@@ -39,11 +39,12 @@ constexpr Key aiKeys[] = {{"G", "ai generate", "Generate"},
                           {"E", "ai edit", "Edit with Instruction"},
                           {"R", "ai roast", "Roast My Design"},
                           {"V", "ai vectorize", "Vectorize with AI"}};
-// Live mode: open, write back, save, publish and stop; each hands the keyboard back.
-constexpr Key liveKeys[] = {{"O", "live start", "Open a page"},
-                            {"W", "live writeback", "Write back"},
+// Live mode: open, deploy, save, review changes, history and stop; each hands the keyboard back.
+constexpr Key liveKeys[] = {{"O", "live start", "Open a page…"},
+                            {"D", "live deploy", "Deploy"},
                             {"S", "live save", "Save"},
-                            {"P", "live publish", "Publish…"},
+                            {"R", "live changes", "Review changes"},
+                            {"H", "live history", "History"},
                             {"X", "live stop", "Stop Live"}};
 constexpr Key captureKeys[] = {{"F", "capture color fill", "Pick colour for fill"},
                                {"S", "capture color stroke", "Pick colour for stroke"},

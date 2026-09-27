@@ -5,6 +5,8 @@
 #include "Agent/AgentTools.h"
 #include "Document/Swatches.h"
 #include "Live/AgentWork.h"
+#include "Live/DeployJob.h"
+#include "Live/History.h"
 #include "Live/LiveSession.h"
 #include "Live/WriteBack.h"
 #include "UI/FloatingPanel.h"
@@ -47,7 +49,7 @@ public:
     QString vectorize(AgentLauncher::TraceMode mode);
     QString roast();
 
-    enum class Task { generate, edit, vectorize, roast, live };
+    enum class Task { generate, edit, vectorize, roast, live, deploy };
     struct Waiting {
         QString requestId;
         Task task;
@@ -100,30 +102,84 @@ public:
     LiveSession &liveSession() { return m_live; }
     // `command` is an Electron app's command line; `app` opens `url` as an app window.
     QString startLive(const QUrl &url, const QString &folder, const QString &command = QString(), bool app = false);
-    // Writes the live edits back: the certain ones directly, the rest through the agent. `confirm` accepts uncommitted changes.
-    QString liveWriteBack(bool confirm);
+    // Writes the live edits back: the certain ones directly, the rest through the agent. `agentRequest` gets the
+    // agent's request id when it took some. Nothing opens; each write is recorded for Review changes.
+    QString liveWriteBack(QString *agentRequest = nullptr);
     // "Ask AI…" in the page: the agent changes the code in a worktree of its own.
-    QString liveAsk(const QString &instruction, const QJsonArray &elements, bool confirm);
+    QString liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest = nullptr);
     // Hand to agent: the front document as a mockup, for an app whose code is in `folder`.
-    QString handToAgent(const QString &folder, const QString &instruction, bool confirm);
-    // The agent says it's done: its changes become a review.
-    QString liveAgentDone(const QString &requestId, const QString &summary, bool confirm);
+    QString handToAgent(const QString &folder, const QString &instruction);
+    // The agent says it's done: its changes are written and recorded.
+    QString liveAgentDone(const QString &requestId, const QString &summary);
+    // Every write-back this session, oldest first: the background record Review changes shows.
     const std::vector<WriteBack::Review> &liveReviews() const { return m_reviews; }
-    // Empty `id`: every review.
-    QString keepReview(const QString &id);
+    // Takes a write-back out again. Committed, it becomes a new commit that reverts those files, pushed like a save.
+    // Empty `id`: every write-back not yet committed, newest first.
     QString discardReview(const QString &id);
-    // Commits what was kept since the last save.
-    QString liveSave();
+    // Files written but not yet committed.
     int unsavedFiles() const;
-    std::vector<WriteBack::PublishOption> publishOptions() const;
-    // Runs one publish option; nothing runs without `confirm`. `output` gets what it printed.
-    QString livePublish(const QString &option, bool confirm, QString *output);
     QString liveMessage() const { return m_liveMessage; }
-    // A write-back or agent task refused for the user's uncommitted changes, which the review panel can confirm.
-    bool canConfirm() const { return static_cast<bool>(m_confirm); }
-    QString confirmPending();
-    void showReviewPanel();
+
+    // Deploy-first Live (docs/OS-SUITE.md): write back, commit, push, deploy, with no review in between.
+    struct DeployRequest {
+        // False: Save, which stops after the push.
+        bool deploy = true;
+        // The production confirmation was answered.
+        bool confirm = false;
+        // "Don't ask again for this project".
+        bool remember = false;
+        // A name: create that private GitHub repository first. Empty: not now, and don't ask again.
+        std::optional<QString> github;
+        // Default: Live's project, else the last one.
+        QString folder;
+    };
+    // Starts it in the background; returns why it couldn't, or empty. With nothing answered yet on a first deploy
+    // (or a GitHub repository to offer), `needsAnswer` is set and nothing starts: the Deploy sheet asks.
+    QString liveDeploy(const DeployRequest &request, bool *needsAnswer = nullptr);
+    QString liveSave();
+    // What the Deploy sheet asks for the project.
+    struct DeployQuestion {
+        QString folder;
+        Deploy::Command command;
+        // Production needs confirming (first deploy, or "Don't ask again" wasn't chosen).
+        bool confirm = false;
+        // A GitHub repository to offer: its suggested name; empty when there's nothing to offer.
+        QString github;
+        // The agent that deploys when there's no command.
+        QString agent;
+    };
+    DeployQuestion deployQuestion(const QString &folder = QString());
+    void cancelDeploy();
+    // `live_deployed` from the agent deploying.
+    QString liveDeployed(const QString &requestId, const QString &url, const QString &command, const QString &error);
+    // The project Deploy, Save and History act on.
+    QString deployProject() const;
+    struct DeployState {
+        // idle, writing, committing, github, pushing, deploying, done, failed.
+        QString stage = QStringLiteral("idle");
+        QString message;
+        QString url;
+        QString log;
+        bool running = false;
+        // A command the agent used, to offer "Remember this command".
+        QString suggested;
+    };
+    const DeployState &deployState() const { return m_deployState; }
+    QString rememberSuggested();
+    // `gh auth status`, remembered for a minute unless `refresh`.
+    GitHub::Auth githubAuth(bool refresh = false);
+    QString connectGitHub();
+    std::vector<History::Entry> history();
+    // Brings back that commit's files as a new commit, pushed; Deploy is offered next.
+    QString restoreVersion(const QString &sha);
+
+    // The Live panel: Deploy first; Review changes shows the diffs only when asked.
+    void showLivePanel(bool changes = false);
+    void showHistoryPanel();
+    // Details: the last deploy's log.
+    QString showDeployLog();
     FloatingPanel &reviewPanel() { return m_reviewPanel; }
+    FloatingPanel &historyPanel() { return m_historyPanel; }
     // Vectorize with AI on the last screenshot Capture traced.
     QString vectorizeCapture(AgentLauncher::TraceMode mode);
 
@@ -170,15 +226,40 @@ private:
     Swatches m_swatches;
     LiveSession m_live;
     std::vector<WriteBack::Review> m_reviews;
-    // Kept since the last save, per project folder: the files and the lines for the commit message.
-    std::map<QString, std::pair<QStringList, QStringList>> m_kept;
-    // Where Publish acts when Live isn't running: the last project saved.
-    QString m_publishFolder;
+    // The project last opened in Live, which Deploy, Save and History keep acting on after Live stops.
+    QString m_lastProject;
     std::map<QString, AgentWork> m_liveJobs;
     QString m_liveMessage;
-    std::function<QString()> m_confirm;
+    void wireDeploy();
+    // Records a write-back that is already on disk.
+    void record(const QString &title, const QString &summary, const std::vector<WriteBack::FileChange> &changes, const QString &folder,
+                const QString &id = QString());
+    // The pipeline: waits for the agent's write-backs, then commits and hands off to the job.
+    void setStage(const QString &stage, const QString &message);
+    void finishWriting();
+    void commitAndShip();
+    void pipelineFailed(const QString &line);
+    void launchDeployAgent();
+    QString startSave(const QString &folder, const QString &doneMessage);
+    struct Pipeline {
+        bool active = false;
+        QString folder;
+        bool deploy = true;
+        Deploy::Command command;
+        QString github;
+        QStringList waitingFor;
+        QString agentRequest;
+        // Said when a save finishes, instead of "Saved".
+        QString doneMessage;
+    };
+    Pipeline m_pipeline;
+    DeployState m_deployState;
+    DeployJob m_job;
+    std::optional<std::pair<qint64, GitHub::Auth>> m_github;
     FloatingPanel m_reviewPanel{QStringLiteral("liveReviewPanel"), m_window};
     QPointer<QWidget> m_reviewContent;
+    FloatingPanel m_historyPanel{QStringLiteral("liveHistoryPanel"), m_window};
+    QPointer<QWidget> m_historyContent;
     FloatingPanel m_swatchesPanel{QStringLiteral("swatchesPanel"), m_window};
     QPointer<QWidget> m_swatchesContent;
 };

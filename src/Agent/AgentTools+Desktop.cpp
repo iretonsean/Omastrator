@@ -209,10 +209,8 @@ QJsonObject AgentTools::aiStart(const QJsonObject &params)
 
 QJsonObject AgentTools::live(const QJsonObject &params)
 {
-    static const QStringList actions{QStringLiteral("start"), QStringLiteral("stop"), QStringLiteral("select"), QStringLiteral("edit"),
-                                     QStringLiteral("status"), QStringLiteral("screenshot"), QStringLiteral("writeBack"),
-                                     QStringLiteral("ask"), QStringLiteral("agentDone"), QStringLiteral("review"), QStringLiteral("keep"),
-                                     QStringLiteral("discard"), QStringLiteral("save"), QStringLiteral("publish"), QStringLiteral("handoff")};
+    static const QStringList actions{"start", "stop", "select", "edit", "status", "screenshot", "writeBack", "ask", "agentDone", "review", "discard",
+                                     "save", "deploy", "cancel", "history", "restore", "details", "remember", "github", "handoff"};
     const QString action = actions.value(*choice(params, QStringLiteral("action"), actions, true));
     if (action == QLatin1String("edit")) {
         requiredString(params, QStringLiteral("selector"));
@@ -223,6 +221,18 @@ QJsonObject AgentTools::live(const QJsonObject &params)
     if (const QString failure = m_host.live(action, params, result); !failure.isEmpty())
         throw Error(AgentProtocol::busy, failure);
     return result;
+}
+
+QJsonObject AgentTools::liveDeployed(const QJsonObject &params)
+{
+    const QString url = string(params, QStringLiteral("url")).value_or(QString()).trimmed();
+    if (!url.isEmpty() && !url.startsWith(QLatin1String("http://")) && !url.startsWith(QLatin1String("https://")))
+        fail(QStringLiteral("“url” must be the live http or https address."));
+    QJsonObject result;
+    const QJsonObject forwarded{{"requestId", params["requestId"]}, {"url", url}, {"command", params["command"]}, {"error", params["error"]}};
+    if (const QString failure = m_host.live(QStringLiteral("deployed"), forwarded, result); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return {{"recorded", true}};
 }
 
 QJsonObject AgentTools::command(const QJsonObject &params)

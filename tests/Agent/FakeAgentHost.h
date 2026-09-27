@@ -53,6 +53,17 @@ public:
         lastAi = request;
         return failure;
     }
+    // The last `live` call, and what it answers.
+    QString liveAction;
+    QJsonObject liveParams;
+    QJsonObject liveResult;
+    QString live(const QString &action, const QJsonObject &params, QJsonObject &result) override
+    {
+        liveAction = action;
+        liveParams = params;
+        result = liveResult;
+        return failure;
+    }
     QString newDocument(QSizeF size) override
     {
         editor.createDocument(size);

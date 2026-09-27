@@ -39,10 +39,10 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
         connect(this, signal, &m_server, &AgentServer::statusMayHaveChanged);
     connect(&m_live, &LiveSession::changed, &m_server, &AgentServer::statusMayHaveChanged);
     connect(this, &AgentBridge::liveReviewChanged, &m_server, &AgentServer::statusMayHaveChanged);
-    m_reviewPanel.onClose = [this] { m_reviewPanel.close(); };
+    wireDeploy();
     // "Ask AI…" in the page; a refusal is said in the page's own bar.
     connect(&m_live, &LiveSession::askRequested, this, [this](const QString &prompt, const QJsonArray &elements) {
-        if (const QString failure = liveAsk(prompt, elements, false); !failure.isEmpty())
+        if (const QString failure = liveAsk(prompt, elements); !failure.isEmpty())
             m_live.notice(failure);
     });
     connect(&m_workspace, &ProjectWorkspace::changed, this, &AgentBridge::watchFront);
@@ -58,7 +58,7 @@ void AgentBridge::watchFront()
 
 QJsonObject AgentBridge::statusExtras()
 {
-    static const QStringList tasks{"generate", "edit", "vectorize", "roast", "live"};
+    static const QStringList tasks{"generate", "edit", "vectorize", "roast", "live", "deploy"};
     QJsonObject extras{{"summary", proposalSummary()}, {"waiting", waitingText()}, {"error", m_panelMessage},
                        {"task", m_waiting ? tasks.value(int(m_waiting->task)) : QString()},
                        {"agent", m_waiting ? displayName(m_waiting->agent) : QString()},
@@ -70,6 +70,12 @@ QJsonObject AgentBridge::statusExtras()
                             live["unsaved"] = unsavedFiles();
                             live["working"] = m_waiting && m_waiting->task == Task::live;
                             live["liveMessage"] = m_liveMessage;
+                            // Deploy, Review changes and History act on this project, with Live stopped too.
+                            live["deployProject"] = deployProject();
+                            live["deploy"] = QJsonObject{{"stage", m_deployState.stage}, {"message", m_deployState.message},
+                                                         {"url", m_deployState.url}, {"running", m_deployState.running},
+                                                         {"failed", m_deployState.stage == QLatin1String("failed")},
+                                                         {"suggested", m_deployState.suggested}};
                             return live;
                         }()}};
     // The newest round that has come back.

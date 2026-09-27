@@ -187,10 +187,22 @@ QString helpText()
         "                     open their sheet in Omastrator.\n"
         "  live start [--url URL [--app]] [--command CMD] [--folder PATH] | stop\n"
         "       | select on|off | status | handoff [FOLDER] [NOTES]\n"
-        "  live writeback [--confirm] | ask TEXT [--confirm] | review | keep [ID]\n"
-        "       | discard [ID] | save | publish [OPTION] [--confirm]\n"
         "                     Live mode: edit a page in Omastrator's Chromium. start\n"
         "                     with neither option opens the Live sheet.\n"
+        "  live deploy [--confirm [--remember]] [--github NAME | --no-github]\n"
+        "       [--folder PATH]\n"
+        "                     Write the live edits into the code, commit, push, and\n"
+        "                     deploy to production with the project's own setup.\n"
+        "                     The first deploy of a project asks in Omastrator.\n"
+        "  live save [--github NAME | --no-github]\n"
+        "                     The same, without deploying.\n"
+        "  live changes | discard [ID] | history [--list] | restore SHA\n"
+        "       | details | remember | github [connect] | cancel\n"
+        "                     The record of write-backs and their diffs, the\n"
+        "                     project's commits, the last deploy's log, the\n"
+        "                     command the agent deployed with, and GitHub.\n"
+        "  live writeback | ask TEXT\n"
+        "                     Write the edits back (or ask the agent) without saving.\n"
         "  dictate start | stop | cancel\n"
         "                     Push-to-talk: start listens, stop transcribes with voxtype,\n"
         "                     shows what was heard, and runs it unless cancelled.\n"
@@ -326,6 +338,18 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
     if (verb == QLatin1String("live")) {
         const QString action = args.value(1);
         QJsonObject params{{"action", action}};
+        QStringList rest = args.mid(2);
+        // "--flag VALUE" out of `rest`; false when the value is missing.
+        auto option = [&](const QString &flag, const QString &key) {
+            const qsizetype at = rest.indexOf(flag);
+            if (at < 0)
+                return true;
+            if (at + 1 >= rest.size())
+                return false;
+            params[key] = key == QLatin1String("folder") ? QFileInfo(rest[at + 1]).absoluteFilePath() : rest[at + 1];
+            rest.remove(at, 2);
+            return true;
+        };
         if (action == QLatin1String("start")) {
             const QStringList options = args.mid(2);
             for (qsizetype at = 0; at + 1 < options.size(); at += 2) {
@@ -344,26 +368,39 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         } else if (action == QLatin1String("select")) {
             params["on"] = args.value(2) != QLatin1String("off");
         } else if (action == QLatin1String("handoff")) {
-            QStringList rest = args.mid(2);
-            params["confirm"] = rest.removeAll(QStringLiteral("--confirm")) > 0;
+            rest.removeAll(QStringLiteral("--confirm"));
             if (!rest.isEmpty())
                 params["folder"] = QFileInfo(rest.takeFirst()).absoluteFilePath();
             params["prompt"] = rest.join(QLatin1Char(' '));
-        } else if (action == QLatin1String("writeback") || action == QLatin1String("ask") || action == QLatin1String("keep")
-                   || action == QLatin1String("discard") || action == QLatin1String("publish")) {
-            QStringList rest = args.mid(2);
+        } else if (action == QLatin1String("deploy") || action == QLatin1String("save")) {
             params["confirm"] = rest.removeAll(QStringLiteral("--confirm")) > 0;
-            if (action == QLatin1String("writeback"))
-                params["action"] = QStringLiteral("writeBack");
-            else if (action == QLatin1String("ask"))
-                params["prompt"] = rest.join(QLatin1Char(' '));
-            else if (action == QLatin1String("publish"))
-                params["option"] = rest.value(0);
-            else
-                params["id"] = rest.value(0);
-        } else if (!QStringList{"stop", "status", "review", "save"}.contains(action)) {
-            return failed(QStringLiteral("Choose a Live action: start, stop, select on|off, writeback, ask, review, keep, discard, save, "
-                                         "publish or status."));
+            params["remember"] = rest.removeAll(QStringLiteral("--remember")) > 0;
+            if (rest.removeAll(QStringLiteral("--no-github")) > 0)
+                params["github"] = QString();
+            if (!option(QStringLiteral("--github"), QStringLiteral("github")) || !option(QStringLiteral("--folder"), QStringLiteral("folder")))
+                return failed(QStringLiteral("%1 needs a value.").arg(rest.last()));
+            if (!rest.isEmpty())
+                return failed(QStringLiteral("Unknown option %1.").arg(rest.front()));
+        } else if (action == QLatin1String("writeback")) {
+            params["action"] = QStringLiteral("writeBack");
+        } else if (action == QLatin1String("ask")) {
+            rest.removeAll(QStringLiteral("--confirm"));
+            params["prompt"] = rest.join(QLatin1Char(' '));
+        } else if (action == QLatin1String("discard")) {
+            params["id"] = rest.value(0);
+        } else if (action == QLatin1String("restore")) {
+            if (rest.isEmpty())
+                return failed(QStringLiteral("Name the commit to restore: omastrator island live restore <sha>"));
+            params["id"] = rest.value(0);
+        } else if (action == QLatin1String("history")) {
+            params["list"] = rest.removeAll(QStringLiteral("--list")) > 0;
+        } else if (action == QLatin1String("github")) {
+            params["connect"] = rest.value(0) == QLatin1String("connect");
+        } else if (action == QLatin1String("changes")) {
+            params["action"] = QStringLiteral("review");
+        } else if (!QStringList{"stop", "status", "review", "cancel", "details", "remember"}.contains(action)) {
+            return failed(QStringLiteral("Choose a Live action: start, stop, select on|off, deploy, save, changes, discard, history, restore, "
+                                         "details, remember, github, cancel, writeback, ask or status."));
         }
         if (const QString failure = ensureAppRunning(); !failure.isEmpty()) {
             setActivity(failure, 6);
@@ -372,16 +409,29 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         try {
             AgentClient::Connection connection;
             const QJsonObject result = connection.call(QStringLiteral("live"), params);
-            if (action == QLatin1String("status"))
+            if (action == QLatin1String("status")) {
                 out << QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Indented));
-            else if (result["sheet"].toBool())
-                setActivity(action == QLatin1String("publish") ? QStringLiteral("Publish is open in Omastrator")
-                                                               : QStringLiteral("Live is open in Omastrator: choose a page"),
-                            3);
-            else if (action == QLatin1String("save"))
-                setActivity(QStringLiteral("Saved · committed"), 3);
-            else if (!result["output"].toString().isEmpty())
+            } else if (result["sheet"].toBool()) {
+                setActivity(action == QLatin1String("deploy")  ? QStringLiteral("Confirm the deploy in Omastrator")
+                            : action == QLatin1String("save") ? QStringLiteral("Confirm the save in Omastrator")
+                                                              : QStringLiteral("Live is open in Omastrator: choose a page"),
+                            4);
+            } else if (action == QLatin1String("history")) {
+                for (const QJsonValue &value : result["commits"].toArray()) {
+                    const QJsonObject commit = value.toObject();
+                    out << commit["sha"].toString().left(7) << "  " << commit["time"].toString() << "  " << commit["subject"].toString();
+                    if (commit["deployed"].toBool())
+                        out << "  [deployed" << (commit["url"].toString().isEmpty() ? QString() : QStringLiteral(" ") + commit["url"].toString()) << "]";
+                    out << '\n';
+                }
+            } else if (action == QLatin1String("github")) {
+                out << (!result["installed"].toBool() ? QStringLiteral("gh isn't installed.")
+                        : result["loggedIn"].toBool() ? QStringLiteral("Logged in to GitHub as %1.").arg(result["account"].toString())
+                                                      : QStringLiteral("Not logged in to GitHub. Run: omastrator island live github connect"))
+                    << '\n';
+            } else if (!result["output"].toString().isEmpty()) {
                 out << result["output"].toString();
+            }
             return 0;
         } catch (const AgentProtocol::Error &failure) {
             setActivity(failure.message(), 6);
