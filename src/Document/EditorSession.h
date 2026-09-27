@@ -347,6 +347,53 @@ public:
     // Scale Corners: kept for live corners; paths always scale their curves.
     bool scaleCorners = true;
 
+    // Design system: tokens (docs/DESIGN-SYSTEMS.md) ---------------------------
+    const DesignToken *token(const QString &id) const;
+    // Adds a token (its name made unique) and returns its id.
+    QString addToken(DesignToken token);
+    // A token's value in `mode` (empty: its own value), and every use of it, in one undo step.
+    void setTokenValue(const QString &id, const TokenValue &value, const QString &mode = {});
+    void renameToken(const QString &id, const QString &name);
+    // What used it keeps its look and loses the link.
+    void deleteToken(const QString &id);
+    // A pull: tokens merged in by name, their uses updated, in one step named `editName`. Returns how many changed.
+    int mergeTokens(const std::vector<DesignToken> &tokens, const QString &editName, const QStringList &modes = {});
+    // Modes: every token gets a value for a new one (a copy of its own), and switching restyles every use.
+    void addTokenMode(const QString &mode);
+    void setTokenMode(const QString &mode);
+    // Links the selection to a token and applies it: "fill", "stroke", or a TokenRef key. An empty
+    // target picks by kind: fill for a colour, the gap of a group for spacing, corners for a radius,
+    // type for type. Returns why it couldn't, or empty.
+    QString applyToken(const QString &id, const QString &target = {});
+    void unlinkToken(const QString &target);
+    // The token the selection's `target` follows, if every selected leaf shares one.
+    QString linkedToken(const QString &target) const;
+    void linkTextStyle(const QUuid &style, const QString &token);
+
+    // Design system: components ------------------------------------------------
+    // The selection, grouped if it's more than one group, becomes a main component.
+    std::optional<QUuid> makeComponent(const QString &name = {});
+    // An instance of `master`, centred on `center` (else beside the component), selected.
+    QUuid placeInstance(const QUuid &master, std::optional<QPointF> center = std::nullopt);
+    // Components from a library, each subtree's root a component: variants of a set already in the
+    // document are reused, the rest go on a "Components" layer beside the artboard. Then an instance of
+    // the best match for `variant` in `set`, centred on `center`. One undo step.
+    QUuid placeFromLibrary(const std::vector<VectorObject> &objects, const QString &set, const std::map<QString, QString> &variant,
+                           std::optional<QPointF> center = std::nullopt);
+    // A copy of `master` beside it as another variant of its set, with `property` set to `value`.
+    std::optional<QUuid> addVariant(const QUuid &master, const QString &property, const QString &value);
+    void setVariantProperty(const QUuid &master, const QString &property, const QString &value);
+    void renameComponent(const QString &set, const QString &name);
+    // The selected instances switch to the variant with `property` = `value`, overrides kept.
+    QString swapVariant(const QString &property, const QString &value);
+    void detachInstances();
+    void resetOverrides();
+    std::vector<QUuid> selectedInstances() const;
+    // The component selected, or the one the first selected instance uses.
+    std::optional<QUuid> selectedMaster() const;
+    // Instances rebuilt from their components and stale token links dropped; every edit ends with it.
+    void settle();
+
     // Layers panel -----------------------------------------------------------
     QUuid addLayer();
     void deleteObjects(const std::vector<QUuid> &ids);

@@ -60,6 +60,13 @@ Each folder builds as its own static library:
   `src/UI/DesignController` behind the `design` method. The overlay itself is
   `shell/omastrator.island/Overlay.qml`; its decisions are in
   `OverlayLogic.js`, which `ShellPluginTests` runs in a `QJSEngine`.
+- `src/System` → `oma_system`. Design systems (docs/DESIGN-SYSTEMS.md):
+  `TokenFiles` (W3C tokens.json, Tailwind v4 and v3, CSS variables),
+  `ProjectCode`, `Library` (the global library), `SiteExtract`,
+  `OmarchyThemes` and `SyncPlan`. Every push or pull is a `SyncPlan` that only
+  `UI/SyncConfirmDialog` can confirm; tests answer it with
+  `SyncConfirmDialog::setResponder`. The model is `Document/DesignTokens`,
+  `Document/Components` and `EditorSession+System.cpp`.
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides`,
   `Rulers` and `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,
@@ -95,8 +102,11 @@ Each folder builds as its own static library:
   through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
   `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
   `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL`, `OMASTRATOR_RCLONE`,
-  `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_ATSPI`, `OMASTRATOR_ATSPI_TREE`
-  and `OMASTRATOR_WL_COPY`. Unset `HYPRLAND_INSTANCE_SIGNATURE` in tests that
+  `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_ATSPI`,
+  `OMASTRATOR_ATSPI_TREE`, `OMASTRATOR_WL_COPY` and `OMASTRATOR_GIT`. Design
+  system tests use temporary projects, a temporary `HOME` for themes and
+  libraries, and a fake Omarchy command. Unset `HYPRLAND_INSTANCE_SIGNATURE` in
+  tests that
   build a `DesignController`, and give it a `FakeDesktop`. Live's deploy tests push only to local bare
   repositories and run fake deploy commands. Cloud tests never read the user's
   rclone config.

@@ -101,6 +101,9 @@ system asks first, and shows exactly:
 
 Nothing is written, committed or published without that confirmation.
 
+Built in phase 3: see [DESIGN-SYSTEMS.md](DESIGN-SYSTEMS.md) for what was
+decided and how the confirmation dialog works.
+
 ## Build order
 
 1. **Design mode everywhere (first).** The overlay layer with click-through,

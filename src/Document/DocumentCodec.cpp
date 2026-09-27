@@ -175,6 +175,8 @@ QJsonObject encodeStyle(const TextStyle &style)
         writeParagraph(paragraph, style.paragraph, ParagraphFormat{});
         json["paragraph"] = paragraph;
     }
+    if (!style.typeToken.isEmpty())
+        json["typeToken"] = style.typeToken;
     return json;
 }
 
@@ -188,6 +190,7 @@ TextStyle decodeStyle(const QJsonObject &json)
     style.kind = json["kind"].toString() == QLatin1String("paragraph") ? TextStyleKind::paragraph : TextStyleKind::character;
     style.character = readCharacter(json["character"].toObject(), CharacterFormat{});
     style.paragraph = readParagraph(json["paragraph"].toObject(), ParagraphFormat{});
+    style.typeToken = json["typeToken"].toString();
     return style;
 }
 }
@@ -214,6 +217,8 @@ QJsonObject encode(const Paint &paint)
         json["blendMode"] = rawValue(paint.blendMode);
     if (!paint.swatchId.isEmpty())
         json["swatch"] = paint.swatchId;
+    if (!paint.token.isEmpty())
+        json["token"] = paint.token;
     return json;
 }
 
@@ -237,6 +242,7 @@ Paint decodePaint(const QJsonObject &json)
     paint.opacity = std::clamp(json["opacity"].toDouble(1), 0.0, 1.0);
     paint.blendMode = layerBlendMode(json["blendMode"].toString()).value_or(LayerBlendMode::normal);
     paint.swatchId = json["swatch"].toString();
+    paint.token = json["token"].toString();
     return paint;
 }
 
@@ -476,6 +482,16 @@ QJsonObject encode(const VectorObject &object)
         if (!strokes.isEmpty())
             json["moreStrokes"] = strokes;
     }
+    if (!object.tokenRefs.empty()) {
+        QJsonObject refs;
+        for (const auto &[key, token] : object.tokenRefs)
+            refs[key] = token;
+        json["tokens"] = refs;
+    }
+    if (object.component)
+        json["component"] = Components::encode(*object.component);
+    if (object.instance)
+        json["instance"] = Components::encode(*object.instance);
     return json;
 }
 
@@ -530,6 +546,17 @@ VectorObject decodeObject(const QJsonObject &json)
         object.extraFills.push_back(decodePaint(fill.toObject()));
     for (const QJsonValue &stroke : json["moreStrokes"].toArray())
         object.extraStrokes.push_back(decodeStroke(stroke.toObject()));
+    const QJsonObject refs = json["tokens"].toObject();
+    for (auto ref = refs.begin(); ref != refs.end(); ++ref)
+        object.tokenRefs[ref.key()] = ref.value().toString();
+    // Only groups hold components and instances.
+    if (object.kind == ObjectKind::group && json.contains("component"))
+        object.component = Components::decodeComponent(json["component"].toObject());
+    if (object.kind == ObjectKind::group && json.contains("instance")) {
+        object.instance = Components::decodeInstance(json["instance"].toObject());
+        if (object.instance->master.isNull())
+            object.instance.reset();
+    }
     return object;
 }
 
@@ -611,6 +638,12 @@ QJsonObject encode(const VectorDocument &document)
             styles.append(encodeStyle(style));
         json["textStyles"] = styles;
     }
+    if (!document.tokens.empty())
+        json["tokens"] = DesignTokens::encode(document.tokens);
+    if (!document.tokenModes.isEmpty()) {
+        json["tokenModes"] = QJsonArray::fromStringList(document.tokenModes);
+        json["tokenMode"] = document.tokenMode;
+    }
     return json;
 }
 
@@ -629,6 +662,13 @@ VectorDocument decode(const QJsonObject &json)
     document.guides = decodeGuides(json["guides"].toArray());
     for (const QJsonValue &style : json["textStyles"].toArray())
         document.textStyles.push_back(decodeStyle(style.toObject()));
+    // Version 4: the design system. Earlier files have none.
+    document.tokens = DesignTokens::decode(json["tokens"].toArray());
+    for (const QJsonValue &mode : json["tokenModes"].toArray()) {
+        if (!mode.toString().isEmpty() && !document.tokenModes.contains(mode.toString()))
+            document.tokenModes.append(mode.toString());
+    }
+    document.tokenMode = document.tokenModes.contains(json["tokenMode"].toString()) ? json["tokenMode"].toString() : document.tokenModes.value(0);
     // Every parent must exist, come first, and be a container; ids are unique.
     std::set<QUuid> seen;
     for (const VectorObject &object : document.objects) {

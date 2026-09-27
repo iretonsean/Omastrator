@@ -1,4 +1,6 @@
 #pragma once
+#include "Document/Components.h"
+#include "Document/DesignTokens.h"
 #include "Document/LayerAppearance.h"
 #include "Document/Paint.h"
 #include "Document/VectorPath.h"
@@ -98,6 +100,8 @@ struct TextStyle {
     TextStyleKind kind = TextStyleKind::character;
     CharacterFormat character;
     ParagraphFormat paragraph;
+    // A type token the style follows, if any.
+    QString typeToken;
     friend bool operator==(const TextStyle &, const TextStyle &) = default;
 };
 
@@ -233,6 +237,11 @@ struct VectorObject {
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
     // applying changes back to the source.
     QString liftedFrom;
+    // Scalar properties bound to design tokens, by TokenRef key: {"radius": id}.
+    std::map<QString, QString> tokenRefs;
+    // Groups: a main component, or an instance of one.
+    std::optional<ComponentInfo> component;
+    std::optional<InstanceInfo> instance;
 
     bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group; }
     bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text; }
@@ -264,6 +273,11 @@ struct VectorDocument {
     std::vector<Guide> guides;
     // Character and paragraph styles, in the order they were made.
     std::vector<TextStyle> textStyles;
+    // The design system's tokens, its modes ("light", "dark"; the first is each token's
+    // own value) and the mode shown. No modes: empty.
+    std::vector<DesignToken> tokens;
+    QStringList tokenModes;
+    QString tokenMode;
 
     // A document with one empty layer.
     static VectorDocument blank(QSizeF size);
@@ -319,6 +333,9 @@ private:
     int subtreeEnd(int index) const;
     bool moveUnder(const QUuid &id, const std::optional<QUuid> &parent, int index);
 };
+
+// A text style redefined: characters and paragraphs that still match `old` take `fresh`.
+void restyleText(TextContent &text, const TextStyle &old, const TextStyle &fresh);
 
 // The colour each new layer takes in turn.
 QColor nextLayerColor(int index);

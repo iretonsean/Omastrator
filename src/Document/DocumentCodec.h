@@ -15,7 +15,8 @@ struct CodecError : std::runtime_error {
 namespace DocumentCodec {
 // 2: text styles by face name, tracking in 1/1000 em, leading in pt, area type.
 // 3: styled runs, paragraph formats, OpenType features, character and paragraph styles.
-constexpr int version = 3;
+// 4: design tokens and modes, token references, components, variants and instances.
+constexpr int version = 4;
 constexpr const char *clipboardMimeType = "application/x-omastrator-objects";
 
 QJsonObject encode(const VectorDocument &document);

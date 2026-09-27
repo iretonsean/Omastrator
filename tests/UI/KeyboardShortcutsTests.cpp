@@ -94,8 +94,8 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
     // Fifty-eight menu entries, eleven type keys, sixteen tools, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 98);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 69);
+    QCOMPARE(int(all.size()), 100);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 71);
     QCOMPARE(named("Join").original, ShortcutChord("j", 1));
     QCOMPARE(named("Hide Guides").original, ShortcutChord(";", 1));
     QCOMPARE(named("Scissors tool").original, ShortcutChord("c"));
