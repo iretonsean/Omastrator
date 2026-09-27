@@ -409,7 +409,7 @@ void EditorSession::beginInteraction(const QString &name)
         return;
     if (m_interaction)
         commitInteraction();
-    m_interaction = Interaction{name, *m_document, m_selection, *m_document};
+    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false};
 }
 
 void EditorSession::previewTransform(const QTransform &transform)
@@ -422,6 +422,7 @@ void EditorSession::previewTransform(const QTransform &transform)
             document.transform(id, transform);
     }
     m_document = std::move(document);
+    m_interaction->transform = transform;
     notify();
 }
 
@@ -450,6 +451,9 @@ void EditorSession::commitInteraction()
         notify();
         return;
     }
+    // A drag's move, scale or rotate is what Transform Again repeats.
+    if (interaction.transform && !interaction.transform->isIdentity())
+        m_lastTransform = RepeatTransform{*interaction.transform, interaction.duplicated, std::nullopt};
     // Record the step as though it happened all at once.
     VectorDocument after = std::move(*m_document);
     m_document = std::move(interaction.before);

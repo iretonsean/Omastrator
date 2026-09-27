@@ -198,6 +198,25 @@ struct EditorCanvas::State {
     // Eyedropper --------------------------------------------------------------
     void eyedropperPress(QPointF view);
 
+    // Measuring and readouts ----------------------------------------------------
+    // Alt held over something else: the gaps from the selection to it, or to the artboard.
+    std::optional<QRectF> measureTarget() const;
+    std::vector<QLineF> measureLines() const;
+    QString readout() const;
+    void drawMeasurements(QPainter &painter) const;
+    void drawReadout(QPainter &painter) const;
+    void drawLabel(QPainter &painter, QPointF center, const QString &label) const;
+
+    // Keyboard ------------------------------------------------------------------
+    // Digits set opacity; a second digit soon after makes a two-digit value.
+    int opacityDigit = -1;
+    QElapsedTimer sinceDigit;
+    QTimer opacityCommit;
+    void typeOpacity(int digit);
+    void finishOpacity();
+    // Arrows move by the keyboard increment; Alt moves a copy.
+    bool nudge(QKeyEvent *event);
+
     // Painting ----------------------------------------------------------------
     void paint(QPainter &painter);
     void drawGrid(QPainter &painter, const QRectF &artboard) const;

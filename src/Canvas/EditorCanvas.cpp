@@ -29,6 +29,8 @@ EditorCanvas::EditorCanvas(EditorSession &session, QWidget *parent)
         m_state->caretShown = !m_state->caretShown;
         update();
     });
+    m_state->opacityCommit.setSingleShot(true);
+    connect(&m_state->opacityCommit, &QTimer::timeout, this, [this] { m_state->finishOpacity(); });
     connect(&m_session, &EditorSession::documentChanged, this, [this] {
         m_state->documentChanged();
         update();

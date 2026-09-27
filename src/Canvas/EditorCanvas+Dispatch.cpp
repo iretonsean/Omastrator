@@ -7,6 +7,7 @@
 void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
 {
     const QPointF document = toDocument(view);
+    finishOpacity();
     // A click in the type being edited moves its caret; anywhere else ends it.
     if (text) {
         if (textBox().adjusted(-reach(4), -reach(4), reach(4), reach(4)).contains(document)
