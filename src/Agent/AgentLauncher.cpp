@@ -75,6 +75,11 @@ QString writeInstructions(const QString &directory, const QString &binary, const
 
 QString launch(const QString &taskPrompt, const QString &listening)
 {
+    return launchIn(QString(), taskPrompt, listening);
+}
+
+QString launchIn(const QString &workingDirectory, const QString &taskPrompt, const QString &listening)
+{
     if (taskPrompt.trimmed().isEmpty())
         return QStringLiteral("There is nothing to ask the agent.");
     QString error;
@@ -89,9 +94,12 @@ QString launch(const QString &taskPrompt, const QString &listening)
         return failure;
     QString prompt = taskPrompt;
     if (prompt.toUtf8().size() > maximumPromptArgument) {
-        if (const QString failure = writeFile(QDir(directory).filePath(QStringLiteral("TASK.md")), prompt.toUtf8()); !failure.isEmpty())
+        const QString task = QDir(directory).filePath(QStringLiteral("TASK.md"));
+        if (const QString failure = writeFile(task, prompt.toUtf8()); !failure.isEmpty())
             return failure;
-        prompt = QStringLiteral("Your Omastrator task is in TASK.md in the working directory. Read it, and AGENTS.md, then do it.");
+        prompt = workingDirectory.isEmpty()
+                     ? QStringLiteral("Your Omastrator task is in TASK.md in the working directory. Read it, and AGENTS.md, then do it.")
+                     : QStringLiteral("Your Omastrator task is in %1. Read it, then do it.").arg(task);
     }
 
     // Arguments go straight to the process: the prompt never passes through a shell.
@@ -100,7 +108,7 @@ QString launch(const QString &taskPrompt, const QString &listening)
     environment.insert(QStringLiteral("OMASTRATOR_BIN"), binary);
     environment.insert(QStringLiteral("OMASTRATOR_SOCKET"), socket);
     process->setProcessEnvironment(environment);
-    process->setWorkingDirectory(directory);
+    process->setWorkingDirectory(workingDirectory.isEmpty() ? directory : workingDirectory);
     process->setStandardInputFile(QProcess::nullDevice());
     process->setStandardOutputFile(QProcess::nullDevice());
     process->start(omarchy(), {QStringLiteral("agent"), QStringLiteral("prompt"), prompt});
@@ -117,7 +125,7 @@ QString launch(const QString &taskPrompt, const QString &listening)
         return ok ? QString() : QStringLiteral("Could not launch %1: %2").arg(agent, reason.isEmpty() ? QStringLiteral("it exited at once.") : reason);
     }
     QObject::connect(process, &QProcess::finished, process, &QObject::deleteLater);
-    qCInfo(lcApp).noquote() << "launched" << agent << "in" << directory;
+    qCInfo(lcApp).noquote() << "launched" << agent << "in" << process->workingDirectory();
     return {};
 }
 }

@@ -39,6 +39,12 @@ constexpr Key aiKeys[] = {{"G", "ai generate", "Generate"},
                           {"E", "ai edit", "Edit with Instruction"},
                           {"R", "ai roast", "Roast My Design"},
                           {"V", "ai vectorize", "Vectorize with AI"}};
+// Live mode: open, write back, save, publish and stop; each hands the keyboard back.
+constexpr Key liveKeys[] = {{"O", "live start", "Open a page"},
+                            {"W", "live writeback", "Write back"},
+                            {"S", "live save", "Save"},
+                            {"P", "live publish", "Publish…"},
+                            {"X", "live stop", "Stop Live"}};
 constexpr Key captureKeys[] = {{"F", "capture color fill", "Pick colour for fill"},
                                {"S", "capture color stroke", "Pick colour for stroke"},
                                {"W", "capture color swatch", "Pick colour as a swatch"},
@@ -130,12 +136,13 @@ QByteArray hyprlandLua(const QString &command)
     text += QStringLiteral(
         "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
         "end)\n");
-    for (const char *mode : {"live"})
-        text += QStringLiteral(
-                    "\nhl.define_submap(\"omastrator-%1\", function()\n"
-                    "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
-                    "end)\n")
-                    .arg(QLatin1String(mode));
+    text += QStringLiteral("\nhl.define_submap(\"omastrator-live\", function()\n");
+    for (const Key &key : liveKeys)
+        text += QStringLiteral("  hl.bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
+                    .arg(QLatin1String(key.key), QLatin1String(key.tool), QLatin1String(key.label));
+    text += QStringLiteral(
+        "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
+        "end)\n");
     return text.toUtf8();
 }
 
@@ -165,9 +172,10 @@ QByteArray hyprlandConf(const QString &command)
     for (const Key &key : aiKeys)
         text += back(QLatin1String(key.key), QLatin1String(key.tool));
     text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
-    for (const char *mode : {"live"})
-        text += QStringLiteral("\nsubmap = omastrator-%1\n").arg(QLatin1String(mode)) + back(QStringLiteral("escape"), QStringLiteral("mode normal"))
-                + QStringLiteral("submap = reset\n");
+    text += QStringLiteral("\nsubmap = omastrator-live\n");
+    for (const Key &key : liveKeys)
+        text += back(QLatin1String(key.key), QLatin1String(key.tool));
+    text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
     return text.toUtf8();
 }
 

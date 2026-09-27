@@ -9,6 +9,8 @@
 #include <QJsonDocument>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
@@ -232,6 +234,23 @@ private slots:
         get(server.url().resolved(QUrl(QStringLiteral("/%2e%2e/secret.txt"))), &status);
         QCOMPARE(status, 404);
         QCOMPARE(StaticServer::mimeType(QStringLiteral("x.svg")), QByteArray("image/svg+xml"));
+    }
+
+    void viteHelperMarksSourceLocations()
+    {
+        const QString node = QStandardPaths::findExecutable(QStringLiteral("node"));
+        if (node.isEmpty())
+            QSKIP("node isn't installed.");
+        QProcess run;
+        run.start(node, {QStringLiteral("--input-type=module"), QStringLiteral("-e"),
+                         QStringLiteral("import { markSources } from '" OMASTRATOR_SOURCE_DIR "/extras/vite-plugin-omastrator/index.js';"
+                                        "process.stdout.write(markSources('<html><head><style>p<b{}</style></head>\\n<body>\\n  <p class=\"x\">Hi</p>"
+                                        "<!-- <i> --></body></html>', 'src/page.html'));")});
+        QVERIFY(run.waitForFinished(20'000));
+        const QString out = QString::fromUtf8(run.readAllStandardOutput());
+        QVERIFY2(out.contains(QLatin1String("<p data-oma-src=\"src/page.html:3:3\" class=\"x\">")), qPrintable(out + run.readAllStandardError()));
+        QVERIFY(out.contains(QLatin1String("<body data-oma-src=\"src/page.html:2:1\">")));
+        QVERIFY(!out.contains(QLatin1String("<head data-oma")) && !out.contains(QLatin1String("<i data-oma")) && !out.contains(QLatin1String("<b data-oma")));
     }
 };
 

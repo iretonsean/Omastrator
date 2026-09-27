@@ -124,9 +124,12 @@ it only reads.
   traced.
 - `paste_svg {svg, name?}`
 - `new_document {}`, `show_panel {panel}`: bring the window forward.
-- `live {action: start|stop|select|edit|status|screenshot, url?, folder?,
-  selector?, property?, value?, on?, add?, path?}`: Live mode
-  ([OS-SUITE.md](OS-SUITE.md)).
+- `live {action, …}`: Live mode ([OS-SUITE.md](OS-SUITE.md)). Actions:
+  `start`, `stop`, `select`, `edit`, `status`, `screenshot`, `writeBack`,
+  `ask`, `agentDone`, `review`, `keep`, `discard`, `save`, `publish`. An agent
+  given a Live task works in a git worktree and ends with
+  `omastrator agent live '{"action": "agentDone", "requestId": "…",
+  "summary": "…"}'`; the user reviews the diff.
 - `ai_start {flow: generate|edit|roast|vectorize|cancel, prompt?, count?,
   fitToSelection?, mode?: logo|sketch}`: the island's AI mode. Generate and
   Edit open their sheet unless a prompt is given; Vectorize takes the selected

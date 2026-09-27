@@ -4,11 +4,14 @@
 #include "Agent/AgentServer.h"
 #include "Agent/AgentTools.h"
 #include "Document/Swatches.h"
+#include "Live/AgentWork.h"
 #include "Live/LiveSession.h"
+#include "Live/WriteBack.h"
 #include "UI/FloatingPanel.h"
 #include <QObject>
 #include <QPointer>
 #include <QRectF>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -44,7 +47,7 @@ public:
     QString vectorize(AgentLauncher::TraceMode mode);
     QString roast();
 
-    enum class Task { generate, edit, vectorize, roast };
+    enum class Task { generate, edit, vectorize, roast, live };
     struct Waiting {
         QString requestId;
         Task task;
@@ -96,6 +99,28 @@ public:
     // Live mode: a page or project in Omastrator's Chromium. $OMASTRATOR_LIVE_HEADLESS runs it headless, for tests.
     LiveSession &liveSession() { return m_live; }
     QString startLive(const QUrl &url, const QString &folder);
+    // Writes the live edits back: the certain ones directly, the rest through the agent. `confirm` accepts uncommitted changes.
+    QString liveWriteBack(bool confirm);
+    // "Ask AI…" in the page: the agent changes the code in a worktree of its own.
+    QString liveAsk(const QString &instruction, const QJsonArray &elements, bool confirm);
+    // The agent says it's done: its changes become a review.
+    QString liveAgentDone(const QString &requestId, const QString &summary, bool confirm);
+    const std::vector<WriteBack::Review> &liveReviews() const { return m_reviews; }
+    // Empty `id`: every review.
+    QString keepReview(const QString &id);
+    QString discardReview(const QString &id);
+    // Commits what was kept since the last save.
+    QString liveSave();
+    int unsavedFiles() const { return int(m_keptFiles.size()); }
+    std::vector<WriteBack::PublishOption> publishOptions() const;
+    // Runs one publish option; nothing runs without `confirm`. `output` gets what it printed.
+    QString livePublish(const QString &option, bool confirm, QString *output);
+    QString liveMessage() const { return m_liveMessage; }
+    // A write-back or agent task refused for the user's uncommitted changes, which the review panel can confirm.
+    bool canConfirm() const { return static_cast<bool>(m_confirm); }
+    QString confirmPending();
+    void showReviewPanel();
+    FloatingPanel &reviewPanel() { return m_reviewPanel; }
     // Vectorize with AI on the last screenshot Capture traced.
     QString vectorizeCapture(AgentLauncher::TraceMode mode);
 
@@ -109,6 +134,8 @@ signals:
     void waitingChanged();
     void variationsChanged();
     void roastChanged();
+    // Reviews, kept files, the Live message.
+    void liveReviewChanged();
 
 private:
     // Checks for an agent, then launches; `task` starts waiting on success.
@@ -139,6 +166,14 @@ private:
     QPointer<QWidget> m_roastContent;
     Swatches m_swatches;
     LiveSession m_live;
+    std::vector<WriteBack::Review> m_reviews;
+    QStringList m_keptFiles;
+    QStringList m_keptLines;
+    std::map<QString, AgentWork> m_liveJobs;
+    QString m_liveMessage;
+    std::function<QString()> m_confirm;
+    FloatingPanel m_reviewPanel{QStringLiteral("liveReviewPanel"), m_window};
+    QPointer<QWidget> m_reviewContent;
     FloatingPanel m_swatchesPanel{QStringLiteral("swatchesPanel"), m_window};
     QPointer<QWidget> m_swatchesContent;
 };

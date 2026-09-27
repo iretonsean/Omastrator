@@ -450,3 +450,51 @@ Choices the spec left open, made while building it, in build order.
   CSS Tailwind v4 compiles for it, and its `dev` script is a small Node server
   that prints Vite's banner, so the test exercises detection, `npm run dev`,
   URL discovery and snapping without installing packages.
+
+### Phase 6: write-back and review
+
+- **Write Back is a step, not a side effect.** Edits apply to the page at
+  once; the code changes when the user presses Write Back (the island's Live
+  row, the review panel, or `island live writeback`). One press writes the
+  certain edits and hands the rest to the agent.
+- **Deterministic path** (`WriteBack::plan`), each only when certain:
+  - Text: the old text occurs exactly once across the project's source files
+    (`git ls-files --cached --others --exclude-standard`, so ignored files
+    like `node_modules` never count). New text with markup characters
+    (`< > & { }`) goes to the agent.
+  - Tailwind classes: the element's original class attribute, quoted, occurs
+    exactly once; every swap for that element is made in place in that one
+    string, so class order in the source is kept.
+  - A custom property (`--brand` on `:root`): declared exactly once across the
+    stylesheets.
+  - `data-oma-src="file:line:col"` from the optional Vite helper
+    (`extras/vite-plugin-omastrator`, `vite dev` only) narrows the search to
+    that line, so a repeated string can still be written. It is never
+    required.
+- **Agent path.** The agent runs in a git worktree on a new
+  `omastrator/live-<time>` branch under
+  `$XDG_DATA_HOME/omastrator/worktrees/`, with that worktree as its working
+  directory and nothing written into it. The prompt carries the edits or the
+  instruction, the selected elements (selector, classes, computed styles,
+  markup), a screenshot of the selection and the URL, and asks it to finish
+  with `live agentDone`. Its changes are then copied into the checkout as one
+  review, and the worktree and branch are removed. Projects not in git get
+  the deterministic path only.
+- **Uncommitted work.** Before writing over a file with uncommitted changes,
+  or before starting the agent on a project that has any, Live asks: the
+  review panel offers Go Ahead Anyway. Omastrator's own pending writes don't
+  count. A confirmed agent change is merged into the user's version with
+  `git merge-file`; if they clash it isn't written at all.
+- **Review.** Every write-back keeps the exact bytes of each file it touched
+  (or that it didn't exist). The Live Review panel shows it as a diff with
+  Keep and Discard; Discard restores those bytes, newest review first.
+- **Save** commits only the files kept since the last save, with
+  `git commit --only`, so anything else the user staged stays staged. The
+  message is the change itself for one edit, or a list.
+- **Publish** lists only what the project has: its git upstream
+  (`git push <remote> HEAD:<branch>`, never forced), a Vercel preview
+  (`vercel deploy`), a Netlify draft (`netlify deploy`) or a Cloudflare
+  version upload (`wrangler versions upload`) where the project is set up for
+  one and the CLI is installed. None deploys production. Each option states
+  what it will run; it runs only when chosen, and only once everything is
+  saved. The tests publish only to a local bare repository.

@@ -185,6 +185,8 @@ QString helpText()
         "                     Start an AI flow. Without a prompt, Generate and Edit\n"
         "                     open their sheet in Omastrator.\n"
         "  live start [--url URL] [--folder PATH] | stop | select on|off | status\n"
+        "  live writeback [--confirm] | ask TEXT [--confirm] | review | keep [ID]\n"
+        "       | discard [ID] | save | publish [OPTION] [--confirm]\n"
         "                     Live mode: edit a page in Omastrator's Chromium. start\n"
         "                     with neither option opens the Live sheet.\n"
         "  capture color [fill|stroke|swatch]\n"
@@ -327,8 +329,21 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
                 return failed(QStringLiteral("%1 needs a value.").arg(options.last()));
         } else if (action == QLatin1String("select")) {
             params["on"] = args.value(2) != QLatin1String("off");
-        } else if (action != QLatin1String("stop") && action != QLatin1String("status")) {
-            return failed(QStringLiteral("Choose a Live action: start, stop, select on|off or status."));
+        } else if (action == QLatin1String("writeback") || action == QLatin1String("ask") || action == QLatin1String("keep")
+                   || action == QLatin1String("discard") || action == QLatin1String("publish")) {
+            QStringList rest = args.mid(2);
+            params["confirm"] = rest.removeAll(QStringLiteral("--confirm")) > 0;
+            if (action == QLatin1String("writeback"))
+                params["action"] = QStringLiteral("writeBack");
+            else if (action == QLatin1String("ask"))
+                params["prompt"] = rest.join(QLatin1Char(' '));
+            else if (action == QLatin1String("publish"))
+                params["option"] = rest.value(0);
+            else
+                params["id"] = rest.value(0);
+        } else if (!QStringList{"stop", "status", "review", "save"}.contains(action)) {
+            return failed(QStringLiteral("Choose a Live action: start, stop, select on|off, writeback, ask, review, keep, discard, save, "
+                                         "publish or status."));
         }
         if (const QString failure = ensureAppRunning(); !failure.isEmpty()) {
             setActivity(failure, 6);
@@ -340,7 +355,13 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
             if (action == QLatin1String("status"))
                 out << QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Indented));
             else if (result["sheet"].toBool())
-                setActivity(QStringLiteral("Live is open in Omastrator: choose a page"), 3);
+                setActivity(action == QLatin1String("publish") ? QStringLiteral("Publish is open in Omastrator")
+                                                               : QStringLiteral("Live is open in Omastrator: choose a page"),
+                            3);
+            else if (action == QLatin1String("save"))
+                setActivity(QStringLiteral("Saved · committed"), 3);
+            else if (!result["output"].toString().isEmpty())
+                out << result["output"].toString();
             return 0;
         } catch (const AgentProtocol::Error &failure) {
             setActivity(failure.message(), 6);

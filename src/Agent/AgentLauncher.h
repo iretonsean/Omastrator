@@ -18,6 +18,8 @@ QString writeInstructions(const QString &directory, const QString &binary, const
 QString instructions(const QString &binary);
 // Writes the folder, then launches the agent there. Returns why it failed, or empty.
 QString launch(const QString &taskPrompt, const QString &socket = QString());
+// Launches the agent in `directory` (a project's worktree), writing nothing there. Returns why it failed, or empty.
+QString launchIn(const QString &directory, const QString &taskPrompt, const QString &socket = QString());
 
 // One round of Generate: what was asked, and the SVG the user picked from it.
 struct Round {

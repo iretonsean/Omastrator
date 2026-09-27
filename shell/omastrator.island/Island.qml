@@ -76,6 +76,9 @@ Item {
     live: [
       { id: "live", tip: "Open a page or project in Live", idleOnly: true },
       { id: "element", tip: "Select elements: click to select, Shift-click to add (click again to browse the page normally)", runningOnly: true },
+      { id: "review", tip: "Write Back and review: certain edits go straight to the code, the rest to your agent", projectOnly: true },
+      { id: "save", tip: "Save: commit what you kept", unsavedOnly: true },
+      { id: "publish", tip: "Publish…: says what it will do before it does it", projectOnly: true },
       { id: "stop", tip: "Stop Live", runningOnly: true }
     ]
   })
@@ -162,6 +165,9 @@ Item {
 
   function liveArgs(id) {
     if (id === "stop") return ["island", "live", "stop"]
+    if (id === "review") return (root.live.edits || 0) > 0 ? ["island", "live", "writeback"] : ["island", "live", "review"]
+    if (id === "save") return ["island", "live", "save"]
+    if (id === "publish") return ["island", "live", "publish"]
     if (id === "element") { root.selecting = !root.selecting; return ["island", "live", "select", root.selecting ? "on" : "off"] }
     return ["island", "live", "start"]
   }
@@ -174,10 +180,13 @@ Item {
   }
 
   // Buttons that only make sense now: Stop while an agent works, Vectorize after a traced screenshot.
-  readonly property string liveState: (status.value("live", {}) || {}).state || "off"
+  readonly property var live: status.value("live", {}) || {}
+  readonly property string liveState: live.state || "off"
 
   function shows(item) {
     if (item.runningOnly) return root.liveState === "running"
+    if (item.projectOnly) return !!root.live.project && (root.liveState === "running" || (root.live.reviews || 0) > 0)
+    if (item.unsavedOnly) return (root.live.unsaved || 0) > 0
     if (item.idleOnly) return root.liveState !== "running" && root.liveState !== "starting"
     if (item.waitingOnly) return status.value("waiting", "") !== ""
     if (item.offerOnly) return status.value("offer", "") === "vectorize"

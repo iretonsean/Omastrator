@@ -14,6 +14,8 @@ QDialog *editWithInstruction(AgentBridge &bridge, QWidget *window);
 QDialog *vectorize(AgentBridge &bridge, QWidget *window);
 // The island's Live mode: a page, and which folder its code is in (suggested, or none for a mock-up).
 QDialog *live(AgentBridge &bridge, QWidget *window);
+// Live's Publish: each option the project has, saying what it will do; choosing one runs it.
+QDialog *publish(AgentBridge &bridge, QWidget *window);
 // Help ▸ Connect an Agent…
 QDialog *connectAgent(AgentBridge &bridge, QWidget *window);
 // The text Connect an Agent shows.

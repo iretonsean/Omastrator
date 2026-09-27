@@ -306,6 +306,12 @@ void LiveSession::clearEdits()
     emit changed();
 }
 
+void LiveSession::setEdits(std::vector<LiveEdit> edits)
+{
+    m_edits = std::move(edits);
+    emit changed();
+}
+
 void LiveSession::removeEdit(int index)
 {
     if (index >= 0 && index < int(m_edits.size())) {

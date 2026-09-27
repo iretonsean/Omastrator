@@ -210,7 +210,9 @@ QJsonObject AgentTools::aiStart(const QJsonObject &params)
 QJsonObject AgentTools::live(const QJsonObject &params)
 {
     static const QStringList actions{QStringLiteral("start"), QStringLiteral("stop"), QStringLiteral("select"), QStringLiteral("edit"),
-                                     QStringLiteral("status"), QStringLiteral("screenshot")};
+                                     QStringLiteral("status"), QStringLiteral("screenshot"), QStringLiteral("writeBack"),
+                                     QStringLiteral("ask"), QStringLiteral("agentDone"), QStringLiteral("review"), QStringLiteral("keep"),
+                                     QStringLiteral("discard"), QStringLiteral("save"), QStringLiteral("publish")};
     const QString action = actions.value(*choice(params, QStringLiteral("action"), actions, true));
     if (action == QLatin1String("edit")) {
         requiredString(params, QStringLiteral("selector"));

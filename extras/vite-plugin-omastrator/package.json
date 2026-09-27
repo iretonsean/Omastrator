@@ -1,0 +1,8 @@
+{
+  "name": "vite-plugin-omastrator",
+  "version": "0.1.0",
+  "description": "Marks elements with their source location for Omastrator's Live write-back, in vite dev only.",
+  "type": "module",
+  "main": "index.js",
+  "license": "MIT"
+}

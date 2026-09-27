@@ -4,6 +4,7 @@
 #include "UI/KeyboardShortcuts.h"
 #include "Live/Registry.h"
 #include <QCheckBox>
+#include <QCommandLinkButton>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QLineEdit>
@@ -216,6 +217,42 @@ QDialog *live(AgentBridge &bridge, QWidget *window)
             return QStringLiteral("Enter a page, or choose its project folder.");
         return bridge.startLive(text.isEmpty() ? QUrl() : QUrl::fromUserInput(text), code);
     });
+    return dialog;
+}
+
+QDialog *publish(AgentBridge &bridge, QWidget *window)
+{
+    QFormLayout *form = nullptr;
+    QLabel *error = nullptr;
+    QDialog *dialog = sheet(window, QStringLiteral("publishSheet"), QStringLiteral("Publish"), form, error);
+    const auto options = bridge.publishOptions();
+    auto *intro = new QLabel(options.empty() ? QStringLiteral("This project has nothing set up to publish with: no git upstream, and no "
+                                                              "Vercel, Netlify or Cloudflare CLI.")
+                                             : QStringLiteral("Publishing sends what you've saved. Choose one; it runs when you click it."),
+                             dialog);
+    intro->setWordWrap(true);
+    form->addRow(intro);
+    for (const auto &option : options) {
+        auto *button = new QCommandLinkButton(option.label, option.description, dialog);
+        button->setObjectName(QStringLiteral("publish-") + option.id);
+        form->addRow(button);
+        QObject::connect(button, &QCommandLinkButton::clicked, dialog, [&bridge, dialog, error, id = option.id] {
+            QString output;
+            const QString failure = bridge.livePublish(id, true, &output);
+            if (failure.isEmpty()) {
+                dialog->accept();
+                return;
+            }
+            error->setText(failure);
+            error->show();
+        });
+    }
+    form->addRow(error);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    buttons->button(QDialogButtonBox::Close)->setObjectName(QStringLiteral("dialogCancel"));
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    form->addRow(buttons);
+    dialog->open();
     return dialog;
 }
 

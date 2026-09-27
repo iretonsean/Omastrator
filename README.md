@@ -72,7 +72,11 @@ Omastrator also works outside its window, through Omarchy's own shell
   then change its text, colour, spacing, size, type or radius from a bar beside
   it. Values snap to the project's own tokens: its Tailwind theme, its CSS
   custom properties, then your Omarchy colours. Pages whose code isn't on this
-  machine work as mock-ups.
+  machine work as mock-ups. **Write Back** puts the changes in the code: the
+  ones it can be sure of directly (a unique text, a Tailwind class swap, a CSS
+  custom property), the rest through your agent on a branch of its own. Each
+  shows as a diff to keep or discard; **Save** commits, and **Publish**
+  (a git push, or a Vercel, Netlify or Cloudflare preview) is its own step.
 - **The tray light**: one glyph in the bar that shows when your agent is
   working, when results are ready, or when something went wrong. Click it for
   the island's AI mode.

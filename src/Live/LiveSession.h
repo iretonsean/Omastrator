@@ -71,8 +71,9 @@ public:
     QJsonValue evaluate(const QString &expression, QString *error = nullptr);
     // The bar's path for one edit: snap, apply, record. Returns why it failed, or empty.
     QString edit(const QString &selector, const QString &property, const QString &value);
-    // Forgets the recorded edits (after Keep or Discard in Phase 6).
+    // Forgets the recorded edits, or keeps only `edits` (the ones write-back left for the agent).
     void clearEdits();
+    void setEdits(std::vector<LiveEdit> edits);
     void removeEdit(int index);
     // Shows a line in the overlay's bar.
     void notice(const QString &text);
