@@ -86,10 +86,12 @@ std::optional<Command> headlessCommand(const QString &agent, AgentAccess access,
         return Command{agent, arguments, {}};
     }
     if (name == QLatin1String("codex")) {
+        // Codex's read-only sandbox refuses Unix sockets, so the CLI couldn't reach the app; writes stay in the folder.
         return Command{agent,
                        {QStringLiteral("exec"), QStringLiteral("--skip-git-repo-check"), QStringLiteral("--ephemeral"), QStringLiteral("--color"),
                         QStringLiteral("never"), QStringLiteral("-c"), QStringLiteral("approval_policy=\"never\""), QStringLiteral("--sandbox"),
-                        project ? QStringLiteral("workspace-write") : QStringLiteral("read-only"), QStringLiteral("--"), prompt},
+                        QStringLiteral("workspace-write"), QStringLiteral("-c"), QStringLiteral("sandbox_workspace_write.network_access=true"),
+                        QStringLiteral("--"), prompt},
                        {}};
     }
     if (name == QLatin1String("opencode")) {

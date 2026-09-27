@@ -284,7 +284,7 @@ private slots:
         QCOMPARE(runToEnd(setup), AgentRun::End::exited);
         QCOMPARE(FakeAgents::arguments(outFolder(), QStringLiteral("codex")),
                  (QStringList{"exec", "--skip-git-repo-check", "--ephemeral", "--color", "never", "-c", "approval_policy=\"never\"",
-                              "--sandbox", "read-only", "--", setup.prompt}));
+                              "--sandbox", "workspace-write", "-c", "sandbox_workspace_write.network_access=true", "--", setup.prompt}));
 
         qputenv("FAKE_AGENT", "opencode");
         QCOMPARE(runToEnd(setup), AgentRun::End::exited);
@@ -302,9 +302,9 @@ private slots:
                               "read_file", QStringLiteral("run_shell_command(%1)").arg(cli)}));
         QVERIFY(!QFile::exists(out(QStringLiteral("prompt"))));
 
-        // Project access for each.
-        QCOMPARE(AgentLauncher::headlessCommand(QStringLiteral("codex"), AgentAccess::project, QStringLiteral("x"), QStringLiteral("/b"))->arguments.at(8),
-                 QStringLiteral("workspace-write"));
+        // Project access: Codex's sandbox is the same, the others allow more.
+        QVERIFY(AgentLauncher::headlessCommand(QStringLiteral("codex"), AgentAccess::project, QStringLiteral("x"), QStringLiteral("/b"))
+                    ->arguments.contains(QStringLiteral("workspace-write")));
         const auto opencode = AgentLauncher::headlessCommand(QStringLiteral("opencode"), AgentAccess::project, QStringLiteral("x"), QStringLiteral("/b"));
         QVERIFY(opencode->environment.value(0).contains(QLatin1String("\"edit\":\"allow\"")));
         QVERIFY(AgentLauncher::headlessCommand(QStringLiteral("gemini"), AgentAccess::project, QStringLiteral("x"), QStringLiteral("/b"))

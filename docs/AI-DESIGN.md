@@ -67,7 +67,7 @@ The commands (`<cli>` is `<absolute path to omastrator> agent`):
 | Agent | Omastrator access | Project access |
 |---|---|---|
 | `claude` | `claude -p <prompt> --output-format text --no-session-persistence --strict-mcp-config --mcp-config '{"mcpServers":{}}' --permission-mode acceptEdits --tools Bash,Read --allowedTools "Bash(<cli> *)" Read` | the same with `--tools Bash,Read,Edit,Write,Glob,Grep --allowedTools Bash Read Edit Write Glob Grep` |
-| `codex` | `codex exec --skip-git-repo-check --ephemeral --color never -c approval_policy="never" --sandbox read-only -- <prompt>` | `--sandbox workspace-write` |
+| `codex` | `codex exec --skip-git-repo-check --ephemeral --color never -c approval_policy="never" --sandbox workspace-write -c sandbox_workspace_write.network_access=true -- <prompt>` (the read-only sandbox refuses the Unix socket the CLI needs; writes stay in the working folder) | the same |
 | `opencode` | `opencode run <prompt>`, with `OPENCODE_CONFIG_CONTENT` denying edits, web fetches and every command but `<cli> *` | edits and commands allowed |
 | `gemini` | `gemini -p <prompt> --output-format text --skip-trust --approval-mode default --allowed-tools read_file "run_shell_command(<cli>)"` | `--approval-mode auto_edit --allowed-tools run_shell_command` |
 
