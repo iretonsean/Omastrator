@@ -1,3 +1,4 @@
+#include "Agent/AgentLauncher.h"
 #include "Agent/AgentProtocol.h"
 #include "Document/PathOperations.h"
 #include "Live/Browser.h"
@@ -5,6 +6,7 @@
 #include "UI/AgentSheets.h"
 #include "UI/ProjectWorkspaceView.h"
 #include <QAbstractButton>
+#include <QComboBox>
 #include <QCommandLinkButton>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -13,6 +15,7 @@
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -74,6 +77,7 @@ private slots:
         qputenv("OMASTRATOR_OMARCHY", script.toUtf8());
         qputenv("FAKE_OUT", m_directory.filePath(QStringLiteral("prompt")).toUtf8());
         qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("omastrator.sock")).toUtf8());
+        qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
     }
 
     void init()
@@ -336,6 +340,32 @@ private slots:
         QVERIFY(prompt().contains(QStringLiteral("Make 3 distinct variations")));
         QCOMPARE(bridge.rounds().back().instruction, QStringLiteral("A layout with a clear focal point"));
         QVERIFY(bridge.variationsPanel().isVisible());
+    }
+
+    void roastHeatIsRememberedAndRoastsAgain()
+    {
+        QSettings().remove(QStringLiteral("roast/heat"));
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        workspace.createDocument(QSizeF(200, 200));
+        rectangle(workspace.current().session, {10, 10, 40, 40});
+        window.findChild<QToolButton *>(QStringLiteral("roastMyDesign"))->click();
+        QVERIFY(prompt().contains(QStringLiteral("Heat: Savage")));
+        auto *heat = shown<QComboBox>(QStringLiteral("roastHeat"));
+        QVERIFY(heat);
+        QCOMPARE(heat->currentText(), QStringLiteral("Savage"));
+        QCOMPARE(heat->count(), 4);
+        // Picking Unhinged sticks, and Roast Again asks at that heat.
+        heat->setCurrentIndex(3);
+        emit heat->activated(3);
+        QCOMPARE(AgentLauncher::savedRoastHeat(), AgentLauncher::RoastHeat::unhinged);
+        window.agent()->stopWaiting();
+        QFile::remove(m_directory.filePath(QStringLiteral("prompt")));
+        QTRY_VERIFY(shown<QPushButton>(QStringLiteral("roastAgain")) && shown<QPushButton>(QStringLiteral("roastAgain"))->isEnabled());
+        shown<QPushButton>(QStringLiteral("roastAgain"))->click();
+        QTRY_VERIFY(prompt().contains(QStringLiteral("Heat: Unhinged")));
+        QSettings().remove(QStringLiteral("roast/heat"));
     }
 
     void imageTraceMakeIsAnUndoStep()

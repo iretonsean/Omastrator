@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -53,12 +54,44 @@ private slots:
         qputenv("FAKE_OUT", m_directory.filePath(QStringLiteral("out")).toUtf8());
         qputenv("XDG_DATA_HOME", m_directory.filePath(QStringLiteral("data")).toUtf8());
         qputenv("OMASTRATOR_SOCKET", "/run/user/test/omastrator.sock");
+        // Settings land in the temporary folder, never the user's config.
+        qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
     }
 
     void init()
     {
         qunsetenv("FAKE_FAIL");
         qputenv("FAKE_AGENT", "sh");
+    }
+
+    void roastHeatsGetHotterAndKeepTheHardLines()
+    {
+        QSettings settings;
+        settings.remove(QStringLiteral("roast/heat"));
+        // Savage until the user picks, then whatever they picked.
+        QCOMPARE(AgentLauncher::savedRoastHeat(), AgentLauncher::RoastHeat::savage);
+        AgentLauncher::saveRoastHeat(AgentLauncher::RoastHeat::unhinged);
+        QCOMPARE(AgentLauncher::savedRoastHeat(), AgentLauncher::RoastHeat::unhinged);
+        QCOMPARE(AgentLauncher::roastHeat(QStringLiteral("spicy")), AgentLauncher::RoastHeat::spicy);
+        QVERIFY(!AgentLauncher::roastHeat(QStringLiteral("nuclear")));
+        settings.remove(QStringLiteral("roast/heat"));
+
+        const QString friendly = AgentLauncher::roastHeatGuide(AgentLauncher::RoastHeat::friendly);
+        const QString spicy = AgentLauncher::roastHeatGuide(AgentLauncher::RoastHeat::spicy);
+        const QString savage = AgentLauncher::roastHeatGuide(AgentLauncher::RoastHeat::savage);
+        const QString unhinged = AgentLauncher::roastHeatGuide(AgentLauncher::RoastHeat::unhinged);
+        QVERIFY(friendly.contains(QLatin1String("No swearing")));
+        QVERIFY(spicy.contains(QLatin1String("no fuck")));
+        QVERIFY(savage.contains(QLatin1String("up to two fucks")));
+        QVERIFY(unhinged.contains(QLatin1String("Swearing:** unlimited")));
+        for (const QString &guide : {friendly, spicy, savage, unhinged}) {
+            QVERIFY(guide.contains(QLatin1String("Never, at any heat:** slurs")));
+            QVERIFY(guide.contains(QLatin1String("suicide or self-harm")));
+        }
+        const QString prompt = AgentLauncher::roastPrompt(QStringLiteral("req-9"), QStringLiteral("/tmp/b.png"), false,
+                                                          AgentLauncher::RoastHeat::friendly);
+        QVERIFY(prompt.contains(friendly));
+        QVERIFY(!prompt.contains(QLatin1String("Heat: Savage")));
     }
 
     void noDefaultAgentSaysWhereToChooseOne()
@@ -105,7 +138,7 @@ private slots:
         QCOMPARE(read(QDir(folder).filePath(QStringLiteral("CLAUDE.md"))), agents);
         for (const AgentProtocol::Method &method : AgentProtocol::methods())
             QVERIFY2(agents.contains(QStringLiteral("`%1 {").arg(method.name)), qPrintable(method.name));
-        QVERIFY(agents.contains(QLatin1String("holding back is the only way to fail them")));
+        QVERIFY(agents.contains(QLatin1String("Each roast task names a **heat**")));
         QVERIFY(agents.contains(QLatin1String("proposal_finish")));
         const QJsonObject mcp = QJsonDocument::fromJson(read(QDir(folder).filePath(QStringLiteral(".mcp.json"))).toUtf8()).object();
         const QJsonObject server = mcp["mcpServers"].toObject()["omastrator"].toObject();

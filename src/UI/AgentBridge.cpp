@@ -264,7 +264,7 @@ QString AgentBridge::roast()
         return failure.message();
     }
     const QString requestId = newRequestId();
-    error = launch(requestId, Task::roast, AgentLauncher::roastPrompt(requestId, path, selectionOnly));
+    error = launch(requestId, Task::roast, AgentLauncher::roastPrompt(requestId, path, selectionOnly, AgentLauncher::savedRoastHeat()));
     m_panelMessage = error;
     if (error.isEmpty())
         m_roast.reset();

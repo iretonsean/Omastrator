@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <QRectF>
 #include <QString>
 #include <optional>
@@ -33,5 +34,14 @@ QString generatePrompt(const QString &requestId, const QString &brief, int count
 QString editPrompt(const QString &requestId, const QString &instruction, bool hasSelection);
 enum class TraceMode { logo, sketch };
 QString smartTracePrompt(const QString &requestId, const QString &traceGroupId, const QString &imagePath, TraceMode mode);
-QString roastPrompt(const QString &requestId, const QString &renderPath, bool selectionOnly);
+// How hard Roast My Design hits; the user picks it and it is remembered.
+enum class RoastHeat { friendly, spicy, savage, unhinged };
+inline constexpr std::array allRoastHeats{RoastHeat::friendly, RoastHeat::spicy, RoastHeat::savage, RoastHeat::unhinged};
+QString title(RoastHeat heat);
+std::optional<RoastHeat> roastHeat(const QString &title);
+RoastHeat savedRoastHeat();
+void saveRoastHeat(RoastHeat heat);
+// The heat's aim, limits and calibration lines, as the roast task carries them.
+QString roastHeatGuide(RoastHeat heat);
+QString roastPrompt(const QString &requestId, const QString &renderPath, bool selectionOnly, RoastHeat heat = RoastHeat::savage);
 }

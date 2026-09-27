@@ -80,6 +80,21 @@ someone sees it.
 
 ## Roast My Design
 
+**Heat.** The Roast panel has a Heat picker that is remembered between runs, and
+"Roast Again" re-roasts at the new heat. The default is Savage.
+
+| Heat | What it allows |
+|---|---|
+| Friendly | Ribbing from a friend: pointed and specific, no swearing, the work only |
+| Spicy | The work plus the habits it reveals; mild swears, no fuck; light dark humour |
+| Savage | The meanest set of the night: dark humour, the disbelief opener, up to two fucks |
+| Unhinged | Everything Savage allows, then past it: crude and sexual innuendo about the work, infamous comparisons, the designer's life, photos of the designer on the artboard, unlimited swearing |
+
+Every heat keeps the same hard lines: no slurs, no jokes attacking race,
+ethnicity, religion, gender, sexuality or disability, and nothing about
+suicide or self-harm. The per-heat guides live in `roastHeatGuide()` in
+`src/Agent/AgentLauncher+Prompts.cpp`.
+
 The one place the humor goes loud, updated 2026-09-26 after the first live roasts read as too polite and too long. It's a button at the bottom of the tool rail,
 and it's the only playful button label in the app.
 

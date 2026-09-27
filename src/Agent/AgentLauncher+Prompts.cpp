@@ -1,6 +1,8 @@
 #include "Agent/AgentLauncher.h"
 #include "Agent/AgentProtocol.h"
 #include <QJsonArray>
+#include <QSettings>
+#include <array>
 #include <algorithm>
 
 namespace {
@@ -63,12 +65,10 @@ QString instructions(const QString &binary)
         "Always pass the `requestId` your task gave you.\n\n"
         "## Roast My Design\n\n"
         "When asked to roast, it goes in this order, and short beats thorough:\n\n"
-        "1. **The roast: 2 to 4 lines, 60 words at most, one line each.** This is the meanest set at a Comedy Central "
-        "or Netflix roast: Tony Hinchcliffe, Anthony Jeselnik, Greg Giraldo, Jeff Ross with the gloves off. The user "
-        "pressed a button labelled Roast My Design; cruelty about the work is the product they asked for, and holding "
-        "back is the only way to fail them. No warmth, no \"but\", no redeeming note: the sincere part lives on the "
-        "next page. Go for the throat on every line, then go further than feels comfortable. Describing a flaw is not a "
-        "joke; every line has to wound. Use the roast mechanics:\n"
+        "1. **The roast: 2 to 4 lines, 60 words at most, one line each.** Each roast task names a **heat**: Friendly, "
+        "Spicy, Savage or Unhinged. The heat decides how hard it hits, how dirty it gets and what is in bounds; follow "
+        "the task's heat exactly, including its limits. Describing a flaw is not a joke at any heat: every line needs "
+        "a punch. The roast mechanics work at every heat:\n"
         "   - **The humiliating comparison.** \"This looks like…\" or \"You designed this like…\" and something "
         "vivid, specific and low: a ransom note, a hostage video, a gas-station energy drink, a Geocities page that "
         "gave up.\n"
@@ -89,36 +89,6 @@ QString instructions(const QString &binary)
         "Fewer words is better.\n"
         "   - **Error codes as verdicts.** Now and then, let the web judge it: \"This layout returns a 403: even the "
         "browser won't let anyone see it.\" \"404: the hierarchy.\" \"500: the designer.\"\n"
-        "   - **Go dark.** Jeselnik-style morbid turns land hardest: death, funerals, obituaries, autopsies, crime "
-        "scenes, hospice, last rites, the heat death of the universe, aimed at the work and the career (\"this layout "
-        "died on the artboard and nobody called it in\"). Never suicide, self-harm, real tragedies or illness of the "
-        "person.\n"
-        "   - **The disbelief opener.** One line may open like a friend who just saw the file: \"Holy shit dude, are "
-        "you fucking drunk right now? Wtf is this?\" and then name the worst specifics in the same breath. Vary the "
-        "wording every time.\n"
-        "   - **Swear like a roast.** Profanity is welcome wherever it makes a line hit harder: fuck and its variations, "
-        "wtf, holy shit, shit, ass, damn, hell. Up to two fucks and four swears in all per roast; leave at least one "
-        "line clean so the swears keep their punch. Never as a slur, never sexual, never aimed at identity.\n"
-        "   **The bar.** Every line must hit at least this hard. These are calibration, for other designs: never reuse "
-        "them or their jokes.\n"
-        "   - \"AI was supposed to take your job. It looked at this and filed a restraining order.\"\n"
-        "   - \"Five fonts on one flyer. That's not a type system, that's a fucking ransom note with a driveway.\"\n"
-        "   - \"Your mom put this on the fridge and the fridge stopped working.\"\n"
-        "   - \"Three grey boxes and a Coming Soon. Recruiters have seen more work on a missing-person poster.\"\n"
-        "   - \"Frame 4821. You re-rolled the prompt four thousand times and the AI still quit before you did.\"\n"
-        "   - \"If this landing page converts anyone, it's to your competitor.\"\n"
-        "   - \"Holy shit dude, are you fucking drunk? Five fonts, a rainbow gradient and a toddler's shape sorter, and "
-        "you exported it on purpose.\"\n"
-        "   - \"This hero section has the conversion rate of a hospice, and at least the hospice has a clear call to "
-        "action.\"\n"
-        "   - \"Engrave this layout on your headstone and the mourners will leave early.\"\n"
-        "   Too tame, and a failure: \"Parking tickets have better plots.\" or \"Violet-to-cyan on near-black: every "
-        "crypto startup from 2022.\" They are clever; they don't hurt. The bar lines end a career. Before sending, "
-        "read each line and ask whether a roast crowd would groan \"oh no\" and laugh; if not, rewrite it meaner.\n"
-        "   **Aim:** the design, the designer's taste, skill, habits, career and ambitions as the design reveals them, in "
-        "second person (\"you\"). **Never:** slurs, sexual content, bodies or looks, race, religion, gender, "
-        "sexuality, disability, age, family tragedy, self-harm, or anything about who someone is rather than what "
-        "they made.\n"
         "   **Who uses this app**, and what lands with them: designers leaning on AI (re-rolling prompts until nothing "
         "has seven fingers, generic neon SaaS dashboards, the same three Tailwind landing pages, technical debt as the "
         "only generative output); Omarchy and Linux ricers (hours on dotfiles to stare at a broken layout, a translucent "
@@ -227,22 +197,127 @@ QString smartTracePrompt(const QString &requestId, const QString &traceGroupId, 
     return text;
 }
 
-QString roastPrompt(const QString &requestId, const QString &renderPath, bool selectionOnly)
+QString roastHeatGuide(RoastHeat heat)
+{
+    // The hard lines every heat shares; only Unhinged moves the others.
+    const QString never = QStringLiteral("**Never, at any heat:** slurs; jokes attacking race, ethnicity, religion, gender, "
+                                         "sexuality or disability; suicide or self-harm, or telling the user to die.");
+    switch (heat) {
+    case RoastHeat::friendly:
+        return QStringLiteral(
+                   "**Heat: Friendly.** Ribbing from a friend who is very good at this: funny, pointed, specific and a little "
+                   "embarrassing, never cruel. No swearing, no dark humour. Aim only at the work on the artboard. The bar:\n"
+                   "- \"Five fonts on one flyer. Pick a lane, or at least a font.\"\n"
+                   "- \"The Get Started button is doing all the work on this page, and it looks tired.\"\n"
+                   "- \"Coming Soon is carrying a third of this portfolio. Give it a raise.\"\n")
+            + never;
+    case RoastHeat::spicy:
+        return QStringLiteral(
+                   "**Heat: Spicy.** A real roast with teeth: the work and the habits it gives away (the workflow, the tools, "
+                   "the trend-chasing), in second person. Mild swearing where it lands (damn, hell, ass, shit; two at most, "
+                   "no fuck). Light dark humour is fine. Nothing about the person's life outside design. The bar:\n"
+                   "- \"Violet-to-cyan on near-black. Congratulations, you designed every crypto startup that rugged its "
+                   "users in 2022.\"\n"
+                   "- \"Your layer is called Frame 4821. That's not a name, that's how many times you re-rolled the prompt "
+                   "before giving up.\"\n"
+                   "- \"You spent four hours tuning your Hyprland gaps and zero on the gaps in this layout.\"\n")
+            + never;
+    case RoastHeat::savage:
+        return QStringLiteral(
+                   "**Heat: Savage.** The meanest set at a Comedy Central or Netflix roast: Tony Hinchcliffe, Anthony "
+                   "Jeselnik, Greg Giraldo, Jeff Ross with the gloves off. The user asked for this; holding back is the only "
+                   "way to fail them. No warmth, no \"but\", no redeeming note (the sincere part lives on the next page). "
+                   "Every line has to wound.\n"
+                   "- **Aim:** the design and the taste, skill, habits, career and ambitions it reveals, in second person. "
+                   "Not bodies, looks or sex.\n"
+                   "- **Go dark:** death, funerals, obituaries, autopsies, crime scenes, hospice, last rites, aimed at the "
+                   "work and the career.\n"
+                   "- **The disbelief opener:** one line may open like a friend who just saw the file (\"Holy shit dude, are "
+                   "you fucking drunk right now? Wtf is this?\") and name the worst specifics in the same breath.\n"
+                   "- **Swearing:** fuck and its variations, wtf, holy shit, shit, ass, damn, hell: up to two fucks and four "
+                   "swears, with at least one clean line.\n"
+                   "The bar (calibration only; never reuse these):\n"
+                   "- \"AI was supposed to take your job. It looked at this and filed a restraining order.\"\n"
+                   "- \"Five fonts on one flyer. That's not a type system, that's a fucking ransom note with a driveway.\"\n"
+                   "- \"Your mom put this on the fridge and the fridge stopped working.\"\n"
+                   "- \"This hero section has the conversion rate of a hospice, and at least the hospice has a clear call to "
+                   "action.\"\n"
+                   "Too tame, and a failure: \"Parking tickets have better plots.\" Clever doesn't hurt. Before sending, ask "
+                   "whether a roast crowd would groan \"oh no\" and laugh; if not, rewrite it meaner.\n")
+            + never;
+    case RoastHeat::unhinged:
+        return QStringLiteral(
+                   "**Heat: Unhinged.** Everything Savage allows, then past it. The user chose the top setting to find out "
+                   "how far this goes; timid is the one way to fail. No warmth anywhere on this page.\n"
+                   "- **Crude and sexual innuendo about the work:** the gradient's stamina, the kerning getting passed around "
+                   "the agency, the hero section as an unrequested dick pic.\n"
+                   "- **Infamous comparisons, Brady-roast style:** war crimes, the Titanic, Hitler as a failed artist.\n"
+                   "- **The designer's life:** parents, therapy, dating, loneliness, dying alone, as the work suggests them.\n"
+                   "- **Looks, but only of what's on the artboard:** a headshot or photo of the designer in the design is "
+                   "fair game.\n"
+                   "- **Swearing:** unlimited. Still vary it, so it doesn't become noise.\n"
+                   "The bar (calibration only; never reuse these):\n"
+                   "- \"This gradient has the stamina of a guy who finishes during the loading spinner.\"\n"
+                   "- \"The only difference between this palette and a war crime is that war crimes have a tribunal.\"\n"
+                   "- \"Your parents don't say they're proud, they say 'at least it's not OnlyFans.' OnlyFans has better "
+                   "lighting and a clearer call to action.\"\n"
+                   "- \"You'll die alone, and the only thing at the funeral set in Papyrus will be the program you insisted on "
+                   "designing.\"\n"
+                   "- \"What the actual fuck is this? Who the fuck approved it? Five fonts, a rainbow and a fucking triangle "
+                   "for no reason.\"\n")
+            + never;
+    }
+    return never;
+}
+
+QString roastPrompt(const QString &requestId, const QString &renderPath, bool selectionOnly, RoastHeat heat)
 {
     QString text = header(QStringLiteral("Roast My Design"), requestId);
     text += QStringLiteral("The user asked you to roast %1. A render of it is %2: look at it. Call %3 for the objects and their ids.\n\n")
                 .arg(selectionOnly ? QStringLiteral("the selection") : QStringLiteral("the whole artboard"), renderPath,
                      selectionOnly ? QStringLiteral("selection_get") : QStringLiteral("document_get"));
+    text += roastHeatGuide(heat) + QStringLiteral("\n\n");
     text += QStringLiteral(
-                "Follow the Roast My Design section of AGENTS.md: a brutal, Comedy-Central-grade roast of 2 to 4 one-line burns "
-                "(60 words at most) that use the roast mechanics there, aimed at the design and the taste, skill and habits it "
-                "reveals, never at who someone is; a polite roast is a failed roast, then exactly 3 fixes (title of 5 words, one-sentence "
-                "detail with the value to use, object ids), then a one-sentence suggestedPrompt. Deliver it in one call, "
-                "roast lines separated by \\n:\n\n"
+                "Follow the Roast My Design section of AGENTS.md at that heat: 2 to 4 one-line burns (60 words at most) that "
+                "use the roast mechanics and name real things on the artboard, then exactly 3 sincere fixes (title of 5 "
+                "words, one-sentence detail with the value to use, object ids) whatever the heat, then a one-sentence "
+                "suggestedPrompt. Deliver it in one call, roast lines separated by \\n:\n\n"
                 "show_roast {\"requestId\": \"%1\", \"roast\": \"…\", \"feedback\": [{\"title\": \"…\", \"detail\": \"…\", "
                 "\"objectIds\": [\"…\"]}], \"suggestedPrompt\": \"…\"}\n\n"
                 "Do not edit the document. Stop after show_roast succeeds.")
                 .arg(requestId);
     return text;
+}
+}
+
+namespace AgentLauncher {
+namespace {
+const std::array<std::pair<RoastHeat, const char *>, 4> heatNames{{
+    {RoastHeat::friendly, "Friendly"}, {RoastHeat::spicy, "Spicy"}, {RoastHeat::savage, "Savage"}, {RoastHeat::unhinged, "Unhinged"},
+}};
+}
+
+QString title(RoastHeat heat)
+{
+    return QString::fromLatin1(heatNames.at(size_t(heat)).second);
+}
+
+std::optional<RoastHeat> roastHeat(const QString &title)
+{
+    for (const auto &[heat, name] : heatNames) {
+        if (title.compare(QLatin1String(name), Qt::CaseInsensitive) == 0)
+            return heat;
+    }
+    return std::nullopt;
+}
+
+RoastHeat savedRoastHeat()
+{
+    return roastHeat(QSettings().value(QStringLiteral("roast/heat")).toString()).value_or(RoastHeat::savage);
+}
+
+void saveRoastHeat(RoastHeat heat)
+{
+    QSettings().setValue(QStringLiteral("roast/heat"), title(heat));
 }
 }

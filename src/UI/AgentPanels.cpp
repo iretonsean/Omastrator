@@ -1,8 +1,10 @@
 #include "UI/AgentPanels.h"
+#include "Agent/AgentLauncher.h"
 #include "Document/EditorSession.h"
 #include "IO/SvgImporter.h"
 #include "Rendering/VectorRenderer.h"
 #include "UI/AgentBridge.h"
+#include <QComboBox>
 #include <QCommandLinkButton>
 #include <QFrame>
 #include <QGridLayout>
@@ -224,6 +226,29 @@ void RoastPanel::buildBody(QWidget &body, QVBoxLayout &column)
         row->addWidget(cancel);
         column.addLayout(row);
     }
+    // How hard it hits: remembered, and one click to roast again at a new heat.
+    auto *heatRow = new QHBoxLayout;
+    auto *heatLabel = new QLabel(QStringLiteral("Heat"), &body);
+    auto *heat = new QComboBox(&body);
+    heat->setObjectName(QStringLiteral("roastHeat"));
+    heat->setAccessibleName(QStringLiteral("Roast heat"));
+    for (AgentLauncher::RoastHeat level : AgentLauncher::allRoastHeats)
+        heat->addItem(AgentLauncher::title(level), int(level));
+    heat->setCurrentIndex(int(AgentLauncher::savedRoastHeat()));
+    heat->setToolTip(QStringLiteral("Friendly teases. Spicy bites. Savage is a Comedy Central roast. Unhinged has no brakes."));
+    connect(heat, &QComboBox::activated, this, [heat] {
+        AgentLauncher::saveRoastHeat(AgentLauncher::RoastHeat(heat->currentData().toInt()));
+    });
+    auto *again = new QPushButton(QStringLiteral("Roast Again"), &body);
+    again->setObjectName(QStringLiteral("roastAgain"));
+    again->setEnabled(!waiting);
+    connect(again, &QPushButton::clicked, this, [this] {
+        QMetaObject::invokeMethod(&m_bridge, [this] { m_bridge.roast(); }, Qt::QueuedConnection);
+    });
+    heatRow->addWidget(heatLabel);
+    heatRow->addWidget(heat, 1);
+    heatRow->addWidget(again);
+    column.addLayout(heatRow);
     auto *message = wrapped(m_bridge.panelMessage(), &body, QStringLiteral("roastMessage"));
     message->setVisible(!m_bridge.panelMessage().isEmpty());
     column.addWidget(message);
