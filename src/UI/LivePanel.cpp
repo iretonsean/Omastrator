@@ -103,6 +103,12 @@ void LivePanel::rebuild()
     QLabel *message = label(m_bridge.liveMessage(), QStringLiteral("liveReviewMessage"), self);
     message->setVisible(!m_bridge.liveMessage().isEmpty());
     column->addWidget(message);
+    if (!m_bridge.liveMessage().isEmpty() && !m_bridge.liveLog().isEmpty()) {
+        QPushButton *log = button(QStringLiteral("Show Log"), QStringLiteral("liveShowLog"), self);
+        log->setToolTip(QStringLiteral("What the agent printed before it stopped"));
+        column->addWidget(log, 0, Qt::AlignLeft);
+        connect(log, &QPushButton::clicked, this, [this] { report(m_bridge.showLiveLog()); });
+    }
     if (m_bridge.waiting() && m_bridge.waiting()->task == AgentBridge::Task::live)
         column->addWidget(label(m_bridge.waitingText(), QStringLiteral("liveReviewWaiting"), self));
 

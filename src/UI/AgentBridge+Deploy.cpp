@@ -162,17 +162,21 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     m_deployState = DeployState{};
     m_deployState.running = true;
     setStage(QStringLiteral("writing"), QStringLiteral("Writing…"));
-    if (m_live.state() == LiveSession::State::running && canonical(m_live.project()) == folder && !m_live.edits().empty()) {
-        QString agentRequest;
-        if (const QString failure = liveWriteBack(&agentRequest); !failure.isEmpty()) {
-            pipelineFailed(failure);
-            return failure;
-        }
-    }
-    // The agent's write-backs for this project, the one just started and any already running.
+    // The agent's write-backs already running for this project; one the write-back starts joins by itself.
     for (const auto &[id, work] : m_liveJobs)
         if (canonical(work.project) == folder)
             m_pipeline.waitingFor << id;
+    if (m_live.state() == LiveSession::State::running && canonical(m_live.project()) == folder && !m_live.edits().empty()) {
+        QString agentRequest;
+        if (const QString failure = liveWriteBack(&agentRequest); !failure.isEmpty()) {
+            if (m_pipeline.active)
+                pipelineFailed(failure);
+            return failure;
+        }
+    }
+    // The write-back waits on the page, so a quick agent may already have answered or stopped.
+    if (!m_pipeline.active || m_deployState.stage != QLatin1String("writing"))
+        return {};
     if (m_pipeline.waitingFor.isEmpty())
         finishWriting();
     else
@@ -243,12 +247,14 @@ void AgentBridge::commitAndShip()
     m_job.start({folder, head, git, m_pipeline.github, m_pipeline.deploy, m_pipeline.command});
 }
 
-void AgentBridge::pipelineFailed(const QString &line)
+void AgentBridge::pipelineFailed(const QString &line, const QString &log)
 {
     m_pipeline.active = false;
     m_deployState.running = false;
     m_deployState.stage = QStringLiteral("failed");
     m_deployState.message = line;
+    if (!log.isEmpty())
+        m_deployState.log = log;
     emit liveReviewChanged();
 }
 
@@ -270,8 +276,7 @@ void AgentBridge::launchDeployAgent()
                                 : WriteBack::git(m_pipeline.folder, {QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%s"), m_job.plan().commit}, &why).trimmed();
     const QString prompt = Deploy::agentPrompt({id, m_pipeline.folder, m_job.plan().commit, subject, pushedTo,
                                                 Setup::shellQuote(QCoreApplication::applicationFilePath())});
-    // TODO(headless): AgentAccess::project, cwd = m_pipeline.folder
-    error = AgentLauncher::launchIn(m_pipeline.folder, prompt, m_server.isListening() ? m_server.path() : QString());
+    error = launchProject(id, m_pipeline.folder, QStringLiteral("deploy"), prompt);
     if (!error.isEmpty()) {
         m_job.agentFinished(QString(), error);
         return;
@@ -315,6 +320,11 @@ void AgentBridge::cancelDeploy()
 {
     if (!m_pipeline.active)
         return;
+    // The agents it waits for stop with it.
+    for (const QString &id : m_pipeline.waitingFor)
+        stopLiveJob(id);
+    if (auto run = m_runs.find(m_pipeline.agentRequest); run != m_runs.end() && run->second)
+        run->second->cancel();
     if (m_job.running()) {
         // The job's finished handler says it.
         m_job.cancel();

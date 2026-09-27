@@ -7,6 +7,7 @@
 #include "UI/LiveHistoryPanel.h"
 #include "UI/LivePanel.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "../Agent/FakeAgents.h"
 #include <QCheckBox>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -18,6 +19,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <csignal>
 
 // Deploy-first Live in the app (docs/OS-SUITE.md): Deploy writes, commits,
 // pushes and deploys with no review in between; the first deploy of a project
@@ -25,10 +27,10 @@
 // is a new commit; History restores. Nothing here needs Chromium: the agent's
 // write-backs come through Hand to Agent, and every outside program is a fake.
 namespace {
-// Stands in for `omarchy`: the default agent is sh. A Live task edits the stylesheet where it runs; a deploy task changes nothing.
+// Stands in for `omarchy`: the default agent is sh (or $FAKE_AGENT). A Live task edits the stylesheet where it runs; a deploy task changes nothing.
 constexpr const char *fakeOmarchy =
     "#!/bin/sh\n"
-    "if [ \"$1\" = default ]; then echo sh; exit 0; fi\n"
+    "if [ \"$1\" = default ]; then echo \"${FAKE_AGENT:-sh}\"; exit 0; fi\n"
     "if [ \"$1\" = agent ] && [ \"$2\" = prompt ]; then printf '%s' \"$3\" > \"$FAKE_OUT\"; pwd > \"$FAKE_OUT.cwd\";\n"
     "  case \"$3\" in *'Omastrator deploy'*) ;; *) printf '#title { color: var(--brand); }\\n' >> style.css;; esac; exit 0; fi\n"
     "exit 2\n";
@@ -156,6 +158,10 @@ private slots:
         qputenv("OMASTRATOR_TERMINAL", m_directory.filePath(QStringLiteral("terminal")).toUtf8());
         qputenv("FAKE_TERMINAL_OUT", m_directory.filePath(QStringLiteral("terminal.out")).toUtf8());
         qputenv("ENV_DUMP", m_directory.filePath(QStringLiteral("child-env")).toUtf8());
+        // Headless agents are fakes on PATH, used where a test names claude.
+        const QString bin = FakeAgents::install(m_directory.path());
+        QVERIFY(!bin.isEmpty());
+        qputenv("PATH", (bin + QLatin1Char(':') + qEnvironmentVariable("PATH")).toUtf8());
     }
 
     void nothingToDeployWithoutAProject()
@@ -444,6 +450,62 @@ private slots:
         QVERIFY(connectButton);
         connectButton->click();
         QTRY_COMPARE(read(qEnvironmentVariable("FAKE_TERMINAL_OUT")).trimmed(), (qEnvironmentVariable("OMASTRATOR_GH") + " auth login").toUtf8());
+    }
+
+    void aDeployAgentThatStopsWithoutReportingFails()
+    {
+        // Claude runs headless, recording into agents/; the default is sh again afterwards.
+        const QString out = m_directory.filePath(QStringLiteral("agents"));
+        QDir().mkpath(out);
+        const QByteArray fakeOut = qgetenv("FAKE_OUT");
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "quiet");
+        qputenv("FAKE_OUT", out.toUtf8());
+        const auto restore = qScopeGuard([fakeOut] {
+            qunsetenv("FAKE_AGENT");
+            qputenv("FAKE_OUT", fakeOut);
+        });
+        QFile::remove(qEnvironmentVariable("FAKE_GH_LOGGED_IN"));
+        const QString site = repository(true);
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        QVERIFY(bridge.deployQuestion(site).command.viaAgent());
+
+        // It pushes, then the agent deploys from the checkout and exits without live_deployed: Deploy failed, with its log.
+        QVERIFY(bridge.liveDeploy({true, true, false, std::nullopt, site}).isEmpty());
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("failed"));
+        QVERIFY2(bridge.deployState().message.startsWith(QLatin1String("Deploy failed: Claude stopped without an answer.")),
+                 qPrintable(bridge.deployState().message));
+        QCOMPARE(FakeAgents::read(out + QStringLiteral("/claude.cwd")).trimmed(), site);
+        QVERIFY(!bridge.waiting() && !bridge.run());
+        QVERIFY(bridge.deployState().log.startsWith(AgentLauncher::logFolder()));
+        QVERIFY(read(bridge.deployState().log).contains("I looked at it and decided not to."));
+        bridge.showLivePanel();
+        QPushButton *details = nullptr;
+        QTRY_VERIFY((details = window.findChild<QPushButton *>(QStringLiteral("liveDetails"))));
+        details->click();
+        QPlainTextEdit *log = nullptr;
+        QTRY_VERIFY((log = window.findChild<QPlainTextEdit *>(QStringLiteral("deployLogText"))));
+        QVERIFY(log->toPlainText().contains(QLatin1String("I looked at it")));
+        log->window()->close();
+        // The record says it failed.
+        QVERIFY(!Deploy::records(site).empty() && !Deploy::records(site).back().ok);
+
+        // Cancel while the agent deploys stops it.
+        qputenv("FAKE_MODE", "hang");
+        QFile::remove(out + QStringLiteral("/claude.child"));
+        QVERIFY(bridge.liveDeploy({true, true, false, std::nullopt, site}).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!FakeAgents::read(out + QStringLiteral("/claude.child")).trimmed().isEmpty(), 15'000);
+        const pid_t child = pid_t(FakeAgents::read(out + QStringLiteral("/claude.child")).trimmed().toInt());
+        QVERIFY(child > 0 && ::kill(child, 0) == 0);
+        bridge.cancelDeploy();
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().message, QStringLiteral("Cancelled."));
+        QVERIFY(!bridge.waiting());
+        QTRY_VERIFY(::kill(child, 0) != 0);
     }
 };
 

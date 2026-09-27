@@ -28,6 +28,8 @@ const char *verb(AgentBridge::Task task)
         return "tracing";
     case AgentBridge::Task::roast:
         return "roasting";
+    case AgentBridge::Task::deploy:
+        return "deploying";
     case AgentBridge::Task::live:
         break;
     }
@@ -39,6 +41,35 @@ QString taskName(AgentBridge::Task task)
 {
     static const QStringList names{"generate", "edit", "vectorize", "roast", "live", "deploy"};
     return names.value(int(task));
+}
+
+QString openLog(const QString &path)
+{
+    if (path.isEmpty() || !QFileInfo::exists(path))
+        return QStringLiteral("The log is gone.");
+    const QString opener = qEnvironmentVariable("OMASTRATOR_XDG_OPEN", QStringLiteral("xdg-open"));
+    if (!QProcess::startDetached(opener, {path}))
+        return QStringLiteral("Could not open %1.").arg(path);
+    return {};
+}
+
+// One line on how a run ended without its answer.
+QString endMessage(const AgentRun &run)
+{
+    const QString name = AgentBridge::displayName(run.agent());
+    if (run.end() == AgentRun::End::timedOut) {
+        const int limit = run.timeoutSeconds();
+        const bool minutes = limit % 60 == 0;
+        const int count = minutes ? limit / 60 : limit;
+        const QString unit = minutes ? QStringLiteral("minute") : QStringLiteral("second");
+        return QStringLiteral("%1 ran out of time after %2 %3%4 and was stopped.")
+            .arg(name)
+            .arg(count)
+            .arg(unit, count == 1 ? QString() : QStringLiteral("s"));
+    }
+    const QString line = run.lastLine();
+    return line.isEmpty() ? QStringLiteral("%1 stopped without an answer.").arg(name)
+                          : QStringLiteral("%1 stopped without an answer: %2").arg(name, line);
 }
 }
 
@@ -191,6 +222,12 @@ QString AgentBridge::waitingText() const
 
 void AgentBridge::stopWaiting()
 {
+    // A deploy waiting on this agent stops with it; a Live agent's worktree goes when it has stopped.
+    if (m_waiting && m_pipeline.active
+        && (m_pipeline.waitingFor.contains(m_waiting->requestId) || m_pipeline.agentRequest == m_waiting->requestId))
+        cancelDeploy();
+    else if (m_waiting && m_waiting->task == Task::live)
+        stopLiveJob(m_waiting->requestId);
     if (m_run)
         m_run->cancel();
     m_run = nullptr;
@@ -202,12 +239,12 @@ void AgentBridge::stopWaiting()
 
 QString AgentBridge::showLog()
 {
-    if (m_logPath.isEmpty() || !QFileInfo::exists(m_logPath))
-        return QStringLiteral("The log is gone.");
-    const QString opener = qEnvironmentVariable("OMASTRATOR_XDG_OPEN", QStringLiteral("xdg-open"));
-    if (!QProcess::startDetached(opener, {m_logPath}))
-        return QStringLiteral("Could not open %1.").arg(m_logPath);
-    return {};
+    return openLog(m_logPath);
+}
+
+QString AgentBridge::showLiveLog()
+{
+    return openLog(m_liveLog);
 }
 
 void AgentBridge::dismissBarMessage()
@@ -247,26 +284,17 @@ void AgentBridge::runFinished(const QString &requestId, AgentRun &run)
 {
     if (m_run == &run)
         m_run = nullptr;
+    m_runs.erase(requestId);
+    // Live and deploy runs answer to their worktree and pipeline, whatever is waited on now.
+    if (m_liveJobs.count(requestId))
+        return liveRunFinished(requestId, run);
+    if (m_pipeline.active && m_pipeline.agentRequest == requestId && m_job.running())
+        return deployRunFinished(run);
     // Answered, cancelled, or replaced by a newer task: nothing to say.
     if (!m_waiting || m_waiting->requestId != requestId || run.end() == AgentRun::End::cancelled)
         return;
     const Task task = m_waiting->task;
-    const QString name = displayName(run.agent());
-    QString message;
-    if (run.end() == AgentRun::End::timedOut) {
-        const int limit = run.timeoutSeconds();
-        const bool minutes = limit % 60 == 0;
-        const int count = minutes ? limit / 60 : limit;
-        const QString unit = minutes ? QStringLiteral("minute") : QStringLiteral("second");
-        message = QStringLiteral("%1 ran out of time after %2 %3%4 and was stopped.")
-                      .arg(name)
-                      .arg(count)
-                      .arg(unit, count == 1 ? QString() : QStringLiteral("s"));
-    } else {
-        const QString line = run.lastLine();
-        message = line.isEmpty() ? QStringLiteral("%1 stopped without an answer.").arg(name)
-                                 : QStringLiteral("%1 stopped without an answer: %2").arg(name, line);
-    }
+    const QString message = endMessage(run);
     m_logPath = run.logPath();
     m_waiting.reset();
     if (task == Task::edit || task == Task::vectorize)
@@ -283,6 +311,80 @@ void AgentBridge::runFinished(const QString &requestId, AgentRun &run)
     } else {
         emit proposalChanged();
     }
+}
+
+QString AgentBridge::launchProject(const QString &requestId, const QString &directory, const QString &name, const QString &prompt)
+{
+    const AgentLauncher::LaunchOptions options{AgentAccess::project, directory, name, 0,
+                                               [bridge = QPointer<AgentBridge>(this), requestId](AgentRun &run) {
+                                                   if (bridge)
+                                                       bridge->runFinished(requestId, run);
+                                               }};
+    QPointer<AgentRun> run;
+    if (const QString error = AgentLauncher::launch(prompt, m_server.isListening() ? m_server.path() : QString(), options, &run); !error.isEmpty())
+        return error;
+    m_run = run;
+    if (run)
+        m_runs[requestId] = run;
+    return {};
+}
+
+void AgentBridge::liveRunFinished(const QString &requestId, AgentRun &run)
+{
+    auto job = m_liveJobs.find(requestId);
+    job->second.cleanup();
+    m_liveJobs.erase(job);
+    if (m_waiting && m_waiting->requestId == requestId) {
+        m_waiting.reset();
+        emit waitingChanged();
+    }
+    const bool deploying = m_pipeline.active && m_pipeline.waitingFor.removeAll(requestId) > 0;
+    const QString message = run.end() == AgentRun::End::cancelled ? QStringLiteral("Cancelled.") : endMessage(run);
+    if (deploying)
+        return pipelineFailed(message, run.end() == AgentRun::End::cancelled ? QString() : run.logPath());
+    if (run.end() != AgentRun::End::cancelled) {
+        m_liveMessage = message;
+        m_liveLog = run.logPath();
+        if (m_live.state() == LiveSession::State::running)
+            m_live.notice(message);
+    }
+    emit liveReviewChanged();
+}
+
+void AgentBridge::deployRunFinished(AgentRun &run)
+{
+    if (m_waiting && m_waiting->task == Task::deploy) {
+        m_waiting.reset();
+        emit waitingChanged();
+    }
+    if (run.end() == AgentRun::End::cancelled)
+        return m_job.cancel();
+    // The job's finished handler says "Deploy failed: …"; Details then opens the agent's own log.
+    m_job.agentFinished(QString(), endMessage(run));
+    m_deployState.log = run.logPath();
+    emit liveReviewChanged();
+}
+
+void AgentBridge::stopLiveJob(const QString &requestId)
+{
+    auto job = m_liveJobs.find(requestId);
+    auto found = m_runs.find(requestId);
+    if (job == m_liveJobs.end() || found == m_runs.end() || !found->second || !found->second->isRunning())
+        return;
+    AgentRun *run = found->second;
+    AgentWork work = job->second;
+    m_liveJobs.erase(job);
+    m_runs.erase(found);
+    // The agent may still be writing in the worktree until it has stopped.
+    connect(run, &AgentRun::finished, run, [work]() mutable { work.cleanup(); });
+    run->cancel();
+    if (m_run == run)
+        m_run = nullptr;
+    if (m_waiting && m_waiting->requestId == requestId) {
+        m_waiting.reset();
+        emit waitingChanged();
+    }
+    emit liveReviewChanged();
 }
 
 QString AgentBridge::generate(const QString &brief, int count, bool fitToSelection)

@@ -61,7 +61,8 @@ public:
     const std::optional<Waiting> &waiting() const { return m_waiting; }
     // "Claude is roasting… 12 s", in the agent's own name.
     QString waitingText() const;
-    // Cancel: stops the agent's background run; an agent in a terminal may still answer, which lands as usual.
+    // Cancel: stops the agent's background run (with a Live worktree, or the deploy waiting for it); an agent in a
+    // terminal may still answer, which lands as usual.
     void stopWaiting();
     static QString displayName(const QString &agent);
     // The run in the background, or null when the agent is in a terminal or done.
@@ -130,6 +131,9 @@ public:
     // Files written but not yet committed.
     int unsavedFiles() const;
     QString liveMessage() const { return m_liveMessage; }
+    // The log of a Live agent run that stopped without its change; Show log opens it.
+    QString liveLog() const { return m_liveLog; }
+    QString showLiveLog();
 
     // Deploy-first Live (docs/OS-SUITE.md): write back, commit, push, deploy, with no review in between.
     struct DeployRequest {
@@ -214,6 +218,12 @@ private:
     QString launch(const QString &requestId, Task task, const QString &prompt);
     // A background run ended; if its answer never came, say so.
     void runFinished(const QString &requestId, AgentRun &run);
+    // A project task (Live, Hand to Agent, Deploy with agent) with project access in `directory`; returns why it couldn't start.
+    QString launchProject(const QString &requestId, const QString &directory, const QString &name, const QString &prompt);
+    void liveRunFinished(const QString &requestId, AgentRun &run);
+    void deployRunFinished(AgentRun &run);
+    // Cancels a Live agent's run; its worktree goes once it has stopped. An agent in a terminal is left to finish.
+    void stopLiveJob(const QString &requestId);
     QString quietly(const std::function<bool()> &run);
     // Follows the front tab's session, so its tool and document reach status followers.
     void watchFront();
@@ -226,6 +236,8 @@ private:
     QString m_summary;
     std::optional<Waiting> m_waiting;
     QPointer<AgentRun> m_run;
+    // Every headless Live and deploy run by request id, so Cancel reaches each one.
+    std::map<QString, QPointer<AgentRun>> m_runs;
     QTimer m_tick;
     QString m_logPath;
     QString m_barMessage;
@@ -249,6 +261,7 @@ private:
     QString m_lastProject;
     std::map<QString, AgentWork> m_liveJobs;
     QString m_liveMessage;
+    QString m_liveLog;
     void wireDeploy();
     // Records a write-back that is already on disk.
     void record(const QString &title, const QString &summary, const std::vector<WriteBack::FileChange> &changes, const QString &folder,
@@ -257,7 +270,8 @@ private:
     void setStage(const QString &stage, const QString &message);
     void finishWriting();
     void commitAndShip();
-    void pipelineFailed(const QString &line);
+    // `log` replaces the job's for Details, when an agent's run is what failed.
+    void pipelineFailed(const QString &line, const QString &log = QString());
     void launchDeployAgent();
     QString startSave(const QString &folder, const QString &doneMessage);
     struct Pipeline {

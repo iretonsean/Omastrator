@@ -57,10 +57,14 @@ stdin closed and no MCP servers. What it may do without asking depends on the
 - `AgentAccess::omastrator` (Generate, Refine, Edit with Instruction,
   Vectorize with AI, Roast My Design): read the files it is given and run the
   Omastrator CLI, nothing else.
-- `AgentAccess::project` (Live's write-back and Hand to Agent, through
-  `launchIn` or `LaunchOptions{AgentAccess::project, worktree, "live", …}`):
-  read, edit and write files and run shell commands, starting in the project's
-  worktree.
+- `AgentAccess::project` (Live's write-back, Hand to Agent and Deploy with
+  agent, through `LaunchOptions{AgentAccess::project, <worktree or folder>,
+  "live" / "handoff" / "deploy", …}`): read, edit and write files and run shell
+  commands, starting in the project's worktree (Deploy: its checkout). A Live
+  run that ends without `live agentDone` says so in the Live panel with Show
+  log, or fails the deploy's Writing… stage, and its worktree is removed; a
+  deploy run that ends without `live_deployed` is "Deploy failed: …", with
+  Details opening the run's log. Cancel stops them.
 
 The commands (`<cli>` is `<absolute path to omastrator> agent`):
 

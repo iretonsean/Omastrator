@@ -18,6 +18,12 @@ QString requestId()
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+QString canonical(const QString &folder)
+{
+    const QString resolved = QFileInfo(folder).canonicalFilePath();
+    return resolved.isEmpty() ? folder : resolved;
+}
+
 QString jsonArgument(const QJsonValue &value)
 {
     return QString::fromUtf8(QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact)).mid(1).chopped(1);
@@ -59,6 +65,7 @@ QString AgentBridge::liveWriteBack(QString *agentRequest)
         record(QStringLiteral("Live edits"), plan.done.join(QLatin1Char('\n')), plan.changes, project);
     m_live.setEdits(plan.unresolved);
     m_liveMessage.clear();
+    m_liveLog.clear();
     if (plan.unresolved.empty()) {
         emit liveReviewChanged();
         return {};
@@ -97,17 +104,20 @@ QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &eleme
     }
     AgentWork::Brief brief{instruction, instruction.isEmpty() ? m_live.edits() : std::vector<LiveEdit>{}, elements, screenshot,
                            m_live.url().toString(), Setup::shellQuote(QCoreApplication::applicationFilePath())};
-    // TODO(headless): AgentAccess::project, cwd = work.worktree
-    error = AgentLauncher::launchIn(work.worktree, work.prompt(brief), m_server.isListening() ? m_server.path() : QString());
+    error = launchProject(work.requestId, work.worktree, QStringLiteral("live"), work.prompt(brief));
     if (!error.isEmpty()) {
         work.cleanup();
         return error;
     }
+    m_liveJobs[work.requestId] = work;
+    // A deploy that is writing waits for it, even if it answers before the deploy looks.
+    if (m_pipeline.active && m_deployState.stage == QLatin1String("writing") && canonical(work.project) == m_pipeline.folder
+        && !m_pipeline.waitingFor.contains(work.requestId))
+        m_pipeline.waitingFor << work.requestId;
     if (instruction.isEmpty())
         m_live.setEdits({});
     if (agentRequest)
         *agentRequest = work.requestId;
-    m_liveJobs[work.requestId] = work;
     m_waiting = Waiting{work.requestId, Task::live, agent};
     emit waitingChanged();
     m_live.notice(QStringLiteral("Asked %1. The change is written to the code when it's done.").arg(displayName(agent)));
@@ -138,11 +148,9 @@ QString AgentBridge::handToAgent(const QString &folder, const QString &instructi
         work.cleanup();
         return failure.message();
     }
-    // TODO(headless): AgentAccess::project, cwd = work.worktree
-    error = AgentLauncher::launchIn(work.worktree,
-                                    work.handoffPrompt(instruction, stem + QStringLiteral(".png"), stem + QStringLiteral(".svg"),
-                                                       Setup::shellQuote(QCoreApplication::applicationFilePath())),
-                                    m_server.isListening() ? m_server.path() : QString());
+    error = launchProject(work.requestId, work.worktree, QStringLiteral("handoff"),
+                          work.handoffPrompt(instruction, stem + QStringLiteral(".png"), stem + QStringLiteral(".svg"),
+                                             Setup::shellQuote(QCoreApplication::applicationFilePath())));
     if (!error.isEmpty()) {
         work.cleanup();
         return error;
@@ -151,6 +159,7 @@ QString AgentBridge::handToAgent(const QString &folder, const QString &instructi
     m_lastProject = project;
     m_waiting = Waiting{work.requestId, Task::live, agent};
     m_liveMessage.clear();
+    m_liveLog.clear();
     emit waitingChanged();
     emit liveReviewChanged();
     return {};
@@ -168,6 +177,7 @@ QString AgentBridge::liveAgentDone(const QString &id, const QString &summary)
         m_waiting.reset();
         emit waitingChanged();
     }
+    m_liveLog.clear();
     if (!error.isEmpty()) {
         m_liveMessage = error;
     } else if (changes.empty()) {

@@ -24,15 +24,15 @@ Branch `worktree-agent-a309a81b931e1d3ca`. The design is in
   through. The full suite passes (41 of 41).
 - [x] End to end with the real Claude Code, offscreen: a roast arrived in
   32 s and two variations in 37 s, with no new window and no MCP prompt.
+- [x] Live write-back, Hand to Agent and Deploy with agent run headless through
+  `AgentBridge::launchProject` (`AgentAccess::project`, tasks `live`,
+  `handoff`, `deploy`). Every run is kept by request id, so Cancel (the
+  island's stop or the Live panel's) stops it and removes its worktree. A run
+  that ends without `agentDone` or `live_deployed` is reported through Live's
+  own failure paths with its log (LiveReviewTests, LiveDeployTests).
 
 ## Not done
 
-- [ ] Live (`AgentBridge+Live.cpp`) still calls `launchIn`, which now runs
-  headless with project access but without a finished callback, so Cancel
-  doesn't stop a Live run and a Live run that stops without `agentDone` isn't
-  reported. Switch it to `AgentLauncher::launch(prompt, socket,
-  {AgentAccess::project, worktree, "live", 0, callback}, &run)`, keep the run,
-  and report from the callback as `AgentBridge::runFinished` does.
 - [x] Codex: `codex sandbox` showed the read-only sandbox refuses Unix
   sockets, so both access levels use `workspace-write` with
   `network_access=true`. Not run end to end with the real Codex, opencode or
