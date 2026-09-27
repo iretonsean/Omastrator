@@ -147,6 +147,58 @@ void pathfinder(QPainter &painter, int operation)
 }
 }
 
+namespace {
+// An open circle with an arrowhead: rotation.
+void rotate(QPainter &painter)
+{
+    QPainterPath arc;
+    arc.arcMoveTo(QRectF(3, 3, 12, 12), 60);
+    arc.arcTo(QRectF(3, 3, 12, 12), 60, 280);
+    painter.drawPath(arc);
+    const QPointF tip = arc.currentPosition();
+    painter.drawPolyline(QPolygonF{tip + QPointF(-3.5, -1.5), tip, tip + QPointF(-0.5, -4)});
+}
+
+// Two chain links; apart, they're unlinked.
+void chain(QPainter &painter, bool linked)
+{
+    const double gap = linked ? 0 : 2;
+    painter.drawRoundedRect(QRectF(6, 1.5 - gap, 6, 8), 3, 3);
+    painter.drawRoundedRect(QRectF(6, 8.5 + gap, 6, 8), 3, 3);
+    if (linked)
+        painter.drawLine(QPointF(9, 6.5), QPointF(9, 11.5));
+}
+
+// Two lines of text with a double arrow between them: leading.
+void leadingGlyph(QPainter &painter)
+{
+    painter.drawLine(QPointF(7, 3), QPointF(16, 3));
+    painter.drawLine(QPointF(7, 15), QPointF(16, 15));
+    painter.drawLine(QPointF(3, 3.5), QPointF(3, 14.5));
+    painter.drawPolyline(QPolygonF{QPointF(1.2, 5.5), QPointF(3, 3.5), QPointF(4.8, 5.5)});
+    painter.drawPolyline(QPolygonF{QPointF(1.2, 12.5), QPointF(3, 14.5), QPointF(4.8, 12.5)});
+}
+
+// A letter between two bars with a double arrow under it: tracking.
+void trackingGlyph(QPainter &painter)
+{
+    painter.drawLine(QPointF(2, 2), QPointF(2, 11));
+    painter.drawLine(QPointF(16, 2), QPointF(16, 11));
+    painter.drawPolyline(QPolygonF{QPointF(5.5, 11), QPointF(9, 2.5), QPointF(12.5, 11)});
+    painter.drawLine(QPointF(6.8, 8), QPointF(11.2, 8));
+    painter.drawLine(QPointF(3.5, 15), QPointF(14.5, 15));
+    painter.drawPolyline(QPolygonF{QPointF(5.5, 13.2), QPointF(3.5, 15), QPointF(5.5, 16.8)});
+    painter.drawPolyline(QPolygonF{QPointF(12.5, 13.2), QPointF(14.5, 15), QPointF(12.5, 16.8)});
+}
+
+void dots(QPainter &painter)
+{
+    painter.setBrush(painter.pen().color());
+    for (const double x : {4.0, 9.0, 14.0})
+        painter.drawEllipse(QPointF(x, 9), 1.3, 1.3);
+}
+}
+
 void PanelIcons::paint(QPainter &painter, PanelIcon icon, QPointF origin, double side, const QColor &colour)
 {
     painter.save();
@@ -184,6 +236,12 @@ void PanelIcons::paint(QPainter &painter, PanelIcon icon, QPointF origin, double
     case PanelIcon::minusFront: pathfinder(painter, 1); break;
     case PanelIcon::intersect: pathfinder(painter, 2); break;
     case PanelIcon::exclude: pathfinder(painter, 3); break;
+    case PanelIcon::rotate: rotate(painter); break;
+    case PanelIcon::link: chain(painter, true); break;
+    case PanelIcon::unlink: chain(painter, false); break;
+    case PanelIcon::more: dots(painter); break;
+    case PanelIcon::leading: leadingGlyph(painter); break;
+    case PanelIcon::tracking: trackingGlyph(painter); break;
     }
     painter.restore();
 }

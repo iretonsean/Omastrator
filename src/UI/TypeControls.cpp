@@ -1,3 +1,4 @@
+#include "UI/CharacterSection.h"
 #include "UI/NumberField.h"
 #include "UI/ToolHeaders.h"
 #include <QEvent>
@@ -9,40 +10,6 @@
 
 namespace {
 const std::array<TextAlignment, 4> alignments{TextAlignment::left, TextAlignment::center, TextAlignment::right, TextAlignment::justify};
-
-// Four lines against one side, as text-align glyphs are.
-QPixmap alignmentGlyph(TextAlignment alignment, const QColor &ink, double ratio)
-{
-    QPixmap pixmap(QSize(18, 18) * ratio);
-    pixmap.setDevicePixelRatio(ratio);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(ink, 1.6, Qt::SolidLine, Qt::RoundCap));
-    for (int row = 0; row < 4; ++row) {
-        const bool justified = alignment == TextAlignment::justify || alignment == TextAlignment::justifyAll;
-        const double length = justified ? (row == 3 && alignment == TextAlignment::justify ? 8 : 14) : row % 2 == 0 ? 14 : 9, y = 4 + row * 3.4;
-        const double left = alignment == TextAlignment::center ? 9 - length / 2 : alignment == TextAlignment::right ? 16 - length : 2;
-        painter.drawLine(QPointF(left, y), QPointF(left + length, y));
-    }
-    return pixmap;
-}
-
-QString alignmentName(TextAlignment alignment)
-{
-    switch (alignment) {
-    case TextAlignment::center:
-        return QStringLiteral("Align center");
-    case TextAlignment::right:
-        return QStringLiteral("Align right");
-    case TextAlignment::justify:
-        return QStringLiteral("Justify with last line aligned left");
-    case TextAlignment::justifyAll:
-        return QStringLiteral("Justify all lines");
-    default:
-        return QStringLiteral("Align left");
-    }
-}
 }
 
 TypeControls::TypeControls(EditorSession &session, QWidget *parent)
@@ -51,10 +18,10 @@ TypeControls::TypeControls(EditorSession &session, QWidget *parent)
           change([size](TextContent &text) { text.size = std::clamp(size, 0.1, 1296.0); }, QStringLiteral("Font Size"));
       }, this)),
       m_style(new QComboBox(this)),
-      m_alignments{toggle(QStringLiteral("typeAlignLeft"), QString(), alignmentName(TextAlignment::left)),
-                   toggle(QStringLiteral("typeAlignCenter"), QString(), alignmentName(TextAlignment::center)),
-                   toggle(QStringLiteral("typeAlignRight"), QString(), alignmentName(TextAlignment::right)),
-                   toggle(QStringLiteral("typeAlignJustify"), QString(), alignmentName(TextAlignment::justify))}
+      m_alignments{toggle(QStringLiteral("typeAlignLeft"), QString(), TypeAlignment::name(TextAlignment::left)),
+                   toggle(QStringLiteral("typeAlignCenter"), QString(), TypeAlignment::name(TextAlignment::center)),
+                   toggle(QStringLiteral("typeAlignRight"), QString(), TypeAlignment::name(TextAlignment::right)),
+                   toggle(QStringLiteral("typeAlignJustify"), QString(), TypeAlignment::name(TextAlignment::justify))}
 {
     setObjectName(QStringLiteral("typeControls"));
     m_family->setObjectName(QStringLiteral("typeFamily"));
@@ -123,7 +90,7 @@ void TypeControls::change(const std::function<void(TextContent &)> &edit, const 
 void TypeControls::applyGlyphs()
 {
     for (size_t index = 0; index < alignments.size(); ++index)
-        m_alignments.at(index)->setIcon(alignmentGlyph(alignments.at(index), palette().color(QPalette::WindowText), devicePixelRatio()));
+        m_alignments.at(index)->setIcon(TypeAlignment::glyph(alignments.at(index), palette().color(QPalette::WindowText), devicePixelRatio()));
 }
 
 // The theme's ink reaches the glyphs.

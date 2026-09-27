@@ -1,6 +1,14 @@
 #include "Document/PathOperations.h"
 #include "UI/NumberField.h"
+#include "Canvas/EditorCanvas.h"
+#include "UI/CharacterSection.h"
+#include "UI/ColorPaletteControls.h"
 #include "UI/PropertiesPanel.h"
+#include <QAction>
+#include <QMenu>
+#include <QMouseEvent>
+#include <QSettings>
+#include <QFontDatabase>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSlider>
@@ -34,6 +42,7 @@ class PropertiesPanelTests : public QObject {
     Q_OBJECT
 private slots:
     void initTestCase();
+    void cleanup();
     void transformFieldsMoveAndScaleFromTheTopLeft();
     void rotationTurnsThenReadsZero();
     void withoutSelectionTheArtboardShows();
@@ -43,12 +52,33 @@ private slots:
     void blendModeApplies();
     void alignAndPathfinderFollowTheirGates();
     void swapAndDefaultButtons();
+    void theReferencePointIsWhatXYReadAndWHKeep();
+    void theLinkKeepsProportions();
+    void scaleStrokesIsAnOption();
+    void relativeInputAppliesToEachObject();
+    void aLabelScrubIsOneUndoStep();
+    void mixedValuesReadMixed();
+    void sectionsFoldAndRememberIt();
+    void sectionsFollowTheSelection();
+    void iconButtonsSayWhatTheyDo();
+    void theDocumentShowsWithNothingSelected();
+    void characterShowsForSelectedText();
+    void characterFieldsAreOneNamedStepEach();
+    void characterShowMoreIsRemembered();
+    void characterReadsMixedAcrossTexts();
+    void areaTextResizesItsBoxNotItsGlyphs();
 
 };
 
 void PropertiesPanelTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QSettings().clear();
+}
+
+void PropertiesPanelTests::cleanup()
+{
+    QSettings().clear();
 }
 
 void PropertiesPanelTests::transformFieldsMoveAndScaleFromTheTopLeft()
@@ -89,12 +119,20 @@ void PropertiesPanelTests::rotationTurnsThenReadsZero()
     session.createDocument(QSizeF(400, 300));
     const QUuid box = session.addPath(Shapes::rectangle(QRectF(0, 0, 100, 50)), QStringLiteral("Box"));
     PropertiesPanel panel(session);
+    // About the centre reference point, the centre stays put.
+    panel.findChild<ReferencePointPicker *>("referencePoint")->setPoint(4);
     type(panel, "transformRotationField", "90");
     const QRectF turned = bounds(session, box);
     QVERIFY(std::abs(turned.width() - 50) < 1e-6 && std::abs(turned.height() - 100) < 1e-6);
     QVERIFY(std::abs(turned.center().x() - 50) < 1e-6 && std::abs(turned.center().y() - 25) < 1e-6);
     QCOMPARE(session.undoName(), QString("Rotate"));
     QCOMPARE(panel.findChild<QLineEdit *>("transformRotationField")->text(), QString("0"));
+    // About the top-left one, that corner stays put.
+    session.undo();
+    panel.findChild<ReferencePointPicker *>("referencePoint")->setPoint(0);
+    type(panel, "transformRotationField", "90");
+    const QRectF corner = bounds(session, box);
+    QVERIFY(std::abs(corner.left() - 0) < 1e-6 && std::abs(corner.bottom() - 0) < 1e-6);
 }
 
 void PropertiesPanelTests::withoutSelectionTheArtboardShows()
@@ -262,12 +300,412 @@ void PropertiesPanelTests::swapAndDefaultButtons()
     const QUuid box = session.addPath(Shapes::rectangle(QRectF(0, 0, 10, 10)), QStringLiteral("Box"));
     session.setFillOfSelection(Paint::solid(Qt::red));
     PropertiesPanel panel(session);
-    panel.findChild<QPushButton *>("swapFillStrokeButton")->click();
+    panel.findChild<QAbstractButton *>("swapFillStrokeButton")->click();
     QCOMPARE(session.document()->find(box)->fill, Paint::solid(Qt::black));
     QCOMPARE(session.document()->find(box)->stroke.paint, Paint::solid(Qt::red));
-    panel.findChild<QPushButton *>("defaultFillStrokeButton")->click();
+    panel.findChild<QAbstractButton *>("defaultFillStrokeButton")->click();
     QCOMPARE(session.document()->find(box)->fill, Paint::solid(Qt::white));
     QCOMPARE(session.document()->find(box)->stroke, StrokeStyle());
+}
+
+
+namespace {
+QUuid textAt(EditorSession &session, QPointF at, const QString &words)
+{
+    return session.addObject(session.textObject(at, words), QStringLiteral("Type"));
+}
+
+// A press, a drag of `dx` pixels and a release on a field's label.
+void scrub(QWidget *handle, int dx, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+{
+    const QPointF start(4, 4);
+    const auto send = [&](QEvent::Type type, QPointF at, Qt::MouseButtons buttons) {
+        QMouseEvent event(type, at, handle->mapToGlobal(at), Qt::LeftButton, buttons, modifiers);
+        QCoreApplication::sendEvent(handle, &event);
+    };
+    send(QEvent::MouseButtonPress, start, Qt::LeftButton);
+    for (int step = 1; step <= 4; ++step)
+        send(QEvent::MouseMove, start + QPointF(dx * step / 4.0, 0), Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, start + QPointF(dx, 0), Qt::NoButton);
+}
+
+NumberField *numberNamed(QWidget &root, const QString &name)
+{
+    return root.findChild<NumberField *>(name);
+}
+}
+
+void PropertiesPanelTests::theReferencePointIsWhatXYReadAndWHKeep()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid box = session.addPath(Shapes::rectangle(QRectF(10, 20, 100, 50)), QStringLiteral("Box"));
+    PropertiesPanel panel(session);
+    auto *picker = panel.findChild<ReferencePointPicker *>("referencePoint");
+    picker->setPoint(4);
+    QCOMPARE(panel.findChild<QLineEdit *>("transformXField")->text(), QString("60"));
+    QCOMPARE(panel.findChild<QLineEdit *>("transformYField")->text(), QString("45"));
+    // With the centre reference, W keeps the centre in place.
+    type(panel, "transformWField", "200");
+    QCOMPARE(bounds(session, box), QRectF(-40, 20, 200, 50));
+    // X moves that point to the value.
+    type(panel, "transformXField", "100");
+    QCOMPARE(bounds(session, box).center().x(), 100.0);
+    // Bottom right: H grows upwards.
+    picker->setPoint(8);
+    type(panel, "transformHField", "100");
+    QCOMPARE(bounds(session, box).bottom(), 70.0);
+    QCOMPARE(bounds(session, box).height(), 100.0);
+    // The choice is remembered.
+    PropertiesPanel second(session);
+    QCOMPARE(second.findChild<ReferencePointPicker *>("referencePoint")->point(), 8);
+}
+
+void PropertiesPanelTests::theLinkKeepsProportions()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid box = session.addPath(Shapes::rectangle(QRectF(0, 0, 100, 40)), QStringLiteral("Box"));
+    PropertiesPanel panel(session);
+    auto *link = panel.findChild<QToolButton *>("transformLink");
+    QVERIFY(link && link->isCheckable() && !link->isChecked());
+    link->click();
+    QVERIFY(link->isChecked());
+    type(panel, "transformWField", "200");
+    QCOMPARE(bounds(session, box), QRectF(0, 0, 200, 80));
+    type(panel, "transformHField", "40");
+    QCOMPARE(bounds(session, box), QRectF(0, 0, 100, 40));
+    QVERIFY(QSettings().value("properties/constrainProportions").toBool());
+}
+
+void PropertiesPanelTests::scaleStrokesIsAnOption()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid box = session.addPath(Shapes::rectangle(QRectF(0, 0, 100, 100)), QStringLiteral("Box"));
+    StrokeStyle stroke;
+    stroke.width = 4;
+    session.setStrokeOfSelection(stroke);
+    PropertiesPanel panel(session);
+    auto *option = panel.findChild<QAction *>("scaleStrokes");
+    QVERIFY(option && option->isCheckable() && !option->isChecked());
+    // Off: the stroke keeps its weight through a 200 % scale.
+    type(panel, "transformWField", "*2");
+    QCOMPARE(bounds(session, box).width(), 200.0);
+    QCOMPARE(session.document()->find(box)->stroke.width, 4.0);
+    session.undo();
+    option->trigger();
+    QVERIFY(session.scaleStrokes);
+    type(panel, "transformWField", "200");
+    type(panel, "transformHField", "200");
+    QVERIFY(std::abs(session.document()->find(box)->stroke.width - 8) < 1e-9);
+}
+
+void PropertiesPanelTests::relativeInputAppliesToEachObject()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = session.addPath(Shapes::rectangle(QRectF(0, 0, 10, 10)), QStringLiteral("A"));
+    const QUuid b = session.addPath(Shapes::rectangle(QRectF(50, 20, 20, 10)), QStringLiteral("B"));
+    const QUuid c = session.addPath(Shapes::rectangle(QRectF(100, 40, 40, 10)), QStringLiteral("C"));
+    session.select({a, b, c});
+    PropertiesPanel panel(session);
+    type(panel, "transformXField", "+10");
+    QCOMPARE(bounds(session, a).left(), 10.0);
+    QCOMPARE(bounds(session, b).left(), 60.0);
+    QCOMPARE(bounds(session, c).left(), 110.0);
+    QCOMPARE(session.undoName(), QString("Move"));
+    // Each doubles its own width about its own reference point.
+    type(panel, "transformWField", "*2");
+    QCOMPARE(bounds(session, a), QRectF(10, 0, 20, 10));
+    QCOMPARE(bounds(session, b), QRectF(60, 20, 40, 10));
+    QCOMPARE(bounds(session, c), QRectF(110, 40, 80, 10));
+    // One step for all three.
+    session.undo();
+    QCOMPARE(bounds(session, c), QRectF(110, 40, 40, 10));
+    // Math and units work on the whole selection.
+    type(panel, "transformYField", "1in - 2pt");
+    QCOMPARE(session.selectionBounds().top(), 70.0);
+}
+
+void PropertiesPanelTests::aLabelScrubIsOneUndoStep()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid box = session.addPath(Shapes::rectangle(QRectF(10, 20, 100, 50)), QStringLiteral("Box"));
+    PropertiesPanel panel(session);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    NumberField *x = numberNamed(panel, "transformX");
+    QVERIFY(x->handle() && x->handle()->text() == "X");
+    const bool couldUndo = session.canUndo();
+    scrub(x->handle(), 20);
+    QCOMPARE(bounds(session, box).left(), 30.0);
+    QCOMPARE(session.undoName(), QString("Move"));
+    // Shift is ten times as far, Alt a tenth.
+    scrub(x->handle(), 20, Qt::ShiftModifier);
+    QCOMPARE(bounds(session, box).left(), 230.0);
+    scrub(x->handle(), -20, Qt::AltModifier);
+    QVERIFY(std::abs(bounds(session, box).left() - 228) < 1e-9);
+    session.undo();
+    session.undo();
+    session.undo();
+    QCOMPARE(bounds(session, box).left(), 10.0);
+    QCOMPARE(session.canUndo(), couldUndo);
+}
+
+void PropertiesPanelTests::mixedValuesReadMixed()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = session.addPath(Shapes::rectangle(QRectF(0, 0, 10, 10)), QStringLiteral("A"));
+    session.setFillOfSelection(Paint::solid(Qt::red));
+    const QUuid b = session.addPath(Shapes::rectangle(QRectF(20, 0, 10, 10)), QStringLiteral("B"));
+    session.setFillOfSelection(Paint::solid(Qt::blue));
+    StrokeStyle thick;
+    thick.width = 5;
+    session.setStrokeOfSelection(thick);
+    session.select({a, b});
+    PropertiesPanel panel(session);
+    auto *well = panel.findChild<PaintSwatch *>("fillWell");
+    QVERIFY(well->isMixed());
+    QCOMPARE(panel.findChild<QComboBox *>("fillKind")->currentIndex(), -1);
+    QCOMPARE(panel.findChild<QComboBox *>("fillKind")->placeholderText(), QString("Mixed"));
+    auto *weight = panel.findChild<QLineEdit *>("strokeWidth");
+    QVERIFY(weight->text().isEmpty());
+    QCOMPARE(weight->placeholderText(), QString("Mixed"));
+    // A step on a mixed weight adds to each one's own.
+    QTest::keyClick(weight, Qt::Key_Up);
+    QCOMPARE(session.document()->find(a)->stroke.width, 1.5);
+    QCOMPARE(session.document()->find(b)->stroke.width, 5.5);
+    // A value applies to both, and they read as one again.
+    weight->setText("2");
+    QTest::keyClick(weight, Qt::Key_Return);
+    QCOMPARE(session.document()->find(a)->stroke.width, 2.0);
+    QCOMPARE(weight->text(), QString("2"));
+    session.setFillOfSelection(Paint::solid(Qt::green));
+    QVERIFY(!well->isMixed());
+}
+
+void PropertiesPanelTests::sectionsFoldAndRememberIt()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    session.addPath(Shapes::rectangle(QRectF(0, 0, 10, 10)), QStringLiteral("Box"));
+    {
+        PropertiesPanel panel(session);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        auto *stroke = panel.findChild<PanelSection *>("strokeSection");
+        QVERIFY(!stroke->isCollapsed());
+        QVERIFY(panel.findChild<QWidget *>("strokeCap")->isVisible());
+        stroke->toggle()->click();
+        QVERIFY(stroke->isCollapsed());
+        QVERIFY(!panel.findChild<QWidget *>("strokeCap")->isVisible());
+    }
+    PropertiesPanel again(session);
+    QVERIFY(again.findChild<PanelSection *>("strokeSection")->isCollapsed());
+    again.findChild<PanelSection *>("strokeSection")->toggle()->click();
+    QVERIFY(!QSettings().value(PanelSection::settingsKey("stroke")).toBool());
+}
+
+void PropertiesPanelTests::sectionsFollowTheSelection()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = session.addPath(Shapes::rectangle(QRectF(0, 0, 10, 10)), QStringLiteral("A"));
+    const QUuid b = session.addPath(Shapes::rectangle(QRectF(20, 0, 10, 10)), QStringLiteral("B"));
+    PropertiesPanel panel(session);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    const auto shown = [&](const char *name) { return panel.findChild<QWidget *>(name)->isVisible(); };
+    session.select({a});
+    QVERIFY(shown("alignSection") && !shown("pathfinderSection") && !shown("characterSection"));
+    session.select({a, b});
+    QVERIFY(shown("pathfinderSection"));
+    session.deselectAll();
+    QVERIFY(!shown("alignSection") && !shown("transformSection") && shown("artboardSection"));
+    // The Type tool shows Character for the next text, with nothing selected.
+    session.selectTool(Tool::text);
+    QVERIFY(shown("characterSection"));
+}
+
+void PropertiesPanelTests::iconButtonsSayWhatTheyDo()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    PropertiesPanel panel(session);
+    QVERIFY(panel.findChild<QToolButton *>("unite")->toolTip().startsWith("Unite (Pathfinder)"));
+    QCOMPARE(panel.findChild<QToolButton *>("unite")->accessibleName(), QString("Unite"));
+    QCOMPARE(panel.findChild<QToolButton *>("alignLeft")->toolTip(), QString("Align left edges"));
+    QVERIFY(panel.findChild<QToolButton *>("distributeHorizontal")->toolTip().startsWith("Distribute horizontal centers"));
+    for (QToolButton *button : panel.findChildren<QToolButton *>())
+        QVERIFY2(!button->toolTip().isEmpty(), qPrintable(button->objectName()));
+    // The rotation field is labelled by name for tooltips and screen readers.
+    QCOMPARE(panel.findChild<QLineEdit *>("transformRotationField")->accessibleName(), QString("Rotation"));
+    QVERIFY(!numberNamed(panel, "transformRotation")->handle()->pixmap().isNull());
+    // Menus and fields share one height.
+    for (const char *name : {"strokeCap", "alignTarget", "fillKind"})
+        QCOMPARE(panel.findChild<QWidget *>(name)->height(), panel.findChild<QWidget *>("strokeWidth")->height());
+}
+
+void PropertiesPanelTests::theDocumentShowsWithNothingSelected()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    PropertiesPanel panel(session);
+    auto *grid = panel.findChild<QCheckBox *>("documentShowGrid");
+    grid->click();
+    QVERIFY(session.showsGrid);
+    panel.findChild<QCheckBox *>("documentSnapToGrid")->click();
+    QVERIFY(session.snapsToGrid);
+    session.setShowsOutline(true);
+    QVERIFY(panel.findChild<QCheckBox *>("documentOutline")->isChecked());
+    type(panel, "documentNudgeField", "0.5");
+    QCOMPARE(EditorCanvas::keyboardIncrement(), 0.5);
+    QVERIFY(panel.findChild<QPushButton *>("documentFit"));
+    QVERIFY(panel.findChild<QPushButton *>("documentExport")->menu()->actions().size() == 4);
+}
+
+void PropertiesPanelTests::characterShowsForSelectedText()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid text = textAt(session, QPointF(20, 100), "Hello");
+    PropertiesPanel panel(session);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    QCOMPARE(session.tool(), Tool::select);
+    QVERIFY(panel.findChild<QWidget *>("characterSection")->isVisible());
+    const TextContent &shown = session.document()->find(text)->text;
+    QCOMPARE(panel.findChild<QLineEdit *>("characterSizeField")->text(), NumberField::formatted(shown.size));
+    QCOMPARE(panel.findChild<QLineEdit *>("characterTrackingField")->text(), QString("0"));
+    // Auto leading is blank, with its value in the placeholder.
+    QVERIFY(panel.findChild<QLineEdit *>("characterLeadingField")->text().isEmpty());
+    QVERIFY(panel.findChild<QLineEdit *>("characterLeadingField")->placeholderText().startsWith("Auto"));
+    // The style list is the family's real faces.
+    auto *style = panel.findChild<QComboBox *>("characterStyle");
+    const QStringList faces = QFontDatabase::styles(shown.family);
+    for (const QString &face : faces)
+        QVERIFY(style->findText(face) >= 0);
+    QVERIFY(panel.findChild<QToolButton *>("characterAlignLeft")->isChecked());
+}
+
+void PropertiesPanelTests::characterFieldsAreOneNamedStepEach()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid id = textAt(session, QPointF(20, 100), "Hello");
+    PropertiesPanel panel(session);
+    const auto text = [&] { return session.document()->find(id)->text; };
+    type(panel, "characterTrackingField", "50");
+    QCOMPARE(text().tracking, 50.0);
+    QCOMPARE(session.undoName(), QString("Tracking"));
+    type(panel, "characterLeadingField", "30");
+    QCOMPARE(text().leading, std::optional<double>(30));
+    QCOMPARE(session.undoName(), QString("Leading"));
+    // Emptied, leading is Auto again.
+    type(panel, "characterLeadingField", "");
+    QVERIFY(!text().leading.has_value());
+    type(panel, "characterSizeField", "36");
+    QCOMPARE(text().size, 36.0);
+    QCOMPARE(session.undoName(), QString("Font Size"));
+    type(panel, "characterBaselineShiftField", "4");
+    QCOMPARE(text().baselineShift, 4.0);
+    QCOMPARE(session.undoName(), QString("Baseline Shift"));
+    type(panel, "characterHorizontalScaleField", "80");
+    QCOMPARE(text().horizontalScale, 80.0);
+    type(panel, "characterVerticalScaleField", "120");
+    QCOMPARE(text().verticalScale, 120.0);
+    QCOMPARE(session.undoName(), QString("Vertical Scale"));
+    choose(panel, "characterKerning", 1);
+    QCOMPARE(text().kerning, TextKerning::none);
+    QCOMPARE(session.undoName(), QString("Kerning"));
+    choose(panel, "characterCase", 1);
+    QCOMPARE(text().textCase, TextCase::allCaps);
+    QCOMPARE(session.undoName(), QString("Case"));
+    panel.findChild<QToolButton *>("characterUnderline")->click();
+    QVERIFY(text().underline);
+    QCOMPARE(session.undoName(), QString("Underline"));
+    panel.findChild<QToolButton *>("characterStrikethrough")->click();
+    QVERIFY(text().strikethrough);
+    panel.findChild<QToolButton *>("characterJustifyAll")->click();
+    QCOMPARE(text().alignment, TextAlignment::justifyAll);
+    QCOMPARE(session.undoName(), QString("Alignment"));
+    const QStringList faces = QFontDatabase::styles(text().family);
+    if (faces.size() > 1) {
+        auto *style = panel.findChild<QComboBox *>("characterStyle");
+        const int last = style->findText(faces.last());
+        choose(panel, "characterStyle", last);
+        QCOMPARE(text().style, faces.last());
+        QCOMPARE(session.undoName(), QString("Font Style"));
+    }
+    // Area type from the Kind menu, one step.
+    choose(panel, "characterKind", 1);
+    QVERIFY(text().area.has_value());
+    QCOMPARE(session.undoName(), QString("Convert to Area Type"));
+}
+
+void PropertiesPanelTests::characterShowMoreIsRemembered()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    textAt(session, QPointF(20, 100), "Hello");
+    {
+        PropertiesPanel panel(session);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        auto *more = panel.findChild<QPushButton *>("characterMore");
+        QCOMPARE(more->text(), QString("Show more"));
+        QVERIFY(!panel.findChild<QWidget *>("characterExtra")->isVisible());
+        more->click();
+        QVERIFY(panel.findChild<QWidget *>("characterExtra")->isVisible());
+        QCOMPARE(more->text(), QString("Show less"));
+    }
+    PropertiesPanel again(session);
+    QVERIFY(again.findChild<CharacterSection *>()->showsMore());
+}
+
+void PropertiesPanelTests::characterReadsMixedAcrossTexts()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = textAt(session, QPointF(20, 100), "One");
+    const QUuid b = textAt(session, QPointF(20, 200), "Two");
+    session.select({b});
+    session.updateText([](TextContent &text) { text.tracking = 100; }, "Tracking");
+    session.select({a, b});
+    PropertiesPanel panel(session);
+    auto *tracking = panel.findChild<QLineEdit *>("characterTrackingField");
+    QVERIFY(tracking->text().isEmpty());
+    QCOMPARE(tracking->placeholderText(), QString("Mixed"));
+    // "+20" adds to each text's own tracking, in one step.
+    type(panel, "characterTrackingField", "+20");
+    QCOMPARE(session.document()->find(a)->text.tracking, 20.0);
+    QCOMPARE(session.document()->find(b)->text.tracking, 120.0);
+    session.undo();
+    QCOMPARE(session.document()->find(a)->text.tracking, 0.0);
+    QCOMPARE(session.document()->find(b)->text.tracking, 100.0);
+    // A plain value makes them one.
+    type(panel, "characterTrackingField", "10");
+    QCOMPARE(tracking->text(), QString("10"));
+}
+
+void PropertiesPanelTests::areaTextResizesItsBoxNotItsGlyphs()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    VectorObject box = session.textObject(QPointF(0, 0), "A few words that wrap");
+    box.text.area = QSizeF(200, 0);
+    box.transform = QTransform::fromTranslate(10, 10);
+    const QUuid id = session.addObject(box, "Type");
+    PropertiesPanel panel(session);
+    type(panel, "transformWField", "80");
+    const VectorObject *after = session.document()->find(id);
+    QCOMPARE(after->text.area->width(), 80.0);
+    QCOMPARE(after->text.size, box.text.size);
+    QVERIFY(after->transform.type() <= QTransform::TxTranslate);
+    QCOMPARE(bounds(session, id).left(), 10.0);
 }
 
 QTEST_MAIN(PropertiesPanelTests)

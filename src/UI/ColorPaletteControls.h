@@ -9,6 +9,10 @@
 namespace ShownStyle {
 Paint fill(const EditorSession &session);
 StrokeStyle stroke(const EditorSession &session);
+// The selected objects' fills, stroke paints or stroke weights differ.
+bool fillMixed(const EditorSession &session);
+bool strokeMixed(const EditorSession &session);
+bool strokeWidthMixed(const EditorSession &session);
 }
 
 // A fill or stroke well; none shows a red slash.
@@ -16,8 +20,11 @@ class PaintSwatch : public QAbstractButton {
     Q_OBJECT
 public:
     PaintSwatch(std::function<Paint()> paint, bool stroke, QWidget *parent);
-    // A stroke well is a thick ring.
-    static void draw(QPainter &painter, const QRectF &rect, const Paint &paint, bool stroke);
+    // A stroke well is a thick ring; a mixed one is hatched.
+    static void draw(QPainter &painter, const QRectF &rect, const Paint &paint, bool stroke, bool mixed = false);
+    // Several different paints: hatched, with no one colour.
+    void setMixed(bool mixed);
+    bool isMixed() const { return m_mixed; }
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -25,6 +32,7 @@ protected:
 private:
     const std::function<Paint()> m_paint;
     const bool m_stroke;
+    bool m_mixed = false;
 };
 
 // The rail's fill and stroke wells, swap, defaults and picker.

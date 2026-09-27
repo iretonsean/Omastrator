@@ -2,16 +2,19 @@
 #include "Document/EditorSession.h"
 #include "UI/FloatingPanel.h"
 #include "UI/PanelIcons.h"
+#include "UI/PanelSection.h"
+#include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
-#include <QToolButton>
 #include <QScrollArea>
+#include <QToolButton>
 
+class CharacterSection;
 class NumberField;
 class PaintSwatch;
 
-// A fill or stroke: kind, colour, gradient end.
+// A fill or stroke: kind, colour, gradient end. Several different paints read Mixed.
 class PaintRow : public QWidget {
     Q_OBJECT
 public:
@@ -33,26 +36,39 @@ private:
     PaintSwatch *const m_end;
 };
 
-// The right-hand inspector: transform, appearance, align, pathfinder.
+// The right-hand inspector, in Figma's order: the document with nothing
+// selected; else transform, character for text, appearance, stroke, align and
+// pathfinder. Each section folds away and remembers it.
 class PropertiesPanel : public QScrollArea {
     Q_OBJECT
 public:
     explicit PropertiesPanel(EditorSession &session, QWidget *parent = nullptr);
+    // Whether the Type tool or type being edited shows the Character section with nothing selected.
+    void setEditingText(bool editing);
 
 private:
-    QWidget *transformSection();
-    QWidget *artboardSection();
-    QWidget *appearanceSection();
-    QWidget *strokeSection();
-    QWidget *alignSection();
-    QWidget *pathfinderSection();
+    PanelSection *documentSection();
+    PanelSection *transformSection();
+    PanelSection *appearanceSection();
+    PanelSection *strokeSection();
+    PanelSection *alignSection();
+    PanelSection *pathfinderSection();
     QToolButton *iconButton(const QString &name, const QString &tip, PanelIcon icon, const std::function<void()> &run);
+    // The reference point of the selection's bounds.
+    QPointF reference() const;
     void moveTo(double x, double y);
+    // Scales so the bounds are `width` × `height`, keeping the reference point still.
     void resizeTo(double width, double height);
+    // Per object: "+10" or "*2" on each one's own value.
+    void moveEach(bool vertical, const std::function<double(double)> &change);
+    void resizeEach(bool vertical, const std::function<double(double)> &change);
     void setStrokeWidth(double width);
     void applyDashes();
     void synchronize();
     void applyIcons();
+    // One height and one font for the section's fields and menus.
+    void evenControls();
+    void runWindowAction(const QString &name);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -60,15 +76,31 @@ protected:
 private:
     EditorSession &m_session;
     FloatingPanel m_picker{QStringLiteral("colorPickerPanel"), *this};
-    QWidget *m_transform = nullptr;
-    QWidget *m_artboard = nullptr;
+    bool m_editingText = false;
+    PanelSection *m_document = nullptr;
+    PanelSection *m_transform = nullptr;
+    CharacterSection *m_character = nullptr;
+    PanelSection *m_appearance = nullptr;
+    PanelSection *m_stroke = nullptr;
+    PanelSection *m_align = nullptr;
+    PanelSection *m_pathfinder = nullptr;
+    ReferencePointPicker *m_reference = nullptr;
     NumberField *m_x = nullptr;
     NumberField *m_y = nullptr;
     NumberField *m_width = nullptr;
     NumberField *m_height = nullptr;
     NumberField *m_rotation = nullptr;
+    QToolButton *m_link = nullptr;
+    // While the rotation label is dragged: the point it turns about.
+    std::optional<QPointF> m_rotationPivot;
+    QAction *m_scaleStrokes = nullptr;
     NumberField *m_artboardWidth = nullptr;
     NumberField *m_artboardHeight = nullptr;
+    PaintSwatch *m_background = nullptr;
+    QCheckBox *m_grid = nullptr;
+    QCheckBox *m_snap = nullptr;
+    QCheckBox *m_outline = nullptr;
+    NumberField *m_increment = nullptr;
     PaintRow *m_fill = nullptr;
     PaintRow *m_strokePaint = nullptr;
     NumberField *m_strokeWidth = nullptr;
