@@ -103,10 +103,9 @@ QString CloudStorageSheet::installRclone()
     if (program.isEmpty()) {
         // Omarchy's own installers run in its floating terminal; any terminal will do otherwise.
         program = QStandardPaths::findExecutable(QStringLiteral("omarchy-launch-floating-terminal-with-presentation"));
-        if (program.isEmpty()) {
+        // xdg-terminal-exec adds its terminal's own -e.
+        if (program.isEmpty())
             program = QStandardPaths::findExecutable(QStringLiteral("xdg-terminal-exec"));
-            arguments.prepend(QStringLiteral("-e"));
-        }
     }
     if (program.isEmpty())
         return QStringLiteral("There's no terminal to install rclone in. ") + manual;
