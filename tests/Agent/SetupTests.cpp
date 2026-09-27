@@ -109,6 +109,8 @@ private slots:
         QCOMPARE(Setup::withMenuBlock(QByteArray(), block, &comma), "{\n" + block + "}\n");
         // Every entry runs the command it was given, quoted when it must be.
         QVERIFY(Setup::menuBlock(QStringLiteral("/opt/my apps/omastrator")).contains("\"action\": \"'/opt/my apps/omastrator' island new\""));
+        // Labels keep their ellipsis as UTF-8.
+        QVERIFY(block.contains("\"label\": \"Generate\xE2\x80\xA6\""));
         // Without the comments, the block is plain JSON the menu can read.
         QByteArray json = "{\n" + block + "\"end\": {}\n}\n";
         json.replace(block.left(block.indexOf('\n') + 1), "").replace("  // END omastrator setup\n", "");

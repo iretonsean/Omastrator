@@ -15,6 +15,7 @@ class Menus : public QObject {
 public:
     // Without a bridge the AI entries stay disabled.
     Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentBridge *agent = nullptr);
+    ~Menus() override;
 
     QAction *action(const QString &name) const;
     // A new front editor: follow its session and canvas.

@@ -34,6 +34,7 @@ private slots:
     void windowTogglesThePanels();
     void remappedKeysReachTheEntries();
     void aFocusedFieldKeepsUndo();
+    void closingWithTheShortcutsPanelOpen();
 };
 
 void MenusTests::initTestCase()
@@ -218,6 +219,19 @@ void MenusTests::aFocusedFieldKeepsUndo()
     field->clearFocus();
     window.content()->canvas().setFocus();
     QTRY_COMPARE(menus.action("undo")->text(), QString("Undo Draw Box"));
+}
+
+void MenusTests::closingWithTheShortcutsPanelOpen()
+{
+    // The panel hides as the window goes, which moves focus while the menus are being destroyed.
+    auto workspace = std::make_unique<ProjectWorkspace>();
+    auto window = std::make_unique<ProjectWorkspaceView>(*workspace);
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window.get()));
+    window->menus()->action(QStringLiteral("keyboardShortcuts"))->trigger();
+    QTRY_VERIFY(QApplication::activeWindow() && QApplication::activeWindow() != window.get());
+    window.reset();
+    workspace.reset();
 }
 
 QTEST_MAIN(MenusTests)

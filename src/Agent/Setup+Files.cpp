@@ -235,7 +235,7 @@ QByteArray menuBlock(const QString &command)
     };
     QByteArray block = menuBegin + ": `omastrator setup --remove` takes these out.\n";
     for (const Entry &entry : entries) {
-        QString line = QStringLiteral("  \"%1\": {\"icon\": \"%2\", \"label\": \"%3\"").arg(QLatin1String(entry.id), QString::fromUtf8(entry.icon), QLatin1String(entry.label));
+        QString line = QStringLiteral("  \"%1\": {\"icon\": \"%2\", \"label\": \"%3\"").arg(QLatin1String(entry.id), QString::fromUtf8(entry.icon), QString::fromUtf8(entry.label));
         if (entry.description)
             line += QStringLiteral(", \"description\": %1").arg(jsonString(QString::fromUtf8(entry.description)));
         if (entry.args)

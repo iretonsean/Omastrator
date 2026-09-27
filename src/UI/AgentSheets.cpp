@@ -122,10 +122,10 @@ QDialog *vectorize(AgentBridge &bridge, QWidget *window)
     QFormLayout *form = nullptr;
     QLabel *error = nullptr;
     QDialog *dialog = sheet(window, QStringLiteral("vectorizeSheet"), QStringLiteral("Vectorize with AI"), form, error);
-    auto *logo = new QRadioButton(QStringLiteral("Logo & icon"), dialog);
+    auto *logo = new QRadioButton(QStringLiteral("Logo && icon"), dialog);
     logo->setObjectName(QStringLiteral("vectorizeLogo"));
     logo->setChecked(true);
-    auto *sketch = new QRadioButton(QStringLiteral("Sketch & line art"), dialog);
+    auto *sketch = new QRadioButton(QStringLiteral("Sketch && line art"), dialog);
     sketch->setObjectName(QStringLiteral("vectorizeSketch"));
     form->addRow(QStringLiteral("Mode:"), logo);
     form->addRow(QString(), sketch);

@@ -44,6 +44,12 @@ void Menus::remap()
     }
 }
 
+Menus::~Menus()
+{
+    // Closing the shortcuts panel below moves focus; the menus it would update are already gone.
+    disconnect(qApp, nullptr, this, nullptr);
+}
+
 QAction *Menus::action(const QString &name) const
 {
     return parent()->findChild<QAction *>(name);
