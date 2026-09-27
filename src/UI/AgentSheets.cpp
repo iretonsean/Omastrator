@@ -146,9 +146,17 @@ QString connectText(const AgentBridge &bridge)
     text += QStringLiteral("Connect Claude Code with:\n  claude mcp add omastrator -- omastrator --mcp\n\n");
     QString error;
     const QString agent = AgentLauncher::defaultAgent(&error);
-    text += agent.isEmpty() ? QStringLiteral("Default agent: none. %1\n\n").arg(error)
-                            : QStringLiteral("Default agent: %1, which Generate, Edit with Instruction, Vectorize with AI and "
-                                             "Roast My Design launch.\n\n").arg(AgentBridge::displayName(agent));
+    if (agent.isEmpty()) {
+        text += QStringLiteral("Default agent: none. %1\n\n").arg(error);
+    } else {
+        const bool headless = !AgentLauncher::showTerminal() && AgentLauncher::headlessCommand(agent, AgentAccess::omastrator, QString(), QString());
+        text += QStringLiteral("Default agent: %1, which Generate, Edit with Instruction, Vectorize with AI and Roast My Design "
+                               "run %2.\n")
+                    .arg(AgentBridge::displayName(agent),
+                         headless ? QStringLiteral("in the background, with no terminal and no MCP servers")
+                                  : QStringLiteral("in a terminal, through `omarchy agent prompt`"));
+        text += QStringLiteral("Logs of background runs: %1\n\n").arg(AgentLauncher::logFolder());
+    }
     text += QStringLiteral("Any agent can also use the command line:\n\n") + AgentProtocol::helpText();
     return text;
 }
@@ -311,6 +319,14 @@ QDialog *connectAgent(AgentBridge &bridge, QWidget *window)
     text->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     text->setMinimumSize(640, 420);
     column->addWidget(text);
+    auto *terminal = new QCheckBox(QStringLiteral("Open the agent in a terminal while it works"), dialog);
+    terminal->setObjectName(QStringLiteral("showTerminal"));
+    terminal->setChecked(AgentLauncher::showTerminal());
+    QObject::connect(terminal, &QCheckBox::toggled, dialog, [&bridge, text](bool on) {
+        AgentLauncher::setShowTerminal(on);
+        text->setPlainText(connectText(bridge));
+    });
+    column->addWidget(terminal);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     column->addWidget(buttons);
