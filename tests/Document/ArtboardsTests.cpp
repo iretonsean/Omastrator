@@ -169,7 +169,8 @@ private slots:
         session.createDocument({400, 400});
         rectangle(session, {40, 60, 100, 30});
         session.fitArtboardToArtwork(0);
-        QCOMPARE(session.document()->artboard(0).rect, QRectF(40, 60, 100, 30));
+        // Strokes included: a new path's default 1 pt stroke pads the bounds by half a point.
+        QCOMPARE(session.document()->artboard(0).rect, QRectF(39.5, 59.5, 101, 31));
         QCOMPARE(session.undoName(), QStringLiteral("Fit Artboard to Artwork"));
     }
 

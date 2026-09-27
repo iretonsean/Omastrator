@@ -126,9 +126,8 @@ public:
         setToolTip(ContentView::toolTip(shown()));
         setAccessibleName(::title(shown()));
         const bool advanced = ContentView::toolPreset() == ContentView::ToolPreset::advanced;
-        const bool anyShown = std::any_of(m_tools.begin(), m_tools.end(), [](Tool tool) { return !ContentView::hiddenInBasic(tool); });
         // A hidden tool picked by key still shows, in the slot it lives in, while it's active.
-        setVisible(advanced || anyShown || contains(m_session.tool()));
+        setVisible(advanced || !ContentView::hiddenInBasic(shown()) || contains(m_session.tool()));
         update();
     }
 
