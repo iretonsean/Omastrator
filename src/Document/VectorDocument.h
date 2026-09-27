@@ -196,6 +196,16 @@ struct Guide {
     friend bool operator==(const Guide &, const Guide &) = default;
 };
 
+// A page on the canvas, exported on its own (Illustrator's artboards, Figma's frames).
+struct Artboard {
+    QUuid id = QUuid::createUuid();
+    QString name;
+    QRectF rect;
+    // Its paper; transparent exports leave it out.
+    QColor background = Qt::white;
+    friend bool operator==(const Artboard &, const Artboard &) = default;
+};
+
 // Select ▸ Same: what an object must share with the one picked.
 enum class SameAttribute { fillColor, strokeColor, fillAndStroke, strokeWeight, opacity, blendMode, fontFamily, fontFamilyStyleSize };
 // Select ▸ Object: kinds of object picked across the document.
@@ -261,6 +271,11 @@ struct VectorDocument {
     std::vector<Guide> guides;
     // Character and paragraph styles, in the order they were made.
     std::vector<TextStyle> textStyles;
+    // Every artboard in order; empty is one at the origin. The first one's size and
+    // paper are always `size` and `background`, so code that knows one page still works.
+    std::vector<Artboard> artboards;
+    // Export for Screens: objects collected as assets, in the order they were added.
+    std::vector<QUuid> exportAssets;
 
     // A document with one empty layer.
     static VectorDocument blank(QSizeF size);
@@ -310,6 +325,27 @@ struct VectorDocument {
     QString uniqueName(const QString &base) const;
     // Rectangles whose anchors were edited become plain paths.
     void expandEditedShapes();
+
+    // Artboards (VectorDocument+Artboards.cpp) ----------------------------------
+    // The artboards as listed, or the one `size` makes, named "Artboard 1".
+    std::vector<Artboard> allArtboards() const;
+    int artboardCount() const { return artboards.empty() ? 1 : int(artboards.size()); }
+    Artboard artboard(int index) const;
+    // Replaces every artboard; the first sets `size` and `background`. Empty leaves one.
+    void setArtboards(std::vector<Artboard> boards);
+    // The artboard under `point`, the last listed first; -1 over none.
+    int artboardAt(QPointF point) const;
+    int artboardIndex(const QUuid &id) const;
+    // Every artboard's rect together.
+    QRectF artboardBounds() const;
+    // The objects directly in layers that belong to an artboard: those whose bounds,
+    // strokes included, meet it. With one artboard, every one of them.
+    std::vector<QUuid> objectsOn(int index) const;
+    // One artboard as a document of its own: its art moved so its corner is the
+    // origin, and with several artboards, the art on none of the others' alone.
+    VectorDocument artboardDocument(int index) const;
+    // "Artboard 3": the first number no artboard uses yet.
+    QString uniqueArtboardName(const QString &base = QStringLiteral("Artboard")) const;
     friend bool operator==(const VectorDocument &, const VectorDocument &) = default;
 
 private:
