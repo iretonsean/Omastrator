@@ -207,9 +207,12 @@ it only reads.
    proposal. **Refine** takes an instruction ("rounder", "fewer colours") and
    relaunches with the chosen SVG and the history of the conversation. The
    result is a new set of variations to pick from.
-2. **Edit with instruction** (Object ▸ Edit with Instruction…). The instruction
-   runs on the selection, or on the document when nothing is selected. The agent
-   calls the edit methods, then `proposal_finish`.
+2. **Edit with instruction** (Object ▸ Edit with Instruction…, the
+   contextual task bar's Ask AI… field, or a request typed into Ctrl+K). The
+   instruction runs on the selection, or on the document when nothing is
+   selected. The agent calls the edit methods, then `proposal_finish`. From
+   Ctrl+K with nothing selected, a request for new art goes to Generate
+   instead.
 3. **Smart trace** (Object ▸ Image Trace ▸ Vectorize with AI…, with the modes
    *Logo & icon* and *Sketch & line art*):
    - The app runs `ImageTrace` locally first, so the user sees something

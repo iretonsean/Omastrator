@@ -47,7 +47,7 @@ this commit.
 | Menus | File, Edit, Object, Type (Create Outlines only), View, Window, Help. **There is no Select menu**, so no Select Same, Inverse or Next Object Above. | `UI/Menus.cpp` |
 | Undo | Named undo steps. No History panel. | `DocumentHistory` |
 | Export | PNG, JPEG, SVG and PDF of the whole document. No per-object or per-selection export, and no scale presets. | `UI/ExportSheet.cpp` |
-| Command palette | None. The Keyboard Shortcuts sheet can remap every action. | `UI/KeyboardShortcuts*` |
+| Command palette | None at the time of this survey; now Ctrl+K (P1-14). The Keyboard Shortcuts sheet can remap every action. | `UI/KeyboardShortcuts*`, `UI/CommandPalette*` |
 
 It already does well at: theme integration, named undo steps with
 begin/preview/commit interactions, smart guides, remappable shortcuts, clear
@@ -809,9 +809,9 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Join, Average, Scissors, Reverse path | ✓ | ✓ | ✗ | P1 |
 | Selection colours, recent colours, hex field | ✓ | ✓ | picker only | P1 |
 | Copy/Paste properties | (eyedropper) | ✓ | eyedropper only | P1 |
-| Command palette | Discover | ✓ Ctrl+K | ✗ | P1 |
+| Command palette | Discover | ✓ Ctrl+K | ✓ done | P1 |
 | History panel | ✓ | version history | ✗ | P1 |
-| Collapsible Properties sections, contextual task bar | ✓ | ✓ | sections done; task bar ✗ | P1 |
+| Collapsible Properties sections, contextual task bar | ✓ | ✓ | ✓ done | P1 |
 | Multiple artboards | ✓ | frames | ✗ | P2 |
 | Shape Builder | ✓ | ✗ | ✗ | P2 |
 | Type on a path, text wrap, threads, hyphenation | ✓ | partial | ✗ | P2 |
@@ -1192,6 +1192,54 @@ has Qt Test coverage in `tests/<Folder>/`.
   - Digits typed into a field or inline text do nothing to opacity.
 
 ### P1: the detail layer
+
+> **P1-14 and P1-17 done.**
+>
+> **Command palette:** `src/UI/CommandPalette*.cpp`. Ctrl+K and Ctrl+/ (the
+> first remappable as "Command Palette"), and Help ▸ Command Palette…. It is a
+> Figma-style floating box over the window, keyboard-first (arrows, Enter,
+> Esc; a click elsewhere puts it away). It reaches:
+> - every menu bar entry, with its menu path and current key
+> - the selection's right-click entries (Align, Pathfinder, Isolate)
+> - every tool with its key
+> - panels and recent files
+> - document settings (Artboard Size, Show Grid, Snap to Grid, Smart Guides, Keyboard Increment)
+> - AI actions, including Roast My Design at the saved heat
+>
+> Matching runs whole name, prefix, every word's start, substring, initials
+> ("co" is Create Outlines), then letters in order; menu paths and keywords
+> ("document setup", "nudge") find entries too. The last eight commands come
+> first. Unavailable entries show dimmed, sink below the rest, and say so
+> instead of running. When the text starts with "?", or reads as a request (a
+> sentence, or a few words no command answers to), the top row is "Ask
+> <agent>: …". It runs Edit with Instruction on the selection, or on the
+> document when nothing is selected. With nothing selected it runs Generate
+> instead when the text asks for new art ("draw…", "a fox logo") or the
+> artboard is empty. Everything the agent does arrives as a proposal to keep
+> or discard. A failed start stays open with the reason. Tests:
+> `tests/UI/CommandPaletteTests.cpp`.
+>
+> **Contextual task bar:** `src/Canvas/TaskBar.cpp` (the widget: place, hide,
+> fade, grip) and `src/UI/TaskBarActions.cpp` (what it holds, from the menu
+> bar's own actions). What each selection gets:
+> - one path: fill, stroke, Edit Path (Direct Selection) and Path ▸
+> - several paths: fill, stroke, Pathfinder ▸, Shape Builder, Align ▸ and Group
+> - mixed objects: Align ▸, Group, and Pathfinder ▸ when they combine
+> - type: font, size, Create Outlines and Area/Point Type
+> - an image: Image Trace and Vectorize with AI
+> - a group: Ungroup, Isolate, fill and stroke
+> - a clipping group: Release Clipping Mask and Ungroup
+>
+> Every bar ends with an **Ask AI…** field (Enter runs Edit with Instruction
+> on the selection) and ⋯, which opens the selection's right-click menu. It
+> sits 26 px under the selection's bounds, clear of the rotate zone. With no
+> room below it goes above, with no room either way over the view's bottom,
+> and it always stays inside the view. It hides during drags, pen paths,
+> typing on the canvas, an agent's edit and its proposal. Near a selection
+> handle it fades to 15 % and lets clicks through. Dragging the grip moves it
+> and remembers the offset; the grip's right-click pins it in place, resets
+> it, or hides it. View ▸ Contextual Task Bar turns it on and off, remembered.
+> Tests: `tests/Canvas/TaskBarTests.cpp`, `tests/UI/TaskBarActionsTests.cpp`.
 
 | # | Item | One-line spec | Where | Acceptance |
 |---|---|---|---|---|

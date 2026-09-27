@@ -19,6 +19,20 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
 - Selection and direct selection, with scale and rotate handles, marquee
   selection, and smart guides that snap to other objects and the artboard.
   Drags show Δx/Δy, W × H or the angle as you go.
+- A contextual task bar under the selection with its likeliest next actions:
+  fill and stroke, Edit Path and Path ▸ for a path; Pathfinder ▸, Shape
+  Builder, Align ▸ and Group for several; font, size, Create Outlines and
+  Area/Point Type for type; Image Trace and Vectorize with AI for an image;
+  Ungroup and Isolate for a group. It ends with an **Ask AI…** field and ⋯ for
+  the full right-click menu. It steps aside during drags, typing and AI
+  previews, fades near a handle so clicks reach it, moves by its grip (right-click
+  the grip to pin or reset it), and View ▸ Contextual Task Bar turns it off.
+- **Ctrl+K** (or Ctrl+/, or Help ▸ Command Palette…) opens one box that finds
+  every command, tool, panel, recent file, document setting and AI action by
+  name, with its current (remapped) key. Recent commands come first. Type a
+  request instead, or start with `?`, and the top row becomes "Ask Claude:
+  …", which edits the selection or the document as a preview, or generates
+  new art when nothing is selected.
 - Right-click menus on the canvas and the Layers rows that list only what
   applies to what you clicked: Ask AI… first, a Select ▸ picker for stacked
   objects, and the rest one submenu away.
@@ -104,7 +118,8 @@ preview: Enter keeps it as one undo step, and Esc throws it away.
   variations. Pick one from the Variations panel, then refine it ("rounder",
   "fewer colours").
 - **Object ▸ Edit with Instruction…**: for example "recolor to a sunset
-  palette" or "make these icons consistent".
+  palette" or "make these icons consistent". The task bar's Ask AI… field and
+  Ctrl+K reach it without a sheet.
 - **Object ▸ Image Trace ▸ Vectorize with AI…**: a classic trace first, then
   the agent cleans it up. There are two modes, *Logo & icon* and *Sketch & line
   art*.
