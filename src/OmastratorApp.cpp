@@ -32,6 +32,8 @@ int main(int argc, char **argv)
     SliderSnap::install();
     ProjectWorkspace workspace;
     ProjectWorkspaceView window(workspace);
+    // Agents reach the open document here; a second Omastrator reports why it can't in Help ▸ Connect an Agent….
+    window.agent()->startServer();
     window.show();
     // Files named at launch: documents, SVGs and pictures.
     workspace.receive(QApplication::arguments().mid(1));

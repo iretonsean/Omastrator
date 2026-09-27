@@ -224,6 +224,10 @@ void ProjectWorkspace::receive(const QStringList &paths)
 void ProjectWorkspace::showError(const QString &title, const QString &message)
 {
     qCWarning(lcIO).noquote() << title + QStringLiteral(": ") + message;
+    if (errorHandler) {
+        errorHandler(title, message);
+        return;
+    }
     auto *alert = new QMessageBox(window);
     alert->setObjectName(QStringLiteral("fileAlert"));
     alert->setAttribute(Qt::WA_DeleteOnClose);

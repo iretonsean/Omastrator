@@ -23,6 +23,8 @@ public:
 
     // True while this bridge's proposal is the session's open interaction.
     bool hasProposal() const;
+    // The session the proposal is open in, or null.
+    EditorSession *proposalSession() const;
     // "AI: <title>", as the undo step will be named.
     QString proposalTitle() const;
 

@@ -1,5 +1,7 @@
 #include "ContentView.h"
 #include "Logging.h"
+#include "UI/AgentBridge.h"
+#include "UI/AgentPanels.h"
 #include "UI/ColorPaletteControls.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
@@ -12,6 +14,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QScrollArea>
 #include <QSettings>
 #include <QSplitter>
@@ -56,6 +59,47 @@ protected:
 
 private:
     const Tool m_tool;
+};
+
+// Roast My Design, at the bottom of the rail: a flame, the one playful button.
+class RoastButton : public QToolButton {
+public:
+    explicit RoastButton(QWidget *parent) : QToolButton(parent)
+    {
+        setObjectName(QStringLiteral("roastMyDesign"));
+        setFixedSize(34, 34);
+        setFocusPolicy(Qt::NoFocus);
+        setToolTip(QStringLiteral("Roast My Design"));
+        setAccessibleName(QStringLiteral("Roast My Design"));
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QColor ink = palette().color(QPalette::WindowText);
+        if (!isEnabled())
+            ink.setAlphaF(0.35f);
+        if (underMouse() && isEnabled()) {
+            QColor plate = ink;
+            plate.setAlphaF(0.08f);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(plate);
+            painter.drawRoundedRect(QRectF(0.5, 0.5, 33, 33), 7, 7);
+        }
+        QPainterPath flame;
+        flame.moveTo(17, 7);
+        flame.cubicTo(18, 12, 24, 14, 24, 20);
+        flame.cubicTo(24, 24.5, 21, 27, 17, 27);
+        flame.cubicTo(13, 27, 10, 24.5, 10, 20.5);
+        flame.cubicTo(10, 17, 12.5, 15.5, 13.5, 13);
+        flame.cubicTo(14.5, 15.5, 15, 16.5, 16, 17);
+        flame.cubicTo(16.5, 13.5, 16, 10, 17, 7);
+        painter.setPen(QPen(ink, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(flame);
+    }
 };
 
 namespace {
@@ -130,8 +174,8 @@ QFrame *divider(QFrame::Shape shape, QWidget *parent)
 }
 }
 
-ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QWidget *parent)
-    : QWidget(parent), m_session(session), m_workspace(workspace), m_column(new QVBoxLayout(this)), m_canvasSlot(new QGridLayout),
+ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QWidget *parent, AgentBridge *agent)
+    : QWidget(parent), m_session(session), m_workspace(workspace), m_agent(agent), m_column(new QVBoxLayout(this)), m_canvasSlot(new QGridLayout),
       m_canvas(new EditorCanvas(session, this)), m_propertiesPanel(new PropertiesPanel(session, this)), m_layersPanel(new LayersPanel(session, this)),
       m_dropRing(new DropRing(this)), m_zoom(new QLabel(this)), m_pointer(new QLabel(this)), m_artboard(new QLabel(this)),
       m_selection(new QLabel(this)), m_hint(new QLabel(this))
@@ -140,7 +184,16 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     m_column->setContentsMargins(0, 0, 0, 0);
     m_column->setSpacing(0);
     auto *canvas = new QWidget(this);
-    canvas->setLayout(m_canvasSlot);
+    auto *canvasColumn = new QVBoxLayout(canvas);
+    canvasColumn->setContentsMargins(0, 0, 0, 0);
+    canvasColumn->setSpacing(0);
+    // The accept bar sits above the canvas, never over the art.
+    if (m_agent) {
+        m_proposalBar = new ProposalBar(*m_agent, session, canvas);
+        canvasColumn->addWidget(m_proposalBar);
+        connect(m_agent, &AgentBridge::proposalChanged, this, &ContentView::synchronize);
+    }
+    canvasColumn->addLayout(m_canvasSlot, 1);
     m_canvasSlot->setContentsMargins(0, 0, 0, 0);
     // The welcome sits over the canvas.
     m_canvasSlot->addWidget(m_canvas, 0, 0);
@@ -213,8 +266,14 @@ QWidget *ContentView::makeRail()
         }
     }
     toolColumn->addSpacing(10);
-    toolColumn->addWidget(new ColorPaletteControls(m_session, tools), 0, Qt::AlignHCenter);
+    m_palette = new ColorPaletteControls(m_session, tools);
+    toolColumn->addWidget(m_palette, 0, Qt::AlignHCenter);
     toolColumn->addStretch(1);
+    if (m_agent) {
+        m_roast = new RoastButton(tools);
+        connect(m_roast, &QToolButton::clicked, this, [this] { m_agent->roast(); });
+        toolColumn->addWidget(m_roast, 0, Qt::AlignHCenter);
+    }
     // Too short a window scrolls the rail.
     auto *rail = new QScrollArea(this);
     rail->setObjectName(QStringLiteral("toolRail"));
@@ -255,8 +314,19 @@ void ContentView::synchronizePanels()
 void ContentView::synchronize()
 {
     showHeader(m_session.tool());
-    for (const auto &[tool, button] : m_toolButtons)
+    // A proposal pauses the tools: a click or a tool change would commit it.
+    const bool proposal = hasProposal();
+    m_canvas->setPaused(proposal);
+    for (const auto &[tool, button] : m_toolButtons) {
         button->setChecked(m_session.tool() == tool);
+        button->setEnabled(!proposal);
+    }
+    m_dock->setEnabled(!proposal);
+    m_palette->setEnabled(!proposal);
+    if (m_header)
+        m_header->setEnabled(!proposal);
+    if (m_roast)
+        m_roast->setEnabled(m_session.hasDocument());
     showWelcome(!m_session.hasDocument());
     const std::optional<VectorDocument> &document = m_session.document();
     for (QLabel *label : {m_zoom, m_pointer, m_artboard, m_selection})

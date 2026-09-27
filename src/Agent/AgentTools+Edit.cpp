@@ -349,10 +349,6 @@ QJsonObject AgentTools::traceImage(const QJsonObject &params)
 
     ImageTrace::Options options;
     options.colors = mode == 1 ? 1 : int(colors.value_or(6));
-    const std::vector<VectorObject> traced = ImageTrace::trace(image->image, options);
-    if (traced.empty())
-        fail(QStringLiteral("The trace found no shapes. Try the other mode, or more colours."));
-
     // The original pixels, so the agent can compare its cleanup against them.
     QTemporaryFile file(QDir::temp().filePath(QStringLiteral("omastrator-trace-source-XXXXXX.png")));
     file.setAutoRemove(false);
@@ -360,21 +356,13 @@ QJsonObject AgentTools::traceImage(const QJsonObject &params)
         throw Error(AgentProtocol::fileError, QStringLiteral("Could not write the image for the agent to see."));
     const QString imagePath = file.fileName();
     const QSize pixels = image->image.size();
-    const QTransform placed = image->transform;
-
-    VectorObject group;
-    group.kind = ObjectKind::group;
-    group.name = QStringLiteral("Image Trace");
-    const QUuid groupID = group.id;
-    edited.insert(std::move(group), *image->parentID, *imageID);
-    std::vector<QUuid> paths;
-    for (const VectorObject &path : traced) {
-        paths.push_back(path.id);
-        edited.insert(path, groupID);
+    const std::optional<QUuid> traced = ImageTrace::traceInPlace(edited, *imageID, options);
+    if (!traced) {
+        QFile::remove(imagePath);
+        fail(QStringLiteral("The trace found no shapes. Try the other mode, or more colours."));
     }
-    // Traced paths are in pixels; the image's placement puts them on the artboard.
-    edited.transform(groupID, placed);
-    edited.remove({*imageID});
+    const QUuid groupID = *traced;
+    const std::vector<QUuid> paths = edited.children(groupID);
     propose(QStringLiteral("Image Trace"), edited, {groupID});
     return {{"id", idString(groupID)}, {"ids", idArray(paths)}, {"bounds", rect(edited.bounds(groupID))},
             {"imagePath", imagePath}, {"imageSize", QJsonArray{pixels.width(), pixels.height()}}};

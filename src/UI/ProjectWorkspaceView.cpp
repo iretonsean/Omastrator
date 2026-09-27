@@ -33,7 +33,8 @@ ProjectWorkspaceView::ProjectWorkspaceView(ProjectWorkspace &workspace, QWidget 
     m_zoomOut = action(m_toolbar, QStringLiteral("−"), QStringLiteral("Zoom out (Ctrl+−)"), QStringLiteral("zoomOutToolbar"));
     addToolBar(Qt::TopToolBarArea, m_toolbar);
     m_workspace.window = this;
-    m_menus = new Menus(m_workspace, *menuBar(), *this);
+    m_agent = new AgentBridge(m_workspace, *this);
+    m_menus = new Menus(m_workspace, *menuBar(), *this, m_agent);
     connect(m_menus, &Menus::layersToggled, this, [this] { m_content->synchronizePanels(); });
     connect(m_menus, &Menus::propertiesToggled, this, [this] { m_content->synchronizePanels(); });
     connect(m_newTab, &QAction::triggered, this, [this] { m_workspace.newTab(); });
@@ -54,7 +55,7 @@ void ProjectWorkspaceView::synchronize()
         if (m_content)
             connect(m_content, &QObject::destroyed, [keep = m_shownTab] {});
         m_shownTab = front;
-        m_content = new ContentView(front->session, &m_workspace, this);
+        m_content = new ContentView(front->session, &m_workspace, this, m_agent);
         // The window owns the minimum; the editor may be shorter.
         m_content->setMinimumSize(0, 0);
         setCentralWidget(m_content);

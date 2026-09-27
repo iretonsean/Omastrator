@@ -100,12 +100,19 @@ const VectorDocument &AgentTools::document()
 
 bool AgentTools::ownsProposal(const EditorSession &session) const
 {
-    return m_session == &session && session.isInteracting() && m_preview && session.document() && *session.document() == *m_preview;
+    // The name rules out a user's drag begun after the proposal was kept, before it moved anything.
+    return m_session == &session && session.isInteracting() && session.interactionName() == QStringLiteral("AI: ") + m_title && m_preview
+        && session.document() && *session.document() == *m_preview;
 }
 
 bool AgentTools::hasProposal() const
 {
     return m_session && ownsProposal(*m_session);
+}
+
+EditorSession *AgentTools::proposalSession() const
+{
+    return hasProposal() ? m_session.data() : nullptr;
 }
 
 QString AgentTools::proposalTitle() const

@@ -123,6 +123,8 @@ public:
     // when it began, and ends in one undo step or none.
     void beginInteraction(const QString &name);
     bool isInteracting() const { return m_interaction.has_value(); }
+    // The open interaction's undo name, empty when none is open.
+    QString interactionName() const { return m_interaction ? m_interaction->name : QString(); }
     // The selection transformed from where the interaction began.
     void previewTransform(const QTransform &transform);
     // Replaces one object wholesale, for path point drags.
@@ -174,6 +176,9 @@ public:
     // Object ▸ Path ▸ Offset Path: a copy grown by `distance`.
     void offsetSelection(double distance);
     void simplifySelection(double tolerance);
+    // Object ▸ Image Trace ▸ Make: the one selected image becomes traced paths.
+    void traceSelectedImage(int colors = 1);
+    std::optional<QUuid> selectedImage() const;
     // Type ▸ Create Outlines.
     void convertTextToPaths();
     // Object ▸ Compound Path ▸ Make / Release.

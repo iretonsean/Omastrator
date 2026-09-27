@@ -1,5 +1,7 @@
 #include "UI/Menus.h"
 #include "ContentView.h"
+#include "UI/AgentBridge.h"
+#include "UI/AgentSheets.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
 #include <QApplication>
@@ -7,7 +9,8 @@
 #include <QMenu>
 #include <QMessageBox>
 
-Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window) : QObject(&bar), m_workspace(workspace), m_window(window)
+Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentBridge *agent)
+    : QObject(&bar), m_workspace(workspace), m_window(window), m_agent(agent)
 {
     buildFile(bar);
     buildEdit(bar);
@@ -17,6 +20,8 @@ Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window) : QObj
     connect(qApp, &QApplication::focusChanged, this, &Menus::focusMoved);
     connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &Menus::remap);
     connect(&m_workspace, &ProjectWorkspace::changed, this, &Menus::synchronize);
+    if (m_agent)
+        connect(m_agent, &AgentBridge::proposalChanged, this, &Menus::synchronize);
     watchFront(nullptr);
 }
 
@@ -189,6 +194,22 @@ void Menus::buildObject(QMenuBar &bar)
     add(clipping, QStringLiteral("makeClippingMask"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_7), [this] { session().makeClippingMask(); });
     add(clipping, QStringLiteral("releaseClippingMask"), QStringLiteral("Release"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_7),
         [this] { session().releaseClippingMask(); });
+    QMenu *trace = object->addMenu(QStringLiteral("Image Trace"));
+    trace->menuAction()->setObjectName(QStringLiteral("imageTraceMenu"));
+    add(trace, QStringLiteral("imageTraceMake"), QStringLiteral("Make"), QKeySequence(), [this] { session().traceSelectedImage(); });
+    add(trace, QStringLiteral("vectorizeWithAI"), QStringLiteral("Vectorize with AI…"), QKeySequence(), [this] {
+        if (m_agent)
+            AgentSheets::vectorize(*m_agent, &m_window);
+    });
+    object->addSeparator();
+    add(object, QStringLiteral("generate"), QStringLiteral("Generate…"), QKeySequence(), [this] {
+        if (m_agent)
+            AgentSheets::generate(*m_agent, &m_window);
+    });
+    add(object, QStringLiteral("editWithInstruction"), QStringLiteral("Edit with Instruction…"), QKeySequence(), [this] {
+        if (m_agent)
+            AgentSheets::editWithInstruction(*m_agent, &m_window);
+    });
     object->addSeparator();
     add(object, QStringLiteral("artboardSize"), QStringLiteral("Artboard Size…"), QKeySequence(), [this] { ObjectDialogs::artboardSize(session(), &m_window); });
     QMenu *type = bar.addMenu(QStringLiteral("&Type"));
@@ -228,6 +249,10 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     });
     properties->setCheckable(true);
     QMenu *help = bar.addMenu(QStringLiteral("&Help"));
+    add(help, QStringLiteral("connectAgent"), QStringLiteral("Connect an Agent…"), QKeySequence(), [this] {
+        if (m_agent)
+            AgentSheets::connectAgent(*m_agent, &m_window);
+    });
     add(help, QStringLiteral("about"), QStringLiteral("About Omastrator"), QKeySequence(), [this] {
         QMessageBox::about(&m_window, QStringLiteral("About Omastrator"),
                            QStringLiteral("<b>Omastrator</b> %1<br>Vector illustration for Linux, made for Omarchy.<br>"

@@ -52,6 +52,17 @@ void EditorCanvas::finishTextEditing()
     m_state->finishText();
 }
 
+void EditorCanvas::setPaused(bool paused)
+{
+    if (m_paused == paused)
+        return;
+    m_paused = paused;
+    if (paused)
+        m_state->cancelDrag();
+    m_state->updateCursor();
+    update();
+}
+
 // Geometry ---------------------------------------------------------------------
 
 QSizeF EditorCanvas::State::documentSize() const
@@ -158,6 +169,8 @@ void EditorCanvas::mousePressEvent(QMouseEvent *event)
         return;
     }
     setFocus(Qt::MouseFocusReason);
+    if (m_paused)
+        return;
     // A press starts afresh: Qt can lose a release.
     if (m_state->drag)
         m_state->release(event->position(), event->modifiers());
@@ -193,7 +206,7 @@ void EditorCanvas::mouseReleaseEvent(QMouseEvent *event)
 
 void EditorCanvas::mouseDoubleClickEvent(QMouseEvent *event)
 {
-    if (event->button() != Qt::LeftButton || !m_session.hasDocument()) {
+    if (event->button() != Qt::LeftButton || !m_session.hasDocument() || m_paused) {
         QWidget::mouseDoubleClickEvent(event);
         return;
     }
@@ -203,6 +216,10 @@ void EditorCanvas::mouseDoubleClickEvent(QMouseEvent *event)
 
 void EditorCanvas::keyPressEvent(QKeyEvent *event)
 {
+    if (m_paused) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
     m_state->modifiers = event->modifiers();
     if (!m_state->keyPress(event))
         QWidget::keyPressEvent(event);
@@ -211,6 +228,10 @@ void EditorCanvas::keyPressEvent(QKeyEvent *event)
 
 void EditorCanvas::keyReleaseEvent(QKeyEvent *event)
 {
+    if (m_paused) {
+        QWidget::keyReleaseEvent(event);
+        return;
+    }
     m_state->modifiers = event->modifiers();
     if (!m_state->keyRelease(event))
         QWidget::keyReleaseEvent(event);

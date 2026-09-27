@@ -1,6 +1,7 @@
 #pragma once
 #include "Document/VectorDocument.h"
 #include <QImage>
+#include <optional>
 #include <vector>
 
 // Object ▸ Image Trace: pixels to filled paths, black and white or in colour.
@@ -23,4 +24,8 @@ struct Options {
 // One even-odd filled path per colour, in the image's pixel coordinates,
 // bottom to top in palette order. Paths have no stroke.
 std::vector<VectorObject> trace(const QImage &image, const Options &options = {});
+
+// Replaces the image object `image` with a group of its traced paths, placed
+// where the image sat. Returns the group, or nothing when no shape was found.
+std::optional<QUuid> traceInPlace(VectorDocument &document, const QUuid &image, const Options &options = {});
 }

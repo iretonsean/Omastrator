@@ -16,6 +16,9 @@ public:
     bool isEditingText() const;
     // Ends in-place type editing, keeping what was typed.
     void finishTextEditing();
+    // Paused, clicks and keys start nothing: an agent's proposal waits for Enter or Esc.
+    void setPaused(bool paused);
+    bool isPaused() const { return m_paused; }
 
 signals:
     // The pointer's document position, for the status bar; nullopt off the artboard.
@@ -42,4 +45,5 @@ private:
     EditorSession &m_session;
     struct State;
     std::unique_ptr<State> m_state;
+    bool m_paused = false;
 };

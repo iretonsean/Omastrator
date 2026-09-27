@@ -43,6 +43,8 @@ public:
     bool isManaging() const { return m_isManaging; }
     // Dialogs and alerts open over it.
     QPointer<QWidget> window;
+    // Set, failures come here instead of an alert: the agent bridge reports them itself.
+    std::function<void(const QString &title, const QString &message)> errorHandler;
 
     ProjectTab &current() const;
     std::shared_ptr<ProjectTab> tab(QUuid id) const;

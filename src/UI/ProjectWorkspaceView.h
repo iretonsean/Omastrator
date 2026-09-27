@@ -1,5 +1,6 @@
 #pragma once
 #include "ContentView.h"
+#include "UI/AgentBridge.h"
 #include "UI/Menus.h"
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspace.h"
@@ -15,6 +16,8 @@ public:
     ContentView *content() const { return m_content; }
     ProjectTabStrip *tabs() const { return m_tabs; }
     Menus *menus() const { return m_menus; }
+    // The agent bridge; main starts its server.
+    AgentBridge *agent() const { return m_agent; }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -26,6 +29,7 @@ private:
     ProjectWorkspace &m_workspace;
     QToolBar *const m_toolbar;
     ProjectTabStrip *const m_tabs;
+    AgentBridge *m_agent = nullptr;
     Menus *m_menus = nullptr;
     QAction *m_newTab = nullptr;
     QAction *m_fit = nullptr;

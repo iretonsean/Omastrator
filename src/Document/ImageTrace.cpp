@@ -399,3 +399,25 @@ std::vector<VectorObject> trace(const QImage &image, const Options &options)
     return result;
 }
 }
+
+std::optional<QUuid> ImageTrace::traceInPlace(VectorDocument &document, const QUuid &image, const Options &options)
+{
+    const VectorObject *source = document.find(image);
+    if (!source || source->kind != ObjectKind::image || !source->parentID)
+        return std::nullopt;
+    const std::vector<VectorObject> traced = trace(source->image, options);
+    if (traced.empty())
+        return std::nullopt;
+    const QTransform placed = source->transform;
+    VectorObject group;
+    group.kind = ObjectKind::group;
+    group.name = QStringLiteral("Image Trace");
+    const QUuid groupID = group.id;
+    document.insert(std::move(group), *source->parentID, image);
+    for (const VectorObject &path : traced)
+        document.insert(path, groupID);
+    // Traced paths are in pixels; the image's placement puts them on the artboard.
+    document.transform(groupID, placed);
+    document.remove({image});
+    return groupID;
+}

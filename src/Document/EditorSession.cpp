@@ -1,4 +1,5 @@
 #include "Document/EditorSession.h"
+#include "Document/ImageTrace.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -578,4 +579,31 @@ void EditorSession::previewDocument(const VectorDocument &document, const std::v
     m_selection = selection;
     pruneSelection();
     notify();
+}
+
+std::optional<QUuid> EditorSession::selectedImage() const
+{
+    std::optional<QUuid> found;
+    for (const QUuid &id : selectedLeaves()) {
+        if (m_document->find(id)->kind != ObjectKind::image)
+            continue;
+        // Two images leave the choice open: nothing to trace.
+        if (found)
+            return std::nullopt;
+        found = id;
+    }
+    return found;
+}
+
+void EditorSession::traceSelectedImage(int colors)
+{
+    const std::optional<QUuid> image = selectedImage();
+    if (!image || m_document->isEffectivelyLocked(*image))
+        return;
+    ImageTrace::Options options;
+    options.colors = std::clamp(colors, 1, 16);
+    edit(QStringLiteral("Image Trace"), [&](VectorDocument &document) {
+        if (const auto group = ImageTrace::traceInPlace(document, *image, options))
+            m_selection = {*group};
+    });
 }

@@ -9,7 +9,9 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+class AgentBridge;
 class LayersPanel;
+class ProposalBar;
 class PropertiesPanel;
 class ProjectWorkspace;
 class QMimeData;
@@ -21,7 +23,9 @@ class ContentView : public QWidget {
     Q_OBJECT
 public:
     // Without a workspace the welcome and drops do nothing.
-    explicit ContentView(EditorSession &session, ProjectWorkspace *workspace = nullptr, QWidget *parent = nullptr);
+    // Without an agent bridge there is no Roast My Design and no accept bar.
+    explicit ContentView(EditorSession &session, ProjectWorkspace *workspace = nullptr, QWidget *parent = nullptr,
+                         AgentBridge *agent = nullptr);
     ~ContentView() override;
 
     // The rail, top to bottom, in Illustrator's groups.
@@ -50,6 +54,8 @@ public:
     // Shows the dock's panels as the settings say.
     void synchronizePanels();
     bool acceptsDrop(const QMimeData &data) const;
+    // An agent's proposal is open here: tools pause until Enter or Esc.
+    bool hasProposal() const;
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -71,6 +77,10 @@ private:
 
     EditorSession &m_session;
     const QPointer<ProjectWorkspace> m_workspace;
+    const QPointer<AgentBridge> m_agent;
+    ProposalBar *m_proposalBar = nullptr;
+    QToolButton *m_roast = nullptr;
+    QWidget *m_palette = nullptr;
     QVBoxLayout *const m_column;
     ToolHeaderBar *m_header = nullptr;
     std::optional<Tool> m_shownTool;

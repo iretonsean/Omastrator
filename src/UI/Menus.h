@@ -7,11 +7,14 @@
 #include <QMenuBar>
 #include <QPointer>
 
+class AgentBridge;
+
 // The menu bar: Illustrator's commands whose session functions exist.
 class Menus : public QObject {
     Q_OBJECT
 public:
-    Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window);
+    // Without a bridge the AI entries stay disabled.
+    Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentBridge *agent = nullptr);
 
     QAction *action(const QString &name) const;
     // A new front editor: follow its session and canvas.
@@ -36,6 +39,7 @@ private:
 
     ProjectWorkspace &m_workspace;
     QWidget &m_window;
+    AgentBridge *const m_agent;
     QMenu *m_recent = nullptr;
     FloatingPanel m_shortcutsPanel{QStringLiteral("keyboardShortcuts"), m_window};
     QMetaObject::Connection m_sessionWatch;

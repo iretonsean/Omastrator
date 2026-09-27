@@ -131,6 +131,20 @@ private slots:
         QCOMPARE(host.editor.document()->bounds(shape), QRectF(5, 5, 10, 10));
     }
 
+    void aDragBegunAfterKeepingIsTheUsers()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({200, 200});
+        AgentTools tools(host);
+        tools.call(QStringLiteral("insert_svg"), {{"svg", square}});
+        host.editor.commitInteraction();
+        // Pressed but not moved yet: the document still matches the last proposal.
+        host.editor.beginInteraction(QStringLiteral("Move"));
+        QVERIFY(!tools.hasProposal());
+        QCOMPARE(failure(tools, QStringLiteral("insert_svg"), {{"svg", square}}), int(AgentProtocol::busy));
+        QCOMPARE(host.editor.interactionName(), QStringLiteral("Move"));
+    }
+
     void proposalFinishRenamesTheUndoStep()
     {
         FakeAgentHost host;

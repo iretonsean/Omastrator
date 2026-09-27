@@ -1,6 +1,7 @@
 #include "ContentView.h"
 #include "IO/ProjectStore.h"
 #include "Logging.h"
+#include "UI/AgentBridge.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ProjectWorkspace.h"
 #include <QApplication>
@@ -77,6 +78,18 @@ bool ContentView::eventFilter(QObject *watched, QEvent *event)
 // True when handled here, so the canvas never sees it.
 bool ContentView::canvasKey(QKeyEvent *event)
 {
+    // A proposal takes Enter and Esc; tool keys would commit it, so they rest.
+    if (hasProposal()) {
+        if (event->type() == QEvent::KeyPress && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)) {
+            m_agent->keepProposal();
+            return true;
+        }
+        if (event->type() == QEvent::KeyPress && event->key() == Qt::Key_Escape) {
+            m_agent->discardProposal();
+            return true;
+        }
+        return false;
+    }
     const bool typing = m_canvas->isEditingText();
     const std::unique_ptr<QKeyEvent> typed = typing ? ShortcutSettings::shared().textEvent(*event) : ShortcutSettings::shared().canvasEvent(*event);
     if (!typed)
@@ -104,7 +117,12 @@ bool ContentView::canvasKey(QKeyEvent *event)
 
 bool ContentView::acceptsDrop(const QMimeData &data) const
 {
-    return m_workspace && !m_workspace->isManaging() && !droppedFiles(data).isEmpty();
+    return m_workspace && !m_workspace->isManaging() && !hasProposal() && !droppedFiles(data).isEmpty();
+}
+
+bool ContentView::hasProposal() const
+{
+    return m_agent && m_agent->hasProposalIn(m_session);
 }
 
 void ContentView::dragEnterEvent(QDragEnterEvent *event)
