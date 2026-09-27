@@ -17,8 +17,23 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
 ## Features
 
 - Selection and direct selection, with scale and rotate handles, marquee
-  selection, nudging, and smart guides that snap to other objects and the
-  artboard.
+  selection, and smart guides that snap to other objects and the artboard.
+  Drags show Δx/Δy, W × H or the angle as you go.
+- Right-click menus on the canvas and the Layers rows that list only what
+  applies to what you clicked: Ask AI… first, a Select ▸ picker for stacked
+  objects, and the rest one submenu away.
+- A Select menu: Inverse, Next Object Above and Below, Same ▸ (fill, stroke,
+  weight, opacity, blend mode, font), Object ▸ (text, images, clipping masks,
+  open paths, stray points) and Reselect.
+- Hold Alt to measure from the selection to whatever is under the pointer, or
+  to the artboard's edges.
+- Paste in Front, Back and in Place; Ctrl+D repeats the last transform, so an
+  Alt-drag copy followed by Ctrl+D, Ctrl+D is step-and-repeat. Duplicate is
+  Ctrl+Alt+D.
+- Arrow keys nudge by a keyboard increment you set in Preferences (Shift for
+  ten times it, Alt to nudge a copy). Number keys set opacity: 5 is 50 %, 0 is
+  100 %, and two quick digits make an exact value.
+- Zoom to Selection (Shift+2) and Fit Artboard (Shift+1).
 - Pen, pencil, line, rectangle, rounded rectangle, ellipse, polygon and star
   tools, all producing editable Bézier paths.
 - Point type, edited in place on the canvas, with Create Outlines.
