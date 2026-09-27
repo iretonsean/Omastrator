@@ -1,6 +1,7 @@
 #pragma once
 #include "Document/DocumentHistory.h"
 #include "Document/PathOperations.h"
+#include "Document/ShapeBuilder.h"
 #include "Document/VectorDocument.h"
 #include "Rendering/CanvasViewport.h"
 #include <QObject>
@@ -25,6 +26,7 @@ enum class Tool {
     ellipse,         // L
     polygon,
     star,
+    shapeBuilder,    // Shift-M
     rotate,          // R
     scale,           // S
     eyedropper,      // I
@@ -33,7 +35,7 @@ enum class Tool {
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
-                                     Tool::rotate, Tool::scale, Tool::eyedropper, Tool::hand, Tool::zoom};
+                                     Tool::shapeBuilder, Tool::rotate, Tool::scale, Tool::eyedropper, Tool::hand, Tool::zoom};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -82,6 +84,8 @@ public:
     int starPoints = 5;
     // Inner over outer radius.
     double starInnerRatio = 0.5;
+    // Shape Builder's tool options.
+    ShapeBuilderOptions shapeBuilder;
 
     // Selection --------------------------------------------------------------
     // Objects directly under a layer, or deeper after a group is entered.
@@ -142,6 +146,8 @@ public:
     void previewDocument(const VectorDocument &document, const std::vector<QUuid> &selection);
     void commitInteraction();
     void cancelInteraction();
+    // Shape Builder: a gesture on the selection's arrangement, from where the interaction began; results stay selected.
+    bool previewShapeBuild(const ShapeBuilder::Arrangement &arrangement, const ShapeBuilder::Gesture &gesture);
 
     // Objects ----------------------------------------------------------------
     // Adds above the selection (or on top of the active layer) and selects it.
