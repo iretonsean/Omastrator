@@ -52,7 +52,10 @@ Each folder builds as its own static library:
   `DesktopSource` (Hyprland, AT-SPI and grim; tests use
   `tests/Anywhere/FakeDesktop.h`), `Inspect` (the web inspector script, the
   AT-SPI helper, distances), `Overlays` (`overlays.omai`, a layer per surface),
-  `Desk` (frames), `Bar` (actions and suggestions) and `AnywhereSettings`
+  `Desk` (frames), `Bar` (actions and suggestions), `Lift` (a surface's UI as
+  vectors: `LiftScript.h` walks the DOM, `Lift+Screen` reads the AT-SPI tree or
+  traces, `LiftJob` runs it in the background; tests fake the tree through
+  `FakeDesktop::trees` or `OMASTRATOR_ATSPI_TREE`) and `AnywhereSettings`
   (onboarding, destinations, in `anywhere.json`). The app side is
   `src/UI/DesignController` behind the `design` method. The overlay itself is
   `shell/omastrator.island/Overlay.qml`; its decisions are in
@@ -92,7 +95,7 @@ Each folder builds as its own static library:
   through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
   `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
   `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL`, `OMASTRATOR_RCLONE`,
-  `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_ATSPI`
+  `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_ATSPI`, `OMASTRATOR_ATSPI_TREE`
   and `OMASTRATOR_WL_COPY`. Unset `HYPRLAND_INSTANCE_SIGNATURE` in tests that
   build a `DesignController`, and give it a `FakeDesktop`. Live's deploy tests push only to local bare
   repositories and run fake deploy commands. Cloud tests never read the user's

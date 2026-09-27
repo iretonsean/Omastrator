@@ -277,7 +277,7 @@ private slots:
                                                    {"children", QJsonArray{QJsonObject{{"role", "label"}, {"rect", QJsonArray{10, 10, 200, 20}},
                                                                                        {"text", "~ $ ls"}, {"index", 0}}}}}}};
         app.desktop->trees.insert(4242, tree);
-        auto hovered = [&] {
+        auto hovered = [&]() -> QJsonValue {
             app.call(QStringLiteral("deselect"));
             app.desktop->pointer = QPoint(300, 300);
             app.design().mode().poll();
