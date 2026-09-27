@@ -45,13 +45,17 @@ DesignController::DesignController(AgentBridge &bridge, ProjectWorkspace &worksp
     connect(&m_overlays.session(), &EditorSession::changed, this, &DesignController::changed);
     m_deskSave.setSingleShot(true);
     m_deskSave.setInterval(500);
-    connect(&m_deskSave, &QTimer::timeout, this, &DesignController::autosaveDesk);
+    connect(&m_deskSave, &QTimer::timeout, this, [this] { autosaveDesk(); });
 }
 
 DesignController::~DesignController()
 {
+    // The window may be going too: save what's pending without telling anyone.
+    blockSignals(true);
+    m_overlays.session().blockSignals(true);
     m_overlays.save();
-    autosaveDesk();
+    if (m_deskSave.isActive())
+        autosaveDesk(false);
 }
 
 void DesignController::setSource(std::unique_ptr<DesktopSource> source)
@@ -256,6 +260,15 @@ QJsonObject DesignController::status()
 {
     QJsonObject status = m_mode->status();
     status["overlays"] = m_placements;
+    // Where each monitor sits in Hyprland's layout, so the overlay places art and the bar on the right one.
+    QJsonArray monitors;
+    for (const Hyprland::Monitor &monitor : m_mode->monitors())
+        monitors.append(QJsonObject{{"name", monitor.name},
+                                    {"x", monitor.rect.x()},
+                                    {"y", monitor.rect.y()},
+                                    {"width", monitor.rect.width()},
+                                    {"height", monitor.rect.height()}});
+    status["monitors"] = monitors;
     status["message"] = m_message;
     const AnywhereSettings::Answers answers = AnywhereSettings::Answers::fromJson(m_settings["onboarding"].toObject());
     QJsonObject onboarding{{"open", m_onboardingOpen}, {"needed", !answers.done}, {"answers", answers.toJson()}};
@@ -359,7 +372,7 @@ ProjectTab *DesignController::deskTab(QString *error)
     return &tab;
 }
 
-void DesignController::autosaveDesk()
+void DesignController::autosaveDesk(bool mark)
 {
     const QString path = Desk::defaultPath();
     for (const std::shared_ptr<ProjectTab> &tab : m_workspace.tabs()) {
@@ -369,7 +382,8 @@ void DesignController::autosaveDesk()
         try {
             QDir().mkpath(QFileInfo(path).absolutePath());
             ProjectStore::write(*tab->session.document(), path);
-            tab->session.markSaved();
+            if (mark)
+                tab->session.markSaved();
         } catch (const FileError &failure) {
             say(QStringLiteral("The Desk couldn't be saved: %1").arg(failure.message()));
         }

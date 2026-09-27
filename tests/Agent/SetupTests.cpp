@@ -225,6 +225,40 @@ private slots:
         QVERIFY(!read(config(QStringLiteral("omarchy/shell.json"))).contains("omastrator"));
     }
 
+    // Design mode's keys (docs/ANYWHERE.md) sit where Omarchy's defaults have none, and anywhere.json remaps them.
+    void designKeysAreFreeAndRemappable()
+    {
+        const QByteArray lua = Setup::hyprlandLua(QStringLiteral("omastrator"));
+        QVERIFY(lua.contains("hl.bind(\"SUPER + ALT + O\", function()"));
+        QVERIFY(lua.contains("hl.dispatch(hl.dsp.submap(\"omastrator-design\"))"));
+        QVERIFY(lua.contains("hl.bind(\"SUPER + ALT + W\", hl.dsp.exec_cmd(omastrator .. \" desk toggle\")"));
+        QVERIFY(lua.contains("hl.bind(\"Alt_L\", design(\"alt on\")"));
+        QVERIFY(lua.contains("omastrator .. \" --daemon\""));
+        const QByteArray conf = Setup::hyprlandConf(QStringLiteral("omastrator"));
+        QVERIFY(conf.contains("bindd = SUPER ALT, O, Omastrator: design mode, exec, omastrator design on\n"));
+        QVERIFY(conf.contains("bindd = SUPER ALT, W, Omastrator: the Desk, exec, omastrator desk toggle\n"));
+        QVERIFY(conf.contains("bindr = ALT, Alt_L, exec, omastrator design alt off\n"));
+        QVERIFY(conf.contains("exec-once = omastrator --daemon\n"));
+        // Neither key is one of Omarchy's own, where its defaults are installed.
+        const QString bindings = QStringLiteral("/usr/share/omarchy/default/hypr/bindings");
+        for (const QString &name : QDir(bindings).entryList({QStringLiteral("*.lua")}, QDir::Files)) {
+            const QByteArray text = read(QDir(bindings).filePath(name));
+            QVERIFY2(!text.contains("\"SUPER + ALT + O\"") && !text.contains("\"SUPER + ALT + W\""), qPrintable(name));
+        }
+
+        Setup::Environment environment = Setup::Environment::current();
+        QCOMPARE(Setup::DesignKeys::from(environment).design, QStringLiteral("SUPER + ALT + O"));
+        QDir().mkpath(environment.omastratorConfig());
+        write(QDir(environment.omastratorConfig()).filePath(QStringLiteral("anywhere.json")),
+              "{\"keys\": {\"design\": \"SUPER + ALT + I\", \"desk\": \"SUPER + ALT + \\\"; rm -rf ~\"}}");
+        const Setup::DesignKeys keys = Setup::DesignKeys::from(environment);
+        QCOMPARE(keys.design, QStringLiteral("SUPER + ALT + I"));
+        // Anything but a key combination is ignored.
+        QCOMPARE(keys.desk, QStringLiteral("SUPER + ALT + W"));
+        QVERIFY(Setup::hyprlandConf(QStringLiteral("omastrator"), keys).contains("bindd = SUPER ALT, I, Omastrator: design mode"));
+        QFile::remove(QDir(environment.omastratorConfig()).filePath(QStringLiteral("anywhere.json")));
+    }
+
     void hyprlandAcceptsTheKeys()
     {
         const QString hyprland = QStandardPaths::findExecutable(QStringLiteral("Hyprland"));

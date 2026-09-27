@@ -183,7 +183,8 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
     const HyprFormat format = hyprFormat(environment);
     const QString keys = QDir(environment.omastratorConfig()).filePath(format == HyprFormat::lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf"));
     plan.push_back({QStringLiteral("keys"), QStringLiteral("Write the island's Hyprland keys (Omastrator's own file)"), keys, readFile(keys),
-                    format == HyprFormat::lua ? hyprlandLua(environment.command) : hyprlandConf(environment.command)});
+                    format == HyprFormat::lua ? hyprlandLua(environment.command, DesignKeys::from(environment))
+                                              : hyprlandConf(environment.command, DesignKeys::from(environment))});
     // The vocabulary is the user's to edit once written.
     const QString vocabulary = QDir(environment.omastratorConfig()).filePath(QStringLiteral("vocabulary.txt"));
     if (!QFileInfo::exists(vocabulary))

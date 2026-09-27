@@ -9,3 +9,12 @@ Terminal=false
 Categories=Graphics;VectorGraphics;
 MimeType=application/x-omastrator;image/svg+xml;
 StartupWMClass=Omastrator
+Actions=Desk;Design;
+
+[Desktop Action Desk]
+Name=The Desk
+Exec=omastrator desk window
+
+[Desktop Action Design]
+Name=Design Mode
+Exec=omastrator design on

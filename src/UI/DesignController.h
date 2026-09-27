@@ -77,7 +77,8 @@ private:
     // A screenshot of `rect` kept in the captures folder; empty when grim can't.
     QString keepScreenshot(const QRect &rect, QImage *image = nullptr);
     void say(const QString &line);
-    void autosaveDesk();
+    // `mark`: the tab shows as saved (not while the window is being torn down).
+    void autosaveDesk(bool mark = true);
 
     AgentBridge &m_bridge;
     ProjectWorkspace &m_workspace;
