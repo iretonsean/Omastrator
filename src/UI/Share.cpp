@@ -166,41 +166,7 @@ QString setGithubConfirmed(bool confirmed)
 
 VectorDocument selectionDocument(const VectorDocument &document, const std::vector<QUuid> &ids)
 {
-    std::set<QUuid> keep;
-    for (const QUuid &id : ids) {
-        if (!document.find(id))
-            continue;
-        keep.insert(id);
-        for (const QUuid &inner : document.descendants(id))
-            keep.insert(inner);
-        // Its layer and groups, and any clipping path above it, so it looks as it does on the artboard.
-        for (const VectorObject *up = document.find(id); up && up->parentID; up = document.find(*up->parentID)) {
-            keep.insert(*up->parentID);
-            if (const VectorObject *parent = document.find(*up->parentID); parent && parent->isClipGroup) {
-                const std::vector<QUuid> children = document.children(parent->id);
-                if (!children.empty()) {
-                    keep.insert(children.front());
-                    for (const QUuid &inner : document.descendants(children.front()))
-                        keep.insert(inner);
-                }
-            }
-        }
-    }
-    const QRectF bounds = document.bounds(std::vector<QUuid>(ids.begin(), ids.end()), true);
-    if (keep.empty() || bounds.isEmpty())
-        return document;
-    VectorDocument cropped = document;
-    std::vector<QUuid> drop;
-    for (const VectorObject &object : cropped.objects) {
-        if (!keep.count(object.id))
-            drop.push_back(object.id);
-    }
-    cropped.remove(drop);
-    for (const QUuid &layer : cropped.layers())
-        cropped.transform(layer, QTransform::fromTranslate(-bounds.left(), -bounds.top()), false, false);
-    cropped.size = bounds.size();
-    cropped.background = Qt::transparent;
-    return cropped;
+    return document.croppedTo(ids);
 }
 
 void write(const VectorDocument &document, Format format, const QString &path)

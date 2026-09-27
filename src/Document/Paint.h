@@ -60,6 +60,22 @@ enum class Arrowhead { none, arrow, triangle, circle, square, bar };
 QString rawValue(Arrowhead head);
 Arrowhead arrowhead(const QString &rawValue);
 
+// The Width tool's profile picker (P2-7): a preset shape for the width points,
+// or custom once they've been dragged by hand.
+enum class StrokeWidthProfile { uniform, taperStart, taperEnd, bulge, custom };
+QString rawValue(StrokeWidthProfile profile);
+StrokeWidthProfile strokeWidthProfile(const QString &rawValue);
+
+// A width point along a stroke (P2-7). `t` is 0..1 along the whole path (every
+// subpath's length, in order); `left` and `right` are half-widths off the
+// centerline, apart so an Alt-drag can move just one side.
+struct StrokeWidthPoint {
+    double t = 0;
+    double left = 0;
+    double right = 0;
+    friend bool operator==(const StrokeWidthPoint &, const StrokeWidthPoint &) = default;
+};
+
 struct StrokeStyle {
     Paint paint = Paint::solid(Qt::black);
     double width = 1;
@@ -76,6 +92,9 @@ struct StrokeStyle {
     double arrowScale = 100;
     // Illustrator's "align dashes to corners and path ends": dashes stretch to sit centred on each.
     bool alignDashes = false;
+    // Width tool (P2-7): empty is a uniform weight; points override it along the path.
+    StrokeWidthProfile widthProfile = StrokeWidthProfile::uniform;
+    std::vector<StrokeWidthPoint> widthPoints;
 
     bool isVisible() const { return paint.isVisible() && width > 0; }
     // A plain QPen draws it: centred, no heads, dashes as they fall.

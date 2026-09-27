@@ -263,6 +263,14 @@ QJsonObject encode(const StrokeStyle &stroke)
         json["arrowScale"] = stroke.arrowScale;
     if (stroke.alignDashes)
         json["alignDashes"] = true;
+    if (stroke.widthProfile != StrokeWidthProfile::uniform)
+        json["widthProfile"] = rawValue(stroke.widthProfile);
+    if (!stroke.widthPoints.empty()) {
+        QJsonArray points;
+        for (const StrokeWidthPoint &point : stroke.widthPoints)
+            points.append(QJsonObject{{"t", point.t}, {"left", point.left}, {"right", point.right}});
+        json["widthPoints"] = points;
+    }
     return json;
 }
 
@@ -282,6 +290,12 @@ StrokeStyle decodeStroke(const QJsonObject &json)
     stroke.endArrow = arrowhead(json["endArrow"].toString());
     stroke.arrowScale = std::clamp(json["arrowScale"].toDouble(100), 1.0, 1000.0);
     stroke.alignDashes = json["alignDashes"].toBool();
+    stroke.widthProfile = strokeWidthProfile(json["widthProfile"].toString());
+    for (const QJsonValue &value : json["widthPoints"].toArray()) {
+        const QJsonObject point = value.toObject();
+        stroke.widthPoints.push_back({std::clamp(point["t"].toDouble(), 0.0, 1.0), std::max(0.0, point["left"].toDouble()),
+                                      std::max(0.0, point["right"].toDouble())});
+    }
     return stroke;
 }
 
@@ -448,6 +462,8 @@ QJsonObject encode(const VectorObject &object)
         json["layerColor"] = color(object.layerColor);
     if (object.isClipGroup)
         json["clip"] = true;
+    if (object.mask)
+        json["mask"] = QJsonObject{{"clip", object.mask->clip}, {"inverted", object.mask->inverted}};
     if (!object.liftedFrom.isEmpty())
         json["liftedFrom"] = object.liftedFrom;
     switch (object.kind) {
@@ -520,6 +536,10 @@ VectorObject decodeObject(const QJsonObject &json)
     if (json.contains("layerColor"))
         object.layerColor = readColor(json["layerColor"]);
     object.isClipGroup = json["clip"].toBool();
+    if (json.contains("mask")) {
+        const QJsonObject mask = json["mask"].toObject();
+        object.mask = OpacityMask{mask["clip"].toBool(true), mask["inverted"].toBool()};
+    }
     object.liftedFrom = json["liftedFrom"].toString();
     object.transform = readTransform(json["transform"]);
     if (object.kind == ObjectKind::path) {
@@ -644,6 +664,22 @@ QJsonObject encode(const VectorDocument &document)
         json["tokenModes"] = QJsonArray::fromStringList(document.tokenModes);
         json["tokenMode"] = document.tokenMode;
     }
+    if (!document.artboards.empty()) {
+        QJsonArray boards;
+        for (const Artboard &board : document.artboards) {
+            boards.append(QJsonObject{{"id", board.id.toString(QUuid::WithoutBraces)}, {"name", board.name},
+                                       {"x", board.rect.x()}, {"y", board.rect.y()},
+                                       {"width", board.rect.width()}, {"height", board.rect.height()},
+                                       {"background", color(board.background)}});
+        }
+        json["artboards"] = boards;
+    }
+    if (!document.exportAssets.empty()) {
+        QJsonArray assets;
+        for (const QUuid &assetId : document.exportAssets)
+            assets.append(assetId.toString(QUuid::WithoutBraces));
+        json["exportAssets"] = assets;
+    }
     return json;
 }
 
@@ -669,6 +705,22 @@ VectorDocument decode(const QJsonObject &json)
             document.tokenModes.append(mode.toString());
     }
     document.tokenMode = document.tokenModes.contains(json["tokenMode"].toString()) ? json["tokenMode"].toString() : document.tokenModes.value(0);
+    // Version 5: artboards and export assets. Earlier files (or v4 files without them) give the implicit one.
+    for (const QJsonValue &value : json["artboards"].toArray()) {
+        const QJsonObject board = value.toObject();
+        const QUuid boardId = QUuid::fromString(board["id"].toString());
+        if (boardId.isNull())
+            continue;
+        const QRectF rect(board["x"].toDouble(), board["y"].toDouble(), board["width"].toDouble(), board["height"].toDouble());
+        if (!(rect.width() > 0 && rect.height() > 0))
+            continue;
+        document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white)});
+    }
+    for (const QJsonValue &value : json["exportAssets"].toArray()) {
+        const QUuid assetId = QUuid::fromString(value.toString());
+        if (!assetId.isNull())
+            document.exportAssets.push_back(assetId);
+    }
     // Every parent must exist, come first, and be a container; ids are unique.
     std::set<QUuid> seen;
     for (const VectorObject &object : document.objects) {

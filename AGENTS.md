@@ -17,7 +17,9 @@ Each folder builds as its own static library:
   through.
 - `src/IO` → `oma_io`. `ProjectStore` (`.omai`), `SvgImporter` (vendored
   nanosvg in `third_party/`), `SvgExporter`, `DocumentExporter` (PDF, PNG,
-  JPEG) and `ImageImporter`. Errors are thrown as `FileError`.
+  JPEG), `ImageImporter` and `ScreenExport` (Export for Screens: artboards and
+  export assets, a batch of scales and formats). Errors are thrown as
+  `FileError`.
 - `src/Cloud` → `oma_cloud`. Cloud storage through rclone
   (docs/CLOUD-STORAGE.md): `CloudStorage` runs it, `CloudLocation` is
   `remote:path` plus the cache, `CloudUploader` uploads in the background with
@@ -42,7 +44,8 @@ Each folder builds as its own static library:
 - `src/Live` → `oma_live`. Live web editing (docs/OS-SUITE.md): an in-tree
   WebSocket client and the DevTools Protocol (`WebSocket`, `Cdp`), Chromium in
   Omastrator's own profile (`Browser`), dev servers and a static server,
-  `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, write-back
+  `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, `EditSets` (edits to
+  sites that aren't yours, kept per origin), write-back
   (`WriteBack`, `AgentWork`), and Deploy (`Deploy`, `DeployJob`, `History`,
   with GitHub through `gh`). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
@@ -54,7 +57,8 @@ Each folder builds as its own static library:
   AT-SPI helper, distances), `Overlays` (`overlays.omai`, a layer per surface),
   `Desk` (frames), `Bar` (actions and suggestions), `Lift` (a surface's UI as
   vectors: `LiftScript.h` walks the DOM, `Lift+Screen` reads the AT-SPI tree or
-  traces, `LiftJob` runs it in the background; tests fake the tree through
+  traces, `LiftJob` runs it in the background, `LiftDiff` maps changed lifted
+  page vectors back to page edits; tests fake the tree through
   `FakeDesktop::trees` or `OMASTRATOR_ATSPI_TREE`) and `AnywhereSettings`
   (onboarding, destinations, in `anywhere.json`). The app side is
   `src/UI/DesignController` behind the `design` method. The overlay itself is
@@ -63,7 +67,12 @@ Each folder builds as its own static library:
 - `src/System` → `oma_system`. Design systems (docs/DESIGN-SYSTEMS.md):
   `TokenFiles` (W3C tokens.json, Tailwind v4 and v3, CSS variables),
   `ProjectCode`, `Library` (the global library), `SiteExtract`,
-  `OmarchyThemes` and `SyncPlan`. Every push or pull is a `SyncPlan` that only
+  `OmarchyThemes` and `SyncPlan`; phase 4's `DesktopLook` (Omarchy's gaps,
+  borders, bar, font, wallpaper and colours), `AppStyle` (GTK CSS, qt6ct and
+  Qt stylesheets) and `ConfigBackup` (backups and Revert), with the app side in
+  `UI/DesignController+Look.cpp` and `UI/DesktopLookPanel`; their tests build a
+  fake Omarchy desktop in a temporary HOME (`tests/System/DesktopFixtures.h`).
+  Every push or pull, and every write to the desktop's config, is a `SyncPlan` that only
   `UI/SyncConfirmDialog` can confirm; tests answer it with
   `SyncConfirmDialog::setResponder`. The model is `Document/DesignTokens`,
   `Document/Components` and `EditorSession+System.cpp`.

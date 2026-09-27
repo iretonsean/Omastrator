@@ -49,10 +49,15 @@ struct EditorCanvas::State {
         shapeBuilder,
         // Gradient tool: an end, a stop, or a new start-to-end drag.
         gradient,
+        // Width tool: an existing point, or a new one dropped where the drag started.
+        width,
         // A ruler guide moved, or one drawn out of a ruler.
         guide,
         // Direct Selection: a live corner's widget.
         corner,
+        // The Artboard tool: drawing a new one, moving or resizing one, or
+        // moving the fresh copy an Alt-drag made.
+        artboard,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -80,8 +85,13 @@ struct EditorCanvas::State {
         int guide = -1;
         Qt::Orientation guideAxis = Qt::Horizontal;
         double guidePosition = 0;
+        // The Artboard tool: which one is being moved or resized, known at the press (an
+        // implicit artboard's id isn't stable enough to look up again once the drag starts).
+        int artboardIndex = -1;
         // A click on what was already selected: it becomes the key object if nothing moves.
         std::optional<QUuid> keyCandidate;
+        // Width tool: the point's position along the path (0..1), fixed at press.
+        double pathT = 0;
     };
     std::optional<Drag> drag;
     // A fresh drag of `kind` pressed at `view`.
@@ -158,6 +168,18 @@ struct EditorCanvas::State {
     void dragCorner(QPointF view, Qt::KeyboardModifiers modifiers);
     // A click without a drag: Alt cycles round, inverted and chamfer.
     void finishCorner(Qt::KeyboardModifiers modifiers);
+
+    // Artboard (Shift-O) --------------------------------------------------------
+    // The active artboard's rect in document coordinates, while there's a document.
+    std::optional<QRectF> activeArtboardBox() const;
+    // A resize handle of the active artboard under `view`, only under the Artboard tool.
+    std::optional<int> artboardHandleAt(QPointF view) const;
+    void artboardPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragArtboard(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishArtboard();
+    void drawArtboardTool(QPainter &painter) const;
+    // Every artboard's name, drawn above its top-left corner.
+    void drawArtboardLabels(QPainter &painter) const;
 
     // Scissors (C) ------------------------------------------------------------------
     void scissorsPress(QPointF view);
@@ -280,6 +302,21 @@ struct EditorCanvas::State {
     void dragGradient(QPointF view, Qt::KeyboardModifiers modifiers);
     void finishGradient();
     void drawGradient(QPainter &painter) const;
+
+    // Width (Shift-W) -----------------------------------------------------------
+    // The point (last selected leaf with a visible stroke) the annotator edits.
+    std::optional<QUuid> widthTarget() const;
+    // An existing width point's index near `view`, if any.
+    std::optional<int> widthHandleAt(QPointF view) const;
+    // The object and index a Delete press would remove, once set by a click or drag.
+    std::optional<QUuid> widthPointObject;
+    std::optional<int> widthPointIndex;
+    void widthPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragWidth(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishWidth();
+    void drawWidth(QPainter &painter) const;
+    // Removes `widthPointObject`'s point at `widthPointIndex`, as its own undo step.
+    bool deleteWidthPoint();
 
     // Measuring and readouts ----------------------------------------------------
     // Alt held over something else: the gaps from the selection to it, or to the artboard.

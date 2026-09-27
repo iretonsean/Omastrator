@@ -65,9 +65,11 @@ void MenusTests::everyMenuKeyHasOneDefinition()
         if (original.isEmpty())
             continue;
         const ShortcutChord chord(original[0]);
-        // Function keys are no chord: F7 stays unremappable.
+        // Function keys are no chord: F7 stays unremappable, and so do the artboard page keys.
         if (chord.key.size() != 1) {
-            QCOMPARE(entry->objectName(), QString("showLayers"));
+            QVERIFY2(entry->objectName() == QString("showLayers") || entry->objectName() == QString("nextArtboard")
+                         || entry->objectName() == QString("previousArtboard"),
+                     qPrintable(entry->objectName()));
             continue;
         }
         keyed += 1;

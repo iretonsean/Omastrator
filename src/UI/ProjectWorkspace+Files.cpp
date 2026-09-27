@@ -173,15 +173,18 @@ bool ProjectWorkspace::placeFile(const QString &path)
 
 bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format format, const RasterOptions &options)
 {
-    const std::optional<VectorDocument> &document = current().session.document();
+    EditorSession &session = current().session;
+    const std::optional<VectorDocument> &document = session.document();
     if (!document)
         return false;
+    // Several artboards: the active one, not always the first.
+    const VectorDocument page = document->artboards.empty() ? *document : document->artboardDocument(session.activeArtboard());
     try {
         switch (format) {
-        case DocumentExporter::Format::pdf: DocumentExporter::writePdf(*document, path); break;
-        case DocumentExporter::Format::png: DocumentExporter::writePng(*document, path, options.scale, options.transparent); break;
-        case DocumentExporter::Format::jpeg: DocumentExporter::writeJpeg(*document, path, options.scale, options.quality); break;
-        case DocumentExporter::Format::svg: SvgExporter::write(*document, path); break;
+        case DocumentExporter::Format::pdf: DocumentExporter::writePdf(page, path); break;
+        case DocumentExporter::Format::png: DocumentExporter::writePng(page, path, options.scale, options.transparent); break;
+        case DocumentExporter::Format::jpeg: DocumentExporter::writeJpeg(page, path, options.scale, options.quality); break;
+        case DocumentExporter::Format::svg: SvgExporter::write(page, path); break;
         }
     } catch (const FileError &error) {
         showError(QStringLiteral("Couldn’t export “%1”").arg(QFileInfo(path).fileName()), error.message());
@@ -299,6 +302,9 @@ void ProjectWorkspace::placeHere()
 
 QString ProjectWorkspace::suggestedName(const QString &suffix) const
 {
+    const EditorSession &session = current().session;
+    if (const std::optional<VectorDocument> &document = session.document(); document && document->artboardCount() > 1)
+        return document->artboard(session.activeArtboard()).name + QLatin1Char('.') + suffix;
     return current().title() + QLatin1Char('.') + suffix;
 }
 
@@ -358,7 +364,9 @@ void ProjectWorkspace::exportAs(DocumentExporter::Format format)
     dialog->setWindowTitle(format == DocumentExporter::Format::png ? QStringLiteral("Export PNG") : QStringLiteral("Export JPEG"));
     auto *layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(new ExportSheet(*current().session.document(), format, [dialog, choosePath](std::optional<RasterOptions> chosen) {
+    const VectorDocument &shown = *current().session.document();
+    const VectorDocument page = shown.artboards.empty() ? shown : shown.artboardDocument(current().session.activeArtboard());
+    layout->addWidget(new ExportSheet(page, format, [dialog, choosePath](std::optional<RasterOptions> chosen) {
         dialog->done(chosen ? QDialog::Accepted : QDialog::Rejected);
         if (chosen)
             choosePath(*chosen);

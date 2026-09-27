@@ -119,20 +119,41 @@ QString AgentWork::prompt(const Brief &brief) const
     return text;
 }
 
-QString AgentWork::handoffPrompt(const QString &instruction, const QString &png, const QString &svg, const QString &command) const
+QString AgentWork::handoffPrompt(const Package &package) const
 {
-    return QStringLiteral(
-               "This is an Omastrator hand-off (request %1). The user redesigned part of this app's interface in Omastrator and "
-               "wants the source changed to match.\n\n"
-               "Work only in this folder, a git worktree on its own branch (%2): %3\n"
-               "Don't commit, push or deploy. Omastrator writes your change into the project; the user can review or discard "
-               "it later.\n\n"
-               "The mockup: %4 (look at it), and the same as SVG: %5\n"
-               "%6\n"
-               "Find where this interface is built (widgets, QML, GTK builder files, CSS, or web views), and change it to match the "
-               "mockup using the toolkit's own styling and the project's conventions. Keep the change as small as it can be.\n\n"
-               "When you're done, run:\n  %7 agent live '{\"action\": \"agentDone\", \"requestId\": \"%1\", \"summary\": \"<one line on what changed>\"}'\n"
-               "If you can't do it, run the same with a summary that says why, and change nothing.\n")
-        .arg(requestId, branch, worktree, png, svg,
-             instruction.isEmpty() ? QString() : QStringLiteral("The user says: %1\n").arg(instruction), command);
+    QString text = QStringLiteral(
+                       "This is an Omastrator hand-off (request %1). The user redesigned part of this app's interface in Omastrator and "
+                       "wants the source changed to match.\n\n"
+                       "Work only in this folder, a git worktree on its own branch (%2): %3\n"
+                       "Don't commit, push or deploy. Omastrator writes your change into the project; the user can review or discard "
+                       "it later.\n\n")
+                       .arg(requestId, branch, worktree);
+    if (!package.source.isEmpty())
+        text += QStringLiteral("It came from: %1%2\n").arg(package.source, package.url.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(package.url));
+    text += package.svg.isEmpty() ? QStringLiteral("The mockup: %1 (look at it)\n").arg(package.png)
+                                  : QStringLiteral("The mockup: %1 (look at it), and the same as SVG: %2\n").arg(package.png, package.svg);
+    if (!package.screenshot.isEmpty())
+        text += QStringLiteral("The screen as it is now: %1\n").arg(package.screenshot);
+    if (!package.original.isEmpty())
+        text += QStringLiteral("The page before the user's edits: %1\n").arg(package.original);
+    if (!package.selectors.isEmpty())
+        text += QStringLiteral("Which element or widget each shape was lifted from (a CSS selector for pages, an accessible path of roles "
+                               "for apps), with where it sits: %1\n")
+                    .arg(package.selectors);
+    if (!package.css.isEmpty()) {
+        text += QStringLiteral("\nThe user edited the running page in Omastrator's browser. Those edits as CSS: %1\n").arg(package.css);
+        if (!package.diff.isEmpty())
+            text += QStringLiteral("And as before → after, per page and element:\n%1\n").arg(package.diff.left(20'000));
+    }
+    if (!package.instruction.isEmpty())
+        text += QStringLiteral("\nThe user says: %1\n").arg(package.instruction);
+    text += QStringLiteral(
+                "\nFind where this interface is built (components, templates, stylesheets, widgets, QML, GTK builder files or web "
+                "views), and change it to match the mockup using the project's own tokens, toolkit styling and conventions. Keep "
+                "the change as small as it can be.\n\n"
+                "When you're done, run:\n  %1 agent live '{\"action\": \"agentDone\", \"requestId\": \"%2\", \"summary\": \"<one line on what changed>\"}'\n"
+                "If you can't do it, run the same with a summary that says why, and change nothing.\n")
+                .arg(package.command, requestId);
+    return text;
 }
+

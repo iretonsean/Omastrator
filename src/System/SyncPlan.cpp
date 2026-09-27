@@ -1,4 +1,6 @@
 #include "System/SyncPlan.h"
+#include "System/ConfigBackup.h"
+#include <QLocale>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -36,6 +38,10 @@ QString run(const QString &program, const QStringList &arguments, const QString 
 
 QString FileWrite::state() const
 {
+    if (remove)
+        return QFileInfo::exists(path) || QFileInfo(path).isSymLink() ? QStringLiteral("removed") : QStringLiteral("unchanged");
+    if (!linkTo.isEmpty())
+        return linkTo == linkBefore ? QStringLiteral("unchanged") : QStringLiteral("link");
     if (!copyFrom.isEmpty())
         return QStringLiteral("copied");
     if (!before)
@@ -43,13 +49,28 @@ QString FileWrite::state() const
     return *before == after ? QStringLiteral("unchanged") : QStringLiteral("changed");
 }
 
+bool FileWrite::binary() const
+{
+    const auto hasNul = [](const QByteArray &bytes) { return bytes.left(8000).contains('\0'); };
+    return hasNul(after) || (before && hasNul(*before));
+}
+
 QString FileWrite::summary() const
 {
+    const QString by = byCommand ? QStringLiteral(" (by the command)") : QString();
+    if (remove)
+        return QStringLiteral("deleted") + by;
+    if (!linkTo.isEmpty())
+        return (linkBefore.isEmpty() ? QStringLiteral("link to %1") : QStringLiteral("link to %1, was %2")).arg(linkTo, linkBefore) + by;
     if (!copyFrom.isEmpty())
-        return QStringLiteral("copied from %1").arg(copyFrom);
+        return QStringLiteral("copied from %1").arg(copyFrom) + by;
+    if (binary()) {
+        const QString size = QLocale::system().formattedDataSize(after.size());
+        return (before ? QStringLiteral("replaced, %1") : QStringLiteral("new, %1")).arg(size) + by;
+    }
     const QStringList now = linesOf(after);
     if (!before)
-        return QStringLiteral("new, %1 lines").arg(now.size());
+        return QStringLiteral("new, %1 lines").arg(now.size()) + by;
     const QStringList was = linesOf(*before);
     // Lines only on one side, as a multiset.
     QStringList removed = was;
@@ -62,12 +83,16 @@ QString FileWrite::summary() const
     }
     if (added == 0 && removed.isEmpty())
         return QStringLiteral("no changes");
-    return QStringLiteral("+%1 −%2 lines").arg(added).arg(removed.size());
+    return QStringLiteral("+%1 −%2 lines").arg(added).arg(removed.size()) + by;
 }
 
 QString FileWrite::diff(int maxLines) const
 {
-    if (!copyFrom.isEmpty())
+    if (!linkTo.isEmpty())
+        return (linkBefore.isEmpty() ? QString() : QStringLiteral("− → ") + linkBefore + QLatin1Char('\n')) + QStringLiteral("+ → ") + linkTo;
+    if (remove)
+        return QStringLiteral("− (the whole file)");
+    if (!copyFrom.isEmpty() || binary())
         return {};
     const QStringList now = linesOf(after);
     const QStringList was = before ? linesOf(*before) : QStringList();
@@ -104,16 +129,29 @@ std::vector<const FileWrite *> SyncPlan::changes() const
     return result;
 }
 
+std::vector<QStringList> SyncPlan::allCommands() const
+{
+    std::vector<QStringList> all;
+    if (!command.isEmpty())
+        all.push_back(command);
+    for (const QStringList &more : commands) {
+        if (!more.isEmpty())
+            all.push_back(more);
+    }
+    return all;
+}
+
 QString SyncPlan::diffSummary() const
 {
-    int changed = 0, added = 0, copied = 0;
+    int changed = 0, added = 0, copied = 0, removed = 0;
     for (const FileWrite &write : writes) {
         const QString state = write.state();
-        changed += state == QLatin1String("changed");
+        changed += state == QLatin1String("changed") || state == QLatin1String("link");
         added += state == QLatin1String("new");
         copied += state == QLatin1String("copied");
+        removed += state == QLatin1String("removed");
     }
-    const int total = changed + added + copied;
+    const int total = changed + added + copied + removed;
     if (total == 0)
         return QStringLiteral("No files are written.");
     QStringList parts;
@@ -123,6 +161,8 @@ QString SyncPlan::diffSummary() const
         parts.append(QStringLiteral("%1 new").arg(added));
     if (copied)
         parts.append(QStringLiteral("%1 copied").arg(copied));
+    if (removed)
+        parts.append(QStringLiteral("%1 deleted").arg(removed));
     return QStringLiteral("%1 %2: %3").arg(total).arg(total == 1 ? QStringLiteral("file") : QStringLiteral("files"), parts.join(QStringLiteral(", ")));
 }
 
@@ -153,25 +193,54 @@ QString execute(const SyncPlan &plan, const Confirmation &confirmation)
         return plan.problem;
     // Nothing is written if any file changed since the preview.
     for (const FileWrite &write : plan.writes) {
+        const QString stale = QStringLiteral("%1 changed since the preview. Nothing was written.").arg(write.path);
+        if (!write.copyFrom.isEmpty() || write.remove)
+            continue;
+        if (!write.linkTo.isEmpty()) {
+            if (QFileInfo(write.path).symLinkTarget() != write.linkBefore)
+                return stale;
+            continue;
+        }
         QFile file(write.path);
         const bool exists = file.exists();
-        if (!write.copyFrom.isEmpty())
-            continue;
         if (exists != write.before.has_value())
-            return QStringLiteral("%1 changed since the preview. Nothing was written.").arg(write.path);
+            return stale;
         if (exists && (!file.open(QIODevice::ReadOnly) || file.readAll() != *write.before))
-            return QStringLiteral("%1 changed since the preview. Nothing was written.").arg(write.path);
+            return stale;
+    }
+    // The backup comes first, so a write that fails halfway can still be reverted.
+    if (!plan.backupFolder.isEmpty()) {
+        QStringList paths = plan.alsoBackUp;
+        for (const FileWrite &write : plan.writes) {
+            if (!paths.contains(write.path))
+                paths.append(write.path);
+        }
+        if (const QString failed = ConfigBackup::save(plan.backupFolder, plan.title, paths, plan.revertCommands); !failed.isEmpty())
+            return failed;
     }
     QStringList written;
     for (const FileWrite &write : plan.writes) {
-        if (write.state() == QLatin1String("unchanged"))
+        if (write.byCommand || write.state() == QLatin1String("unchanged"))
             continue;
+        if (write.remove) {
+            if (!QFile::remove(write.path))
+                return QStringLiteral("Couldn't delete %1.").arg(write.path);
+            written.append(write.path);
+            continue;
+        }
         QDir().mkpath(QFileInfo(write.path).absolutePath());
-        if (!write.copyFrom.isEmpty()) {
+        if (!write.linkTo.isEmpty()) {
+            QFile::remove(write.path);
+            if (!QFile::link(write.linkTo, write.path))
+                return QStringLiteral("Couldn't link %1 to %2.").arg(write.path, write.linkTo);
+        } else if (!write.copyFrom.isEmpty()) {
             QFile::remove(write.path);
             if (!QFile::copy(write.copyFrom, write.path))
                 return QStringLiteral("Couldn't copy %1 to %2.").arg(write.copyFrom, write.path);
         } else {
+            // A link is replaced by the file, as a revert of a linked file restores its bytes.
+            if (QFileInfo(write.path).isSymLink())
+                QFile::remove(write.path);
             QSaveFile file(write.path);
             if (!file.open(QIODevice::WriteOnly) || file.write(write.after) != write.after.size() || !file.commit())
                 return QStringLiteral("Couldn't write %1: %2").arg(write.path, file.errorString());
@@ -189,8 +258,8 @@ QString execute(const SyncPlan &plan, const Confirmation &confirmation)
             !failed.isEmpty())
             return failed;
     }
-    if (!plan.command.isEmpty()) {
-        if (const QString failed = run(plan.command.front(), plan.command.mid(1), QDir::homePath()); !failed.isEmpty())
+    for (const QStringList &command : plan.allCommands()) {
+        if (const QString failed = run(command.front(), command.mid(1), QDir::homePath()); !failed.isEmpty())
             return failed;
     }
     if (plan.apply)

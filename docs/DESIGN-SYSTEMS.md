@@ -194,4 +194,5 @@ so it doesn't ask.
 - Site extraction proposes components as boxes with one line of text; lifting
   whole elements into vectors is phase 2's job.
 - Omarchy themes: colours and the shell's spacing. Fonts, the bar layout and
-  wallpapers come along untouched.
+  wallpapers come along untouched here; Desktop Look edits them on the desktop
+  itself (ANYWHERE.md, phase 4), through the same confirmation.

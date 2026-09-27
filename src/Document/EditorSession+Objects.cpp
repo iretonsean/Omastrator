@@ -315,6 +315,68 @@ void EditorSession::releaseClippingMask()
     });
 }
 
+void EditorSession::makeOpacityMask()
+{
+    if (!m_document || m_selection.size() < 2)
+        return;
+    groupSelection();
+    const QUuid group = m_selection.front();
+    edit(QStringLiteral("Make Mask"), [&](VectorDocument &document) {
+        // Grouping keeps the topmost selected object last: it's already the mask.
+        document.find(group)->mask = OpacityMask();
+        document.find(group)->name = QStringLiteral("Mask Group");
+    });
+}
+
+void EditorSession::releaseOpacityMask()
+{
+    if (!m_document)
+        return;
+    edit(QStringLiteral("Release Mask"), [&](VectorDocument &document) {
+        for (const QUuid &id : m_selection) {
+            VectorObject *group = document.find(id);
+            if (group && group->mask) {
+                group->mask.reset();
+                group->name = QStringLiteral("Group");
+            }
+        }
+    });
+}
+
+void EditorSession::setOpacityMaskClip(bool clip)
+{
+    if (!m_document)
+        return;
+    edit(QStringLiteral("Mask Clip"), [&](VectorDocument &document) {
+        for (const QUuid &id : m_selection) {
+            VectorObject *group = document.find(id);
+            if (group && group->mask)
+                group->mask->clip = clip;
+        }
+    });
+}
+
+void EditorSession::setOpacityMaskInverted(bool inverted)
+{
+    if (!m_document)
+        return;
+    edit(QStringLiteral("Invert Mask"), [&](VectorDocument &document) {
+        for (const QUuid &id : m_selection) {
+            VectorObject *group = document.find(id);
+            if (group && group->mask)
+                group->mask->inverted = inverted;
+        }
+    });
+}
+
+std::optional<QUuid> EditorSession::selectedMaskGroup() const
+{
+    if (!m_document || m_selection.size() != 1)
+        return std::nullopt;
+    const VectorObject *object = m_document->find(m_selection.front());
+    return object && object->mask ? std::optional(object->id) : std::nullopt;
+}
+
 void EditorSession::arrange(ArrangeOrder order)
 {
     if (!m_document || m_selection.empty())
@@ -360,7 +422,7 @@ void EditorSession::align(AlignEdge edge, AlignTarget target)
     // A key object, once clicked, is what the selection aligns to.
     const bool toKey = m_keyObject && target != AlignTarget::artboard;
     const QRectF reference = toKey ? m_document->bounds(*m_keyObject)
-        : target == AlignTarget::artboard || m_selection.size() == 1 ? QRectF(QPointF(0, 0), m_document->size)
+        : target == AlignTarget::artboard || m_selection.size() == 1 ? m_document->artboard(activeArtboard()).rect
                                                                      : selectionBounds();
     edit(QStringLiteral("Align"), [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {

@@ -61,15 +61,19 @@ void EditorCanvas::State::paint(QPainter &painter)
     const std::optional<VectorDocument> &document = session.document();
     if (!document)
         return;
-    const QRectF artboard = session.viewport.documentRect(document->size);
-    drawShadow(painter, artboard);
+    const QTransform toViewT = documentToView();
+    const std::vector<Artboard> boards = document->allArtboards();
+    for (const Artboard &board : boards)
+        drawShadow(painter, toViewT.mapRect(board.rect));
     painter.save();
-    painter.setTransform(documentToView());
+    painter.setTransform(toViewT);
     VectorRenderer::Options options;
     options.outlineMode = session.showsOutline;
     options.outlineWidth = 1;
-    if (options.outlineMode)
-        painter.fillRect(QRectF(QPointF(0, 0), document->size), Qt::white);
+    if (options.outlineMode) {
+        for (const Artboard &board : boards)
+            painter.fillRect(board.rect, Qt::white);
+    }
     std::optional<VectorDocument> shown;
     if (text && text->inDocument && !text->preedit.isEmpty() && document->find(text->object.id)) {
         // The input method's preedit shows in the type itself, pushing the rest along.
@@ -82,16 +86,20 @@ void EditorCanvas::State::paint(QPainter &painter)
     else
         VectorRenderer::draw(painter, drawn, options);
     painter.restore();
-    drawPixelGrid(painter, artboard);
-    if (session.showsGrid)
-        drawGrid(painter, artboard);
-    // A hairline astride the artboard's edge.
-    painter.save();
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(QColor::fromRgbF(0, 0, 0, 0.35), 1 / session.viewport.backingScale));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRect(artboard);
-    painter.restore();
+    for (const Artboard &board : boards) {
+        const QRectF artboard = toViewT.mapRect(board.rect);
+        drawPixelGrid(painter, artboard);
+        if (session.showsGrid)
+            drawGrid(painter, artboard);
+        // A hairline astride the artboard's edge.
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(QPen(QColor::fromRgbF(0, 0, 0, 0.35), 1 / session.viewport.backingScale));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(artboard);
+        painter.restore();
+    }
+    drawArtboardLabels(painter);
     drawGuides(painter);
     drawOverlay(painter);
 }
@@ -143,9 +151,11 @@ void EditorCanvas::State::drawOverlay(QPainter &painter) const
         drawDirectSelection(painter);
     else
         drawSelection(painter);
+    drawArtboardTool(painter);
     drawPen(painter);
     drawBuilder(painter);
     drawGradient(painter);
+    drawWidth(painter);
     if (drag && drag->kind == DragKind::pencil && drag->points.size() > 1) {
         QPolygonF line;
         for (const QPointF point : drag->points)

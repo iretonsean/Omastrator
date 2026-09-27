@@ -2,6 +2,7 @@
 #include "Document/Paint.h"
 #include <QPainterPath>
 #include <QRectF>
+#include <utility>
 #include <vector>
 
 // What a stroke covers beyond a plain QPen: inside and outside alignment,
@@ -22,4 +23,25 @@ QPainterPath alignedDashes(const QPainterPath &path, const std::vector<double> &
 QPainterPath area(const QPainterPath &path, const StrokeStyle &stroke);
 // The dash pattern in pen widths, as QPen and QPainterPathStroker take it.
 QList<qreal> dashPattern(const std::vector<double> &dashes, double width);
+
+// Width tool (P2-7) --------------------------------------------------------------
+
+// The area a variable-width stroke covers: what `area()` makes when `widthPoints` isn't empty.
+QPainterPath variableArea(const QPainterPath &path, const StrokeStyle &stroke);
+// The half-widths (left, right) at fraction `t` (0..1) along the whole path, smoothed between width points.
+std::pair<double, double> widthAt(const StrokeStyle &stroke, double t);
+// A profile preset's width points at `width`; uniform and custom have none of their own.
+std::vector<StrokeWidthPoint> presetWidthPoints(StrokeWidthProfile profile, double width);
+
+// Where a point sits on a path: its nearest point and outward normal, and `t` (0..1) along the whole path.
+struct PathLocation {
+    QPointF point;
+    QPointF normal{0, 1};
+    double t = 0;
+    double distance = 0;
+};
+// The closest point on the path to `at`, for hit-testing the Width tool's handles.
+PathLocation locate(const QPainterPath &path, QPointF at);
+// The point and normal at fraction `t` (0..1) along the whole path.
+PathLocation locateAtT(const QPainterPath &path, double t);
 }

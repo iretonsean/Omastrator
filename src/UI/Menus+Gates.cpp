@@ -56,7 +56,7 @@ void Menus::synchronize()
                              "sendToBack", "lockSelection", "hideSelection", "outlineStroke", "offsetPath", "simplify", "releaseCompoundPath",
                              "releaseClippingMask"})
         action(QString::fromLatin1(name))->setEnabled(editing && selected);
-    for (const char *name : {"transformMenu", "arrangeMenu", "pathMenu", "compoundMenu", "clippingMenu"})
+    for (const char *name : {"transformMenu", "arrangeMenu", "pathMenu", "compoundMenu", "clippingMenu", "opacityMaskMenu"})
         action(QString::fromLatin1(name))->setEnabled(drawn);
     action(QStringLiteral("group"))->setEnabled(editing && s.canGroup());
     action(QStringLiteral("componentsMenu"))->setEnabled(drawn);
@@ -67,9 +67,26 @@ void Menus::synchronize()
     action(QStringLiteral("ungroup"))->setEnabled(editing && s.canUngroup());
     action(QStringLiteral("makeCompoundPath"))->setEnabled(editing && s.canCombine());
     action(QStringLiteral("makeClippingMask"))->setEnabled(editing && s.selection().size() >= 2);
+    action(QStringLiteral("makeOpacityMask"))->setEnabled(editing && s.selection().size() >= 2);
+    const std::optional<QUuid> maskGroup = s.selectedMaskGroup();
+    action(QStringLiteral("releaseOpacityMask"))->setEnabled(editing && maskGroup.has_value());
+    action(QStringLiteral("opacityMaskClip"))->setEnabled(editing && maskGroup.has_value());
+    action(QStringLiteral("opacityMaskClip"))->setChecked(maskGroup && s.document()->find(*maskGroup)->mask->clip);
+    action(QStringLiteral("invertOpacityMask"))->setEnabled(editing && maskGroup.has_value());
+    action(QStringLiteral("invertOpacityMask"))->setChecked(maskGroup && s.document()->find(*maskGroup)->mask->inverted);
     action(QStringLiteral("unlockAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("showAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("artboardSize"))->setEnabled(editing && drawn);
+    action(QStringLiteral("artboardsMenu"))->setEnabled(drawn);
+    for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "fitArtboardToArtwork", "switchArtboardOrientation",
+                             "fitAllArtboards"})
+        action(QString::fromLatin1(name))->setEnabled(editing && drawn);
+    const int artboards = drawn ? s.document()->artboardCount() : 1;
+    action(QStringLiteral("deleteArtboard"))->setEnabled(editing && drawn && artboards > 1);
+    for (const char *name : {"nextArtboard", "previousArtboard"})
+        action(QString::fromLatin1(name))->setEnabled(drawn && artboards > 1);
+    action(QStringLiteral("collectForExport"))->setEnabled(editing && selected);
+    action(QStringLiteral("exportForScreens"))->setEnabled(drawn);
     action(QStringLiteral("createOutlines"))->setEnabled(editing && drawn && selectionHas(s, ObjectKind::text));
     bool hasPoint = false, hasArea = false;
     for (const QUuid &id : s.selectedTexts()) {

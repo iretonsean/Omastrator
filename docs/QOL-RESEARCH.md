@@ -1484,18 +1484,18 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 | # | Item | One-line spec | Where | Acceptance |
 |---|---|---|---|---|
-| P2-1 | **Multiple artboards** | `VectorDocument::artboards` (name, rect, background), the Artboard tool (Shift+O) with the documented context menu (New, Duplicate, Rename, Delete, Fit to Artwork Bounds, Switch Orientation), an Artboards list, and export per artboard. | `VectorDocument`, `EditorSession`, a new tool, `ExportSheet`, `DocumentExporter` | Two artboards export to two PNGs named after them; Fit to Artwork Bounds hugs the art |
+| P2-1 ✓ | **Multiple artboards** (done: see below) | `VectorDocument::artboards` (name, rect, background), the Artboard tool (Shift+O) with the documented context menu (New, Duplicate, Rename, Delete, Fit to Artwork Bounds, Switch Orientation), an Artboards list, and export per artboard. | `VectorDocument`, `EditorSession`, a new tool, `ExportSheet`, `DocumentExporter` | Two artboards export to two PNGs named after them; Fit to Artwork Bounds hugs the art |
 | P2-2 | **Shape Builder** (Shift+M) | Drag across the regions of overlapping selected shapes to merge them; Alt-drag removes them. The regions are computed from a planar arrangement of the outlines. | New `PathOperations::regions()`, a new tool in `EditorCanvas` | Merging two regions of three overlapping circles gives one path plus the rest untouched; one undo step |
 | P2-3 | **Type on a path** | Type on a Path tool: glyphs placed along a path with `QPainterPath::pointAtPercent`/`angleAtPercent`, a start bracket to slide, and flip. | `TextContent::onPath`, `VectorDocument::outline` | Outlines follow a circle; the text stays editable; SVG export uses `<textPath>` |
 | P2-4 | **Text wrap and threads** | Area type flows around objects marked "text wrap" (with an offset), and threads overflow into a linked box. | `TextContent`, the layout in `VectorDocument.cpp` | Text avoids a wrap object's bounds + offset; overflow continues in the next box |
 | P2-5 | **Hyphenation** | Optional, using hyphen patterns (TeX patterns, `hyphen` data) for area type. Honour soft hyphens (U+00AD) first. | The area-type layout | Soft hyphens break with a visible hyphen at a line end and are hidden otherwise |
 | P2-6 ✓ | **Symbols** (done as components: docs/DESIGN-SYSTEMS.md) | A symbol definition stored in the document plus instances (a transform plus an id). Editing the master updates every instance; Break Link expands one. | `VectorDocument`, `VectorRenderer`, a Symbols panel | Recolouring a master updates 10 instances in one undo step |
-| P2-7 | **Width tool / variable strokes** | Width points along a stroke, and profiles, rendered as an outline. | `StrokeStyle::widthProfile`, `PathOperations` | Uniform, tapered and bulge profiles render and export as filled outlines |
+| P2-7 ✓ | **Width tool / variable strokes** (done: see below) | Width points along a stroke, and profiles, rendered as an outline. | `StrokeStyle::widthProfile`, `StrokeGeometry`, `PathOperations` | Uniform, tapered and bulge profiles render and export as filled outlines |
 | P2-8 ✓ | **On-canvas gradient annotator** (done: see below) | With the Gradient tool (G), drag the start and end on the object and drag the stops. | `EditorCanvas`, `Paint` | Dragging the end point changes the gradient angle live; one undo step |
-| P2-9 | **Opacity masks** | Make Mask (top object's luminance), Clip, Invert. | `VectorObject::mask`, `VectorRenderer` | A white-to-black gradient mask fades the art; PDF and SVG export keep it |
-| P2-10 | **Export for Screens / per-object export** | Mark objects or artboards for export; scales 0.5×–3× with suffixes; PNG/JPG/SVG/PDF/WebP in one batch. | `ExportSheet`, `DocumentExporter` | Exporting two assets at 1× and 2× writes four files with `@2x` suffixes |
+| P2-9 ✓ | **Opacity masks** (done: see below) | Make Mask (top object's luminance), Clip, Invert. | `VectorObject::mask`, `VectorRenderer` | A white-to-black gradient mask fades the art; PDF and SVG export keep it |
+| P2-10 ✓ | **Export for Screens / per-object export** (done: see below) | Mark objects or artboards for export; scales 0.5×–3× with suffixes; PNG/JPG/SVG/PDF/WebP in one batch. | `ExportSheet`, `DocumentExporter` | Exporting two assets at 1× and 2× writes four files with `@2x` suffixes |
 | P2-11 ✓ | **Snap to pixel / Make Pixel Perfect** | Snap anchors and bounds to whole pixels while drawing and moving; pixel grid at ≥ 600 %. Object ▸ Make Pixel Perfect snaps the selection onto the grid after the fact, one undo step. | `EditorSession::snapped`, `EditorCanvas+Paint.cpp`, `EditorSession::makePixelPerfect` | A dragged rectangle's edges land on integers; Make Pixel Perfect on a path with fractional anchors rounds them to whole points |
-| P2-12 | **Toolbar flyouts and presets** | Group tools with flyouts, Alt-click to cycle, and Basic/Advanced presets. | `ContentView`, `ToolIcons` | The tool order is saved; flyouts open on long-press or right-click |
+| P2-12 ✓ | **Toolbar flyouts and presets** (done: see below) | Group tools with flyouts, Alt-click to cycle, and Basic/Advanced presets. | `ContentView`, `ToolIcons` | The tool order is saved; flyouts open on long-press or right-click |
 
 > **P2-8 done.** `src/Canvas/EditorCanvas+Gradient.cpp`. The Gradient tool
 > (G, in the toolbar by the eyedropper) edits the first selected object's fill.
@@ -1506,6 +1506,74 @@ has Qt Test coverage in `tests/<Folder>/`.
 > length, or a stop to slide it along. Everything previews live and ends in one
 > "Gradient" step. A click on another object selects it. Radial gradients use
 > the same bar: centre and radius.
+
+> **P2-1 done.** `.omai` version 5 (additive; a v3 or v4 file gives one implicit
+> artboard named "Artboard 1"). `VectorDocument::artboards`; `size`/`background`
+> stay the truth for the first artboard, so single-artboard code keeps working.
+> The Artboard tool (Shift+O, `EditorCanvas+Artboards.cpp`) draws, moves and
+> resizes by its eight handles, Alt-drags a duplicate, and Delete removes the
+> active one (never the last). Object ▸ Artboards has New, Duplicate, Rename…,
+> Delete, Fit to Artwork Bounds, Switch Orientation, Next/Previous (Shift+PgDn/
+> PgUp); the canvas context menu shares them under the tool, and an Artboards
+> list sits in Properties ▸ Document (double-click renames, right-click for the
+> same menu, a + button adds one). Export, Share and `ProjectWorkspace::exportTo`
+> default to the active artboard via `VectorDocument::artboardDocument`.
+
+> **P2-7 done.** `src/Document/Paint.h` (`StrokeWidthPoint`, `StrokeWidthProfile`),
+> `src/Document/StrokeGeometry.{h,cpp}` (`variableArea`, `widthAt`,
+> `presetWidthPoints`, `locate`/`locateAtT`) and `src/Canvas/EditorCanvas+Width.cpp`.
+> The Width tool (Shift+W, in the toolbar by the Gradient tool) drags on a
+> selected path's stroke to add a point there or move one that's already there;
+> Alt-drag moves just the side under the pointer. Each width point keeps its own
+> left and right half-width, interpolated (smoothstep) between points along the
+> path's whole length, so the stroke renders, exports (SVG as a filled path,
+> PDF as vector fills, same as an aligned or arrowed stroke already did) and
+> Outline Stroke's shows the same outline everywhere, through
+> `StrokeGeometry::area()`. Properties ▸ Stroke's new Profile menu (Uniform,
+> Taper Start, Taper End, Bulge, Custom) sets a preset's points in one "Stroke"
+> step; dragging on the canvas is one "Width Point" step, and Delete on a
+> touched point is "Remove Width Point". Deviation from the one-line spec:
+> width points are measured along the whole path (every subpath's length, in
+> order) rather than per subpath, dashes are ignored on a variable-width
+> stroke, and open ends get a flat seam rather than the stroke's own cap.
+
+> **P2-9 done.** `src/Document/VectorDocument.h` (`OpacityMask`,
+> `VectorObject::mask`), `src/Rendering/VectorRenderer.cpp`
+> (`renderIsolated`/`applyLuminanceMask` in `drawChildren`) and
+> `src/IO/SvgExporter.cpp` (`writeOpacityMask`). Object ▸ Opacity Mask ▸ Make
+> Mask groups the selection and turns its topmost object into the mask (as
+> Clipping Mask does, but the mask object keeps its own paint instead of being
+> cleared); Release, Clip and Invert Mask sit beside it, each its own undo step
+> ("Make Mask", "Release Mask", "Mask Clip", "Invert Mask"). The canvas and PNG
+> render it by rasterizing the mask and its content apart and multiplying the
+> content's alpha by the mask's luminance (its own alpha too, so what a
+> clipped mask never covers stays hidden; unclipped, that area stays visible).
+> PDF export draws through the same renderer, so it keeps the mask as an
+> embedded raster patch rather than a live PDF soft mask; SVG export writes a
+> real `<mask>` (luminance is the format's own rule), with Invert Mask as an
+> `feColorMatrix` filter and an unclipped mask backed by a white rect.
+
+> **P2-10 done.** `src/IO/ScreenExport.{h,cpp}`, pure logic over
+> `VectorDocument::artboardDocument` and the new `VectorDocument::croppedTo`
+> (shared with Share's "just this selection" export). File ▸ Export ▸ Export
+> for Screens… (`ExportForScreensSheet`) lists every artboard and any objects
+> collected with Object ▸ Collect for Export, scale chips (0.5×–4×) and format
+> checkboxes (PNG, JPG, SVG, PDF, WebP — WebP fails cleanly, file by file,
+> without the plugin), a folder, a progress bar and Open Folder; scales and
+> formats are remembered in `QSettings` (`screenExport/*`). Files are named
+> `<safe name><suffix>.<ext>`, empty at 1× and `@2x`, `@0.5x` and so on
+> otherwise; vector formats write once, at 1×.
+>
+> **P2-12 done.** `ContentView`'s rail is slots, not buttons: Selection,
+> Artboard, Pen, Type, Shapes, Shape Builder, Transform, Paint and Navigate,
+> each named `tool:<first tool's raw>`. A slot shows the tool last picked
+> within it (remembered per slot in `QSettings`), draws a corner triangle when
+> it holds more than one, opens a flyout `QMenu` on right-click or a 400 ms
+> press, and Alt-click cycles through it. The rail's own context menu (or
+> View ▸ Toolbar) switches Basic and Advanced (`QSettings` `toolPreset`,
+> default Advanced); Basic hides roundedRectangle, polygon, star, scissors,
+> shapeBuilder, rotate, scale and gradient, but a hidden tool picked by key
+> still shows in its slot while it's active.
 
 ### Out of scope
 

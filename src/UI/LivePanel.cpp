@@ -1,10 +1,13 @@
 #include "UI/LivePanel.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
+#include <QCheckBox>
 #include <QDesktopServices>
 #include <QFontDatabase>
 #include <QHBoxLayout>
+#include <QJsonObject>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
@@ -77,6 +80,59 @@ void LivePanel::report(const QString &failure)
     }
 }
 
+void LivePanel::addSite(QVBoxLayout *column)
+{
+    QWidget *const self = m_body;
+    LiveSession &live = m_bridge.liveSession();
+    const std::vector<EditSets::Set> sets = live.editSets();
+    const int pending = int(live.edits().size());
+    column->addWidget(label(pending == 0 ? QStringLiteral("No edits waiting to be kept.")
+                                         : QStringLiteral("%1 edits not kept yet. Keep them as an edit set to have them back next visit.").arg(pending),
+                            QStringLiteral("liveSitePending"), self));
+    for (const EditSets::Set &set : sets) {
+        auto *box = new QCheckBox(QStringLiteral("%1 (%2 edits)").arg(set.name).arg(set.edits.size()), self);
+        box->setObjectName(QStringLiteral("liveEditSet"));
+        box->setChecked(set.enabled);
+        box->setToolTip(QStringLiteral("Shown on %1 every time it opens in Omastrator").arg(live.origin()));
+        column->addWidget(box);
+        connect(box, &QCheckBox::toggled, this,
+                [this, name = set.name](bool on) { QMetaObject::invokeMethod(this, [this, name, on] { report(m_bridge.liveSession().setEditSetEnabled(name, on)); }, Qt::QueuedConnection); });
+    }
+    auto *row = new QHBoxLayout;
+    auto *name = new QLineEdit(self);
+    name->setObjectName(QStringLiteral("liveEditSetName"));
+    name->setPlaceholderText(EditSets::suggestedName(live.origin()));
+    QPushButton *keep = button(QStringLiteral("Keep Edits"), QStringLiteral("liveKeepEdits"), self);
+    keep->setEnabled(pending > 0);
+    keep->setToolTip(QStringLiteral("Keep the edits on this machine as a named set that comes back when you revisit the site"));
+    row->addWidget(name, 1);
+    row->addWidget(keep);
+    column->addLayout(row);
+    connect(keep, &QPushButton::clicked, this, [this, name] { report(m_bridge.liveSession().keepEdits(name->text())); });
+
+    auto *more = new QHBoxLayout;
+    const bool any = !live.editsShown().empty();
+    QPushButton *exportCss = button(QStringLiteral("Export CSS…"), QStringLiteral("liveExportEdits"), self);
+    exportCss->setToolTip(QStringLiteral("The edits on the page as a style sheet or a userstyle"));
+    QPushButton *beforeAfter = button(QStringLiteral("Before and After to Desk"), QStringLiteral("liveBeforeAfter"), self);
+    beforeAfter->setToolTip(QStringLiteral("The page lifted without its edits and with them, as two frames on the Desk"));
+    QPushButton *handOff = button(QStringLiteral("Hand to Agent…"), QStringLiteral("liveHandOff"), self);
+    handOff->setToolTip(QStringLiteral("Your agent builds these edits into your own app's source"));
+    exportCss->setEnabled(any);
+    beforeAfter->setEnabled(any);
+    for (QPushButton *each : {exportCss, beforeAfter, handOff})
+        more->addWidget(each);
+    more->addStretch();
+    column->addLayout(more);
+    auto run = [this](const QString &action) {
+        QJsonObject result;
+        report(m_bridge.siteAction(action, {}, result));
+    };
+    connect(exportCss, &QPushButton::clicked, this, [run] { run(QStringLiteral("export")); });
+    connect(beforeAfter, &QPushButton::clicked, this, [run] { run(QStringLiteral("beforeAfter")); });
+    connect(handOff, &QPushButton::clicked, this, [run] { run(QStringLiteral("handoff")); });
+}
+
 void LivePanel::rebuild()
 {
     // A fresh body each time; the old one goes with everything in it.
@@ -91,11 +147,14 @@ void LivePanel::rebuild()
     const AgentBridge::DeployState &state = m_bridge.deployState();
     const QString project = m_bridge.deployProject();
     LiveSession &live = m_bridge.liveSession();
+    // A site that isn't yours: its edits stay on this machine, and there's nothing to deploy.
+    const bool mockup = live.state() == LiveSession::State::running && live.isMockup();
 
-    column->addWidget(label(project.isEmpty() ? (live.state() == LiveSession::State::running ? QStringLiteral("A mock-up: changes stay in the browser.")
-                                                                                             : QStringLiteral("Open a project in Live to deploy it."))
-                                              : project,
+    column->addWidget(label(mockup ? QStringLiteral("Not your site: changes stay on this machine.")
+                                   : project.isEmpty() ? QStringLiteral("Open a project in Live to deploy it.") : project,
                             QStringLiteral("liveProject"), self));
+    if (mockup)
+        addSite(column);
     QLabel *status = label(state.message, QStringLiteral("liveStatus"), self);
     status->setVisible(!state.message.isEmpty());
     status->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -124,6 +183,8 @@ void LivePanel::rebuild()
     save->setToolTip(QStringLiteral("Write the live edits into the code, commit and push, without deploying"));
     actions->addWidget(deploy);
     actions->addWidget(save);
+    deploy->setVisible(!mockup);
+    save->setVisible(!mockup);
     if (state.running) {
         QPushButton *cancel = button(QStringLiteral("Cancel"), QStringLiteral("liveCancel"), self);
         actions->addWidget(cancel);
@@ -161,7 +222,7 @@ void LivePanel::rebuild()
     }
 
     // GitHub keeps the history; gh holds the login.
-    if (!project.isEmpty()) {
+    if (!project.isEmpty() && !mockup) {
         const GitHub::Auth auth = m_bridge.githubAuth();
         const QString page = History::githubPage(project);
         auto *row = new QHBoxLayout;

@@ -11,25 +11,38 @@
 #include "UI/PropertiesPanel.h"
 #include "UI/ToolHeaders.h"
 #include "UI/ToolIcons.h"
+#include <QContextMenuEvent>
 #include <QFrame>
 #include <QKeyEvent>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QScrollArea>
 #include <QSettings>
 #include <QSplitter>
+#include <QTimer>
+#include <algorithm>
 #include <cmath>
 
-const std::vector<std::vector<Tool>> ContentView::railGroups{
-    {Tool::select, Tool::directSelect},
-    {Tool::pen, Tool::pencil, Tool::text, Tool::line},
-    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::shapeBuilder, Tool::scissors},
-    {Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper},
-    {Tool::hand, Tool::zoom},
+const std::vector<std::vector<std::vector<Tool>>> ContentView::toolSlotGroups{
+    {{Tool::select, Tool::directSelect}, {Tool::artboard}},
+    {{Tool::pen, Tool::pencil, Tool::scissors}, {Tool::text},
+     {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::line}, {Tool::shapeBuilder}},
+    {{Tool::rotate, Tool::scale}, {Tool::gradient, Tool::eyedropper}, {Tool::width}},
+    {{Tool::hand, Tool::zoom}},
 };
 
+std::vector<std::vector<Tool>> ContentView::toolSlots()
+{
+    std::vector<std::vector<Tool>> flat;
+    for (const auto &group : toolSlotGroups)
+        flat.insert(flat.end(), group.begin(), group.end());
+    return flat;
+}
+
 namespace {
+const QString toolPresetKey = QStringLiteral("toolPreset");
 const QString splitKey = QStringLiteral("panelSplitState");
 
 // The grip between Properties and Layers: a visible bar; a double-click resets it.
@@ -79,16 +92,43 @@ protected:
 };
 }
 
-// A rail button: its tool's icon; a plate when chosen.
-class ToolButton : public QToolButton {
+// A rail slot: one or more tools sharing a button. It shows the last one picked, with a
+// corner triangle when more than one is visible; right-click or a long press flies out the
+// rest, and Alt-click cycles between them.
+class ToolSlot : public QToolButton {
 public:
-    ToolButton(Tool tool, QWidget *parent) : QToolButton(parent), m_tool(tool)
+    ToolSlot(std::vector<Tool> tools, EditorSession &session, QWidget *parent) : QToolButton(parent), m_tools(std::move(tools)), m_session(session)
     {
-        setObjectName(QStringLiteral("tool:") + rawValue(tool));
+        setObjectName(QStringLiteral("tool:") + rawValue(m_tools.front()));
         setCheckable(true);
         setFixedSize(34, 34);
         setFocusPolicy(Qt::NoFocus);
-        setAccessibleName(title(tool));
+        m_pressTimer.setSingleShot(true);
+        m_pressTimer.setInterval(400);
+        connect(&m_pressTimer, &QTimer::timeout, this, [this] {
+            m_longPressed = true;
+            openFlyout();
+        });
+    }
+
+    const std::vector<Tool> &tools() const { return m_tools; }
+    // The one it shows: the last picked among its own tools, else the first.
+    Tool shown() const
+    {
+        const std::optional<Tool> remembered = toolNamed(QSettings().value(settingsKey()).toString());
+        return remembered && contains(*remembered) ? *remembered : m_tools.front();
+    }
+    // Refreshed on every ContentView::synchronize(): the checked state, tooltip, and
+    // whether the whole slot is worth showing under the current preset.
+    void refresh()
+    {
+        setChecked(contains(m_session.tool()));
+        setToolTip(ContentView::toolTip(shown()));
+        setAccessibleName(::title(shown()));
+        const bool advanced = ContentView::toolPreset() == ContentView::ToolPreset::advanced;
+        // A hidden tool picked by key still shows, in the slot it lives in, while it's active.
+        setVisible(advanced || !ContentView::hiddenInBasic(shown()) || contains(m_session.tool()));
+        update();
     }
 
 protected:
@@ -105,11 +145,90 @@ protected:
             painter.setBrush(plate);
             painter.drawRoundedRect(QRectF(0.5, 0.5, 33, 33), 7, 7);
         }
-        ToolIcons::paint(painter, m_tool, QPointF(8, 8), ToolIcons::points, ink);
+        ToolIcons::paint(painter, shown(), QPointF(8, 8), ToolIcons::points, ink);
+        if (visibleTools().size() > 1) {
+            QPainterPath triangle;
+            triangle.moveTo(27, 33);
+            triangle.lineTo(33, 33);
+            triangle.lineTo(33, 27);
+            triangle.closeSubpath();
+            QColor tri = ink;
+            tri.setAlphaF(0.5f);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(tri);
+            painter.drawPath(triangle);
+        }
     }
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() != Qt::LeftButton)
+            return;
+        m_longPressed = false;
+        m_pressTimer.start();
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (event->button() != Qt::LeftButton)
+            return;
+        m_pressTimer.stop();
+        if (m_longPressed) {
+            m_longPressed = false;
+            return;
+        }
+        if (event->modifiers().testFlag(Qt::AltModifier))
+            cycle();
+        else
+            choose(shown());
+    }
+    void contextMenuEvent(QContextMenuEvent *) override { openFlyout(); }
 
 private:
-    const Tool m_tool;
+    bool contains(Tool tool) const { return std::find(m_tools.begin(), m_tools.end(), tool) != m_tools.end(); }
+    QString settingsKey() const { return QStringLiteral("toolSlot/") + rawValue(m_tools.front()); }
+    // Every tool worth offering: all of them under Advanced, else the ones Basic doesn't
+    // hide, plus the active one even if it's on that list (so it's never stranded).
+    std::vector<Tool> visibleTools() const
+    {
+        std::vector<Tool> shownTools;
+        for (Tool tool : m_tools) {
+            if (ContentView::toolPreset() == ContentView::ToolPreset::advanced || !ContentView::hiddenInBasic(tool) || m_session.tool() == tool)
+                shownTools.push_back(tool);
+        }
+        return shownTools.empty() ? std::vector<Tool>{m_tools.front()} : shownTools;
+    }
+    void choose(Tool tool)
+    {
+        QSettings().setValue(settingsKey(), rawValue(tool));
+        m_session.selectTool(tool);
+    }
+    void cycle()
+    {
+        const std::vector<Tool> visible = visibleTools();
+        const auto at = std::find(visible.begin(), visible.end(), shown());
+        const size_t index = at == visible.end() ? 0 : (size_t(at - visible.begin()) + 1) % visible.size();
+        choose(visible[index]);
+    }
+    void openFlyout()
+    {
+        const std::vector<Tool> visible = visibleTools();
+        if (visible.size() < 2) {
+            choose(visible.front());
+            return;
+        }
+        QMenu menu(this);
+        for (Tool tool : visible) {
+            QAction *action = menu.addAction(::title(tool));
+            action->setCheckable(true);
+            action->setChecked(m_session.tool() == tool);
+            connect(action, &QAction::triggered, this, [this, tool] { choose(tool); });
+        }
+        menu.exec(mapToGlobal(QPoint(width(), 0)));
+    }
+
+    std::vector<Tool> m_tools;
+    EditorSession &m_session;
+    QTimer m_pressTimer;
+    bool m_longPressed = false;
 };
 
 // Roast My Design, at the bottom of the rail: a flame, the one playful button.
@@ -308,20 +427,16 @@ QWidget *ContentView::makeRail()
     auto *toolColumn = new QVBoxLayout(tools);
     toolColumn->setContentsMargins(7, 12, 7, 12);
     toolColumn->setSpacing(2);
-    for (const std::vector<Tool> &group : railGroups) {
-        if (&group != &railGroups.front()) {
+    for (const auto &group : toolSlotGroups) {
+        if (&group != &toolSlotGroups.front()) {
             toolColumn->addSpacing(4);
             toolColumn->addWidget(divider(QFrame::HLine, tools));
             toolColumn->addSpacing(4);
         }
-        for (const Tool tool : group) {
-            auto *button = new ToolButton(tool, tools);
-            connect(button, &QToolButton::clicked, this, [this, tool] {
-                m_session.selectTool(tool);
-                synchronize();
-            });
-            toolColumn->addWidget(button, 0, Qt::AlignHCenter);
-            m_toolButtons.push_back({tool, button});
+        for (const std::vector<Tool> &slotTools : group) {
+            auto *slot = new ToolSlot(slotTools, m_session, tools);
+            toolColumn->addWidget(slot, 0, Qt::AlignHCenter);
+            m_toolSlots.push_back(slot);
         }
     }
     toolColumn->addSpacing(10);
@@ -342,7 +457,48 @@ QWidget *ContentView::makeRail()
     rail->setFrameShape(QFrame::NoFrame);
     rail->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     rail->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // Right-click the rail itself (not a slot) for Basic/Advanced.
+    tools->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(tools, &QWidget::customContextMenuRequested, this, [this, tools](const QPoint &at) {
+        QMenu menu(tools);
+        QAction *basic = menu.addAction(QStringLiteral("Basic"));
+        QAction *advanced = menu.addAction(QStringLiteral("Advanced"));
+        basic->setCheckable(true);
+        advanced->setCheckable(true);
+        basic->setChecked(toolPreset() == ToolPreset::basic);
+        advanced->setChecked(toolPreset() == ToolPreset::advanced);
+        connect(basic, &QAction::triggered, this, [this] { setToolPreset(ToolPreset::basic); synchronize(); });
+        connect(advanced, &QAction::triggered, this, [this] { setToolPreset(ToolPreset::advanced); synchronize(); });
+        menu.exec(tools->mapToGlobal(at));
+    });
     return rail;
+}
+
+ContentView::ToolPreset ContentView::toolPreset()
+{
+    return QSettings().value(toolPresetKey).toString() == QLatin1String("basic") ? ToolPreset::basic : ToolPreset::advanced;
+}
+
+void ContentView::setToolPreset(ToolPreset preset)
+{
+    QSettings().setValue(toolPresetKey, preset == ToolPreset::basic ? QStringLiteral("basic") : QStringLiteral("advanced"));
+}
+
+bool ContentView::hiddenInBasic(Tool tool)
+{
+    switch (tool) {
+    case Tool::roundedRectangle:
+    case Tool::polygon:
+    case Tool::star:
+    case Tool::scissors:
+    case Tool::shapeBuilder:
+    case Tool::rotate:
+    case Tool::scale:
+    case Tool::gradient:
+        return true;
+    default:
+        return false;
+    }
 }
 
 QString ContentView::toolTip(Tool tool)
@@ -356,8 +512,8 @@ QString ContentView::toolTip(Tool tool)
 
 void ContentView::retitleTools()
 {
-    for (const auto &[tool, button] : m_toolButtons)
-        button->setToolTip(toolTip(tool));
+    for (ToolSlot *slot : m_toolSlots)
+        slot->refresh();
 }
 
 void ContentView::synchronizePanels()
@@ -376,9 +532,9 @@ void ContentView::synchronize()
     // A proposal pauses the tools: a click or a tool change would commit it.
     const bool proposal = hasProposal();
     m_canvas->setPaused(proposal);
-    for (const auto &[tool, button] : m_toolButtons) {
-        button->setChecked(m_session.tool() == tool);
-        button->setEnabled(!proposal);
+    for (ToolSlot *slot : m_toolSlots) {
+        slot->refresh();
+        slot->setEnabled(!proposal);
     }
     m_dock->setEnabled(!proposal);
     m_palette->setEnabled(!proposal);
@@ -393,7 +549,9 @@ void ContentView::synchronize()
     if (document) {
         m_zoom->setText(percent(m_session.viewport.zoom()));
         const QLocale english(QLocale::English, QLocale::UnitedStates);
-        m_artboard->setText(QStringLiteral("%1 × %2 pt").arg(english.toString(document->size.width(), 'g', 6), english.toString(document->size.height(), 'g', 6)));
+        const Artboard active = document->artboard(m_session.activeArtboard());
+        const QString size = QStringLiteral("%1 × %2 pt").arg(english.toString(active.rect.width(), 'g', 6), english.toString(active.rect.height(), 'g', 6));
+        m_artboard->setText(document->artboardCount() > 1 ? active.name + QStringLiteral(" · ") + size : size);
         const size_t count = m_session.selection().size();
         m_selection->setText(count == 0 ? QStringLiteral("No selection") : count == 1 ? QStringLiteral("1 object selected")
                                                                                      : QStringLiteral("%1 objects selected").arg(count));

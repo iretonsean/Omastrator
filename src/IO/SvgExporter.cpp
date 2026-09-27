@@ -6,6 +6,7 @@
 #include <QFontDatabase>
 #include <QBuffer>
 #include <QLineF>
+#include <QMargins>
 #include <QSaveFile>
 #include <QSet>
 #include <QXmlStreamWriter>
@@ -369,24 +370,28 @@ private:
     void writeContainer(const VectorObject &object)
     {
         const std::vector<QUuid> children = document.children(object.id);
-        size_t first = 0;
-        QString clip;
+        size_t first = 0, last = children.size();
+        QString clip, mask;
         if (object.isClipGroup && !children.empty()) {
             // The bottom child is the clip; it draws nothing itself.
-            const VectorObject *mask = document.find(children.front());
+            const VectorObject *clipObject = document.find(children.front());
             clip = definitionID("clip");
             xml.writeStartElement(QStringLiteral("defs"));
             xml.writeStartElement(QStringLiteral("clipPath"));
             xml.writeAttribute(QStringLiteral("id"), clip);
             xml.writeEmptyElement(QStringLiteral("path"));
-            const bool isPath = mask && mask->kind == ObjectKind::path;
+            const bool isPath = clipObject && clipObject->kind == ObjectKind::path;
             const QPainterPath outline = document.outline(children.front());
-            xml.writeAttribute(QStringLiteral("d"), isPath ? pathData(mask->path) : pathData(outline));
-            if ((isPath ? mask->path.fillRule : outline.fillRule()) == Qt::OddEvenFill)
+            xml.writeAttribute(QStringLiteral("d"), isPath ? pathData(clipObject->path) : pathData(outline));
+            if ((isPath ? clipObject->path.fillRule : outline.fillRule()) == Qt::OddEvenFill)
                 xml.writeAttribute(QStringLiteral("clip-rule"), QStringLiteral("evenodd"));
             xml.writeEndElement();
             xml.writeEndElement();
             first = 1;
+        } else if (object.mask && children.size() >= 2) {
+            // P2-9: the top child's luminance masks everything under it.
+            mask = writeOpacityMask(object, children.back());
+            last = children.size() - 1;
         }
         xml.writeStartElement(QStringLiteral("g"));
         writeCommon(object);
@@ -396,9 +401,59 @@ private:
         }
         if (!clip.isEmpty())
             xml.writeAttribute(QStringLiteral("clip-path"), QStringLiteral("url(#%1)").arg(clip));
-        for (size_t index = first; index < children.size(); ++index)
+        if (!mask.isEmpty())
+            xml.writeAttribute(QStringLiteral("mask"), QStringLiteral("url(#%1)").arg(mask));
+        for (size_t index = first; index < last; ++index)
             writeObject(children[index]);
         xml.writeEndElement();
+    }
+
+    // A <mask> from `maskId`'s luminance (SVG's own rule); Invert runs it through a
+    // colour-matrix filter, and Clip off backs it with white so what it never
+    // covers stays visible instead of hidden.
+    QString writeOpacityMask(const VectorObject &object, const QUuid &maskId)
+    {
+        const QString id = definitionID("mask");
+        xml.writeStartElement(QStringLiteral("defs"));
+        QString filter;
+        if (object.mask->inverted) {
+            filter = definitionID("invert");
+            xml.writeStartElement(QStringLiteral("filter"));
+            xml.writeAttribute(QStringLiteral("id"), filter);
+            xml.writeEmptyElement(QStringLiteral("feColorMatrix"));
+            xml.writeAttribute(QStringLiteral("type"), QStringLiteral("matrix"));
+            xml.writeAttribute(QStringLiteral("values"), QStringLiteral("-1 0 0 0 1  0 -1 0 0 1  0 0 -1 0 1  0 0 0 1 0"));
+            xml.writeEndElement();
+        }
+        // The region itself, in document coordinates with a margin: unset, its default
+        // percentages would resolve against the whole page instead of this group.
+        const QRectF bounds = document.bounds(object.id, true).marginsAdded(QMarginsF(20, 20, 20, 20));
+        xml.writeStartElement(QStringLiteral("mask"));
+        xml.writeAttribute(QStringLiteral("id"), id);
+        xml.writeAttribute(QStringLiteral("maskUnits"), QStringLiteral("userSpaceOnUse"));
+        xml.writeAttribute(QStringLiteral("x"), number(bounds.left()));
+        xml.writeAttribute(QStringLiteral("y"), number(bounds.top()));
+        xml.writeAttribute(QStringLiteral("width"), number(bounds.width()));
+        xml.writeAttribute(QStringLiteral("height"), number(bounds.height()));
+        if (!object.mask->clip) {
+            xml.writeEmptyElement(QStringLiteral("rect"));
+            xml.writeAttribute(QStringLiteral("x"), number(bounds.left()));
+            xml.writeAttribute(QStringLiteral("y"), number(bounds.top()));
+            xml.writeAttribute(QStringLiteral("width"), number(bounds.width()));
+            xml.writeAttribute(QStringLiteral("height"), number(bounds.height()));
+            xml.writeAttribute(QStringLiteral("fill"), QStringLiteral("white"));
+        }
+        if (filter.isEmpty()) {
+            writeObject(maskId);
+        } else {
+            xml.writeStartElement(QStringLiteral("g"));
+            xml.writeAttribute(QStringLiteral("filter"), QStringLiteral("url(#%1)").arg(filter));
+            writeObject(maskId);
+            xml.writeEndElement();
+        }
+        xml.writeEndElement();
+        xml.writeEndElement();
+        return id;
     }
 
     void writePath(const VectorObject &object)
@@ -606,10 +661,13 @@ private:
 namespace SvgExporter {
 QByteArray serialize(const VectorDocument &document, const Options &options)
 {
+    // Several artboards: this exports the first one alone, so single-artboard
+    // output (the common case) stays byte-identical to before.
+    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);
-    Writer(document, options, &buffer).write();
+    Writer(page, options, &buffer).write();
     return bytes;
 }
 

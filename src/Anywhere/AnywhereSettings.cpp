@@ -155,6 +155,22 @@ QString setDestination(const QString &surfaceKey, const QString &destination)
     return write(settings);
 }
 
+QString handoffFolder(const QString &surfaceKey)
+{
+    return read()["handoff"].toObject()[surfaceKey].toString();
+}
+
+QString setHandoffFolder(const QString &surfaceKey, const QString &folder)
+{
+    QJsonObject settings = read();
+    QJsonObject folders = settings["handoff"].toObject();
+    if (folders[surfaceKey].toString() == folder)
+        return {};
+    folders[surfaceKey] = folder;
+    settings["handoff"] = folders;
+    return write(settings);
+}
+
 QString deskWorkspace()
 {
     const QString chosen = read()["deskWorkspace"].toString().trimmed();

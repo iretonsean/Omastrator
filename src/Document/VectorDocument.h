@@ -200,10 +200,28 @@ struct Guide {
     friend bool operator==(const Guide &, const Guide &) = default;
 };
 
+// A page on the canvas, exported on its own (Illustrator's artboards, Figma's frames).
+struct Artboard {
+    QUuid id = QUuid::createUuid();
+    QString name;
+    QRectF rect;
+    // Its paper; transparent exports leave it out.
+    QColor background = Qt::white;
+    friend bool operator==(const Artboard &, const Artboard &) = default;
+};
+
 // Select ▸ Same: what an object must share with the one picked.
 enum class SameAttribute { fillColor, strokeColor, fillAndStroke, strokeWeight, opacity, blendMode, fontFamily, fontFamilyStyleSize };
 // Select ▸ Object: kinds of object picked across the document.
 enum class ObjectFilter { textObjects, images, clippingMasks, openPaths, strayPoints };
+
+// Groups (P2-9): the top child's luminance masks the rest. Clip hides whatever
+// falls outside the mask's own rendered coverage; off, that area stays visible.
+struct OpacityMask {
+    bool clip = true;
+    bool inverted = false;
+    friend bool operator==(const OpacityMask &, const OpacityMask &) = default;
+};
 
 struct VectorObject {
     QUuid id = QUuid::createUuid();
@@ -232,6 +250,8 @@ struct VectorObject {
     QTransform transform;
     // Groups: the first child clips the rest.
     bool isClipGroup = false;
+    // Groups: set makes this an opacity mask group (P2-9); the top child is the mask.
+    std::optional<OpacityMask> mask;
     // Rectangles: the live shape, while the path is still what it makes.
     std::optional<LiveRectangle> shape;
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
@@ -273,6 +293,11 @@ struct VectorDocument {
     std::vector<Guide> guides;
     // Character and paragraph styles, in the order they were made.
     std::vector<TextStyle> textStyles;
+    // Every artboard in order; empty is one at the origin. The first one's size and
+    // paper are always `size` and `background`, so code that knows one page still works.
+    std::vector<Artboard> artboards;
+    // Export for Screens: objects collected as assets, in the order they were added.
+    std::vector<QUuid> exportAssets;
     // The design system's tokens, its modes ("light", "dark"; the first is each token's
     // own value) and the mode shown. No modes: empty.
     std::vector<DesignToken> tokens;
@@ -325,9 +350,33 @@ struct VectorDocument {
     void transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText, bool scaleCorners = true);
     // A copy of an object's subtree with new ids.
     std::vector<VectorObject> copySubtree(const QUuid &id) const;
+    // `ids`, their descendants, and the layers, groups and clip masks above them, moved so
+    // their bounds' corner is the origin; background cleared, artboards and export assets too.
+    VectorDocument croppedTo(const std::vector<QUuid> &ids) const;
     QString uniqueName(const QString &base) const;
     // Rectangles whose anchors were edited become plain paths.
     void expandEditedShapes();
+
+    // Artboards (VectorDocument+Artboards.cpp) ----------------------------------
+    // The artboards as listed, or the one `size` makes, named "Artboard 1".
+    std::vector<Artboard> allArtboards() const;
+    int artboardCount() const { return artboards.empty() ? 1 : int(artboards.size()); }
+    Artboard artboard(int index) const;
+    // Replaces every artboard; the first sets `size` and `background`. Empty leaves one.
+    void setArtboards(std::vector<Artboard> boards);
+    // The artboard under `point`, the last listed first; -1 over none.
+    int artboardAt(QPointF point) const;
+    int artboardIndex(const QUuid &id) const;
+    // Every artboard's rect together.
+    QRectF artboardBounds() const;
+    // The objects directly in layers that belong to an artboard: those whose bounds,
+    // strokes included, meet it. With one artboard, every one of them.
+    std::vector<QUuid> objectsOn(int index) const;
+    // One artboard as a document of its own: its art moved so its corner is the
+    // origin, and with several artboards, the art on none of the others' alone.
+    VectorDocument artboardDocument(int index) const;
+    // "Artboard 3": the first number no artboard uses yet.
+    QString uniqueArtboardName(const QString &base = QStringLiteral("Artboard")) const;
     friend bool operator==(const VectorDocument &, const VectorDocument &) = default;
 
 private:

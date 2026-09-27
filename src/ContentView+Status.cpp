@@ -71,8 +71,10 @@ QString ContentView::hint(Tool tool)
     case Tool::scale: return QStringLiteral("Drag to scale the selection · Shift keeps proportions");
     case Tool::eyedropper: return QStringLiteral("Click an object to take its fill and stroke. Alt-click gives it the selection's");
     case Tool::gradient: return QStringLiteral("Drag across the selection to set its gradient; drag the ends or the stops to adjust");
+    case Tool::width: return QStringLiteral("Drag on the stroke to add or move a width point · Alt-drag moves one side · Delete removes it");
     case Tool::hand: return QStringLiteral("Drag to pan · Space pans from any tool");
     case Tool::zoom: return QStringLiteral("Click to zoom in · Alt-click to zoom out");
+    case Tool::artboard: return QStringLiteral("Drag to draw an artboard · Drag to move or resize · Alt-drag duplicates · Delete removes it");
     }
     return QString();
 }

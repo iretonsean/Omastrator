@@ -116,7 +116,7 @@ Paint Paint::withCompositeOf(const Paint &other) const
 
 bool StrokeStyle::isPlain() const
 {
-    return alignment == StrokeAlignment::center && startArrow == Arrowhead::none && endArrow == Arrowhead::none
+    return widthPoints.empty() && alignment == StrokeAlignment::center && startArrow == Arrowhead::none && endArrow == Arrowhead::none
         && !(alignDashes && !dashes.empty());
 }
 
@@ -160,6 +160,27 @@ Arrowhead arrowhead(const QString &rawValue)
             return head;
     }
     return Arrowhead::none;
+}
+
+namespace {
+const std::array<std::pair<StrokeWidthProfile, const char *>, 5> widthProfileNames{{
+    {StrokeWidthProfile::uniform, "uniform"}, {StrokeWidthProfile::taperStart, "taperStart"}, {StrokeWidthProfile::taperEnd, "taperEnd"},
+    {StrokeWidthProfile::bulge, "bulge"}, {StrokeWidthProfile::custom, "custom"},
+}};
+}
+
+QString rawValue(StrokeWidthProfile profile)
+{
+    return QString::fromLatin1(widthProfileNames.at(size_t(profile)).second);
+}
+
+StrokeWidthProfile strokeWidthProfile(const QString &rawValue)
+{
+    for (const auto &[profile, name] : widthProfileNames) {
+        if (rawValue == QLatin1String(name))
+            return profile;
+    }
+    return StrokeWidthProfile::uniform;
 }
 
 QPen StrokeStyle::pen(const QRectF &bounds) const

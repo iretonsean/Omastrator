@@ -10,6 +10,8 @@ QDialog *scale(EditorSession &session, QWidget *window);
 QDialog *move(EditorSession &session, QWidget *window);
 QDialog *offsetPath(EditorSession &session, QWidget *window);
 QDialog *artboardSize(EditorSession &session, QWidget *window);
+// Object ▸ Artboards ▸ Rename…: the artboard's name, typed.
+QDialog *renameArtboard(EditorSession &session, int index, QWidget *window);
 // Object ▸ Path ▸ Average: horizontal, vertical or both.
 QDialog *average(EditorSession &session, QWidget *window);
 // Type ▸ Find/Replace Font…: the families used, missing ones marked, one swapped for another.

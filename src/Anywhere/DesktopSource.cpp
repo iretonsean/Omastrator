@@ -30,6 +30,11 @@ std::optional<QJsonObject> SystemSource::accessible(const Hyprland::Window &wind
     return Inspect::accessibleAt(window.pid, windowPoint);
 }
 
+std::vector<Hyprland::Layer> SystemSource::layers()
+{
+    return Hyprland::parseLayers(Hyprland::query(QStringLiteral("layers")));
+}
+
 std::optional<QColor> SystemSource::pixel(QPoint point)
 {
     const Capture::Run run = Capture::run(QStringLiteral("grim"), {QStringLiteral("-g"), geometry(QRect(point, QSize(1, 1))), QStringLiteral("-t"),

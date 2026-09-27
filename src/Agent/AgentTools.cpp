@@ -175,7 +175,7 @@ QJsonObject AgentTools::selectTool(const QJsonObject &params)
     const std::optional<Tool> tool = toolNamed(name);
     if (!tool)
         fail(QStringLiteral("There is no tool “%1”. Use one of: select, directSelect, pen, pencil, text, line, rectangle, "
-                            "roundedRectangle, ellipse, polygon, star, shapeBuilder, scissors, rotate, scale, gradient, eyedropper, hand, zoom.").arg(given));
+                            "roundedRectangle, ellipse, polygon, star, shapeBuilder, scissors, rotate, scale, gradient, width, eyedropper, hand, zoom.").arg(given));
     EditorSession *current = m_host.session();
     if (!current)
         throw Error(AgentProtocol::noDocument, QStringLiteral("Omastrator has no window open."));
@@ -294,6 +294,8 @@ QJsonObject AgentTools::render(const QJsonObject &params)
         for (const QUuid &layer : copy.layers())
             copy.transform(layer, QTransform::fromTranslate(-area.x(), -area.y()));
         copy.size = QSizeF(std::max(1.0, area.width()), std::max(1.0, area.height()));
+        copy.artboards.clear();
+        copy.exportAssets.clear();
     }
     if (copy.size.width() * scale > maximumRenderSide || copy.size.height() * scale > maximumRenderSide)
         fail(QStringLiteral("%1 × %2 pixels is too large; use a smaller “scale”.")

@@ -4,6 +4,7 @@
 #include "UI/AgentSheets.h"
 #include "UI/CommandPalette.h"
 #include "UI/ContextMenus.h"
+#include "UI/ExportForScreensSheet.h"
 #include "UI/HistoryPanel.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
@@ -124,6 +125,10 @@ void Menus::buildFile(QMenuBar &bar)
     add(exports, QStringLiteral("exportJPEG"), QStringLiteral("JPEG…"), QKeySequence(), [this] { m_workspace.exportAs(DocumentExporter::Format::jpeg); });
     add(exports, QStringLiteral("exportSVG"), QStringLiteral("SVG…"), QKeySequence(), [this] { m_workspace.exportAs(DocumentExporter::Format::svg); });
     add(exports, QStringLiteral("exportPDF"), QStringLiteral("PDF…"), QKeySequence(), [this] { m_workspace.exportAs(DocumentExporter::Format::pdf); });
+    exports->addSeparator();
+    // Alt+Ctrl+E is PNG's; this batch export gets no key of its own.
+    add(exports, QStringLiteral("exportForScreens"), QStringLiteral("Export for Screens…"), QKeySequence(),
+        [this] { (new ExportForScreensSheet(session(), &m_window))->open(); });
     file->addSeparator();
     add(file, QStringLiteral("quit"), QStringLiteral("Quit"), QKeySequence(Qt::CTRL | Qt::Key_Q), [this] { m_window.close(); })
         ->setMenuRole(QAction::QuitRole);
@@ -285,6 +290,21 @@ void Menus::buildObject(QMenuBar &bar)
     add(clipping, QStringLiteral("makeClippingMask"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_7), [this] { session().makeClippingMask(); });
     add(clipping, QStringLiteral("releaseClippingMask"), QStringLiteral("Release"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_7),
         [this] { session().releaseClippingMask(); });
+    QMenu *opacityMask = object->addMenu(QStringLiteral("Opacity Mask"));
+    opacityMask->menuAction()->setObjectName(QStringLiteral("opacityMaskMenu"));
+    add(opacityMask, QStringLiteral("makeOpacityMask"), QStringLiteral("Make Mask"), QKeySequence(), [this] { session().makeOpacityMask(); });
+    add(opacityMask, QStringLiteral("releaseOpacityMask"), QStringLiteral("Release"), QKeySequence(), [this] { session().releaseOpacityMask(); });
+    opacityMask->addSeparator();
+    add(opacityMask, QStringLiteral("opacityMaskClip"), QStringLiteral("Clip"), QKeySequence(), [this] {
+        const std::optional<QUuid> group = session().selectedMaskGroup();
+        const bool clipped = group && session().document()->find(*group)->mask->clip;
+        session().setOpacityMaskClip(!clipped);
+    })->setCheckable(true);
+    add(opacityMask, QStringLiteral("invertOpacityMask"), QStringLiteral("Invert Mask"), QKeySequence(), [this] {
+        const std::optional<QUuid> group = session().selectedMaskGroup();
+        const bool inverted = group && session().document()->find(*group)->mask->inverted;
+        session().setOpacityMaskInverted(!inverted);
+    })->setCheckable(true);
     QMenu *trace = object->addMenu(QStringLiteral("Image Trace"));
     trace->menuAction()->setObjectName(QStringLiteral("imageTraceMenu"));
     add(trace, QStringLiteral("imageTraceMake"), QStringLiteral("Make"), QKeySequence(), [this] { session().traceSelectedImage(); });
@@ -303,6 +323,27 @@ void Menus::buildObject(QMenuBar &bar)
     });
     object->addSeparator();
     add(object, QStringLiteral("artboardSize"), QStringLiteral("Artboard Size…"), QKeySequence(), [this] { ObjectDialogs::artboardSize(session(), &m_window); });
+    QMenu *artboards = object->addMenu(QStringLiteral("Artboards"));
+    artboards->menuAction()->setObjectName(QStringLiteral("artboardsMenu"));
+    add(artboards, QStringLiteral("newArtboard"), QStringLiteral("New Artboard"), QKeySequence(), [this] { session().addArtboard(); });
+    add(artboards, QStringLiteral("duplicateArtboard"), QStringLiteral("Duplicate Artboard"), QKeySequence(),
+        [this] { session().duplicateArtboard(session().activeArtboard()); });
+    add(artboards, QStringLiteral("renameArtboard"), QStringLiteral("Rename…"), QKeySequence(),
+        [this] { ObjectDialogs::renameArtboard(session(), session().activeArtboard(), &m_window); });
+    add(artboards, QStringLiteral("deleteArtboard"), QStringLiteral("Delete Artboard"), QKeySequence(),
+        [this] { session().deleteArtboard(session().activeArtboard()); });
+    add(artboards, QStringLiteral("fitArtboardToArtwork"), QStringLiteral("Fit to Artwork Bounds"), QKeySequence(),
+        [this] { session().fitArtboardToArtwork(session().activeArtboard()); });
+    add(artboards, QStringLiteral("switchArtboardOrientation"), QStringLiteral("Switch Orientation"), QKeySequence(),
+        [this] { session().switchArtboardOrientation(session().activeArtboard()); });
+    artboards->addSeparator();
+    // Page keys aren't one-character chords; they're the only entries this test lets past F7.
+    add(artboards, QStringLiteral("nextArtboard"), QStringLiteral("Next Artboard"), QKeySequence(Qt::SHIFT | Qt::Key_PageDown),
+        [this] { session().showArtboard(true); });
+    add(artboards, QStringLiteral("previousArtboard"), QStringLiteral("Previous Artboard"), QKeySequence(Qt::SHIFT | Qt::Key_PageUp),
+        [this] { session().showArtboard(false); });
+    add(object, QStringLiteral("collectForExport"), QStringLiteral("Collect for Export"), QKeySequence(),
+        [this] { session().collectForExport(session().selection()); });
     QMenu *type = bar.addMenu(QStringLiteral("&Type"));
     add(type, QStringLiteral("createOutlines"), QStringLiteral("Create Outlines"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O),
         [this] { session().convertTextToPaths(); });
@@ -369,6 +410,7 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     alias(add(view, QStringLiteral("fitArtboard"), QStringLiteral("Fit Artboard in Window"), QKeySequence(Qt::CTRL | Qt::Key_0),
               [this] { session().zoomToFit(); }),
           QKeySequence(Qt::SHIFT | Qt::Key_1));
+    add(view, QStringLiteral("fitAllArtboards"), QStringLiteral("Fit All in Window"), QKeySequence(), [this] { session().fitAllArtboards(); });
     alias(add(view, QStringLiteral("zoomToSelection"), QStringLiteral("Zoom to Selection"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_0),
               [this] { session().zoomToSelection(); }),
           QKeySequence(Qt::SHIFT | Qt::Key_2));

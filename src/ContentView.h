@@ -16,7 +16,7 @@ class PropertiesPanel;
 class ProjectWorkspace;
 class QMimeData;
 class QSplitter;
-class ToolButton;
+class ToolSlot;
 
 // One document's editor area: tool bar, rail, canvas, dock, status.
 class ContentView : public QWidget {
@@ -28,8 +28,18 @@ public:
                          AgentBridge *agent = nullptr);
     ~ContentView() override;
 
-    // The rail, top to bottom, in Illustrator's groups.
-    static const std::vector<std::vector<Tool>> railGroups;
+    // The rail's slots, top to bottom, in Illustrator's groups; a slot with more than one
+    // tool flies out on right-click or a long press, and shows the last one picked.
+    static const std::vector<std::vector<std::vector<Tool>>> toolSlotGroups;
+    // Every slot, flattened, in rail order (what railGroups used to be, one level deeper).
+    static std::vector<std::vector<Tool>> toolSlots();
+    // View ▸ Toolbar, and the rail's own context menu: which tools the rail hides.
+    enum class ToolPreset { basic, advanced };
+    static ToolPreset toolPreset();
+    static void setToolPreset(ToolPreset preset);
+    // Basic hides the tools Illustrator considers advanced; a tool picked by key still
+    // shows in its slot while it's the active one, even when it's on this list.
+    static bool hiddenInBasic(Tool tool);
     // The status bar's words for a tool.
     static QString hint(Tool tool);
     // Zoom as percent, one decimal at most.
@@ -84,7 +94,7 @@ private:
     QVBoxLayout *const m_column;
     ToolHeaderBar *m_header = nullptr;
     std::optional<Tool> m_shownTool;
-    std::vector<std::pair<Tool, ToolButton *>> m_toolButtons;
+    std::vector<ToolSlot *> m_toolSlots;
     QGridLayout *const m_canvasSlot;
     EditorCanvas *const m_canvas;
     PropertiesPanel *const m_propertiesPanel;
