@@ -371,7 +371,7 @@ private slots:
         session.select({childNamed(*session.document(), instance, QStringLiteral("Label"))->id});
         session.setVisible(session.selection().front(), false);
         const QJsonObject json = DocumentCodec::encode(*session.document());
-        QCOMPARE(json["version"].toInt(), 4);
+        QCOMPARE(json["version"].toInt(), 5);
         VectorDocument decoded = DocumentCodec::decode(json);
         Components::sync(decoded);
         QCOMPARE(decoded.tokens, session.document()->tokens);
@@ -397,7 +397,7 @@ private slots:
         QVERIFY(decoded.tokenModes.isEmpty());
         QCOMPARE(decoded.objects.size(), session.document()->objects.size());
         // A newer file is refused.
-        json["version"] = 5;
+        json["version"] = 6;
         QVERIFY_THROWS_EXCEPTION(CodecError, DocumentCodec::decode(json));
     }
 

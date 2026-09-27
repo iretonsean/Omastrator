@@ -83,6 +83,9 @@ struct EditorCanvas::State {
         int guide = -1;
         Qt::Orientation guideAxis = Qt::Horizontal;
         double guidePosition = 0;
+        // The Artboard tool: which one is being moved or resized, known at the press (an
+        // implicit artboard's id isn't stable enough to look up again once the drag starts).
+        int artboardIndex = -1;
         // A click on what was already selected: it becomes the key object if nothing moves.
         std::optional<QUuid> keyCandidate;
     };

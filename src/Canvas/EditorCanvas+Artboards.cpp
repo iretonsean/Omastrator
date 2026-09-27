@@ -63,10 +63,13 @@ void EditorCanvas::State::artboardPress(QPointF view, Qt::KeyboardModifiers modi
     const VectorDocument &document = *session.document();
     const QPointF point = toDocument(view);
     if (const std::optional<int> handle = artboardHandleAt(view)) {
-        // Resizing the active artboard: the opposite corner stays put.
+        // Resizing the active artboard: the opposite corner stays put. An implicit
+        // artboard's id isn't stable enough to look up again, so the index is kept instead.
+        const int index = session.activeArtboard();
         beginDrag(DragKind::artboard, view);
         drag->handle = *handle;
-        drag->object = document.artboard(session.activeArtboard()).id;
+        drag->artboardIndex = index;
+        drag->object = document.artboard(index).id;
         drag->startBounds = *activeArtboardBox();
         return;
     }
@@ -87,12 +90,14 @@ void EditorCanvas::State::artboardPress(QPointF view, Qt::KeyboardModifiers modi
             return;
         beginDrag(DragKind::artboard, view);
         drag->handle = -2;
+        drag->artboardIndex = copyIndex;
         drag->object = copy;
         drag->startBounds = session.document()->artboard(copyIndex).rect;
         return;
     }
     beginDrag(DragKind::artboard, view);
     drag->handle = -2;
+    drag->artboardIndex = hit;
     drag->object = document.artboard(hit).id;
     drag->startBounds = document.artboard(hit).rect;
 }
@@ -107,8 +112,8 @@ void EditorCanvas::State::dragArtboard(QPointF view, Qt::KeyboardModifiers modif
         drag->startBounds = QRectF(drag->pressDocument, current).normalized();
         return;
     }
-    const int index = session.document()->artboardIndex(drag->object);
-    if (index < 0)
+    const int index = drag->artboardIndex;
+    if (index < 0 || index >= session.document()->artboardCount())
         return;
     if (!drag->interacting) {
         session.beginInteraction(drag->handle >= 0 ? QStringLiteral("Resize Artboard") : QStringLiteral("Move Artboard"));

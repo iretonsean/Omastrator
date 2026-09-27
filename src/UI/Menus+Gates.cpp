@@ -70,6 +70,16 @@ void Menus::synchronize()
     action(QStringLiteral("unlockAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("showAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("artboardSize"))->setEnabled(editing && drawn);
+    action(QStringLiteral("artboardsMenu"))->setEnabled(drawn);
+    for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "fitArtboardToArtwork", "switchArtboardOrientation",
+                             "fitAllArtboards"})
+        action(QString::fromLatin1(name))->setEnabled(editing && drawn);
+    const int artboards = drawn ? s.document()->artboardCount() : 1;
+    action(QStringLiteral("deleteArtboard"))->setEnabled(editing && drawn && artboards > 1);
+    for (const char *name : {"nextArtboard", "previousArtboard"})
+        action(QString::fromLatin1(name))->setEnabled(drawn && artboards > 1);
+    action(QStringLiteral("collectForExport"))->setEnabled(editing && selected);
+    action(QStringLiteral("exportForScreens"))->setEnabled(drawn);
     action(QStringLiteral("createOutlines"))->setEnabled(editing && drawn && selectionHas(s, ObjectKind::text));
     bool hasPoint = false, hasArea = false;
     for (const QUuid &id : s.selectedTexts()) {

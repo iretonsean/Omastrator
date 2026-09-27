@@ -48,7 +48,19 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   Properties with nothing selected (Shift for ten times it, Alt to nudge a
   copy; with only type selected, Alt+arrows adjust the type instead). Number keys set opacity: 5 is 50 %, 0 is
   100 %, and two quick digits make an exact value.
-- Zoom to Selection (Shift+2) and Fit Artboard (Shift+1).
+- Zoom to Selection (Shift+2), Fit Artboard (Shift+1) and View ▸ Fit All in Window.
+- Multiple artboards: the Artboard tool (Shift+O) draws, moves and resizes
+  them, Alt-drags a duplicate, and Delete removes the active one (never the
+  last). Object ▸ Artboards has New, Duplicate, Rename…, Delete, Fit to
+  Artwork Bounds, Switch Orientation and Next/Previous (Shift+PgDn/PgUp); an
+  Artboards list sits in Properties ▸ Document. Export, Share and the active
+  artboard's own size and background follow whichever one is active.
+- The rail's tools sit in slots that share a button when more than one lives
+  together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
+  Paint, Navigate): a corner triangle marks a group, right-click or a long
+  press flies it open, Alt-click cycles through it, and it remembers the last
+  one picked. Its own context menu (or View ▸ Toolbar) switches Basic, which
+  hides the least-used tools, and Advanced, which shows all of them.
 - Rulers (Ctrl+R) with the pointer marked on each. Drag a guide out of a
   ruler, drag it back to remove it, or double-click it to type its place.
   Objects snap to guides even with smart guides off. View ▸ Guides hides
@@ -121,6 +133,9 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   - saves and opens `.omai` documents (oh my)
   - imports SVG
   - exports SVG, PDF (kept as vectors), PNG and JPEG
+  - File ▸ Export ▸ Export for Screens… batches any artboards and objects
+    collected with Object ▸ Collect for Export, at several scales (0.5×–4×,
+    suffixed `@2x` and so on) and formats (PNG, JPG, SVG, PDF, WebP) at once
   - places JPEG, PNG, TIFF, WebP and GIF images
   - opens and saves on cloud storage as well as on this computer
     ([Cloud storage](#cloud-storage))
