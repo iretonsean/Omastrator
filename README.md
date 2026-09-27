@@ -89,6 +89,14 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   once; a "+" shows local changes. Type ▸ Find/Replace Font… lists the fonts
   used, flags missing ones (also noted when the file opens) and replaces them
   in one step. Create Outlines turns type into paths, a path per run colour.
+- Type on a Path (Shift+T): click a path to run type along it, with a bracket
+  to slide where it starts and Type ▸ Type on a Path ▸ Flip to read the other
+  way. Object ▸ Text Wrap ▸ Make sends area type around a shape (with an
+  offset); an area box's ports thread its overflow into the next box, split
+  back apart with Type ▸ Threaded Text ▸ Remove Threading. The Paragraph
+  section's Hyphenate checkbox breaks long words at the ends of lines, with
+  its margins behind a disclosure; a soft hyphen (U+00AD) you type yourself
+  always works, hyphenated or not.
 - A Properties panel in Figma's order, whose sections fold away and show only
   when they apply. Number fields take arithmetic and units (`2*(3+1)`,
   `25mm`, `50%`), `+10` or `*2` applied to each object, arrow steps, and a

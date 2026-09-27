@@ -43,6 +43,7 @@ ToolHeaderBar *ToolHeaders::make(EditorSession &session, Tool tool, QWidget *par
     case Tool::pen: return plainBar(tool, QStringLiteral("Click for corners · Drag for curves · Click the first point to close · Return ends"), parent);
     case Tool::pencil: return plainBar(tool, QStringLiteral("Drag to draw a smooth path · End at the start to close"), parent);
     case Tool::text: return new TypeControls(session, parent);
+    case Tool::typeOnPath: return plainBar(tool, QStringLiteral("Click a path to type along it · Drag the bracket to slide the start"), parent);
     case Tool::line:
     case Tool::rectangle:
     case Tool::roundedRectangle:

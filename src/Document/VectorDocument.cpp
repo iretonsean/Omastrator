@@ -318,6 +318,11 @@ void VectorDocument::remove(const std::vector<QUuid> &ids)
         const auto nested = descendants(id);
         doomed.insert(doomed.end(), nested.begin(), nested.end());
     }
+    // A thread into what's removed goes nowhere now.
+    for (VectorObject &object : objects) {
+        if (std::find(doomed.begin(), doomed.end(), object.text.threadNext) != doomed.end())
+            object.text.threadNext = QUuid();
+    }
     std::erase_if(objects, [&](const VectorObject &object) {
         return std::find(doomed.begin(), doomed.end(), object.id) != doomed.end();
     });
@@ -454,6 +459,11 @@ std::vector<VectorObject> VectorDocument::copySubtree(const QUuid &id) const
         // A copy of a component inside it is a plain copy; the copy itself becomes an instance.
         if (&copy != &copies.front())
             copy.component.reset();
+        // A thread stays within the copy; one that leaves it is dropped.
+        if (!copy.text.threadNext.isNull()) {
+            const auto found = std::find_if(renamed.begin(), renamed.end(), [&](const auto &pair) { return pair.first == copy.text.threadNext; });
+            copy.text.threadNext = found == renamed.end() ? QUuid() : found->second;
+        }
     }
     if (!copies.empty() && copies.front().component) {
         copies.front().instance = InstanceInfo{objects[size_t(from)].id, copies.front().component->placement, {}, {}};

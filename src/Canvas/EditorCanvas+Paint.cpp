@@ -176,6 +176,39 @@ void EditorCanvas::State::drawOverlay(QPainter &painter) const
             painter.setBrush(Qt::NoBrush);
         }
     }
+    // Type on a Path: a bracket at the effective start of a selected path text.
+    for (const QUuid &id : session.selectedTexts()) {
+        const VectorObject *object = text && text->object.id == id ? &text->object : document.find(id);
+        if (!object)
+            continue;
+        if (const auto bracket = pathBracketPoint(*object)) {
+            // A tick across the path, at the point text would start from.
+            const QPointF normal(-bracket->second.y(), bracket->second.x());
+            const QPointF a = object->transform.map(bracket->first - normal * reach(6));
+            const QPointF b = object->transform.map(bracket->first + normal * reach(6));
+            painter.setPen(cosmetic(accent(), 1.5));
+            painter.drawLine(toView(a), toView(b));
+        }
+    }
+    // Threaded text: an in port and an out port on every selected area box, and a
+    // line between two that are linked.
+    for (const QUuid &id : session.selectedTexts()) {
+        const VectorObject *object = document.find(id);
+        if (!object || !object->text.area)
+            continue;
+        painter.setPen(cosmetic(accent(), 1.2));
+        painter.setBrush(Qt::white);
+        painter.drawRect(QRectF(toView(inPortAt(*object)) - QPointF(3, 3), QSizeF(6, 6)));
+        const bool armed = linkArmedFrom == id;
+        painter.setBrush(armed ? accent() : Qt::white);
+        painter.drawRect(QRectF(toView(outPortAt(*object)) - QPointF(3, 3), QSizeF(6, 6)));
+        painter.setBrush(Qt::NoBrush);
+        if (!object->text.threadNext.isNull() && session.isSelected(object->text.threadNext)) {
+            const VectorObject *next = document.find(object->text.threadNext);
+            if (next)
+                painter.drawLine(toView(outPortAt(*object)), toView(inPortAt(*next)));
+        }
+    }
     if (drag && (drag->kind == DragKind::marquee || drag->kind == DragKind::zoomRect) && drag->started) {
         const QRectF area = QRectF(drag->pressView, drag->lastView).normalized();
         painter.setRenderHint(QPainter::Antialiasing, false);

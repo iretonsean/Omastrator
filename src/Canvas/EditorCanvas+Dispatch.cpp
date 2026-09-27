@@ -9,6 +9,11 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
 {
     const QPointF document = toDocument(view);
     finishOpacity();
+    // Link mode (a thread's out port was clicked) takes the next click, wherever it lands.
+    if (threadLinkPress(view)) {
+        canvas.update();
+        return;
+    }
     // A click in the type being edited moves its caret; anywhere else ends it.
     if (text) {
         if (textBox().adjusted(-reach(4), -reach(4), reach(4), reach(4)).contains(document)
@@ -44,10 +49,20 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
             beginRulerGuide(Qt::Vertical, view);
         return;
     }
-    // A guide under the Selection tools moves; a live corner's widget sets its radius.
+    // A guide under the Selection tools moves; a live corner's widget sets its radius;
+    // a selected path text's bracket slides its start.
     if (session.tool() == Tool::select || session.tool() == Tool::directSelect) {
         if (const std::optional<CornerWidget> corner = cornerWidgetAt(view)) {
             cornerPress(*corner, view);
+            return;
+        }
+        if (const std::optional<QUuid> id = pathBracketAt(view)) {
+            beginDrag(DragKind::pathBracket, view);
+            drag->object = *id;
+            return;
+        }
+        if (const std::optional<QUuid> id = outPortHitAt(view)) {
+            linkArmedFrom = id;
             return;
         }
         if (!handleAt(view) && !hitLeaf(document)) {
@@ -72,6 +87,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
         break;
     case Tool::text:
         textPress(view);
+        break;
+    case Tool::typeOnPath:
+        typeOnPathPress(view);
         break;
     case Tool::line:
     case Tool::rectangle:
@@ -174,6 +192,9 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::corner:
         dragCorner(view, modifiers);
         break;
+    case DragKind::pathBracket:
+        dragPathBracket(view);
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -218,6 +239,10 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
         break;
     case DragKind::corner:
         finishCorner(modifiers);
+        break;
+    case DragKind::pathBracket:
+        if (drag->interacting && session.isInteracting())
+            session.commitInteraction();
         break;
     case DragKind::move:
         // A click that moved nothing on an object already selected makes it the key object.
@@ -326,6 +351,7 @@ void EditorCanvas::State::toolChanged()
         finishPen();
     if (text && shownTool != Tool::text && was == Tool::text)
         finishText();
+    linkArmedFrom.reset();
     hovered.reset();
     hoverGuides.reset();
     builderRegion.reset();

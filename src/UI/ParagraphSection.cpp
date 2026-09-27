@@ -22,7 +22,7 @@ constexpr std::array lastLines{TextAlignment::justify, TextAlignment::justifyCen
 
 ParagraphSection::ParagraphSection(EditorSession &session, QWidget *parent)
     : PanelSection(QStringLiteral("Paragraph"), QStringLiteral("paragraph"), parent), m_session(session), m_lastLine(new QComboBox(this)),
-      m_lastLineRow(new QWidget(this))
+      m_lastLineRow(new QWidget(this)), m_hyphenate(new QCheckBox(QStringLiteral("Hyphenate"), this)), m_hyphenateOptions(new QWidget(this))
 {
     NumberField *left = number(QStringLiteral("Left"), QStringLiteral("paragraphLeftIndent"), QStringLiteral("Left Indent"), &ParagraphFormat::leftIndent,
                                QStringLiteral("Left indent"));
@@ -68,6 +68,29 @@ ParagraphSection::ParagraphSection(EditorSession &session, QWidget *parent)
     lastRow->addWidget(caption(QStringLiteral("Last line"), m_lastLineRow));
     lastRow->addWidget(m_lastLine, 1);
     body->addWidget(m_lastLineRow);
+
+    // Hyphenate: on or off outright; its margins sit behind it, one step away.
+    m_hyphenate->setObjectName(QStringLiteral("paragraphHyphenate"));
+    m_hyphenate->setFont(ToolHeaderStyle::controlFont());
+    m_hyphenate->setToolTip(QStringLiteral("Break long words at the ends of lines"));
+    connect(m_hyphenate, &QCheckBox::toggled, this, [this](bool on) {
+        m_session.updateText([on](TextContent &text) { text.formatParagraphs(0, text.paragraphCount() - 1, [on](ParagraphFormat &p) { p.hyphenate = on; }); },
+                             QStringLiteral("Hyphenate"));
+    });
+    body->addWidget(m_hyphenate);
+    NumberField *minWord = count(QStringLiteral("Words longer than"), QStringLiteral("paragraphHyphenMinWord"), QStringLiteral("Hyphenate: Minimum Word"),
+                                 &ParagraphFormat::hyphenMinWord, QStringLiteral("Shortest word that may break"));
+    NumberField *minBefore = count(QStringLiteral("After first"), QStringLiteral("paragraphHyphenMinBefore"), QStringLiteral("Hyphenate: After First"),
+                                   &ParagraphFormat::hyphenMinBefore, QStringLiteral("Letters kept before a break"));
+    NumberField *minAfter = count(QStringLiteral("Before last"), QStringLiteral("paragraphHyphenMinAfter"), QStringLiteral("Hyphenate: Before Last"),
+                                  &ParagraphFormat::hyphenMinAfter, QStringLiteral("Letters kept after a break"));
+    auto *options = new QVBoxLayout(m_hyphenateOptions);
+    options->setContentsMargins(16, 4, 0, 0);
+    options->setSpacing(6);
+    options->addWidget(minWord);
+    options->addWidget(minBefore);
+    options->addWidget(minAfter);
+    body->addWidget(m_hyphenateOptions);
 }
 
 NumberField *ParagraphSection::number(const QString &label, const QString &name, const QString &undo, double ParagraphFormat::*member, const QString &tip)
@@ -92,6 +115,22 @@ NumberField *ParagraphSection::number(const QString &label, const QString &name,
             m_session.endEdit();
     };
     m_numbers.push_back({made, member});
+    return made;
+}
+
+NumberField *ParagraphSection::count(const QString &label, const QString &name, const QString &undo, int ParagraphFormat::*member, const QString &tip)
+{
+    auto *made = new NumberField(label, QString(), [this, member, undo](double value) {
+        m_session.updateText([member, value](TextContent &text) {
+            text.formatParagraphs(0, text.paragraphCount() - 1, [member, value](ParagraphFormat &p) { p.*member = std::max(1, int(std::lround(value))); });
+        }, undo);
+    }, this);
+    made->setObjectName(name);
+    made->field->setObjectName(name + QStringLiteral("Field"));
+    made->field->setAccessibleName(undo);
+    made->setToolTip(tip);
+    made->minimum = 1;
+    made->maximum = 50;
     return made;
 }
 

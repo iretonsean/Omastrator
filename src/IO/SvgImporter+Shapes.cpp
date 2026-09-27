@@ -110,16 +110,23 @@ Contour contour(const NSVGpath *path)
 }
 
 namespace SvgImport {
+VectorPath pathGeometry(const NSVGshape *shape)
+{
+    VectorPath path;
+    for (const NSVGpath *p = shape->paths; p; p = p->next) {
+        Contour c = contour(p);
+        if (!c.nodes.empty())
+            path.contours.push_back(std::move(c));
+    }
+    path.fillRule = shape->fillRule == NSVG_FILLRULE_EVENODD ? Qt::OddEvenFill : Qt::WindingFill;
+    return path;
+}
+
 VectorObject pathObject(const NSVGshape *shape)
 {
     VectorObject object;
     object.kind = ObjectKind::path;
-    for (const NSVGpath *path = shape->paths; path; path = path->next) {
-        Contour c = contour(path);
-        if (!c.nodes.empty())
-            object.path.contours.push_back(std::move(c));
-    }
-    object.path.fillRule = shape->fillRule == NSVG_FILLRULE_EVENODD ? Qt::OddEvenFill : Qt::WindingFill;
+    object.path = pathGeometry(shape);
     applyPaint(object, shape, object.path.bounds());
     return object;
 }

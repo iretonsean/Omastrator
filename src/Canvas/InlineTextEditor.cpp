@@ -4,6 +4,7 @@
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <QPainterPath>
+#include <QPolygonF>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -358,6 +359,9 @@ void InlineTextEditor::draw(QPainter &painter, const QTransform &documentToView,
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
     const QTransform toView = object.transform * documentToView;
+    const bool onPath = layout().isOnPath();
+    // On a path, a flat point warps along it; otherwise it stays exactly where it was.
+    const auto warped = [&](QPointF local, int line) { return toView.map(onPath ? layout().warp(local, line) : local); };
     const double ascent = layout().ascent(), descent = layout().descent();
     if (hasSelection()) {
         QColor tint = accent;
@@ -372,12 +376,28 @@ void InlineTextEditor::draw(QPainter &painter, const QTransform &documentToView,
             const double y = baseline(int(line));
             // A selected line break shows as a sliver past the line's end.
             const double past = end < to && all[line].lastInParagraph ? object.text.size / 4 : 0;
-            QPainterPath band;
-            band.addRect(QRectF(QPointF(layout().xAt(start, int(line)), y - ascent), QPointF(layout().xAt(end, int(line)) + past, y + descent)));
-            painter.fillPath(toView.map(band), tint);
+            const double left = layout().xAt(start, int(line)), right = layout().xAt(end, int(line)) + past;
+            if (!onPath) {
+                QPainterPath band;
+                band.addRect(QRectF(QPointF(left, y - ascent), QPointF(right, y + descent)));
+                painter.fillPath(toView.map(band), tint);
+                continue;
+            }
+            // A polygon sampled along the path, since a straight band would cut the curve.
+            QPolygonF band;
+            constexpr int samples = 16;
+            for (int step = 0; step <= samples; ++step)
+                band << warped(QPointF(left + (right - left) * step / samples, -ascent), int(line));
+            for (int step = samples; step >= 0; --step)
+                band << warped(QPointF(left + (right - left) * step / samples, descent), int(line));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(tint);
+            painter.drawPolygon(band);
+            painter.setBrush(Qt::NoBrush);
         }
     }
     QRectF caretBox = caretRect();
+    int caretLine = lineOf(caret);
     if (!preedit.isEmpty()) {
         // The preedit sits at the caret, underlined, until it commits; what follows moves along.
         InlineTextEditor shown(displayObject());
@@ -389,12 +409,13 @@ void InlineTextEditor::draw(QPainter &painter, const QTransform &documentToView,
             painter.fillPath(toView.map(shown.object.text.outline()), accent);
         }
         painter.setPen(QPen(accent, 1));
-        painter.drawLine(toView.map(QPointF(caretBox.left(), underline)), toView.map(QPointF(end, underline)));
+        painter.drawLine(warped(QPointF(caretBox.left(), underline), caretLine), warped(QPointF(end, underline), caretLine));
         caretBox = shown.caretRect();
+        caretLine = shown.lineOf(shown.caret);
     }
     if (caretShown && !hasSelection()) {
         painter.setPen(QPen(accent, 1.5));
-        painter.drawLine(toView.map(caretBox.topLeft()), toView.map(caretBox.bottomLeft()));
+        painter.drawLine(warped(caretBox.topLeft(), caretLine), warped(caretBox.bottomLeft(), caretLine));
     }
     painter.restore();
 }

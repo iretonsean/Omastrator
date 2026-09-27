@@ -1,0 +1,7 @@
+#pragma once
+// Generated from third_party/hyph-utf8 by CMake; edit those files instead.
+// hyph-en-us: Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken. See third_party/hyph-utf8/LICENSE.
+namespace OmastratorHyphenation {
+inline constexpr const char patterns[] = R"omahyphpat(@HYPHEN_PATTERNS@)omahyphpat";
+inline constexpr const char exceptions[] = R"omahyphexc(@HYPHEN_EXCEPTIONS@)omahyphexc";
+}

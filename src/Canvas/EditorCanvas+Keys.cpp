@@ -85,7 +85,9 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         }
         return plain;
     case Qt::Key_Escape:
-        if (drag && drag->kind != DragKind::pen) {
+        if (linkArmedFrom) {
+            linkArmedFrom.reset();
+        } else if (drag && drag->kind != DragKind::pen) {
             cancelDrag();
         } else if (pen) {
             finishPen();
@@ -121,6 +123,11 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
     // Shift-M: Shape Builder, as in Illustrator.
     if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_M) {
         session.selectTool(Tool::shapeBuilder);
+        return true;
+    }
+    // Shift-T: Type on a Path.
+    if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_T) {
+        session.selectTool(Tool::typeOnPath);
         return true;
     }
     if (plain && !shift && !event->isAutoRepeat()) {

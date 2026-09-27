@@ -70,6 +70,22 @@ void type(QPainter &painter)
     painter.drawLine(QPointF(6.8, 15), QPointF(11.2, 15));
 }
 
+// A "T" sitting on the arc it follows.
+void typeOnPath(QPainter &painter)
+{
+    QPainterPath arc;
+    arc.moveTo(QPointF(2.5, 14.5));
+    arc.arcTo(QRectF(2.5, 2.5, 13, 13), 200, 130);
+    QPen pen = painter.pen();
+    pen.setWidthF(1.2);
+    painter.setPen(pen);
+    painter.drawPath(arc);
+    pen.setWidthF(1.6);
+    painter.setPen(pen);
+    painter.drawLine(QPointF(7.4, 5.6), QPointF(11.8, 4.4));
+    painter.drawLine(QPointF(9.6, 5), QPointF(10.3, 8.6));
+}
+
 // A regular polygon or star about the square's centre.
 QPolygonF ring(int corners, double outer, double inner)
 {
@@ -190,6 +206,7 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::pen: pen(painter); break;
     case Tool::pencil: pencil(painter); break;
     case Tool::text: type(painter); break;
+    case Tool::typeOnPath: typeOnPath(painter); break;
     case Tool::line: painter.drawLine(QPointF(3, 15), QPointF(15, 3)); break;
     case Tool::rectangle: painter.drawRect(QRectF(2.5, 4.5, 13, 9)); break;
     case Tool::roundedRectangle: painter.drawRoundedRect(QRectF(2.5, 4.5, 13, 9), 3.5, 3.5); break;
