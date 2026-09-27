@@ -32,6 +32,24 @@ struct AgentWork {
         QString command;
     };
     QString prompt(const Brief &brief) const;
-    // Hand to agent: a redesign mockup (PNG and SVG) for an app whose source is this project.
-    QString handoffPrompt(const QString &instruction, const QString &png, const QString &svg, const QString &command) const;
+    // Hand to Agent (docs/ANYWHERE.md): a mockup from any surface, for an app whose source is this project.
+    struct Package {
+        QString instruction;
+        // What it came from: "example.com/pricing", "foot", "the document in front".
+        QString source;
+        QString url;
+        // The mockup as a picture and as vectors; the SVG may be empty.
+        QString png;
+        QString svg;
+        // The surface as it is now, and before a site's edits, when there's one.
+        QString screenshot;
+        QString original;
+        // selectors.json: each lifted shape's source element and where it sits.
+        QString selectors;
+        // A site's edits as CSS, and the same as a before → after list.
+        QString css;
+        QString diff;
+        QString command;
+    };
+    QString handoffPrompt(const Package &package) const;
 };

@@ -252,16 +252,24 @@ QDialog *live(AgentBridge &bridge, QWidget *window)
 
 QDialog *handoff(AgentBridge &bridge, QWidget *window)
 {
+    return handoffFrom(window, QStringLiteral("the document in front"), QString(),
+                       [&bridge](const QString &folder, const QString &notes) { return bridge.handToAgent(folder, notes); });
+}
+
+QDialog *handoffFrom(QWidget *window, const QString &what, const QString &given,
+                     const std::function<QString(const QString &folder, const QString &notes)> &run)
+{
     QFormLayout *form = nullptr;
     QLabel *error = nullptr;
     QDialog *dialog = sheet(window, QStringLiteral("handoffSheet"), QStringLiteral("Hand to Agent"), form, error);
-    auto *intro = new QLabel(QStringLiteral("Your agent changes the app's source to match the document in front, on a git branch of its "
-                                            "own. Its change is written into the source, and Review changes shows the diff."),
+    auto *intro = new QLabel(QStringLiteral("Your agent changes the app's source to match %1, on a git branch of its "
+                                            "own. Its change is written into the source, and Review changes shows the diff.")
+                                 .arg(what.toHtmlEscaped()),
                              dialog);
     intro->setWordWrap(true);
     form->addRow(intro);
     auto *row = new QHBoxLayout;
-    auto *folder = new QLineEdit(dialog);
+    auto *folder = new QLineEdit(given, dialog);
     folder->setObjectName(QStringLiteral("handoffFolder"));
     folder->setPlaceholderText(QStringLiteral("The app's source folder"));
     auto *choose = new QPushButton(QStringLiteral("Choose…"), dialog);
@@ -276,8 +284,7 @@ QDialog *handoff(AgentBridge &bridge, QWidget *window)
     QPlainTextEdit *field = prompt(dialog, QStringLiteral("handoffPrompt"), QStringLiteral("Anything the agent should know, such as which screen this is"),
                                    QString());
     form->addRow(QStringLiteral("Notes:"), field);
-    finish(dialog, form, error, QStringLiteral("Hand to Agent"),
-           [&bridge, folder, field] { return bridge.handToAgent(folder->text().trimmed(), field->toPlainText().trimmed()); });
+    finish(dialog, form, error, QStringLiteral("Hand to Agent"), [run, folder, field] { return run(folder->text().trimmed(), field->toPlainText().trimmed()); });
     return dialog;
 }
 

@@ -257,8 +257,8 @@ Omastrator also works outside its window, through Omarchy's own shell
   then change its text, colour, spacing, size, type or radius from a bar beside
   it. Values snap to the project's own tokens: its Tailwind theme, its CSS
   custom properties, then your Omarchy colours. Pages whose code isn't on this
-  machine work as mock-ups. **Deploy** is the one button: it writes the
-  changes into the code (the ones it can be sure of directly, the rest through
+  machine keep their edits on this machine (see "Sites that aren't yours"
+  below). **Deploy** is the one button: it writes the changes into the code (the ones it can be sure of directly, the rest through
   your agent on a branch of its own), commits them, pushes, and deploys to
   production with the project's own setup: a remembered command, a `deploy`
   script, the Vercel, Netlify, Cloudflare or Fly CLI, a Makefile or
@@ -321,7 +321,23 @@ Clicks go straight through it to your apps.
 - **Where work goes** is your choice each time, and it's remembered per
   surface: keep it on the overlay, send it to the Desk, open it as a document,
   or hand it to the agent. Pages with their code on this machine can also take
-  it into the source.
+  it into the source: lifted text, colours, radii, sizes and padding you
+  changed on the overlay go back as page edits, then into the code the way
+  Live's edits do.
+- **Sites that aren't yours** take the same Live tools in Omastrator's browser
+  as real DOM and CSS edits, snapped to the site's own CSS variables. The page
+  and the Live panel say "Not your site: changes stay on this machine", and
+  there's no Deploy. **Keep Edits** saves them as a named edit set for that
+  site, which comes back every time you open it in Omastrator and can be
+  switched off and on. **Export CSS…** writes them as a style sheet or a
+  userstyle (Stylus), in the site's variables where they snapped to one.
+  **Before and After to Desk** lifts the page without its edits and with them,
+  as two frames in one undo step.
+- **Hand to Agent…** is on the bar for a page, a window and your art. Your
+  agent gets the mock-up (a picture and SVG), which element or widget each
+  lifted shape came from, a page's edits as CSS, and screenshots, and works in
+  a git branch of your app's source folder. Its change waits under Review
+  changes. The folder is remembered for next time.
 - **The Desk** (Super+Alt+W, the island, or the launcher's "The Desk") is one
   canvas for everything sent from any surface. Each frame is labelled with its
   source and time. It opens on its own Hyprland workspace, or as a normal

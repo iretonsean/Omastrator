@@ -129,40 +129,12 @@ QString AgentBridge::handToAgent(const QString &folder, const QString &instructi
     EditorSession *front = session();
     if (!front || !front->hasDocument())
         return QStringLiteral("Open the mockup in Omastrator first: the agent works from the document in front.");
-    if (!QFileInfo(folder).isDir())
-        return QStringLiteral("Choose the folder with the app's source.");
-    QString error;
-    const QString agent = AgentLauncher::defaultAgent(&error);
-    if (agent.isEmpty())
-        return error;
-    const QString project = QFileInfo(folder).canonicalFilePath();
-    AgentWork work{project, {}, {}, requestId(), true};
-    if (const QString failure = work.prepare(); !failure.isEmpty())
-        return failure;
-    // The mockup as the agent sees it, and as vectors to measure from.
-    const QString stem = QDir::temp().filePath(QStringLiteral("omastrator-handoff-%1").arg(work.requestId));
-    try {
-        m_tools.call(QStringLiteral("render"), {{"path", stem + QStringLiteral(".png")}, {"scale", 2}});
-        m_tools.call(QStringLiteral("export"), {{"path", stem + QStringLiteral(".svg")}, {"format", "svg"}});
-    } catch (const AgentProtocol::Error &failure) {
-        work.cleanup();
-        return failure.message();
-    }
-    error = launchProject(work.requestId, work.worktree, QStringLiteral("handoff"),
-                          work.handoffPrompt(instruction, stem + QStringLiteral(".png"), stem + QStringLiteral(".svg"),
-                                             Setup::shellQuote(QCoreApplication::applicationFilePath())));
-    if (!error.isEmpty()) {
-        work.cleanup();
-        return error;
-    }
-    m_liveJobs[work.requestId] = work;
-    m_lastProject = project;
-    m_waiting = Waiting{work.requestId, Task::live, agent};
-    m_liveMessage.clear();
-    m_liveLog.clear();
-    emit waitingChanged();
-    emit liveReviewChanged();
-    return {};
+    HandOff handOff;
+    handOff.folder = folder;
+    handOff.instruction = instruction;
+    handOff.source = QStringLiteral("the document in front");
+    handOff.art = *front->document();
+    return this->handOff(handOff);
 }
 
 QString AgentBridge::liveAgentDone(const QString &id, const QString &summary)
@@ -277,6 +249,14 @@ QString AgentBridge::live(const QString &action, const QJsonObject &params, QJso
         }
         return startLive(params["url"].toString().isEmpty() ? QUrl() : url, folder, command, params["app"].toBool());
     }
+    // A site that isn't yours: its edit sets, Before and After, and Hand to Agent with the page.
+    static const QHash<QString, QString> siteActions{{"editSets", "list"},     {"keepEdits", "keep"},     {"toggleEdits", "toggle"},
+                                                     {"removeEdits", "remove"}, {"exportEdits", "export"}, {"beforeAfter", "beforeAfter"},
+                                                     {"original", "original"}};
+    if (siteActions.contains(action))
+        return siteAction(siteActions.value(action), params, result);
+    if (action == QLatin1String("handoff") && params["page"].toBool())
+        return siteAction(QStringLiteral("handoff"), params, result);
     if (action == QLatin1String("handoff")) {
         if (params["folder"].toString().isEmpty()) {
             forward();

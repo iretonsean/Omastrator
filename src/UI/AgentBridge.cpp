@@ -111,6 +111,15 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
         if (const QString failure = liveAsk(prompt, elements); !failure.isEmpty())
             m_live.notice(failure);
     });
+    // The "Not your site" strip in the page; queued, so a dialog it opens never runs inside the DevTools reply.
+    connect(
+        &m_live, &LiveSession::siteRequested, this,
+        [this](const QString &action, const QJsonObject &params) {
+            QJsonObject result;
+            if (const QString failure = siteAction(action, params, result); !failure.isEmpty())
+                m_live.notice(failure);
+        },
+        Qt::QueuedConnection);
     connect(&m_workspace, &ProjectWorkspace::changed, this, &AgentBridge::watchFront);
     watchFront();
     // The elapsed time ticks only while something is waited on, whoever started it.

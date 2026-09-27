@@ -33,18 +33,18 @@ private slots:
 
     void eachSurfaceKindHasItsLikeliestActions()
     {
-        QCOMPARE(ids(Bar::actions(QStringLiteral("web"))), (QStringList{"inspect", "lift", "mockup", "measure", "extractSystem"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("web"))), (QStringList{"inspect", "lift", "mockup", "measure", "extractSystem", "handToAgent"}));
         // Lift is on, for pages and windows alike.
         const QJsonObject lift = Bar::actions(QStringLiteral("web"))[1].toObject();
         QCOMPARE(lift["enabled"].toBool(true), true);
         QCOMPARE(lift["label"].toString(), QStringLiteral("Lift"));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("window"))), (QStringList{"capture", "lift", "measure", "gapsAndBorders", "restyleApp"}));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("browser"))), (QStringList{"capture", "lift", "measure", "gapsAndBorders", "restyleApp", "openInBrowser"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("window"))), (QStringList{"capture", "lift", "measure", "gapsAndBorders", "restyleApp", "handToAgent"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("browser"))), (QStringList{"capture", "lift", "measure", "gapsAndBorders", "restyleApp", "handToAgent", "openInBrowser"}));
         QCOMPARE(ids(Bar::actions(QStringLiteral("desktop"))), (QStringList{"capture", "measure", "desktopLook"}));
         QCOMPARE(ids(Bar::actions(QStringLiteral("shellBar"))), (QStringList{"barLook", "desktopLook", "capture", "measure"}));
         // Art on the overlay: the in-app task bar's actions for that kind of selection.
-        QCOMPARE(ids(Bar::actions(QStringLiteral("art:paths"))), (QStringList{"unite", "group", "makeComponent", "designSystem", "duplicate", "delete", "undo"}));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("art:group"))), (QStringList{"ungroup", "makeComponent", "designSystem", "duplicate", "delete", "undo"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("art:paths"))), (QStringList{"unite", "group", "makeComponent", "designSystem", "handToAgent", "duplicate", "delete", "undo"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("art:group"))), (QStringList{"ungroup", "makeComponent", "designSystem", "handToAgent", "duplicate", "delete", "undo"}));
         QCOMPARE(ids(Bar::actions(QStringLiteral("art:text:point"))).first(), QStringLiteral("createOutlines"));
         QCOMPARE(ids(Bar::actions(QStringLiteral("art:clipGroup"))).first(), QStringLiteral("releaseClippingMask"));
         QVERIFY(Bar::actions(QStringLiteral("nothing")).isEmpty());

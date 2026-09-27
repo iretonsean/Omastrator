@@ -18,6 +18,8 @@ public:
 private:
     void rebuild();
     void report(const QString &failure);
+    // A site that isn't yours: its edit sets, each toggleable, and what can be done with them.
+    void addSite(QVBoxLayout *column);
 
     AgentBridge &m_bridge;
     QVBoxLayout *const m_outer;

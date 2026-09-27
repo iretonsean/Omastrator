@@ -1,6 +1,7 @@
 #pragma once
 #include <QDialog>
 #include <QString>
+#include <functional>
 
 class AgentBridge;
 
@@ -20,6 +21,10 @@ QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder = QS
 QDialog *deployLog(QWidget *window, const QString &path);
 // File ▸ Hand to Agent…: the document in front as a mockup, for an app whose source is in a folder.
 QDialog *handoff(AgentBridge &bridge, QWidget *window);
+// Hand to Agent… from a surface (docs/ANYWHERE.md): `what` names it; `folder` is offered first; `run` starts it with the
+// folder and the notes, and returns why it couldn't.
+QDialog *handoffFrom(QWidget *window, const QString &what, const QString &folder,
+                     const std::function<QString(const QString &folder, const QString &notes)> &run);
 // Help ▸ Connect an Agent…
 QDialog *connectAgent(AgentBridge &bridge, QWidget *window);
 // The text Connect an Agent shows.
