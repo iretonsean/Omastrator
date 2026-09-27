@@ -193,7 +193,10 @@ void CloudBrowser::navigate(const CloudLocation &target)
     m_entries->clear();
     m_status->setText(QStringLiteral("Loading…"));
     m_choose->setEnabled(saving(m_mode));
-    m_listing = m_storage.list(target, [this, target](const QList<CloudEntry> &entries, const QString &error) {
+    // The job outlives a closed browser and still reports, cancelled.
+    m_listing = m_storage.list(target, [this, browser = QPointer<CloudBrowser>(this), target](const QList<CloudEntry> &entries, const QString &error) {
+        if (!browser)
+            return;
         m_listing = nullptr;
         if (!m_folder || !(*m_folder == target))
             return;

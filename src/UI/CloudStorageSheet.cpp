@@ -423,7 +423,10 @@ void CloudStorageSheet::connectRemote()
     m_cancelling = false;
     wait(QStringLiteral("Connecting to %1…").arg(m_provider.type.isEmpty() ? type : m_provider.name));
     // "Other" asks every basic question, since there's no form for it.
-    m_job = m_storage.createRemote(name, type, options, m_provider.type.isEmpty(), [this](const CloudConfigStep &step) { handle(step); });
+    m_job = m_storage.createRemote(name, type, options, m_provider.type.isEmpty(), [sheet = QPointer<CloudStorageSheet>(this)](const CloudConfigStep &step) {
+        if (sheet)
+            sheet->handle(step);
+    });
 }
 
 void CloudStorageSheet::handle(const CloudConfigStep &step)
@@ -450,7 +453,10 @@ void CloudStorageSheet::handle(const CloudConfigStep &step)
     // "Use the browser?" is always yes here: it opens the provider's sign-in page.
     if (step.question->name == QLatin1String("config_is_local")) {
         wait(QStringLiteral("Sign in to %1 in your browser. rclone keeps the sign-in; Omastrator never sees it.").arg(m_provider.name));
-        m_job = m_storage.answer(m_connecting, step.question->state, QStringLiteral("true"), [this](const CloudConfigStep &next) { handle(next); });
+        m_job = m_storage.answer(m_connecting, step.question->state, QStringLiteral("true"), [sheet = QPointer<CloudStorageSheet>(this)](const CloudConfigStep &next) {
+            if (sheet)
+                sheet->handle(next);
+        });
         return;
     }
     ask(*step.question);
@@ -499,7 +505,10 @@ void CloudStorageSheet::answerQuestion()
     }
     m_answer->clear();
     wait(QStringLiteral("Connecting to %1…").arg(m_provider.type.isEmpty() ? QStringLiteral("the service") : m_provider.name));
-    m_job = m_storage.answer(m_connecting, m_question.state, value, [this](const CloudConfigStep &step) { handle(step); });
+    m_job = m_storage.answer(m_connecting, m_question.state, value, [sheet = QPointer<CloudStorageSheet>(this)](const CloudConfigStep &step) {
+        if (sheet)
+            sheet->handle(step);
+    });
 }
 
 void CloudStorageSheet::wait(const QString &text)
