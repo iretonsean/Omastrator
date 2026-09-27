@@ -17,7 +17,9 @@ Each folder builds as its own static library:
   through.
 - `src/IO` → `oma_io`. `ProjectStore` (`.omai`), `SvgImporter` (vendored
   nanosvg in `third_party/`), `SvgExporter`, `DocumentExporter` (PDF, PNG,
-  JPEG) and `ImageImporter`. Errors are thrown as `FileError`.
+  JPEG), `ImageImporter` and `ScreenExport` (Export for Screens: artboards and
+  export assets, a batch of scales and formats). Errors are thrown as
+  `FileError`.
 - `src/Cloud` → `oma_cloud`. Cloud storage through rclone
   (docs/CLOUD-STORAGE.md): `CloudStorage` runs it, `CloudLocation` is
   `remote:path` plus the cache, `CloudUploader` uploads in the background with
