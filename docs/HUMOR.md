@@ -67,6 +67,11 @@ someone sees it.
 - First use of Comic Sans or Papyrus: Bold choice. It's legal, technically.
 - The logo is scaled up 3 times in a row: The client will be thrilled.
 
+**Live mode errors** (the plain sentence first, as always)
+- The page returned 403 Forbidden. The site said what the client was too polite
+  to.
+- The dev server stopped. It saw the diff.
+
 **Tips**
 - Hold Shift while you drag to keep proportions. Or don't, and give the client
   the stretched look they secretly asked for.
@@ -94,6 +99,10 @@ the arrow keys:
      Congratulations, you designed every crypto startup that rugged its users in
      2022." A line that only describes the flaw fails. The agent instructions
      carry a few benchmark lines like that one, which the agent must never reuse.
+   - *Structures from real roasts:* "The only difference between this and…",
+     "seen more trauma than…", "or, as I like to call them…", an escalating
+     chain, the fake-out, and error codes as verdicts ("This layout returns a
+     403: even the browser won't let anyone see it").
    - *Dark humour:* morbid turns (death, funerals, obituaries, crime scenes,
      hospice, last rites) aimed at the work and the career. Never suicide,
      self-harm, real tragedies or the person's illness.
