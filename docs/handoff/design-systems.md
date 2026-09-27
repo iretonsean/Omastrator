@@ -29,7 +29,7 @@ Branch `worktree-agent-a9d2d6b27bac641c1`. The design and every decision are in
 - [x] UI: Window ▸ Design System (Tokens / Components / Sources), Object ▸
   Components (Ctrl+Alt+K, Ctrl+Alt+B), a Component section in Properties
   (variant menus, Reset, Detach), Ctrl+K (Apply Token, Place Component, Swap
-  Variant), the in-app task bar (Make Component / Detach on groups), and the
+  Variant), the in-app task bar (Detach on an instance), and the
   floating bar (Extract Design System on pages; Make Component and Design
   System on art).
 - [x] Tests: `DesignSystemTests` (model), `DesignSourcesTests` (formats on

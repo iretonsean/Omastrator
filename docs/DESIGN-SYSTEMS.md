@@ -14,8 +14,9 @@ pull follows the author's confirmation rule.
   Instance (Ctrl+Alt+B), Reset Overrides and Select Main Component.
 - **Ctrl+K** lists "Apply Token: …" for every token, "Place Component: …" for
   every component, and "Swap Variant: size = lg" for the selected instance.
-- **The in-app task bar** offers Make Component on a group, and Detach on an
-  instance.
+- **Properties** shows a Component section for an instance (a menu per
+  variant property, Reset and Detach) or a component (its instance count).
+- **The in-app task bar** offers Detach on an instance.
 - **The floating bar** (design mode) offers Extract Design System on a page in
   Omastrator's browser, and Make Component and Design System on art.
 
