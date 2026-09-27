@@ -30,6 +30,12 @@ Each folder builds as its own static library:
   touching the user's shell, run a throwaway `quickshell -p` config that loads
   the plugin, with `OMASTRATOR_SOCKET` and `OMASTRATOR_RUNTIME_DIR` pointed at a
   temporary folder.
+- `src/Live` → `oma_live`. Live web editing (docs/OS-SUITE.md): an in-tree
+  WebSocket client and the DevTools Protocol (`WebSocket`, `Cdp`), Chromium in
+  Omastrator's own profile (`Browser`), dev servers and a static server,
+  `ProjectRegistry`, `TokenSet` snapping, and `LiveSession`. The page overlay
+  is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
+  tests run the fixtures in `tests/Live/fixtures` and skip without Chromium.
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides` and
   `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,

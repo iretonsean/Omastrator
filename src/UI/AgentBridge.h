@@ -4,6 +4,7 @@
 #include "Agent/AgentServer.h"
 #include "Agent/AgentTools.h"
 #include "Document/Swatches.h"
+#include "Live/LiveSession.h"
 #include "UI/FloatingPanel.h"
 #include <QObject>
 #include <QPointer>
@@ -90,6 +91,11 @@ public:
     QString showNewDocument() override;
     QString showPanel(const QString &panel) override;
     QString startAi(const AiRequest &request) override;
+    QString live(const QString &action, const QJsonObject &params, QJsonObject &result) override;
+
+    // Live mode: a page or project in Omastrator's Chromium. $OMASTRATOR_LIVE_HEADLESS runs it headless, for tests.
+    LiveSession &liveSession() { return m_live; }
+    QString startLive(const QUrl &url, const QString &folder);
     // Vectorize with AI on the last screenshot Capture traced.
     QString vectorizeCapture(AgentLauncher::TraceMode mode);
 
@@ -132,6 +138,7 @@ private:
     QPointer<QWidget> m_variationsContent;
     QPointer<QWidget> m_roastContent;
     Swatches m_swatches;
+    LiveSession m_live;
     FloatingPanel m_swatchesPanel{QStringLiteral("swatchesPanel"), m_window};
     QPointer<QWidget> m_swatchesContent;
 };

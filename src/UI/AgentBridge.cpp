@@ -6,6 +6,7 @@
 #include "UI/ProjectWorkspace.h"
 #include "UI/SwatchesPanel.h"
 #include <QJsonArray>
+#include <QJsonDocument>
 
 namespace {
 QString newRequestId()
@@ -36,6 +37,7 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
     for (auto signal : {&AgentBridge::proposalChanged, &AgentBridge::waitingChanged, &AgentBridge::variationsChanged,
                         &AgentBridge::roastChanged})
         connect(this, signal, &m_server, &AgentServer::statusMayHaveChanged);
+    connect(&m_live, &LiveSession::changed, &m_server, &AgentServer::statusMayHaveChanged);
     connect(&m_workspace, &ProjectWorkspace::changed, this, &AgentBridge::watchFront);
     watchFront();
 }
@@ -54,7 +56,8 @@ QJsonObject AgentBridge::statusExtras()
                        {"task", m_waiting ? tasks.value(int(m_waiting->task)) : QString()},
                        {"agent", m_waiting ? displayName(m_waiting->agent) : QString()},
                        {"ready", m_tools.hasProposal() || m_resultsUnseen},
-                       {"roastId", m_roast ? m_roast->requestId : QString()}};
+                       {"roastId", m_roast ? m_roast->requestId : QString()},
+                       {"live", m_live.status()}};
     // The newest round that has come back.
     for (auto round = m_rounds.rbegin(); round != m_rounds.rend(); ++round) {
         if (!round->variations.empty()) {
@@ -388,6 +391,71 @@ QString AgentBridge::startAi(const AiRequest &request)
         return QStringLiteral("Select one placed image, or take a screenshot in Capture mode first.");
     }
     return QStringLiteral("There is no AI flow “%1”.").arg(request.flow);
+}
+
+QString AgentBridge::startLive(const QUrl &url, const QString &folder)
+{
+    LiveSession::Target target;
+    target.url = url;
+    target.folder = folder;
+    target.headless = qEnvironmentVariableIsSet("OMASTRATOR_LIVE_HEADLESS");
+    return m_live.start(target);
+}
+
+QString AgentBridge::live(const QString &action, const QJsonObject &params, QJsonObject &result)
+{
+    if (action == QLatin1String("start")) {
+        const QUrl url = QUrl::fromUserInput(params["url"].toString());
+        const QString folder = params["folder"].toString();
+        if (params["url"].toString().isEmpty() && folder.isEmpty()) {
+            m_window.raise();
+            m_window.activateWindow();
+            QMetaObject::invokeMethod(this, [this] { AgentSheets::live(*this, &m_window); }, Qt::QueuedConnection);
+            result["sheet"] = true;
+            return {};
+        }
+        return startLive(params["url"].toString().isEmpty() ? QUrl() : url, folder);
+    }
+    if (action == QLatin1String("stop")) {
+        m_live.stop();
+        return {};
+    }
+    if (action == QLatin1String("status")) {
+        result = m_live.status();
+        QJsonArray edits;
+        for (const LiveEdit &edit : m_live.edits())
+            edits.append(edit.toJson());
+        result["editList"] = edits;
+        result["selectionList"] = m_live.selection();
+        return {};
+    }
+    if (m_live.state() != LiveSession::State::running)
+        return QStringLiteral("Live isn't running. Start it from the island's Live mode.");
+    if (action == QLatin1String("select") && params.contains("selector")) {
+        QString error;
+        const QJsonValue found = m_live.evaluate(QStringLiteral("window.__oma.select(%1, %2)")
+                                                     .arg(QString::fromUtf8(QJsonDocument(QJsonArray{params["selector"]}).toJson(QJsonDocument::Compact)).mid(1).chopped(1),
+                                                          params["add"].toBool() ? QStringLiteral("true") : QStringLiteral("false")),
+                                                 &error);
+        if (error.isEmpty() && found.isNull())
+            return QStringLiteral("Nothing on the page matches %1.").arg(params["selector"].toString());
+        return error;
+    }
+    if (action == QLatin1String("select")) {
+        QString error;
+        m_live.evaluate(QStringLiteral("window.__oma.enable(%1)").arg(params["on"].toBool(true) ? QStringLiteral("true") : QStringLiteral("false")), &error);
+        return error;
+    }
+    if (action == QLatin1String("edit"))
+        return m_live.edit(params["selector"].toString(), params["property"].toString(), params["value"].toString());
+    if (action == QLatin1String("screenshot")) {
+        const QString path = params["path"].toString();
+        if (path.isEmpty())
+            return QStringLiteral("Say where to write the screenshot with “path”.");
+        result["path"] = path;
+        return m_live.screenshot(path, params["selector"].toString());
+    }
+    return QStringLiteral("There is no Live action “%1”.").arg(action);
 }
 
 QString AgentBridge::vectorizeCapture(AgentLauncher::TraceMode mode)

@@ -396,3 +396,57 @@ Choices the spec left open, made while building it, in build order.
   nothing to roast) puts its plain reason on the island's activity line.
 - **Keys.** The AI submap takes G, E, R and V, each handing the keyboard back.
   The menu gains Generate… and Roast My Design.
+
+### Phase 5: Live web editing
+
+- **Where it runs.** The Live session lives in the app process (the bridge
+  owns one `LiveSession`), so its state reaches the island through the same
+  status stream (`live: {state, url, project, mockup, edits, selection,
+  message, server}`), and one process owns the browser, the dev server and the
+  recorded edits. The island's Live row opens the Live sheet (a page, and which
+  folder its code is in), toggles selecting, and stops.
+- **The browser.** Chromium (else Chrome) with
+  `--user-data-dir=$XDG_DATA_HOME/omastrator/browser`,
+  `--remote-debugging-port=0` and `--remote-debugging-address=127.0.0.1`; the
+  port comes from `DevToolsActivePort`. It is a normal window for the user and
+  headless in tests. Closing it ends Live.
+- **DevTools client.** `WebSocketClient` implements RFC 6455's client side
+  (masking, 16- and 64-bit lengths, fragments, ping and close) over
+  `QTcpSocket`; `CdpConnection` matches answers to ids and uses flat sessions.
+  Both are tested against a server written in the test from the RFC.
+- **One place snaps.** The overlay never decides a value: it sends the
+  property and raw value to the app, `TokenSet::resolve` snaps it, and the
+  app calls `__oma.applyResolved()`. So the rules are C++ and unit-tested:
+  - Tokens come from the page's CSS custom properties, resolved by the page
+    (colours through a canvas, so `oklch()` works; lengths through a probe).
+    Tailwind v4's theme variables (`--color-*`, `--spacing`, `--text-*`,
+    `--font-weight-*`, `--radius-*`) are Tailwind tokens with their class
+    suffix; `--spacing` gives the whole spacing scale. Other custom properties
+    are CSS tokens. The Omarchy theme's colours come last.
+  - Colours snap to the nearest token within a CIE76 distance of 18, Tailwind
+    first, then CSS, then Omarchy; further away, the colour is kept. Lengths,
+    sizes, weights and radii always snap when a scale exists.
+  - When the element has a Tailwind class for that property (`p-4`,
+    `bg-sky-500`, `text-3xl`; `text-` colour and size told apart), the class is
+    swapped (`p-4` → `p-3`). If the page's CSS lacks the new class (Tailwind
+    compiles only used classes), the value is also set inline until the dev
+    server recompiles.
+  - Tailwind v3 has no theme variables, so its pages snap to their CSS custom
+    properties and Omarchy colours only, and class swaps aren't offered.
+- **Dev servers.** `omastrator.json` (`{"dev": "…", "url": "…"}`) wins, then
+  package.json's `dev` or `start` script run by the lockfile's package
+  manager, then Omastrator's own static server for a folder with
+  `index.html`. The URL is read from the server's output. It runs in its own
+  process group with `BROWSER=none`, and stopping Live stops the group.
+- **Registry and suggestions.** Starting Live with a page and a folder
+  remembers the origin in `projects.json`. Suggestions come from localhost
+  ports (the listening process's working folder, from `/proc`),
+  `package.json` homepage, `.vercel/project.json`, `wrangler.toml`,
+  `netlify.toml`, git remotes and folder names, one or two folders deep in the
+  usual code folders.
+- **Mock-ups.** A page with no folder is a mock-up: edits apply in the browser
+  and are recorded, but write-back is not offered.
+- **Fixtures without the network.** The Vite + Tailwind fixture commits the
+  CSS Tailwind v4 compiles for it, and its `dev` script is a small Node server
+  that prints Vite's banner, so the test exercises detection, `npm run dev`,
+  URL discovery and snapping without installing packages.

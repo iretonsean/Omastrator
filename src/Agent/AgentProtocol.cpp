@@ -185,6 +185,18 @@ constexpr const char *methodTable = R"json([
    "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "Generate's variations. Default 3."},
    "fitToSelection": {"type": "boolean"},
    "mode": {"type": "string", "enum": ["logo", "sketch"], "description": "Vectorize's mode. Default logo."}}}},
+{"name": "live", "group": "desktop", "mcp": false,
+ "description": "Live mode: open a page or project in Omastrator's own Chromium with the editing overlay, and act on it. start with neither url nor folder opens the Live sheet.",
+ "inputSchema": {"type": "object", "required": ["action"], "properties": {
+   "action": {"type": "string", "enum": ["start", "stop", "select", "edit", "status", "screenshot"]},
+   "path": {"type": "string", "description": "screenshot: where to write the PNG."},
+   "url": {"type": "string"},
+   "folder": {"type": "string", "description": "The page's code; with url, the user has confirmed it."},
+   "on": {"type": "boolean", "description": "select without a selector: whether clicks in the page select elements."},
+   "add": {"type": "boolean", "description": "select with a selector: add to the selection, as Shift-click does."},
+   "selector": {"type": "string"},
+   "property": {"type": "string"},
+   "value": {"type": "string"}}}},
 {"name": "paste_svg", "group": "desktop", "mcp": false,
  "description": "The user's paste of SVG from the clipboard: editable paths, grouped and centred, as one undo step. A new document is made when none is open.",
  "inputSchema": {"type": "object", "required": ["svg"], "properties": {

@@ -206,3 +206,19 @@ QJsonObject AgentTools::aiStart(const QJsonObject &params)
         throw Error(AgentProtocol::busy, failure);
     return {{"started", request.flow}};
 }
+
+QJsonObject AgentTools::live(const QJsonObject &params)
+{
+    static const QStringList actions{QStringLiteral("start"), QStringLiteral("stop"), QStringLiteral("select"), QStringLiteral("edit"),
+                                     QStringLiteral("status"), QStringLiteral("screenshot")};
+    const QString action = actions.value(*choice(params, QStringLiteral("action"), actions, true));
+    if (action == QLatin1String("edit")) {
+        requiredString(params, QStringLiteral("selector"));
+        requiredString(params, QStringLiteral("property"));
+        requiredString(params, QStringLiteral("value"));
+    }
+    QJsonObject result;
+    if (const QString failure = m_host.live(action, params, result); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return result;
+}

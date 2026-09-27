@@ -79,6 +79,7 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("new_document"), &AgentTools::newDocument},
         {QStringLiteral("show_panel"), &AgentTools::showPanel},
         {QStringLiteral("ai_start"), &AgentTools::aiStart},
+        {QStringLiteral("live"), &AgentTools::live},
     };
     try {
         if (method == QLatin1String("selection_get"))

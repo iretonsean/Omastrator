@@ -63,4 +63,6 @@ public:
         bool sketch = false;
     };
     virtual QString startAi(const AiRequest &) { return QStringLiteral("This Omastrator can't start AI flows."); }
+    // The `live` method's actions; `result` gets what the action returns. Returns why it failed, or empty.
+    virtual QString live(const QString &action, const QJsonObject &, QJsonObject &) { return QStringLiteral("This Omastrator has no Live mode (%1).").arg(action); }
 };

@@ -6,6 +6,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalSocket>
@@ -183,6 +184,9 @@ QString helpText()
         "     [--fit] [--mode logo|sketch]\n"
         "                     Start an AI flow. Without a prompt, Generate and Edit\n"
         "                     open their sheet in Omastrator.\n"
+        "  live start [--url URL] [--folder PATH] | stop | select on|off | status\n"
+        "                     Live mode: edit a page in Omastrator's Chromium. start\n"
+        "                     with neither option opens the Live sheet.\n"
         "  capture color [fill|stroke|swatch]\n"
         "                     Pick a colour anywhere on screen (hyprpicker).\n"
         "  capture screenshot Choose a region (slurp, grim), open it and trace it.\n"
@@ -305,6 +309,40 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
             return 0;
         } catch (const AgentProtocol::Error &failure) {
             // The island says why, since nobody sees this command's output.
+            setActivity(failure.message(), 6);
+            return failed(failure.message());
+        }
+    }
+    if (verb == QLatin1String("live")) {
+        const QString action = args.value(1);
+        QJsonObject params{{"action", action}};
+        if (action == QLatin1String("start")) {
+            const QStringList options = args.mid(2);
+            for (qsizetype at = 0; at + 1 < options.size(); at += 2) {
+                if (options[at] != QLatin1String("--url") && options[at] != QLatin1String("--folder"))
+                    return failed(QStringLiteral("Unknown option %1.").arg(options[at]));
+                params[options[at].mid(2)] = options[at] == QLatin1String("--folder") ? QFileInfo(options[at + 1]).absoluteFilePath() : options[at + 1];
+            }
+            if (options.size() % 2)
+                return failed(QStringLiteral("%1 needs a value.").arg(options.last()));
+        } else if (action == QLatin1String("select")) {
+            params["on"] = args.value(2) != QLatin1String("off");
+        } else if (action != QLatin1String("stop") && action != QLatin1String("status")) {
+            return failed(QStringLiteral("Choose a Live action: start, stop, select on|off or status."));
+        }
+        if (const QString failure = ensureAppRunning(); !failure.isEmpty()) {
+            setActivity(failure, 6);
+            return failed(failure);
+        }
+        try {
+            AgentClient::Connection connection;
+            const QJsonObject result = connection.call(QStringLiteral("live"), params);
+            if (action == QLatin1String("status"))
+                out << QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Indented));
+            else if (result["sheet"].toBool())
+                setActivity(QStringLiteral("Live is open in Omastrator: choose a page"), 3);
+            return 0;
+        } catch (const AgentProtocol::Error &failure) {
             setActivity(failure.message(), 6);
             return failed(failure.message());
         }

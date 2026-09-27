@@ -1,0 +1,5 @@
+#pragma once
+// Generated from src/Live/overlay.js by CMake; edit that file instead.
+namespace OmastratorLive {
+inline constexpr const char overlay[] = R"oma_overlay(@OVERLAY_SOURCE@)oma_overlay";
+}

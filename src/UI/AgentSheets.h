@@ -12,6 +12,8 @@ QDialog *generate(AgentBridge &bridge, QWidget *window, const QString &prompt = 
 QDialog *editWithInstruction(AgentBridge &bridge, QWidget *window);
 // Object ▸ Image Trace ▸ Vectorize with AI…
 QDialog *vectorize(AgentBridge &bridge, QWidget *window);
+// The island's Live mode: a page, and which folder its code is in (suggested, or none for a mock-up).
+QDialog *live(AgentBridge &bridge, QWidget *window);
 // Help ▸ Connect an Agent…
 QDialog *connectAgent(AgentBridge &bridge, QWidget *window);
 // The text Connect an Agent shows.

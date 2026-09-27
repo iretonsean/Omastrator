@@ -67,6 +67,12 @@ Omastrator also works outside its window, through Omarchy's own shell
   region, pastes clipboard SVG as paths, or loads your theme's colours as
   swatches. *AI* starts Generate…, Edit with Instruction…, Roast My Design and
   Vectorize with AI, and shows when your agent is working.
+- **Live**: open a web page, or a project folder on this machine, in
+  Omastrator's own Chromium. Click an element to select it (Shift-click adds),
+  then change its text, colour, spacing, size, type or radius from a bar beside
+  it. Values snap to the project's own tokens: its Tailwind theme, its CSS
+  custom properties, then your Omarchy colours. Pages whose code isn't on this
+  machine work as mock-ups.
 - **The tray light**: one glyph in the bar that shows when your agent is
   working, when results are ready, or when something went wrong. Click it for
   the island's AI mode.

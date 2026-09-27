@@ -73,7 +73,11 @@ Item {
       { id: "vectorize", tip: "Vectorize with AI: click for Logo & icon, Shift-click for Sketch & line art" },
       { id: "stop", tip: "Stop waiting for the agent", waitingOnly: true }
     ],
-    live: []
+    live: [
+      { id: "live", tip: "Open a page or project in Live", idleOnly: true },
+      { id: "element", tip: "Select elements: click to select, Shift-click to add (click again to browse the page normally)", runningOnly: true },
+      { id: "stop", tip: "Stop Live", runningOnly: true }
+    ]
   })
 
   readonly property var tools: modeTools[mode] || []
@@ -111,8 +115,19 @@ Item {
       flash("Roast ready", 4)
     else if (next.proposal && next.proposal !== prev.proposal)
       flash(next.proposal + " is ready: Enter keeps it, Esc discards it", 4)
+    else if (liveLine(prev.live || {}, next.live || {}))
+      flash(liveLine(prev.live || {}, next.live || {}), 4)
     else if (next.running && !prev.running && root.mode === "draw")
       flash("Omastrator is open", 2)
+  }
+
+  function liveLine(prev, next) {
+    if (next.state === prev.state) return ""
+    if (next.state === "starting") return "Live: " + (next.message || "starting…")
+    if (next.state === "failed") return next.message || "Live couldn't start"
+    if (next.state === "running") return "Live: " + next.url + (next.mockup ? " (mock-up)" : "")
+    if (next.state === "off" && prev.state === "running") return next.message || "Live stopped"
+    return ""
   }
 
   // ------------------------------------------------------------ actions
@@ -143,14 +158,27 @@ Item {
     return ["island", "ai", id]
   }
 
+  property bool selecting: true
+
+  function liveArgs(id) {
+    if (id === "stop") return ["island", "live", "stop"]
+    if (id === "element") { root.selecting = !root.selecting; return ["island", "live", "select", root.selecting ? "on" : "off"] }
+    return ["island", "live", "start"]
+  }
+
   function runAction(item, mouse) {
     if (root.mode === "draw") chooseTool(item.id)
+    else if (root.mode === "live") status.run(liveArgs(item.id))
     else if (item.id === "vectorize" || root.mode === "ai") status.run(aiArgs(item.id, mouse))
     else if (root.mode === "capture") status.run(captureArgs(item.id, mouse))
   }
 
   // Buttons that only make sense now: Stop while an agent works, Vectorize after a traced screenshot.
+  readonly property string liveState: (status.value("live", {}) || {}).state || "off"
+
   function shows(item) {
+    if (item.runningOnly) return root.liveState === "running"
+    if (item.idleOnly) return root.liveState !== "running" && root.liveState !== "starting"
     if (item.waitingOnly) return status.value("waiting", "") !== ""
     if (item.offerOnly) return status.value("offer", "") === "vectorize"
     return true
@@ -322,7 +350,8 @@ Item {
               visible: root.shows(modelData)
               glyph: modelData.icon || modelData.id
               tip: modelData.tip
-              selected: root.mode === "draw" && root.running && root.tool === modelData.id
+              selected: (root.mode === "draw" && root.running && root.tool === modelData.id)
+                        || (root.mode === "live" && modelData.id === "element" && root.selecting)
               dim: modelData.enabled === false
               onClicked: function (mouse) { if (modelData.enabled !== false) root.runAction(modelData, mouse) }
             }

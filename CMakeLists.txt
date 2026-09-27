@@ -44,8 +44,17 @@ target_link_libraries(oma_agent PUBLIC oma_core oma_io Qt6::Network)
 # `omastrator setup` run from a build finds the plugins here; packages install them under share/.
 target_compile_definitions(oma_agent PRIVATE OMASTRATOR_SHELL_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/shell")
 
+# Live web editing: the browser over the DevTools Protocol, dev servers, tokens.
+oma_library(oma_live src/Live/*.cpp)
+target_link_libraries(oma_live PUBLIC oma_agent Qt6::Network)
+# The page overlay is compiled in; editing overlay.js reconfigures.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/overlay.js)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/overlay.js OVERLAY_SOURCE)
+configure_file(cmake/OverlayScript.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/Live/OverlayScript.h @ONLY)
+target_include_directories(oma_live PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
-target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas oma_agent)
+target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas oma_agent oma_live)
 
 include(GNUInstallDirs)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
@@ -101,4 +110,5 @@ oma_tests(oma_core Document)
 oma_tests(oma_io IO)
 oma_tests(oma_canvas Canvas)
 oma_tests(oma_agent Agent)
+oma_tests(oma_live Live)
 oma_tests(oma_ui UI)

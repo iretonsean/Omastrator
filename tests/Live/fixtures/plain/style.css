@@ -1,0 +1,22 @@
+:root {
+  --brand: #e11d48;
+  --ink: #0f172a;
+  --gap: 24px;
+  --radius-card: 12px;
+}
+
+body {
+  margin: 0;
+  font-family: sans-serif;
+  color: var(--ink);
+}
+
+main {
+  padding: var(--gap);
+}
+
+.card {
+  padding: 20px;
+  border-radius: 8px;
+  background: #f1f5f9;
+}

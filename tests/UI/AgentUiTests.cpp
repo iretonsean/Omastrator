@@ -1,5 +1,6 @@
 #include "Agent/AgentProtocol.h"
 #include "Document/PathOperations.h"
+#include "Live/Browser.h"
 #include "UI/AgentPanels.h"
 #include "UI/AgentSheets.h"
 #include "UI/ProjectWorkspaceView.h"
@@ -536,6 +537,44 @@ private slots:
         QVERIFY(prompt().contains(QStringLiteral("Roast My Design")));
         QVERIFY(bridge.roastPanel().isVisible());
         QVERIFY(start({{"flow", "fly"}}).contains(QLatin1String("flow")));
+    }
+
+    void liveRunsInTheAppAndReportsStatus()
+    {
+        if (Browser::executable().isEmpty())
+            QSKIP("Chromium isn't installed.");
+        qputenv("OMASTRATOR_LIVE_HEADLESS", "1");
+        qputenv("XDG_DATA_HOME", m_directory.filePath(QStringLiteral("data")).toUtf8());
+        qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        // With nothing to open, the sheet asks.
+        QVERIFY(bridge.tools().call(QStringLiteral("live"), {{"action", "start"}})["sheet"].toBool());
+        QDialog *sheet = nullptr;
+        QTRY_VERIFY((sheet = shown<QDialog>(QStringLiteral("liveSheet"))));
+        sheet->close();
+
+        bridge.tools().call(QStringLiteral("live"), {{"action", "start"}, {"folder", OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/plain"}});
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.tools().status()["live"].toObject()["state"].toString() != QLatin1String("starting"), 60'000);
+        QCOMPARE(bridge.tools().status()["live"].toObject()["state"].toString(), QStringLiteral("running"));
+        bridge.tools().call(QStringLiteral("live"), {{"action", "edit"}, {"selector", "#title"}, {"property", "color"}, {"value", "#e11d48"}});
+        const QJsonObject status = bridge.tools().call(QStringLiteral("live"), {{"action", "status"}});
+        QCOMPARE(status["edits"].toInt(), 1);
+        QCOMPARE(status["editList"].toArray()[0].toObject()["token"].toString(), QStringLiteral("--brand"));
+        bridge.tools().call(QStringLiteral("live"), {{"action", "select"}, {"on", false}});
+        bridge.tools().call(QStringLiteral("live"), {{"action", "stop"}});
+        QCOMPARE(bridge.tools().status()["live"].toObject()["state"].toString(), QStringLiteral("off"));
+        bool refused = false;
+        try {
+            bridge.tools().call(QStringLiteral("live"), {{"action", "edit"}, {"selector", "#title"}, {"property", "color"}, {"value", "red"}});
+        } catch (const AgentProtocol::Error &failure) {
+            refused = failure.message().contains(QLatin1String("isn't running"));
+        }
+        QVERIFY(refused);
+        qunsetenv("XDG_DATA_HOME");
+        qunsetenv("XDG_CONFIG_HOME");
     }
 };
 

@@ -2,7 +2,12 @@
 #include "Agent/AgentProtocol.h"
 #include "UI/AgentBridge.h"
 #include "UI/KeyboardShortcuts.h"
+#include "Live/Registry.h"
 #include <QCheckBox>
+#include <QComboBox>
+#include <QFileDialog>
+#include <QLineEdit>
+#include <QTimer>
 #include <QDialogButtonBox>
 #include <QFontDatabase>
 #include <QFormLayout>
@@ -143,6 +148,75 @@ QString connectText(const AgentBridge &bridge)
                                              "Roast My Design launch.\n\n").arg(AgentBridge::displayName(agent));
     text += QStringLiteral("Any agent can also use the command line:\n\n") + AgentProtocol::helpText();
     return text;
+}
+
+QDialog *live(AgentBridge &bridge, QWidget *window)
+{
+    QFormLayout *form = nullptr;
+    QLabel *error = nullptr;
+    QDialog *dialog = sheet(window, QStringLiteral("liveSheet"), QStringLiteral("Live"), form, error);
+    auto *intro = new QLabel(QStringLiteral("Open a page in Omastrator's own Chromium to edit it live. Changes are "
+                                            "written back only to a project folder you confirm here."),
+                             dialog);
+    intro->setWordWrap(true);
+    form->addRow(intro);
+    auto *url = new QLineEdit(dialog);
+    url->setObjectName(QStringLiteral("liveUrl"));
+    url->setPlaceholderText(QStringLiteral("https://your-site.com, or leave empty to run a project folder"));
+    form->addRow(QStringLiteral("Page:"), url);
+    auto *folder = new QComboBox(dialog);
+    folder->setObjectName(QStringLiteral("liveFolder"));
+    form->addRow(QStringLiteral("Its code:"), folder);
+    auto *reason = new QLabel(dialog);
+    reason->setObjectName(QStringLiteral("liveReason"));
+    reason->setWordWrap(true);
+    form->addRow(QString(), reason);
+    const QString choose = QStringLiteral("choose");
+    // The folder list follows the address: registered first, then suggestions, then a mock-up.
+    auto refresh = [url, folder, reason, choose] {
+        const QString chosen = folder->currentData().toString();
+        folder->clear();
+        const QString text = url->text().trimmed();
+        const QUrl page = QUrl::fromUserInput(text);
+        if (!text.isEmpty()) {
+            if (const auto registered = ProjectRegistry::folderFor(page))
+                folder->addItem(QStringLiteral("%1 (registered)").arg(*registered), *registered);
+            for (const auto &suggestion : ProjectRegistry::suggest(page)) {
+                if (folder->findData(suggestion.folder) < 0)
+                    folder->addItem(suggestion.folder, suggestion.folder);
+                folder->setItemData(folder->count() - 1, suggestion.reason, Qt::ToolTipRole);
+            }
+            folder->addItem(QStringLiteral("None: a mock-up, changes stay in the browser"), QString());
+        }
+        folder->addItem(QStringLiteral("Choose a folder…"), choose);
+        if (const int again = folder->findData(chosen); again >= 0 && !chosen.isEmpty() && chosen != choose)
+            folder->setCurrentIndex(again);
+        reason->setText(folder->currentData(Qt::ToolTipRole).toString());
+    };
+    auto *debounce = new QTimer(dialog);
+    debounce->setSingleShot(true);
+    debounce->setInterval(400);
+    QObject::connect(debounce, &QTimer::timeout, dialog, refresh);
+    QObject::connect(url, &QLineEdit::textChanged, debounce, qOverload<>(&QTimer::start));
+    QObject::connect(folder, &QComboBox::activated, dialog, [dialog, folder, reason, choose](int index) {
+        reason->setText(folder->itemData(index, Qt::ToolTipRole).toString());
+        if (folder->itemData(index).toString() != choose)
+            return;
+        const QString picked = QFileDialog::getExistingDirectory(dialog, QStringLiteral("The page's code"), QDir::homePath());
+        if (picked.isEmpty())
+            return;
+        folder->insertItem(0, picked, picked);
+        folder->setCurrentIndex(0);
+    });
+    refresh();
+    finish(dialog, form, error, QStringLiteral("Start Live"), [&bridge, url, folder, choose] {
+        const QString text = url->text().trimmed();
+        const QString code = folder->currentData().toString() == choose ? QString() : folder->currentData().toString();
+        if (text.isEmpty() && code.isEmpty())
+            return QStringLiteral("Enter a page, or choose its project folder.");
+        return bridge.startLive(text.isEmpty() ? QUrl() : QUrl::fromUserInput(text), code);
+    });
+    return dialog;
 }
 
 QDialog *connectAgent(AgentBridge &bridge, QWidget *window)
