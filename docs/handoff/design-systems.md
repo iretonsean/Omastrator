@@ -35,7 +35,7 @@ Branch `worktree-agent-a9d2d6b27bac641c1`. The design and every decision are in
 - [x] Tests: `DesignSystemTests` (model), `DesignSourcesTests` (formats on
   temporary projects, library and themes in a temporary HOME, headless
   Chromium fixture), `DesignSystemUiTests` (dialog blocks writes, git commit
-  on a temporary repo, fake omarchy).
+  on a temporary repo, fake omarchy). Full suite: 80 of 80 pass.
 
 ## Left / next steps
 

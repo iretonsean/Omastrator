@@ -97,21 +97,21 @@ void KeyboardShortcutsSheetTests::aRecordedKeyRemapsItsMenuEntryOnSave()
     QTRY_VERIFY(undo.hasFocus());
     // Save rests while a key is being recorded.
     QVERIFY(!find<QPushButton>(sheet, "saveShortcuts").isEnabled());
-    QTest::keyClick(&undo, Qt::Key_K, Qt::ControlModifier | Qt::AltModifier);
-    QCOMPARE(undo.text(), QString("Ctrl+Alt+K"));
+    QTest::keyClick(&undo, Qt::Key_U, Qt::ControlModifier | Qt::AltModifier);
+    QCOMPARE(undo.text(), QString("Ctrl+Alt+U"));
     // Recording done, the button lets go of the keys.
     QVERIFY(!undo.hasFocus());
     // Nothing applies until Save.
     QCOMPARE(bar.action("undo").shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Z));
     find<QPushButton>(sheet, "saveShortcuts").click();
     QTRY_VERIFY(!shownPanel());
-    QCOMPARE(bar.action("undo").shortcut(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_K));
-    QCOMPARE(ShortcutSettings::shared().overrides().value("Menus:Undo"), ShortcutChord("k", 3));
+    QCOMPARE(bar.action("undo").shortcut(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_U));
+    QCOMPARE(ShortcutSettings::shared().overrides().value("Menus:Undo"), ShortcutChord("u", 3));
     // Another entry keeps its key.
     QCOMPARE(bar.action("fitArtboard").shortcut(), QKeySequence(Qt::CTRL | Qt::Key_0));
     // A new window reads the saved keys too.
     Bar again;
-    QCOMPARE(again.action("undo").shortcut(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_K));
+    QCOMPARE(again.action("undo").shortcut(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_U));
     ShortcutSettings::shared().save({});
     QCOMPARE(bar.action("undo").shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Z));
 }
