@@ -27,6 +27,8 @@ public:
     EditorSession *proposalSession() const;
     // "AI: <title>", as the undo step will be named.
     QString proposalTitle() const;
+    // status_get's answer: never throws, and needs no document.
+    QJsonObject status();
 
 signals:
     // A proposal opened, grew or was renamed.
@@ -69,6 +71,8 @@ private:
     QJsonObject save(const QJsonObject &params);
     QJsonObject exportFile(const QJsonObject &params);
     QJsonObject place(const QJsonObject &params);
+    // Session.
+    QJsonObject selectTool(const QJsonObject &params);
     // Panels.
     QJsonObject showVariations(const QJsonObject &params);
     QJsonObject showRoast(const QJsonObject &params);

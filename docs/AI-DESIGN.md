@@ -99,6 +99,19 @@ UUID strings.
   `ImageTrace`, run in the app. It returns the new objects' ids, and the agent
   cleans them up next.
 
+**Session** (not document edits)
+- `select_tool {tool}`: chooses the canvas tool, with or without a document.
+  Takes the toolbar's names (`select`, `directSelect`, `pen`, …) and a few
+  aliases (`move`, `direct`, `type`).
+- `status_get {}`: the tool, whether a document is open, the proposal title
+  and summary, the agent task waited on (`waiting`, `task`, `agent`), the
+  newest variations (`variations`, `variationsId`), `roastId`, `ready`
+  (results the user hasn't acted on) and `error`.
+- `status_follow {}` is answered on the socket only, not over MCP: it returns
+  `status_get`'s answer, then sends a `{"method": "status", "params": …}`
+  notification each time that answer changes. `omastrator status --follow`
+  uses it; see [OS-SUITE.md](OS-SUITE.md).
+
 ## Flows
 
 1. **Generate…** (Object ▸ Generate…). A prompt, a variation count from 1 to 6

@@ -235,3 +235,34 @@ branch.
   never the user's own profile.
 - **Nothing outward-facing:** no real deploys and no pushes other than to this
   repo's `os-suite` branch.
+
+## Decisions
+
+Choices the spec left open, made while building it, in build order.
+
+### Phase 0: status, tools and mode
+
+- **The mode lives outside the app.** Normal and Capture must work with
+  Omastrator closed, so the island's mode, its expanded flag and its activity
+  line live in `$XDG_RUNTIME_DIR/omastrator/island.json` (gone at logout, so
+  each session starts in Normal). `omastrator island …` writes it. The modes
+  whose first-use label has shown are kept in
+  `$XDG_STATE_HOME/omastrator/island-seen.json`. The app still owns documents,
+  tools and proposals.
+- **One stream.** `omastrator status --follow` merges the app's
+  `status_follow` notifications with that file (watched with
+  `QFileSystemWatcher`) and prints one compact JSON line when the merged
+  object changes. Every key is always present, so QML never reads
+  `undefined`: `running`, `document`, `tool`, `proposal`, `summary`,
+  `waiting`, `task`, `agent`, `variations`, `variationsId`, `roastId`,
+  `ready`, `error`, `live`, `mode`, `expanded`, `activity`, `activityId`,
+  `activitySeconds`, `labelsSeen`. When the app closes, the app keys return
+  to their defaults and the stream reconnects every half second.
+- **Settled changes only.** The app publishes status 30 ms after the last
+  change and only when it differs, per follower, so a drag or zoom does not
+  flood the island.
+- **`status_follow` is not an MCP tool.** It streams, which MCP tools don't;
+  agents use `status_get`.
+- **Starting the app.** `island mode draw` and `island tool …` start
+  Omastrator when nothing answers on the socket and wait up to 15 s for it.
+  `$OMASTRATOR_APP` replaces the command in tests.

@@ -18,6 +18,11 @@ Each folder builds as its own static library:
 - `src/IO` → `oma_io`. `ProjectStore` (`.omai`), `SvgImporter` (vendored
   nanosvg in `third_party/`), `SvgExporter`, `DocumentExporter` (PDF, PNG,
   JPEG) and `ImageImporter`. Errors are thrown as `FileError`.
+- `src/Agent` → `oma_agent`. The agent socket, CLI and MCP bridge
+  (docs/AI-DESIGN.md), plus the desktop-wide commands in docs/OS-SUITE.md:
+  `Cli` dispatches every GUI-less command, `Island` keeps the island's mode
+  file and `omastrator island …`, `StatusStream` is `omastrator status
+  --follow`.
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides` and
   `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,

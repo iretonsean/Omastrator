@@ -18,6 +18,10 @@ AgentServer::AgentServer(AgentTools &tools, QObject *parent)
     // Same user only: the socket file is 0600.
     m_server->setSocketOptions(QLocalServer::UserAccessOption);
     connect(m_server, &QLocalServer::newConnection, this, &AgentServer::accept);
+    // Drags and zooms change the session many times a frame; followers hear the settled state.
+    m_statusTimer.setSingleShot(true);
+    m_statusTimer.setInterval(30);
+    connect(&m_statusTimer, &QTimer::timeout, this, &AgentServer::publishStatus);
 }
 
 AgentServer::~AgentServer()
@@ -61,7 +65,28 @@ void AgentServer::close()
     for (QLocalSocket *socket : m_pending.keys())
         socket->disconnectFromServer();
     m_pending.clear();
+    m_followers.clear();
     m_path.clear();
+}
+
+void AgentServer::statusMayHaveChanged()
+{
+    if (!m_followers.isEmpty() && !m_statusTimer.isActive())
+        m_statusTimer.start();
+}
+
+void AgentServer::publishStatus()
+{
+    if (m_followers.isEmpty())
+        return;
+    const QJsonObject status = m_tools.status();
+    const QByteArray line = AgentProtocol::frame({{"jsonrpc", "2.0"}, {"method", "status"}, {"params", status}});
+    for (auto it = m_followers.begin(); it != m_followers.end(); ++it) {
+        if (it.value() == status)
+            continue;
+        it.value() = status;
+        it.key()->write(line);
+    }
 }
 
 bool AgentServer::isListening() const
@@ -76,6 +101,7 @@ void AgentServer::accept()
         connect(socket, &QLocalSocket::readyRead, this, [this, socket] { read(socket); });
         connect(socket, &QLocalSocket::disconnected, this, [this, socket] {
             m_pending.remove(socket);
+            m_followers.remove(socket);
             socket->deleteLater();
         });
     }
@@ -103,10 +129,17 @@ void AgentServer::read(QLocalSocket *socket)
         buffer.remove(0, end + 1);
         if (line.isEmpty())
             continue;
-        const QJsonObject reply = AgentProtocol::respond(line, [this](const QString &method, const QJsonObject &params) {
+        const QJsonObject reply = AgentProtocol::respond(line, [this, socket](const QString &method, const QJsonObject &params) {
+            // `omastrator status --follow`: this answer, then a notification per change.
+            if (method == QLatin1String("status_follow")) {
+                const QJsonObject status = m_tools.status();
+                m_followers.insert(socket, status);
+                return status;
+            }
             return m_tools.call(method, params);
         });
         if (alive && !reply.isEmpty())
             socket->write(AgentProtocol::frame(reply));
+        statusMayHaveChanged();
     }
 }

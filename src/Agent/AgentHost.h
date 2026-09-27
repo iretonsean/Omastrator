@@ -1,4 +1,5 @@
 #pragma once
+#include <QJsonObject>
 #include <QString>
 #include <QUuid>
 #include <vector>
@@ -42,4 +43,6 @@ public:
     virtual void showRoast(const AgentRoast &roast) = 0;
     // The agent is done; the accept bar shows `summary` until Enter or Esc.
     virtual void proposalFinished(const QString &title, const QString &summary) = 0;
+    // What only the app knows for status_get: the agent task it waits on, variations ready, the live session.
+    virtual QJsonObject statusExtras() { return {}; }
 };

@@ -141,7 +141,14 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "required": ["mode"], "properties": {
    "id": {"type": "string", "description": "The image object. Default: the one selected image."},
    "mode": {"type": "string", "enum": ["color", "blackAndWhite"]},
-   "colors": {"type": "integer", "minimum": 2, "maximum": 16, "description": "Colour mode's palette size. Default 6."}}}}
+   "colors": {"type": "integer", "minimum": 2, "maximum": 16, "description": "Colour mode's palette size. Default 6."}}}},
+{"name": "select_tool", "group": "session",
+ "description": "Chooses the canvas tool, as clicking it in the toolbar does. Works with no document open. Returns the tool now chosen.",
+ "inputSchema": {"type": "object", "required": ["tool"], "properties": {
+   "tool": {"type": "string", "description": "select, directSelect, pen, pencil, text, line, rectangle, roundedRectangle, ellipse, polygon, star, rotate, scale, eyedropper, hand or zoom (move, direct, type and eyedrop work too)."}}}},
+{"name": "status_get", "group": "session",
+ "description": "What the app is doing: the tool, whether a document is open, the proposal waiting for the user, the agent task it waits on and the variations ready. Not a document read.",
+ "inputSchema": {"type": "object", "properties": {}}}
 ])json";
 }
 

@@ -35,6 +35,8 @@ inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::rotate, Tool::scale, Tool::eyedropper, Tool::hand, Tool::zoom};
 QString rawValue(Tool tool);
+// The tool whose rawValue is `raw`.
+std::optional<Tool> toolNamed(const QString &raw);
 // The tool's name as the toolbar's tooltip shows it.
 QString title(Tool tool);
 bool isShapeTool(Tool tool);

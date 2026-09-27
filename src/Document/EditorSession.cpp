@@ -35,6 +35,15 @@ QString rawValue(Tool tool)
     return QString::fromLatin1(toolInfo.at(size_t(tool)).raw);
 }
 
+std::optional<Tool> toolNamed(const QString &raw)
+{
+    for (const ToolInfo &info : toolInfo) {
+        if (raw == QLatin1String(info.raw))
+            return info.tool;
+    }
+    return std::nullopt;
+}
+
 QString title(Tool tool)
 {
     return QString::fromLatin1(toolInfo.at(size_t(tool)).title);

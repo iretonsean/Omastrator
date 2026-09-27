@@ -1,0 +1,262 @@
+#include "Agent/Island.h"
+#include "Agent/AgentClient.h"
+#include "Agent/AgentProtocol.h"
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QLocalSocket>
+#include <QProcess>
+#include <QSaveFile>
+#include <QThread>
+#include <unistd.h>
+
+namespace {
+QJsonObject readJson(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(file.readAll()).object();
+}
+
+QString writeJson(const QString &path, const QJsonObject &json)
+{
+    const QString folder = QFileInfo(path).absolutePath();
+    if (!QDir().mkpath(folder))
+        return QStringLiteral("Could not create %1.").arg(folder);
+    QFile::setPermissions(folder, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    QSaveFile file(path);
+    const QByteArray bytes = QJsonDocument(json).toJson(QJsonDocument::Compact) + '\n';
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+        return QStringLiteral("Could not write %1: %2").arg(path, file.errorString());
+    return {};
+}
+
+QString stateHome()
+{
+    const QString given = qEnvironmentVariable("XDG_STATE_HOME");
+    return given.isEmpty() ? QDir::home().filePath(QStringLiteral(".local/state")) : given;
+}
+
+// "draw", or the mode `step` places away from `from`.
+QString resolveMode(const QString &asked, const QString &from)
+{
+    const QStringList &all = Island::modes();
+    if (asked == QLatin1String("next") || asked == QLatin1String("previous")) {
+        const qsizetype at = std::max<qsizetype>(0, all.indexOf(from));
+        const qsizetype step = asked == QLatin1String("next") ? 1 : all.size() - 1;
+        return all[(at + step) % all.size()];
+    }
+    return all.contains(asked) ? asked : QString();
+}
+}
+
+namespace Island {
+const QStringList &modes()
+{
+    static const QStringList all{QStringLiteral("normal"), QStringLiteral("draw"), QStringLiteral("capture"), QStringLiteral("ai"),
+                                 QStringLiteral("live")};
+    return all;
+}
+
+QString runtimeDirectory()
+{
+    const QString overridden = qEnvironmentVariable("OMASTRATOR_RUNTIME_DIR");
+    if (!overridden.isEmpty())
+        return overridden;
+    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    if (!runtime.isEmpty() && QDir(runtime).exists())
+        return QDir(runtime).filePath(QStringLiteral("omastrator"));
+    return QStringLiteral("/tmp/omastrator-%1").arg(getuid());
+}
+
+QString statePath()
+{
+    return QDir(runtimeDirectory()).filePath(QStringLiteral("island.json"));
+}
+
+QString seenPath()
+{
+    return QDir(stateHome()).filePath(QStringLiteral("omastrator/island-seen.json"));
+}
+
+QJsonObject State::toJson() const
+{
+    return {{"mode", mode},
+            {"expanded", expanded},
+            {"activity", activity},
+            {"activityId", activityId},
+            {"activitySeconds", activitySeconds},
+            {"labelsSeen", QJsonArray::fromStringList(seen)}};
+}
+
+State State::fromJson(const QJsonObject &json)
+{
+    State state;
+    if (modes().contains(json["mode"].toString()))
+        state.mode = json["mode"].toString();
+    state.expanded = json["expanded"].toBool();
+    state.activity = json["activity"].toString();
+    state.activityId = qint64(json["activityId"].toDouble());
+    state.activitySeconds = json["activitySeconds"].toInt(3);
+    for (const QJsonValue &each : json["labelsSeen"].toArray())
+        state.seen << each.toString();
+    return state;
+}
+
+State read()
+{
+    State state = State::fromJson(readJson(statePath()));
+    state.seen.clear();
+    for (const QJsonValue &each : readJson(seenPath())["labelsSeen"].toArray())
+        state.seen << each.toString();
+    return state;
+}
+
+QString write(const State &state)
+{
+    QJsonObject session = state.toJson();
+    session.remove(QStringLiteral("labelsSeen"));
+    if (const QString failure = writeJson(statePath(), session); !failure.isEmpty())
+        return failure;
+    if (readJson(seenPath())["labelsSeen"].toArray() != QJsonArray::fromStringList(state.seen))
+        return writeJson(seenPath(), {{"labelsSeen", QJsonArray::fromStringList(state.seen)}});
+    return {};
+}
+
+QString setActivity(const QString &text, int seconds)
+{
+    State state = read();
+    state.activity = text;
+    state.activityId = QDateTime::currentMSecsSinceEpoch();
+    state.activitySeconds = std::clamp(seconds, 1, 60);
+    return write(state);
+}
+
+bool appIsRunning()
+{
+    QLocalSocket probe;
+    probe.connectToServer(AgentProtocol::socketPath());
+    const bool up = probe.waitForConnected(300);
+    probe.abort();
+    return up;
+}
+
+QString ensureAppRunning(int timeoutMs)
+{
+    if (appIsRunning())
+        return {};
+    const QString overridden = qEnvironmentVariable("OMASTRATOR_APP");
+    const QString program = overridden.isEmpty() ? QCoreApplication::applicationFilePath() : overridden;
+    if (!QProcess::startDetached(program, {}))
+        return QStringLiteral("Could not start Omastrator (%1).").arg(program);
+    for (int waited = 0; waited < timeoutMs; waited += 100) {
+        QThread::msleep(100);
+        if (appIsRunning())
+            return {};
+    }
+    return QStringLiteral("Omastrator did not start in time. Open it, then try again.");
+}
+
+QString helpText()
+{
+    return QStringLiteral(
+        "Usage: omastrator island <verb> [args]\n\n"
+        "Drives the Omastrator island in omarchy-shell. The island reads\n"
+        "`omastrator status --follow`; these change what it shows.\n\n"
+        "  mode <normal|draw|capture|ai|live|next|previous>\n"
+        "                     Switch mode. Draw starts Omastrator if it isn't running.\n"
+        "  tool <name>        Choose a canvas tool (pen, rectangle, …), in Draw mode.\n"
+        "  expand | rest | toggle\n"
+        "                     Show the mode's tools, or just the mode glyph.\n"
+        "  activity <text> [--seconds N]\n"
+        "                     Show a line briefly, then go back.\n"
+        "  seen <mode>        Stop showing the mode's first-use label.\n"
+        "  state              Print the island's state as JSON.\n");
+}
+
+int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
+{
+    const QString verb = args.value(0);
+    if (verb.isEmpty() || verb == QLatin1String("--help") || verb == QLatin1String("-h") || verb == QLatin1String("help")) {
+        (verb.isEmpty() ? err : out) << helpText();
+        return verb.isEmpty() ? 1 : 0;
+    }
+    auto failed = [&](const QString &message) {
+        err << message << '\n';
+        return 1;
+    };
+    auto save = [&](const State &state) {
+        const QString failure = write(state);
+        return failure.isEmpty() ? 0 : failed(failure);
+    };
+    State state = read();
+    if (verb == QLatin1String("state")) {
+        out << QString::fromUtf8(QJsonDocument(state.toJson()).toJson(QJsonDocument::Compact)) << '\n';
+        return 0;
+    }
+    if (verb == QLatin1String("mode")) {
+        const QString mode = resolveMode(args.value(1), state.mode);
+        if (mode.isEmpty())
+            return failed(QStringLiteral("Choose a mode: %1, next or previous.").arg(modes().join(QStringLiteral(", "))));
+        state.mode = mode;
+        // Normal rests; every other mode opens on its tools.
+        state.expanded = mode != QLatin1String("normal");
+        if (const int code = save(state); code != 0)
+            return code;
+        if (mode == QLatin1String("draw")) {
+            if (const QString failure = ensureAppRunning(); !failure.isEmpty())
+                return failed(failure);
+        }
+        return 0;
+    }
+    if (verb == QLatin1String("expand") || verb == QLatin1String("rest") || verb == QLatin1String("toggle")) {
+        state.expanded = verb == QLatin1String("toggle") ? !state.expanded : verb == QLatin1String("expand");
+        return save(state);
+    }
+    if (verb == QLatin1String("seen")) {
+        const QString mode = args.value(1);
+        if (!modes().contains(mode))
+            return failed(QStringLiteral("Choose a mode: %1.").arg(modes().join(QStringLiteral(", "))));
+        if (!state.seen.contains(mode))
+            state.seen << mode;
+        return save(state);
+    }
+    if (verb == QLatin1String("activity")) {
+        QStringList words = args.mid(1);
+        int seconds = 3;
+        if (const qsizetype at = words.indexOf(QStringLiteral("--seconds")); at >= 0) {
+            bool ok = false;
+            seconds = words.value(at + 1).toInt(&ok);
+            if (!ok)
+                return failed(QStringLiteral("--seconds needs a whole number."));
+            words.remove(at, std::min<qsizetype>(2, words.size() - at));
+        }
+        const QString failure = setActivity(words.join(QLatin1Char(' ')).trimmed(), seconds);
+        return failure.isEmpty() ? 0 : failed(failure);
+    }
+    if (verb == QLatin1String("tool")) {
+        if (args.size() != 2)
+            return failed(QStringLiteral("Name one tool, such as: omastrator island tool pen"));
+        if (const QString failure = ensureAppRunning(); !failure.isEmpty())
+            return failed(failure);
+        try {
+            AgentClient::Connection connection;
+            const QJsonObject result = connection.call(QStringLiteral("select_tool"), {{"tool", args[1]}});
+            if (state.mode != QLatin1String("draw")) {
+                state.mode = QStringLiteral("draw");
+                state.expanded = true;
+                save(state);
+            }
+            out << result["tool"].toString() << '\n';
+            return 0;
+        } catch (const AgentProtocol::Error &failure) {
+            return failed(failure.message());
+        }
+    }
+    return failed(QStringLiteral("There is no island verb “%1”. Run `omastrator island --help`.").arg(verb));
+}
+}

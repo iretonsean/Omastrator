@@ -10,6 +10,7 @@
 #include "Rendering/VectorRenderer.h"
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QTemporaryFile>
 #include <cmath>
@@ -69,10 +70,13 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("place"), &AgentTools::place},
         {QStringLiteral("show_variations"), &AgentTools::showVariations},
         {QStringLiteral("show_roast"), &AgentTools::showRoast},
+        {QStringLiteral("select_tool"), &AgentTools::selectTool},
     };
     try {
         if (method == QLatin1String("selection_get"))
             return selectionGet();
+        if (method == QLatin1String("status_get"))
+            return status();
         for (const auto &[name, handler] : handlers) {
             if (name == method)
                 return (this->*handler)(params);
@@ -118,6 +122,42 @@ EditorSession *AgentTools::proposalSession() const
 QString AgentTools::proposalTitle() const
 {
     return hasProposal() ? QStringLiteral("AI: ") + m_title : QString();
+}
+
+QJsonObject AgentTools::status()
+{
+    EditorSession *current = m_host.session();
+    QJsonObject result{{"running", true},
+                       {"document", current && current->hasDocument()},
+                       {"tool", current ? rawValue(current->tool()) : QStringLiteral("select")},
+                       {"proposal", proposalTitle()}};
+    const QJsonObject extras = m_host.statusExtras();
+    for (auto it = extras.begin(); it != extras.end(); ++it)
+        result.insert(it.key(), it.value());
+    return result;
+}
+
+QJsonObject AgentTools::selectTool(const QJsonObject &params)
+{
+    static const QHash<QString, QString> aliases{{"move", "select"}, {"selection", "select"}, {"direct", "directSelect"},
+                                                 {"directselection", "directSelect"}, {"type", "text"}, {"eyedrop", "eyedropper"},
+                                                 {"roundedrect", "roundedRectangle"}, {"rect", "rectangle"}};
+    const QString given = requiredString(params, QStringLiteral("tool")).trimmed();
+    QString name = aliases.value(given.toLower(), given);
+    // Case aside, "directselect" and "directSelect" are one tool.
+    for (const Tool each : allTools) {
+        if (rawValue(each).compare(name, Qt::CaseInsensitive) == 0)
+            name = rawValue(each);
+    }
+    const std::optional<Tool> tool = toolNamed(name);
+    if (!tool)
+        fail(QStringLiteral("There is no tool “%1”. Use one of: select, directSelect, pen, pencil, text, line, rectangle, "
+                            "roundedRectangle, ellipse, polygon, star, rotate, scale, eyedropper, hand, zoom.").arg(given));
+    EditorSession *current = m_host.session();
+    if (!current)
+        throw Error(AgentProtocol::noDocument, QStringLiteral("Omastrator has no window open."));
+    current->selectTool(*tool);
+    return {{"tool", rawValue(current->tool())}};
 }
 
 VectorDocument AgentTools::draft()

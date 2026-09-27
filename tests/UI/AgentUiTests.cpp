@@ -5,7 +5,9 @@
 #include "UI/ProjectWorkspaceView.h"
 #include <QCommandLinkButton>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QLabel>
+#include <QLocalSocket>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QStandardPaths>
@@ -392,6 +394,55 @@ private slots:
         QVERIFY(shownText);
         QVERIFY(shownText->toPlainText().contains(QStringLiteral("Default agent: sh")));
         shownText->window()->close();
+    }
+
+    void statusFollowsTheFrontSessionAndResults()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        const QString path = m_directory.filePath(QStringLiteral("status.sock"));
+        QVERIFY(bridge.startServer(path).isEmpty());
+        QLocalSocket follower;
+        follower.connectToServer(path);
+        QVERIFY(follower.waitForConnected(1000));
+        follower.write(AgentProtocol::frame(AgentProtocol::request(1, QStringLiteral("status_follow"), {})));
+        QByteArray received;
+        QJsonObject last;
+        auto drain = [&] {
+            received += follower.readAll();
+            qsizetype end;
+            while ((end = received.indexOf('\n')) >= 0) {
+                const QJsonObject message = QJsonDocument::fromJson(received.left(end)).object();
+                received.remove(0, end + 1);
+                last = message.contains("result") ? message["result"].toObject() : message["params"].toObject();
+            }
+            return last;
+        };
+        QTRY_VERIFY(drain()["running"].toBool());
+        QCOMPARE(last["tool"].toString(), QStringLiteral("select"));
+
+        // The canvas's own tool change reaches the island.
+        workspace.current().session.selectTool(Tool::pencil);
+        QTRY_COMPARE(drain()["tool"].toString(), QStringLiteral("pencil"));
+        // A new front tab is followed too.
+        workspace.createDocument(QSizeF(100, 100));
+        QTRY_VERIFY(drain()["document"].toBool());
+        workspace.current().session.selectTool(Tool::star);
+        QTRY_COMPARE(drain()["tool"].toString(), QStringLiteral("star"));
+
+        // Variations arriving are "ready" until the user picks one.
+        bridge.tools().call(QStringLiteral("show_variations"),
+                            {{"requestId", "r1"}, {"variations", QJsonArray{QJsonObject{{"name", "A"}, {"svg", square}}}}});
+        QTRY_VERIFY(drain()["ready"].toBool());
+        QCOMPARE(last["variations"].toInt(), 1);
+        QCOMPARE(last["variationsId"].toString(), QStringLiteral("r1"));
+        QVERIFY(bridge.insertVariation(0, 0).isEmpty());
+        // The picked variation is an open proposal: still ready, now for Enter or Esc.
+        QTRY_COMPARE(drain()["proposal"].toString(), QStringLiteral("AI: Generate"));
+        bridge.keepProposal();
+        QTRY_VERIFY(!drain()["ready"].toBool());
     }
 };
 

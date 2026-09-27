@@ -18,6 +18,7 @@ public:
     QString finishedTitle;
     QString finishedSummary;
     int finishedCount = 0;
+    QJsonObject extras;
 
     EditorSession *session() override { return hasSession ? &editor : nullptr; }
     QString openFile(const QString &path) override
@@ -42,4 +43,5 @@ public:
         finishedSummary = summary;
         ++finishedCount;
     }
+    QJsonObject statusExtras() override { return extras; }
 };

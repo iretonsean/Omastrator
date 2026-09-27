@@ -15,8 +15,47 @@ QString newRequestId()
 AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject(&window), m_workspace(workspace), m_window(window)
 {
     connect(&m_tools, &AgentTools::proposalChanged, this, &AgentBridge::proposalChanged);
-    m_variationsPanel.onClose = [this] { m_variationsPanel.close(); };
-    m_roastPanel.onClose = [this] { m_roastPanel.close(); };
+    m_variationsPanel.onClose = [this] {
+        m_variationsPanel.close();
+        m_resultsUnseen = false;
+        m_server.statusMayHaveChanged();
+    };
+    m_roastPanel.onClose = [this] {
+        m_roastPanel.close();
+        m_resultsUnseen = false;
+        m_server.statusMayHaveChanged();
+    };
+    for (auto signal : {&AgentBridge::proposalChanged, &AgentBridge::waitingChanged, &AgentBridge::variationsChanged,
+                        &AgentBridge::roastChanged})
+        connect(this, signal, &m_server, &AgentServer::statusMayHaveChanged);
+    connect(&m_workspace, &ProjectWorkspace::changed, this, &AgentBridge::watchFront);
+    watchFront();
+}
+
+void AgentBridge::watchFront()
+{
+    disconnect(m_frontWatch);
+    m_frontWatch = connect(&m_workspace.current().session, &EditorSession::changed, &m_server, &AgentServer::statusMayHaveChanged);
+    m_server.statusMayHaveChanged();
+}
+
+QJsonObject AgentBridge::statusExtras()
+{
+    static const QStringList tasks{"generate", "edit", "vectorize", "roast"};
+    QJsonObject extras{{"summary", proposalSummary()}, {"waiting", waitingText()}, {"error", m_panelMessage},
+                       {"task", m_waiting ? tasks.value(int(m_waiting->task)) : QString()},
+                       {"agent", m_waiting ? displayName(m_waiting->agent) : QString()},
+                       {"ready", m_tools.hasProposal() || m_resultsUnseen},
+                       {"roastId", m_roast ? m_roast->requestId : QString()}};
+    // The newest round that has come back.
+    for (auto round = m_rounds.rbegin(); round != m_rounds.rend(); ++round) {
+        if (!round->variations.empty()) {
+            extras["variations"] = int(round->variations.size());
+            extras["variationsId"] = round->requestId;
+            break;
+        }
+    }
+    return extras;
 }
 
 AgentBridge::~AgentBridge() = default;
@@ -46,6 +85,7 @@ QString AgentBridge::proposalSummary() const
 
 void AgentBridge::keepProposal()
 {
+    m_resultsUnseen = false;
     if (EditorSession *open = m_tools.proposalSession())
         open->commitInteraction();
     m_summary.clear();
@@ -55,6 +95,7 @@ void AgentBridge::keepProposal()
 
 void AgentBridge::discardProposal()
 {
+    m_resultsUnseen = false;
     if (EditorSession *open = m_tools.proposalSession())
         open->cancelInteraction();
     m_summary.clear();
@@ -232,6 +273,7 @@ QString AgentBridge::insertVariation(int roundIndex, int index)
         return failure.message();
     }
     m_variationProposed = true;
+    m_resultsUnseen = false;
     m_chosen = std::pair(roundIndex, index);
     emit variationsChanged();
     return {};
@@ -294,6 +336,7 @@ void AgentBridge::showVariations(const QString &requestId, const std::vector<Age
         round = m_rounds.end() - 1;
     }
     round->variations = variations;
+    m_resultsUnseen = true;
     if (m_waiting && m_waiting->requestId == requestId)
         m_waiting.reset();
     emit waitingChanged();
@@ -304,6 +347,7 @@ void AgentBridge::showVariations(const QString &requestId, const std::vector<Age
 void AgentBridge::showRoast(const AgentRoast &roast)
 {
     m_roast = roast;
+    m_resultsUnseen = true;
     m_panelMessage.clear();
     if (m_waiting && m_waiting->requestId == roast.requestId)
         m_waiting.reset();

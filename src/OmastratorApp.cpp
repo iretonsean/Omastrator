@@ -1,4 +1,4 @@
-#include "Agent/AgentClient.h"
+#include "Agent/Cli.h"
 #include "Logging.h"
 #include "UI/OmarchyTheme.h"
 #include "UI/ProjectWorkspace.h"
@@ -6,19 +6,16 @@
 #include "UI/SliderSnap.h"
 #include <QApplication>
 #include <QCoreApplication>
-#include <cstring>
 
 int main(int argc, char **argv)
 {
     qSetMessagePattern(QStringLiteral("%{time yyyy-MM-dd hh:mm:ss.zzz} %{type} %{category}: %{message}"));
-    // `omastrator agent …` and `omastrator --mcp` talk to a running app and start no GUI.
-    if (argc > 1 && (std::strcmp(argv[1], "agent") == 0 || std::strcmp(argv[1], "--mcp") == 0)) {
+    // `omastrator agent …`, `--mcp`, `status`, `island` and the rest start no GUI.
+    if (argc > 1 && Cli::handles(argv[1])) {
         QCoreApplication application(argc, argv);
         QCoreApplication::setApplicationName(QStringLiteral("Omastrator"));
         QCoreApplication::setApplicationVersion(QStringLiteral(OMASTRATOR_VERSION));
-        if (std::strcmp(argv[1], "--mcp") == 0)
-            return AgentClient::runMcp();
-        return AgentClient::runCli(QCoreApplication::arguments().mid(2));
+        return Cli::run(QCoreApplication::arguments().mid(1));
     }
     QApplication application(argc, argv);
     QApplication::setApplicationName(QStringLiteral("Omastrator"));

@@ -83,6 +83,7 @@ public:
     void showVariations(const QString &requestId, const std::vector<AgentVariation> &variations) override;
     void showRoast(const AgentRoast &roast) override;
     void proposalFinished(const QString &title, const QString &summary) override;
+    QJsonObject statusExtras() override;
 
 signals:
     // A proposal opened, grew, was renamed or ended.
@@ -95,6 +96,8 @@ private:
     // Checks for an agent, then launches; `task` starts waiting on success.
     QString launch(const QString &requestId, Task task, const QString &prompt);
     QString quietly(const std::function<bool()> &run);
+    // Follows the front tab's session, so its tool and document reach status followers.
+    void watchFront();
 
     ProjectWorkspace &m_workspace;
     QWidget &m_window;
@@ -109,6 +112,9 @@ private:
     bool m_variationProposed = false;
     std::optional<AgentRoast> m_roast;
     QString m_panelMessage;
+    // Variations or a roast arrived that the user hasn't acted on: the tray light shows "ready".
+    bool m_resultsUnseen = false;
+    QMetaObject::Connection m_frontWatch;
     FloatingPanel m_variationsPanel{QStringLiteral("variationsPanel"), m_window};
     FloatingPanel m_roastPanel{QStringLiteral("roastPanel"), m_window};
     QPointer<QWidget> m_variationsContent;
