@@ -255,6 +255,7 @@ void EditorCanvas::leaveEvent(QEvent *event)
 {
     m_state->hover.reset();
     m_state->updateHoverGuides(std::nullopt);
+    m_state->updateBuilderHover(std::nullopt);
     if (m_state->hovered) {
         m_state->hovered.reset();
         update();

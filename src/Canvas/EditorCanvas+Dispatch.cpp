@@ -58,6 +58,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     case Tool::star:
         shapePress(view);
         break;
+    case Tool::shapeBuilder:
+        builderPress(view, modifiers);
+        break;
     case Tool::rotate:
     case Tool::scale:
         transformToolPress(view);
@@ -127,6 +130,9 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::convert:
         dragConvert(view, modifiers);
         break;
+    case DragKind::shapeBuilder:
+        dragBuilder(view, modifiers);
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -162,6 +168,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
         break;
     case DragKind::pen:
         penRelease();
+        break;
+    case DragKind::shapeBuilder:
+        finishBuilder(modifiers);
         break;
     case DragKind::move:
     case DragKind::scale:
@@ -253,6 +262,8 @@ void EditorCanvas::State::toolChanged()
         enteredGroup.reset();
     hovered.reset();
     hoverGuides.reset();
+    builderRegion.reset();
+    builderEdge.reset();
     updateHoverGuides(drag ? std::nullopt : hover);
     updateCursor();
 }
@@ -260,6 +271,9 @@ void EditorCanvas::State::toolChanged()
 void EditorCanvas::State::documentChanged()
 {
     hoverGuides.reset();
+    built.reset();
+    builderRegion.reset();
+    builderEdge.reset();
     const std::optional<VectorDocument> &document = session.document();
     if (!document) {
         drag.reset();

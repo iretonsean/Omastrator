@@ -49,7 +49,7 @@ is one case among many.
   - **Normal:** the computer as usual. The island rests, and no keys are
     intercepted.
   - **Draw:** Figma-like tools that drive the Omastrator canvas: move, direct
-    select, pen, pencil, rectangle, ellipse, polygon, star, line, text,
+    select, pen, pencil, rectangle, ellipse, polygon, star, shape builder, line, text,
     eyedropper, hand, zoom. They mirror `Tool` in EditorSession, and a new
     `select_tool` agent method keeps the island and the app in sync both
     ways. If Omastrator isn't running, choosing Draw starts it.

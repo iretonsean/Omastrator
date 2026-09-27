@@ -1,7 +1,10 @@
 #include "UI/ToolHeaders.h"
 #include "UI/ColorPaletteControls.h"
 #include "UI/NumberField.h"
+#include <QCheckBox>
+#include <QComboBox>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <cmath>
 
 namespace {
@@ -46,6 +49,7 @@ ToolHeaderBar *ToolHeaders::make(EditorSession &session, Tool tool, QWidget *par
     case Tool::ellipse:
     case Tool::polygon:
     case Tool::star: return new ShapeControls(session, tool, parent);
+    case Tool::shapeBuilder: return new ShapeBuilderControls(session, parent);
     case Tool::rotate:
     case Tool::scale: return new TransformToolHeader(session, tool, parent);
     case Tool::eyedropper: return plainBar(tool, QStringLiteral("Click an object to take its fill and stroke"), parent);
@@ -121,6 +125,72 @@ void ShapeControls::synchronize()
     m_sides->sync(m_session.polygonSides);
     m_points->sync(m_session.starPoints);
     m_inner->sync(m_session.starInnerRatio * 100);
+}
+
+ShapeBuilderControls::ShapeBuilderControls(EditorSession &session, QWidget *parent)
+    : ToolHeaderBar(::title(Tool::shapeBuilder), parent), m_session(session), m_gaps(new QCheckBox(QStringLiteral("Gap detection"), this)),
+      m_gapLength(amount(QStringLiteral("Gap"), QStringLiteral("pt"), QStringLiteral("shapeBuilderGap"), [this](double length) {
+          change([length](ShapeBuilderOptions &options) { options.gapLength = std::clamp(length, 0.0, 100.0); });
+      }, this)),
+      m_strokeSplits(new QCheckBox(QStringLiteral("Click on a stroke splits it"), this)), m_colorFrom(new QComboBox(this)),
+      m_selection(new QComboBox(this)), m_highlightFill(new QCheckBox(QStringLiteral("Highlight fill"), this)),
+      m_highlightStroke(new QCheckBox(QStringLiteral("Highlight stroke"), this))
+{
+    setObjectName(QStringLiteral("shapeBuilderControls"));
+    m_gaps->setObjectName(QStringLiteral("shapeBuilderGapDetection"));
+    m_gaps->setToolTip(QStringLiteral("Treat gaps up to this length as closed"));
+    m_strokeSplits->setObjectName(QStringLiteral("shapeBuilderStrokeSplits"));
+    m_strokeSplits->setToolTip(QStringLiteral("In merge mode, clicking an open path's edge splits the path there"));
+    m_colorFrom->setObjectName(QStringLiteral("shapeBuilderColorFrom"));
+    m_colorFrom->addItems({QStringLiteral("Colour from artwork"), QStringLiteral("Colour from swatches")});
+    m_colorFrom->setToolTip(QStringLiteral("Artwork: a merge takes the style of the object the drag starts in. Swatches: the current fill and stroke."));
+    m_selection->setObjectName(QStringLiteral("shapeBuilderSelection"));
+    m_selection->addItems({QStringLiteral("Freeform"), QStringLiteral("Straight line")});
+    m_selection->setToolTip(QStringLiteral("What a drag touches: the path the pointer takes, or a straight line from the press"));
+    m_highlightFill->setObjectName(QStringLiteral("shapeBuilderHighlightFill"));
+    m_highlightStroke->setObjectName(QStringLiteral("shapeBuilderHighlightStroke"));
+    connect(m_gaps, &QCheckBox::toggled, this, [this](bool on) { change([on](ShapeBuilderOptions &options) { options.gapDetection = on; }); });
+    connect(m_strokeSplits, &QCheckBox::toggled, this,
+            [this](bool on) { change([on](ShapeBuilderOptions &options) { options.clickingStrokeSplits = on; }); });
+    connect(m_colorFrom, &QComboBox::activated, this,
+            [this](int index) { change([index](ShapeBuilderOptions &options) { options.colorFromArtwork = index == 0; }); });
+    connect(m_selection, &QComboBox::activated, this,
+            [this](int index) { change([index](ShapeBuilderOptions &options) { options.freeformSelection = index == 0; }); });
+    connect(m_highlightFill, &QCheckBox::toggled, this,
+            [this](bool on) { change([on](ShapeBuilderOptions &options) { options.highlightFill = on; }); });
+    connect(m_highlightStroke, &QCheckBox::toggled, this,
+            [this](bool on) { change([on](ShapeBuilderOptions &options) { options.highlightStroke = on; }); });
+    int at = 1;
+    for (QWidget *widget : std::initializer_list<QWidget *>{m_gaps, m_gapLength, m_strokeSplits, m_colorFrom, m_selection, m_highlightFill, m_highlightStroke})
+        row->insertWidget(at++, widget);
+    synchronize();
+}
+
+void ShapeBuilderControls::change(const std::function<void(ShapeBuilderOptions &)> &edit)
+{
+    ShapeBuilderOptions options = m_session.shapeBuilder;
+    edit(options);
+    if (options == m_session.shapeBuilder)
+        return;
+    m_session.shapeBuilder = options;
+    synchronize();
+    // Options aren't document edits: tell the canvas to rebuild its regions.
+    emit m_session.changed();
+}
+
+void ShapeBuilderControls::synchronize()
+{
+    const ShapeBuilderOptions &options = m_session.shapeBuilder;
+    const QSignalBlocker blockers[] = {QSignalBlocker(m_gaps), QSignalBlocker(m_strokeSplits), QSignalBlocker(m_colorFrom),
+                                       QSignalBlocker(m_selection), QSignalBlocker(m_highlightFill), QSignalBlocker(m_highlightStroke)};
+    m_gaps->setChecked(options.gapDetection);
+    m_gapLength->sync(options.gapLength);
+    m_gapLength->setEnabled(options.gapDetection);
+    m_strokeSplits->setChecked(options.clickingStrokeSplits);
+    m_colorFrom->setCurrentIndex(options.colorFromArtwork ? 0 : 1);
+    m_selection->setCurrentIndex(options.freeformSelection ? 0 : 1);
+    m_highlightFill->setChecked(options.highlightFill);
+    m_highlightStroke->setChecked(options.highlightStroke);
 }
 
 NavigationToolHeader::NavigationToolHeader(EditorSession &session, QWidget *parent)

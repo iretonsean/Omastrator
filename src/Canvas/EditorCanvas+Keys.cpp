@@ -107,6 +107,14 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
     default:
         break;
     }
+    // Shift-M: Shape Builder, as in Illustrator.
+    if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_M) {
+        session.selectTool(Tool::shapeBuilder);
+        return true;
+    }
+    // Alt turns Shape Builder's highlight to erasing.
+    if (event->key() == Qt::Key_Alt && session.tool() == Tool::shapeBuilder)
+        canvas.update();
     if (plain && !shift && !event->isAutoRepeat()) {
         if (const std::optional<Tool> tool = toolForKey(event->key())) {
             session.selectTool(*tool);
@@ -118,6 +126,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
 
 bool EditorCanvas::State::keyRelease(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Alt && session.tool() == Tool::shapeBuilder)
+        canvas.update();
     if (event->key() == Qt::Key_Space && !event->isAutoRepeat() && spaceHeld) {
         spaceHeld = false;
         if (hover)

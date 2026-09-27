@@ -173,6 +173,7 @@ void EditorCanvas::State::updateHover(QPointF view)
         canvas.update();
     }
     updateHoverGuides(view);
+    updateBuilderHover(view);
     // The pen's rubber band follows the pointer.
     if (pen)
         canvas.update();

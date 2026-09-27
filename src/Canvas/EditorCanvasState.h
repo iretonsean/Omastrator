@@ -42,6 +42,7 @@ struct EditorCanvas::State {
         pen,
         convert,
         textSelect,
+        shapeBuilder,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -170,6 +171,27 @@ struct EditorCanvas::State {
     void shapePress(QPointF view);
     void dragShape(QPointF view, Qt::KeyboardModifiers modifiers);
     VectorPath shapePath(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers) const;
+
+    // Shape Builder (Shift-M) -------------------------------------------------
+    // The selection's regions, kept until the document, selection or options change.
+    struct Built {
+        std::vector<QUuid> leaves;
+        ShapeBuilderOptions options;
+        ShapeBuilder::Arrangement arrangement;
+    };
+    mutable std::optional<Built> built;
+    const ShapeBuilder::Arrangement &arrangement() const;
+    // What the pointer is over, and what the drag has touched so far.
+    std::optional<int> builderRegion;
+    std::optional<int> builderEdge;
+    ShapeBuilder::Gesture building;
+    void builderPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragBuilder(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishBuilder(Qt::KeyboardModifiers modifiers);
+    void updateBuilderHover(std::optional<QPointF> view);
+    // Merging with Shift draws a marquee; the regions it touches, so far.
+    ShapeBuilder::Gesture builderTouched() const;
+    void drawBuilder(QPainter &painter) const;
 
     // Type (T) ----------------------------------------------------------------
     std::unique_ptr<InlineTextEditor> text;

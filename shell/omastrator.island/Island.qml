@@ -53,6 +53,7 @@ Item {
       { id: "ellipse", tip: "Ellipse (L)" },
       { id: "polygon", tip: "Polygon" },
       { id: "star", tip: "Star" },
+      { id: "shapeBuilder", tip: "Shape Builder (Shift+M): drag across overlapping shapes to merge, Alt to delete" },
       { id: "line", tip: "Line Segment (\\)" },
       { id: "text", tip: "Type (T)" },
       { id: "eyedropper", tip: "Eyedropper (I)" },

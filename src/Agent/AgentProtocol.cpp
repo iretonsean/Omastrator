@@ -145,7 +145,7 @@ constexpr const char *methodTable = R"json([
 {"name": "select_tool", "group": "session",
  "description": "Chooses the canvas tool, as clicking it in the toolbar does. Works with no document open. Returns the tool now chosen.",
  "inputSchema": {"type": "object", "required": ["tool"], "properties": {
-   "tool": {"type": "string", "description": "select, directSelect, pen, pencil, text, line, rectangle, roundedRectangle, ellipse, polygon, star, rotate, scale, eyedropper, hand or zoom (move, direct, type and eyedrop work too)."}}}},
+   "tool": {"type": "string", "description": "select, directSelect, pen, pencil, text, line, rectangle, roundedRectangle, ellipse, polygon, star, shapeBuilder, rotate, scale, eyedropper, hand or zoom (move, direct, type and eyedrop work too)."}}}},
 {"name": "status_get", "group": "session",
  "description": "What the app is doing: the tool, whether a document is open, the proposal waiting for the user, the agent task it waits on and the variations ready. Not a document read.",
  "inputSchema": {"type": "object", "properties": {}}},
