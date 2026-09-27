@@ -127,8 +127,11 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
         share(menu, &menus, "releaseClippingMask");
     else if (selected.size() >= 2)
         share(menu, &menus, "makeClippingMask");
-    if (selectionHas(session, ObjectKind::text))
+    if (selectionHas(session, ObjectKind::text)) {
         share(menu, &menus, "createOutlines");
+        share(menu, &menus, "convertToAreaType");
+        share(menu, &menus, "convertToPointType");
+    }
     if (session.selectedImage()) {
         share(menu, &menus, "imageTraceMake");
         share(menu, &menus, "vectorizeWithAI");

@@ -41,7 +41,8 @@ struct ShortcutDefinition {
     QString group;
     ShortcutChord original;
     QString id() const { return group + QLatin1Char(':') + title; }
-    bool isMenu() const { return group == QLatin1String("Menus"); }
+    // Menu entries, the Type menu's among them.
+    bool isMenu() const { return group == QLatin1String("Menus") || group == QLatin1String("Type"); }
     static const std::vector<ShortcutDefinition> &all();
     // The tool a plain canvas key picks, by original chord.
     static std::optional<Tool> tool(const ShortcutChord &chord);

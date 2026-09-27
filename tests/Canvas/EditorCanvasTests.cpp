@@ -1,4 +1,5 @@
 #include "Canvas/EditorCanvas.h"
+#include "Document/TextLayout.h"
 #include <QApplication>
 #include <QSignalSpy>
 #include <QTest>
@@ -366,6 +367,73 @@ private slots:
         f.canvas.finishTextEditing();
         QCOMPARE(f.object(id).text.text, QStringLiteral("Xabc"));
         QCOMPARE(f.session.undoName(), QStringLiteral("Edit Type"));
+    }
+
+    void aTypeToolDragMakesAreaType()
+    {
+        Fixture f;
+        f.session.selectTool(Tool::text);
+        f.drag({50, 40}, {250, 140});
+        QVERIFY(f.canvas.isEditingText());
+        QTest::keyClicks(&f.canvas, QStringLiteral("A long line of words that wraps inside the box it was drawn as"));
+        f.canvas.finishTextEditing();
+        QCOMPARE(f.paths().size(), size_t(1));
+        const VectorObject &text = f.object(f.paths().front());
+        QCOMPARE(text.text.area, std::optional<QSizeF>(QSizeF(200, 100)));
+        QVERIFY(near(text.transform.map(QPointF(0, 0)), {50, 40}));
+        QVERIFY(TextLayout(text.text).lines().size() > 1);
+        QVERIFY(near(f.session.document()->bounds(text.id), QRectF(50, 40, 200, 100)));
+        // Named after what it says, trimmed.
+        QCOMPARE(text.name, QStringLiteral("A long line of words that wra…"));
+        // A click without a drag still makes point type.
+        f.click({60, 250});
+        QTest::keyClicks(&f.canvas, QStringLiteral("Point"));
+        f.canvas.finishTextEditing();
+        QVERIFY(!f.object(f.paths().back()).text.area);
+    }
+
+    void typeNamesFollowItsWordsUntilRenamed()
+    {
+        Fixture f;
+        f.session.selectTool(Tool::text);
+        f.click({100, 100});
+        QTest::keyClicks(&f.canvas, QStringLiteral("N"));
+        const QUuid id = f.paths().front();
+        QCOMPARE(f.object(id).name, QStringLiteral("N"));
+        QTest::keyClicks(&f.canvas, QStringLiteral("ew heading"));
+        QCOMPARE(f.object(id).name, QStringLiteral("New heading"));
+        f.canvas.finishTextEditing();
+        // A name given by hand sticks through later edits.
+        VectorObject renamed = f.object(id);
+        renamed.name = QStringLiteral("Title");
+        f.session.updateObject(renamed, QStringLiteral("Rename"));
+        const QRectF box = f.session.document()->bounds(id);
+        f.click({box.right() - 0.5, box.center().y()});
+        QVERIFY(f.canvas.isEditingText());
+        QTest::keyClick(&f.canvas, Qt::Key_End);
+        QTest::keyClicks(&f.canvas, QStringLiteral("!"));
+        f.canvas.finishTextEditing();
+        QCOMPARE(f.object(id).text.text, QStringLiteral("New heading!"));
+        QCOMPARE(f.object(id).name, QStringLiteral("Title"));
+    }
+
+    void areaTypeHandlesResizeTheBox()
+    {
+        Fixture f;
+        VectorObject area = f.session.textObject({0, 0}, QStringLiteral("Some words to wrap in a box"));
+        area.text.area = QSizeF(200, 0);
+        area.transform = QTransform::fromTranslate(50, 50);
+        const QUuid id = f.session.addObject(area, QStringLiteral("Type"));
+        f.session.selectTool(Tool::select);
+        const QRectF box = f.session.document()->bounds(id);
+        // The right side's handle narrows the box; the glyphs keep their size.
+        f.drag({box.right(), box.center().y()}, {box.right() - 100, box.center().y()});
+        const VectorObject &after = f.object(id);
+        QVERIFY(std::abs(after.text.area->width() - 100) < 1);
+        QCOMPARE(after.text.size, area.text.size);
+        QVERIFY(after.transform.type() <= QTransform::TxTranslate);
+        QVERIFY(TextLayout(after.text).lines().size() > TextLayout(area.text).lines().size());
+        QCOMPARE(f.session.undoName(), QStringLiteral("Scale"));
     }
 
     void zoomToolClicksAndDrags()

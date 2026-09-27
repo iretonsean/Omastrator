@@ -60,6 +60,23 @@ void Menus::synchronize()
     action(QStringLiteral("showAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("artboardSize"))->setEnabled(editing && drawn);
     action(QStringLiteral("createOutlines"))->setEnabled(editing && drawn && selectionHas(s, ObjectKind::text));
+    bool hasPoint = false, hasArea = false;
+    for (const QUuid &id : s.selectedTexts()) {
+        const bool area = s.document()->find(id)->text.area.has_value();
+        hasPoint = hasPoint || !area;
+        hasArea = hasArea || area;
+    }
+    action(QStringLiteral("convertToAreaType"))->setEnabled(editing && hasPoint);
+    action(QStringLiteral("convertToPointType"))->setEnabled(editing && hasArea);
+    // The type keys work on selected type, or while typing; otherwise Alt+arrows fall through to duplicate and nudge.
+    const std::vector<QUuid> leaves = s.selectedLeaves();
+    const bool allText = drawn && !leaves.empty() && s.selectedTexts().size() == leaves.size();
+    const bool typeKeys = !field && !proposal && drawn && (typing || allText);
+    for (const char *name : {"increaseFontSize", "decreaseFontSize", "tightenTracking", "loosenTracking", "tightenTrackingMore",
+                             "loosenTrackingMore", "resetTracking", "decreaseLeading", "increaseLeading", "raiseBaseline", "lowerBaseline"})
+        action(QString::fromLatin1(name))->setEnabled(typeKeys);
+    for (const char *name : {"typeSizeMenu", "typeTrackingMenu", "typeLeadingMenu", "typeBaselineMenu"})
+        action(QString::fromLatin1(name))->setEnabled(drawn);
     const bool agent = m_agent != nullptr;
     action(QStringLiteral("imageTraceMenu"))->setEnabled(drawn);
     action(QStringLiteral("imageTraceMake"))->setEnabled(editing && s.selectedImage().has_value());

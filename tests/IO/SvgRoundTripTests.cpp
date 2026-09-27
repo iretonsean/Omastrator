@@ -1,4 +1,5 @@
 #include "Document/PathOperations.h"
+#include "Document/TextLayout.h"
 #include "IO/SvgExporter.h"
 #include "IO/SvgImporter.h"
 #include <QTemporaryDir>
@@ -354,6 +355,64 @@ private slots:
         QCOMPARE(aligned->text, right.text);
         QVERIFY(!aligned->stroke.isVisible());
         QVERIFY(near(aligned->transform, right.transform));
+    }
+
+    void characterAttributesSurvive()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.name = QStringLiteral("Styled");
+        text.text.text = QStringLiteral("Styled type");
+        text.text.size = 20;
+        text.text.tracking = 50;
+        text.text.kerning = TextKerning::none;
+        text.text.textCase = TextCase::smallCaps;
+        text.text.underline = true;
+        text.text.strikethrough = true;
+        text.text.baselineShift = 4;
+        text.transform = QTransform::fromTranslate(20, 100);
+        add(document, text);
+        const QString svg = QString::fromUtf8(SvgExporter::serialize(document));
+        // Tracking is in em, as CSS reads it.
+        QVERIFY(svg.contains(QStringLiteral("letter-spacing=\"0.05em\"")));
+        QVERIFY(svg.contains(QStringLiteral("font-kerning=\"none\"")));
+        QVERIFY(svg.contains(QStringLiteral("font-variant=\"small-caps\"")));
+        QVERIFY(svg.contains(QStringLiteral("text-decoration=\"underline line-through\"")));
+        QVERIFY(svg.contains(QStringLiteral("baseline-shift=\"4\"")));
+        const VectorDocument read = roundTrip(document);
+        const VectorObject *after = find(read, QStringLiteral("Styled"), ObjectKind::text);
+        QVERIFY(after);
+        QVERIFY(std::abs(after->text.tracking - 50) < 1e-6);
+        QCOMPARE(after->text.kerning, TextKerning::none);
+        QCOMPARE(after->text.textCase, TextCase::smallCaps);
+        QVERIFY(after->text.underline && after->text.strikethrough);
+        QCOMPARE(after->text.baselineShift, 4.0);
+    }
+
+    void areaTypeWritesOneSpanPerLine()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.name = QStringLiteral("Area");
+        text.text.text = QStringLiteral("The quick brown fox jumps over the lazy dog and keeps running far away");
+        text.text.size = 16;
+        text.text.area = QSizeF(200, 0);
+        text.text.alignment = TextAlignment::justify;
+        text.transform = QTransform::fromTranslate(20, 20);
+        add(document, text);
+        const TextLayout layout(text.text);
+        const QString svg = QString::fromUtf8(SvgExporter::serialize(document));
+        QCOMPARE(int(svg.count(QStringLiteral("<tspan"))), int(layout.lines().size()));
+        // Justified lines are stretched to the box; the last isn't.
+        QCOMPARE(int(svg.count(QStringLiteral("lengthAdjust=\"spacing\""))), int(layout.lines().size()) - 1);
+        QVERIFY(svg.contains(QStringLiteral("textLength=\"200\"")));
+        // It comes back as point type with the same words, line by line where it wrapped.
+        const VectorObject *after = find(SvgImporter::parse(svg.toUtf8()), QStringLiteral("Area"), ObjectKind::text);
+        QVERIFY(after);
+        QCOMPARE(QString(after->text.text).replace(QLatin1Char('\n'), QLatin1Char(' ')).simplified(), text.text.text);
+        QCOMPARE(int(after->text.text.count(QLatin1Char('\n'))) + 1, int(layout.lines().size()));
     }
 
     void textGradientSurvives()

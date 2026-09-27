@@ -20,6 +20,9 @@ public:
     bool isEditingText() const;
     // Ends in-place type editing, keeping what was typed.
     void finishTextEditing();
+    // Alt+Left and Alt+Right at a caret with nothing selected: kerns the pair around it.
+    // False when there's no such caret, so the keys track the whole text instead.
+    bool kernAtCaret(double amount);
     // Paused, clicks and keys start nothing: an agent's proposal waits for Enter or Esc.
     void setPaused(bool paused);
     bool isPaused() const { return m_paused; }

@@ -49,6 +49,18 @@ bool EditorCanvas::isEditingText() const
     return m_state->text != nullptr;
 }
 
+bool EditorCanvas::kernAtCaret(double amount)
+{
+    const auto &text = m_state->text;
+    if (!text || !text->inDocument || text->caret != text->anchor || text->caret <= 0 || text->caret >= text->text().size())
+        return false;
+    // A kern sits between two characters of one line.
+    if (text->text().at(text->caret - 1) == QLatin1Char('\n') || text->text().at(text->caret) == QLatin1Char('\n'))
+        return false;
+    m_session.kernText(text->object.id, text->caret, amount);
+    return true;
+}
+
 void EditorCanvas::finishTextEditing()
 {
     m_state->finishText();

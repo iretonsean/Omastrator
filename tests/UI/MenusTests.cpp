@@ -35,6 +35,10 @@ private slots:
     void remappedKeysReachTheEntries();
     void aFocusedFieldKeepsUndo();
     void closingWithTheShortcutsPanelOpen();
+    void typeKeysStyleSelectedType();
+    void altArrowsDuplicateAnythingElse();
+    void typeKeysKernAtACaretWhileTyping();
+    void typeMenuConvertsPointAndArea();
 };
 
 void MenusTests::initTestCase()
@@ -72,7 +76,7 @@ void MenusTests::everyMenuKeyHasOneDefinition()
         QVERIFY2(definition != ShortcutDefinition::all().end(), qPrintable(entry->objectName()));
         used[definition->id()] += 1;
     }
-    QCOMPARE(keyed, 47);
+    QCOMPARE(keyed, 58);
     for (const ShortcutDefinition &definition : ShortcutDefinition::all()) {
         if (definition.isMenu())
             QVERIFY2(used.value(definition.id()) == 1, qPrintable(definition.id()));
@@ -232,6 +236,128 @@ void MenusTests::closingWithTheShortcutsPanelOpen()
     QTRY_VERIFY(QApplication::activeWindow() && QApplication::activeWindow() != window.get());
     window.reset();
     workspace.reset();
+}
+
+
+namespace {
+struct TypeWindow {
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window{workspace};
+    EditorSession &session() { return workspace.current().session; }
+    EditorCanvas &canvas() { return window.content()->canvas(); }
+    TypeWindow()
+    {
+        workspace.createDocument(QSizeF(400, 300));
+        window.resize(1200, 800);
+        window.show();
+        if (!QTest::qWaitForWindowActive(&window))
+            qWarning("the window never became active");
+        canvas().setFocus();
+    }
+    void press(Qt::Key key, Qt::KeyboardModifiers modifiers = Qt::NoModifier) { QTest::keyClick(&canvas(), key, modifiers); }
+    size_t count()
+    {
+        size_t objects = 0;
+        for (const VectorObject &object : session().document()->objects)
+            objects += object.kind == ObjectKind::layer ? 0 : 1;
+        return objects;
+    }
+};
+}
+
+void MenusTests::typeKeysStyleSelectedType()
+{
+    TypeWindow w;
+    const QUuid id = w.session().addText(QPointF(40, 100), QStringLiteral("Tracked"));
+    const auto text = [&] { return w.session().document()->find(id)->text; };
+    QVERIFY(w.window.menus()->action("loosenTracking")->isEnabled());
+    const QString before = w.session().undoName();
+    for (int repeat = 0; repeat < 3; ++repeat)
+        w.press(Qt::Key_Right, Qt::AltModifier);
+    QCOMPARE(text().tracking, 60.0);
+    QCOMPARE(w.count(), size_t(1));
+    QCOMPARE(w.session().undoName(), QString("Tracking"));
+    w.session().undo();
+    QCOMPARE(text().tracking, 0.0);
+    QCOMPARE(w.session().undoName(), before);
+    w.press(Qt::Key_Left, Qt::ControlModifier | Qt::AltModifier);
+    QCOMPARE(text().tracking, -100.0);
+    // Alt+Up tightens leading from Auto's value; Alt+Shift+Up raises the baseline.
+    const double automatic = text().effectiveLeading();
+    w.press(Qt::Key_Up, Qt::AltModifier);
+    QCOMPARE(text().leading, std::optional<double>(automatic - 2));
+    w.press(Qt::Key_Up, Qt::AltModifier | Qt::ShiftModifier);
+    QCOMPARE(text().baselineShift, 2.0);
+    const double size = text().size;
+    w.press(Qt::Key_Greater, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(text().size, size + 2);
+    w.press(Qt::Key_Less, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(text().size, size);
+    w.press(Qt::Key_Q, Qt::ControlModifier | Qt::AltModifier);
+    QCOMPARE(text().tracking, 0.0);
+    QCOMPARE(w.count(), size_t(1));
+}
+
+void MenusTests::altArrowsDuplicateAnythingElse()
+{
+    TypeWindow w;
+    const QUuid text = w.session().addText(QPointF(40, 200), QStringLiteral("Words"));
+    const QUuid shape = box(w.session(), 10);
+    w.session().select({shape});
+    QVERIFY(!w.window.menus()->action("loosenTracking")->isEnabled());
+    w.press(Qt::Key_Right, Qt::AltModifier);
+    // A copy, nudged; the type is untouched.
+    QCOMPARE(w.count(), size_t(3));
+    QCOMPARE(w.session().document()->find(text)->text.tracking, 0.0);
+    // Type and a shape together: not all type, so it's a copy too.
+    w.session().select({text, shape});
+    w.press(Qt::Key_Down, Qt::AltModifier);
+    QCOMPARE(w.count(), size_t(5));
+}
+
+void MenusTests::typeKeysKernAtACaretWhileTyping()
+{
+    TypeWindow w;
+    const QUuid id = w.session().addText(QPointF(100, 100), QStringLiteral("AVA"));
+    w.session().selectTool(Tool::text);
+    const QRectF bounds = w.session().document()->bounds(id);
+    const QPoint at = w.session().viewport.viewPoint(QPointF(bounds.left() + 0.5, bounds.center().y()), w.session().document()->size).toPoint();
+    QTest::mouseClick(&w.canvas(), Qt::LeftButton, Qt::NoModifier, at);
+    QVERIFY(w.canvas().isEditingText());
+    QVERIFY(w.window.menus()->action("loosenTracking")->isEnabled());
+    // The caret between A and V: Alt+Left kerns that pair.
+    w.press(Qt::Key_Right);
+    w.press(Qt::Key_Left, Qt::AltModifier);
+    w.press(Qt::Key_Left, Qt::AltModifier);
+    QCOMPARE(w.session().document()->find(id)->text.kerns.at(1), -40.0);
+    QCOMPARE(w.session().document()->find(id)->text.tracking, 0.0);
+    QCOMPARE(w.session().undoName(), QString("Kerning"));
+    QVERIFY(w.canvas().isEditingText());
+    // With a range selected, it's tracking.
+    w.press(Qt::Key_Right, Qt::ShiftModifier);
+    w.press(Qt::Key_Right, Qt::AltModifier);
+    QCOMPARE(w.session().document()->find(id)->text.tracking, 20.0);
+    // Typing carries on with the kern in place.
+    w.press(Qt::Key_End);
+    QTest::keyClicks(&w.canvas(), QStringLiteral("!"));
+    w.canvas().finishTextEditing();
+    QCOMPARE(w.session().document()->find(id)->text.text, QString("AVA!"));
+    QCOMPARE(w.session().document()->find(id)->text.kerns.at(1), -40.0);
+}
+
+void MenusTests::typeMenuConvertsPointAndArea()
+{
+    TypeWindow w;
+    const QUuid id = w.session().addText(QPointF(40, 100), QStringLiteral("Point to area"));
+    Menus &menus = *w.window.menus();
+    QVERIFY(menus.action("convertToAreaType")->isEnabled());
+    QVERIFY(!menus.action("convertToPointType")->isEnabled());
+    menus.action("convertToAreaType")->trigger();
+    QVERIFY(w.session().document()->find(id)->text.area.has_value());
+    QVERIFY(!menus.action("convertToAreaType")->isEnabled());
+    menus.action("convertToPointType")->trigger();
+    QVERIFY(!w.session().document()->find(id)->text.area.has_value());
+    QCOMPARE(w.session().document()->find(id)->text.text, QString("Point to area"));
 }
 
 QTEST_MAIN(MenusTests)

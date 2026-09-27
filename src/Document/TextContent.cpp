@@ -144,15 +144,18 @@ QString TextContent::styleFor(const QString &family, int weight, bool italic)
     QString best;
     int bestCost = std::numeric_limits<int>::max();
     for (const QString &candidate : styles) {
+        // Only a face of the right slant within a step of the weight will do.
+        const int off = std::abs(QFontDatabase::weight(family, candidate) - weight);
+        if (QFontDatabase::italic(family, candidate) != italic || off > 100)
+            continue;
         // Condensed and other widths come last, so plain faces win ties.
-        const int cost = std::abs(QFontDatabase::weight(family, candidate) - weight) + (QFontDatabase::italic(family, candidate) != italic ? 1000 : 0)
-            + int(candidate.size());
+        const int cost = off * 100 + int(candidate.size());
         if (cost < bestCost) {
             bestCost = cost;
             best = candidate;
         }
     }
-    if (!best.isEmpty() && bestCost < 1000 + 100)
+    if (!best.isEmpty())
         return best;
     const QString name = weightName(weight);
     if (!italic)
@@ -164,6 +167,9 @@ QFont TextContent::font() const
 {
     QFont font(family);
     if (QFontDatabase::styles(family).contains(style)) {
+        // Weight and slant too, so the match and QFontInfo agree with the face.
+        font.setWeight(QFont::Weight(QFontDatabase::weight(family, style)));
+        font.setItalic(QFontDatabase::italic(family, style));
         font.setStyleName(style);
     } else {
         // A face the family lacks is made up from its weight and slant.

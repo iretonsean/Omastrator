@@ -138,10 +138,12 @@ double TextLayout::rawX(const Line &line, int position) const
     return paragraph.lines[size_t(line.index)].cursorToX(position - paragraph.start) * m_horizontal + line.offset;
 }
 
-// Justify-all spreads a paragraph's last line over its spaces, or its letters.
+// Justified lines meet both edges exactly: justify-all spreads a paragraph's last
+// line over its spaces, or its letters, and every justified line gets what Qt left over.
 double TextLayout::shift(const Line &line, double x) const
 {
-    if (!m_text.area || m_text.alignment != TextAlignment::justifyAll || !line.lastInParagraph || line.length < 2)
+    const bool justified = m_text.alignment == TextAlignment::justifyAll || (m_text.alignment == TextAlignment::justify && !line.lastInParagraph);
+    if (!m_text.area || !justified || line.length < 2)
         return 0;
     const Paragraph &paragraph = *m_paragraphs[size_t(line.paragraph)];
     const QString &content = paragraph.layout.text();
@@ -161,6 +163,9 @@ double TextLayout::shift(const Line &line, double x) const
             stops.push_back(index + 1);
     }
     if (stops.empty()) {
+        // One long word only spreads when justify-all asks for its last line.
+        if (!line.lastInParagraph)
+            return 0;
         for (int index = from + 1; index < to; ++index)
             stops.push_back(index);
     }

@@ -115,7 +115,7 @@ KeyboardShortcutsSheet::KeyboardShortcutsSheet(std::function<void()> close, QWid
     auto *rows = new QVBoxLayout(list);
     rows->setContentsMargins(0, 0, 8, 0);
     rows->setSpacing(6);
-    for (const QString &group : {QStringLiteral("Menus"), QStringLiteral("Canvas & Layers"), QStringLiteral("Text Editing")}) {
+    for (const QString &group : {QStringLiteral("Menus"), QStringLiteral("Type"), QStringLiteral("Canvas & Layers"), QStringLiteral("Text Editing")}) {
         // A group without keys shows no heading.
         if (std::none_of(ShortcutDefinition::all().begin(), ShortcutDefinition::all().end(),
                          [&](const ShortcutDefinition &definition) { return definition.group == group; }))

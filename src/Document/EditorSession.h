@@ -143,7 +143,7 @@ public:
     // The open interaction's undo name, empty when none is open.
     QString interactionName() const { return m_interaction ? m_interaction->name : QString(); }
     // The selection transformed from where the interaction began.
-    void previewTransform(const QTransform &transform);
+    void previewTransform(const QTransform &transform, bool reflowAreaText = false);
     // Replaces one object wholesale, for path point drags.
     void previewObject(const VectorObject &object);
     // The object as the interaction found it.
@@ -187,8 +187,12 @@ public:
     void align(AlignEdge edge, AlignTarget target = AlignTarget::selection);
     void distribute(DistributeAxis axis);
     void moveSelection(QPointF delta);
-    void transformSelection(const QTransform &transform, const QString &editName);
-    void rotateSelection(double degrees);
+    // `reflowAreaText`: an upright scale resizes area type's box, as its handles do.
+    void transformSelection(const QTransform &transform, const QString &editName, bool reflowAreaText = false);
+    // Each selected object by its own transform, from its bounds; one undo step.
+    void transformEach(const std::function<QTransform(const QRectF &bounds)> &transform, const QString &editName, bool reflowAreaText = false);
+    // About `pivot`, else the selection's centre.
+    void rotateSelection(double degrees, std::optional<QPointF> pivot = std::nullopt);
     void flipSelection(Qt::Orientation orientation);
     void scaleSelection(double sx, double sy);
     // Pathfinder on the selected leaves; the result takes the bottom one's style.

@@ -185,7 +185,10 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
         : weight.toInt() > 0                                                                    ? weight.toInt()
                                                                                                 : 400;
     const QString fontStyle = source.inherited(run.style, QStringLiteral("font-style"));
-    content.style = TextContent::styleFor(content.family, weightValue, fontStyle == QLatin1String("italic") || fontStyle == QLatin1String("oblique"));
+    const bool slanted = fontStyle == QLatin1String("italic") || fontStyle == QLatin1String("oblique");
+    // Plain text keeps the default face name, which renders as the family's regular.
+    if (weightValue != 400 || slanted)
+        content.style = TextContent::styleFor(content.family, weightValue, slanted);
     // Letter spacing reads in pt; tracking is in 1/1000 em.
     content.tracking = std::round(SvgSyntax::length(source.inherited(run.style, QStringLiteral("letter-spacing")), 0, content.size) / content.size * 1e6) / 1000;
     const QString kerning = source.inherited(run.style, QStringLiteral("font-kerning"));

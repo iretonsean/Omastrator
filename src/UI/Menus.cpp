@@ -243,6 +243,58 @@ void Menus::buildObject(QMenuBar &bar)
     QMenu *type = bar.addMenu(QStringLiteral("&Type"));
     add(type, QStringLiteral("createOutlines"), QStringLiteral("Create Outlines"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O),
         [this] { session().convertTextToPaths(); });
+    add(type, QStringLiteral("convertToAreaType"), QStringLiteral("Convert to Area Type"), QKeySequence(), [this] { session().convertTextType(true); });
+    add(type, QStringLiteral("convertToPointType"), QStringLiteral("Convert to Point Type"), QKeySequence(), [this] { session().convertTextType(false); });
+    type->addSeparator();
+    buildTypeKeys(*type);
+}
+
+// Illustrator's type keys, as entries so they show their keys and can be remapped.
+void Menus::buildTypeKeys(QMenu &type)
+{
+    const auto step = [this](EditorSession::TextStep what, double amount) {
+        return [this, what, amount] { session().stepText(what, amount); };
+    };
+    // At a caret, the tracking keys kern the pair around it instead.
+    const auto track = [this](double amount) {
+        return [this, amount] {
+            if (!(m_canvas && m_canvas->kernAtCaret(amount)))
+                session().stepText(EditorSession::TextStep::tracking, amount);
+        };
+    };
+    QMenu *size = type.addMenu(QStringLiteral("Size"));
+    size->menuAction()->setObjectName(QStringLiteral("typeSizeMenu"));
+    add(size, QStringLiteral("increaseFontSize"), QStringLiteral("Increase Font Size"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Greater),
+        step(EditorSession::TextStep::size, 2));
+    add(size, QStringLiteral("decreaseFontSize"), QStringLiteral("Decrease Font Size"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Less),
+        step(EditorSession::TextStep::size, -2));
+    QMenu *tracking = type.addMenu(QStringLiteral("Tracking"));
+    tracking->menuAction()->setObjectName(QStringLiteral("typeTrackingMenu"));
+    add(tracking, QStringLiteral("tightenTracking"), QStringLiteral("Tighten Tracking"), QKeySequence(Qt::ALT | Qt::Key_Left), track(-20));
+    add(tracking, QStringLiteral("loosenTracking"), QStringLiteral("Loosen Tracking"), QKeySequence(Qt::ALT | Qt::Key_Right), track(20));
+    add(tracking, QStringLiteral("tightenTrackingMore"), QStringLiteral("Tighten Tracking ×5"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Left),
+        track(-100));
+    add(tracking, QStringLiteral("loosenTrackingMore"), QStringLiteral("Loosen Tracking ×5"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Right),
+        track(100));
+    add(tracking, QStringLiteral("resetTracking"), QStringLiteral("Reset Tracking"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Q), [this] {
+        session().updateText([](TextContent &text) {
+            text.tracking = 0;
+            text.kerns.clear();
+        }, QStringLiteral("Reset Tracking"));
+    });
+    // Alt+Up tightens leading, as in Illustrator.
+    QMenu *leading = type.addMenu(QStringLiteral("Leading"));
+    leading->menuAction()->setObjectName(QStringLiteral("typeLeadingMenu"));
+    add(leading, QStringLiteral("decreaseLeading"), QStringLiteral("Decrease Leading"), QKeySequence(Qt::ALT | Qt::Key_Up),
+        step(EditorSession::TextStep::leading, -2));
+    add(leading, QStringLiteral("increaseLeading"), QStringLiteral("Increase Leading"), QKeySequence(Qt::ALT | Qt::Key_Down),
+        step(EditorSession::TextStep::leading, 2));
+    QMenu *baseline = type.addMenu(QStringLiteral("Baseline Shift"));
+    baseline->menuAction()->setObjectName(QStringLiteral("typeBaselineMenu"));
+    add(baseline, QStringLiteral("raiseBaseline"), QStringLiteral("Raise Baseline"), QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_Up),
+        step(EditorSession::TextStep::baselineShift, 2));
+    add(baseline, QStringLiteral("lowerBaseline"), QStringLiteral("Lower Baseline"), QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_Down),
+        step(EditorSession::TextStep::baselineShift, -2));
 }
 
 void Menus::buildViewAndWindow(QMenuBar &bar)

@@ -93,9 +93,9 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Forty-seven menu entries, fourteen tools, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 74);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 47);
+    // Forty-seven menu entries, eleven type keys, fourteen tools, five keys, eight nudges.
+    QCOMPARE(int(all.size()), 85);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 58);
     QSet<QString> ids;
     for (const ShortcutDefinition &definition : all)
         ids.insert(definition.id());
@@ -118,6 +118,17 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
     QCOMPARE(named("Next Object Above").original, ShortcutChord("]", 3));
     QCOMPARE(named("Swap fill and stroke").group, QString("Canvas & Layers"));
     QCOMPARE(named("Undo").id(), QString("Menus:Undo"));
+    // Illustrator's type keys sit under Type, where the sheet lists them.
+    QCOMPARE(named("Loosen Tracking").original, ShortcutChord(QString(QChar(0xf703)), 2));
+    QCOMPARE(named("Tighten Tracking ×5").original, ShortcutChord(QString(QChar(0xf702)), 3));
+    QCOMPARE(named("Decrease Leading").original, ShortcutChord(QString(QChar(0xf700)), 2));
+    QCOMPARE(named("Raise Baseline").original, ShortcutChord(QString(QChar(0xf700)), 10));
+    QCOMPARE(named("Increase Font Size").original, ShortcutChord(".", 9));
+    QCOMPARE(named("Increase Font Size").id(), QString("Type:Increase Font Size"));
+    QVERIFY(named("Increase Font Size").isMenu());
+    // Shift+. is typed as >, and reads back as the same key.
+    QCOMPARE(ShortcutChord(".", 9).combination(), QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_Greater));
+    QCOMPARE(ShortcutChord(QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_Less)), ShortcutChord(",", 9));
     // The defaults hold together.
     QVERIFY(!ShortcutSettings::problem({}));
 }
