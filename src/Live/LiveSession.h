@@ -1,6 +1,7 @@
 #pragma once
 #include "Live/Browser.h"
 #include "Live/DevServer.h"
+#include "Live/EditSets.h"
 #include "Live/Tokens.h"
 #include <QJsonArray>
 #include <QJsonObject>
@@ -24,6 +25,8 @@ struct LiveEdit {
     QString classesAfter;
     // The element as it was before its first edit.
     QJsonObject element;
+    // The page it was made on (EditSets::pathOf).
+    QString path;
     QJsonObject toJson() const;
 };
 
@@ -82,6 +85,19 @@ public:
     // A PNG of the page, or of one element with some room around it. Returns why it failed, or empty.
     QString screenshot(const QString &path, const QString &selector = QString());
 
+    // A site that isn't the user's (docs/ANYWHERE.md): its edits are kept as named sets for its origin, put back on
+    // every visit, never deployed. Each returns why it failed, or empty.
+    QString origin() const;
+    std::vector<EditSets::Set> editSets() const;
+    // Keeps the edits not kept yet in the set `name` (the next "Edits N" when empty) and clears them.
+    QString keepEdits(const QString &name, QString *kept = nullptr);
+    QString setEditSetEnabled(const QString &name, bool enabled);
+    QString removeEditSet(const QString &name);
+    // What's on the page now (enabled sets and edits not kept yet), or one set by name.
+    std::vector<EditSets::Edit> editsShown(const QString &name = QString()) const;
+    // true: the page as the site made it; false: every enabled set and unkept edit back on.
+    QString showOriginal(bool original);
+
     // The overlay's source.
     static QString overlayScript();
 
@@ -90,6 +106,8 @@ signals:
     void editApplied(const LiveEdit &edit);
     // "Ask AI…" in the bar: the prompt and the selected elements.
     void askRequested(const QString &prompt, const QJsonArray &elements);
+    // The page's "Not your site" strip: keep, export, beforeAfter, handoff or toggle, with a set's name.
+    void siteRequested(const QString &action, const QJsonObject &params);
 
 private:
     void run(Target target);
@@ -100,6 +118,10 @@ private:
     void onEvent(const QString &method, const QJsonObject &params, const QString &sessionId);
     void handle(const QJsonObject &message);
     void rescanTokens();
+    // After a load: the address as it is now, the tokens, and on a mock-up its edit sets put back.
+    void pageLoaded();
+    // Tells the overlay about the edit sets (a mock-up) or that the page is the user's.
+    void describeSite();
     void record(const QJsonObject &element, const TokenSet::Resolution &resolution, const QJsonObject &applied, const QString &textBefore);
 
     Browser m_browser;

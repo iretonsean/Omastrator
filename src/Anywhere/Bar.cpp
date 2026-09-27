@@ -28,16 +28,19 @@ QString kindOf(const QString &surfaceKind, bool otherBrowser)
 
 QJsonArray actions(const QString &kind)
 {
+    static const char *handOffTip = "Your agent builds this in your app's source: the mock-up, what it was lifted from and any page edits";
     if (kind == QLatin1String("web"))
         return {action("inspect", "Inspect", "Every style of this element, with Copy CSS"),
                 action("lift", "Lift", "Turn this element into editable shapes and text, in place"),
                 action("mockup", "Mock Up", "Draw over this element with the rectangle tool"),
                 action("measure", "Measure", "Distances from this element to the next one you point at"),
-                action("extractSystem", "Extract Design System", "This page's colours, type, spacing, radii, shadows and repeated components, as a system to review")};
+                action("extractSystem", "Extract Design System", "This page's colours, type, spacing, radii, shadows and repeated components, as a system to review"),
+                action("handToAgent", "Hand to Agent…", handOffTip)};
     if (kind == QLatin1String("window") || kind == QLatin1String("browser")) {
         QJsonArray list{action("capture", "Capture to Desk", "A screenshot of this window as a frame on the Desk"),
                         action("lift", "Lift", "Turn what's pointed at into editable shapes and text, in place"),
-                        action("measure", "Measure", "Distances from this to the next thing you point at")};
+                        action("measure", "Measure", "Distances from this to the next thing you point at"),
+                        action("handToAgent", "Hand to Agent…", handOffTip)};
         if (kind == QLatin1String("browser"))
             list.append(action("openInBrowser", "Open in Omastrator's Browser",
                                "This browser's pages can't be read. Open the page in Omastrator's own browser to inspect it."));
@@ -68,6 +71,7 @@ QJsonArray actions(const QString &kind)
     }
     list.append(action("makeComponent", "Make Component", "Make this art a component, with instances that follow it"));
     list.append(action("designSystem", "Design System", "Tokens and components from your library, for this art"));
+    list.append(action("handToAgent", "Hand to Agent…", handOffTip));
     list.append(action("duplicate", "Duplicate", "Duplicate"));
     list.append(action("delete", "Delete", "Delete"));
     list.append(action("undo", "Undo", "Undo the last change to this surface's art"));

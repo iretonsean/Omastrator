@@ -48,20 +48,14 @@ std::vector<std::pair<QUuid, QString>> frames(const VectorDocument &desk)
     return found;
 }
 
-QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error)
+// Lays one frame out on `next`, after the frames already there.
+static QUuid place(VectorDocument &next, const Frame &frame, QString *error)
 {
     auto failed = [&](const QString &message) {
         if (error)
             *error = message;
         return QUuid();
     };
-    if (!desk.hasDocument())
-        return failed(QStringLiteral("The Desk isn't open."));
-    if (desk.isInteracting())
-        return failed(QStringLiteral("Finish the edit on the Desk first."));
-    VectorDocument next = *desk.document();
-    if (next.layers().empty())
-        next = blank();
 
     // The art's own extent, from its surface's corner.
     QRectF artBounds;
@@ -142,10 +136,39 @@ QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error)
     // The artboard grows to keep every frame on it.
     const QRectF all = next.bounds(groupId, true);
     next.size = QSizeF(std::max(next.size.width(), all.right() + margin), std::max(next.size.height(), all.bottom() + margin));
-
-    desk.beginInteraction(frame.step.isEmpty() ? QStringLiteral("Send to Desk") : frame.step);
-    desk.previewDocument(next, {groupId});
-    desk.commitInteraction();
     return groupId;
+}
+
+QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error)
+{
+    const std::vector<QUuid> ids = addFrames(desk, {frame}, frame.step.isEmpty() ? QStringLiteral("Send to Desk") : frame.step, error);
+    return ids.empty() ? QUuid() : ids.front();
+}
+
+std::vector<QUuid> addFrames(EditorSession &desk, const std::vector<Frame> &frames, const QString &step, QString *error)
+{
+    auto failed = [&](const QString &message) {
+        if (error)
+            *error = message;
+        return std::vector<QUuid>{};
+    };
+    if (!desk.hasDocument())
+        return failed(QStringLiteral("The Desk isn't open."));
+    if (desk.isInteracting())
+        return failed(QStringLiteral("Finish the edit on the Desk first."));
+    VectorDocument next = *desk.document();
+    if (next.layers().empty())
+        next = blank();
+    std::vector<QUuid> ids;
+    for (const Frame &frame : frames) {
+        const QUuid id = place(next, frame, error);
+        if (id.isNull())
+            return {};
+        ids.push_back(id);
+    }
+    desk.beginInteraction(step);
+    desk.previewDocument(next, ids);
+    desk.commitInteraction();
+    return ids;
 }
 }

@@ -49,6 +49,15 @@ public:
     // The lift under way, if any.
     LiftJob *liftJob() const { return m_lift.get(); }
 
+    // A site that isn't yours: the page lifted without its edits, then with them, as two frames on the Desk in one
+    // undo step. Returns why it couldn't start, or empty; it lands in the background.
+    QString beforeAfter(QJsonObject &result);
+    // Hand to Agent with the page in Omastrator's browser: its edits, art and screenshots. Without `folder` in
+    // `params`, the Hand to Agent sheet asks (offering the folder used last for this site).
+    QString handOffPage(const QJsonObject &params, QJsonObject &result);
+    // lifted.json beside the overlays: each lifted object as it landed, for Apply to Source.
+    QString liftedPath() const;
+
 signals:
     void changed();
 
@@ -69,6 +78,12 @@ private:
     QString artAction(const QString &id, const QString &surface);
     QString ask(const QString &prompt, const Target &target, QJsonObject &result);
     QString send(const QString &destination, const Target &target, const QString &prompt, QJsonObject &result);
+    // Hand to Agent… from any surface: its art, what it was lifted from, a page's edits and a screenshot.
+    QString handOff(const Target &target, const QJsonObject &params, QJsonObject &result);
+    // Apply to Source for lifted art on your own page: its changes become page edits, then Live's write-back.
+    // Returns why it couldn't, or empty; `applied` is false when there were no lifted changes to apply.
+    QString applyLifted(const QString &key, const std::vector<QUuid> &roots, bool *applied, QJsonObject &result);
+    void beforeAfterLifted();
     QString captureToDesk(const Target &target, QJsonObject &result);
     // The surface as a frame: its screenshot, where it can be taken, with its art (or the selected part) over it.
     Desk::Frame frameFor(const Target &target, bool screenshot, QString *error);
@@ -105,4 +120,7 @@ private:
     std::unique_ptr<LiftJob> m_lift;
     Surface m_liftSurface;
     QString m_liftDestination;
+    // Before and After: the page's label, and the lift without its edits once it's done.
+    QString m_beforeAfter;
+    std::optional<Lift::Result> m_before;
 };

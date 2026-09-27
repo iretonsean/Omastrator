@@ -7,6 +7,7 @@
 #include "Document/Swatches.h"
 #include "Live/AgentWork.h"
 #include "Live/DeployJob.h"
+#include "Live/EditSets.h"
 #include "Live/History.h"
 #include "Live/LiveSession.h"
 #include "Live/WriteBack.h"
@@ -137,6 +138,29 @@ public:
     QString liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest = nullptr);
     // Hand to agent: the front document as a mockup, for an app whose code is in `folder`.
     QString handToAgent(const QString &folder, const QString &instruction);
+    // Hand to Agent from any surface (docs/ANYWHERE.md): a page that isn't yours, a lifted app, art on the overlay.
+    struct HandOff {
+        QString folder;
+        QString instruction;
+        // What it came from: "example.com/pricing", "foot".
+        QString source;
+        QString url;
+        // The mockup as vectors, when there's art; `picture` stands in for it otherwise.
+        std::optional<VectorDocument> art;
+        QString picture;
+        // The surface as it is now, and a page before its edits.
+        QString screenshot;
+        QString original;
+        // A site's edits, kept or not, and its origin.
+        std::vector<EditSets::Edit> edits;
+        QString origin;
+    };
+    // Packages it (render, SVG, lifted selectors, the edits as CSS) and runs the agent headlessly in a worktree of
+    // `folder`; its change lands as a review. Returns why it couldn't start, or empty.
+    QString handOff(const HandOff &handOff, QString *requestId = nullptr);
+    // A site that isn't yours (docs/ANYWHERE.md): keep, toggle, remove and export its edit sets, Before and After, and
+    // Hand to Agent. `params` holds the set's `name`, `on`, a `path` to export to, the agent's `folder`.
+    QString siteAction(const QString &action, const QJsonObject &params, QJsonObject &result);
     // The agent says it's done: its changes are written and recorded.
     QString liveAgentDone(const QString &requestId, const QString &summary);
     // Every write-back this session, oldest first: the background record Review changes shows.

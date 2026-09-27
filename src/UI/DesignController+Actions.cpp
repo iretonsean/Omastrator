@@ -173,6 +173,8 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
         return ask(params["prompt"].toString().trimmed(), *chosen, result);
     if (action == QLatin1String("send"))
         return send(params["destination"].toString(), *chosen, params["prompt"].toString().trimmed(), result);
+    if (action == QLatin1String("handoff"))
+        return handOff(*chosen, params, result);
     return QStringLiteral("There is no design action “%1”.").arg(action);
 }
 
@@ -206,6 +208,8 @@ QString DesignController::draw(const QJsonObject &params, QJsonObject &result)
 
 QString DesignController::action(const QString &id, const Target &target, QJsonObject &result)
 {
+    if (id == QLatin1String("handToAgent"))
+        return handOff(target, {}, result);
     if (!target.artSurface.isEmpty())
         return artAction(id, target.artSurface);
     const Inspection &inspection = *target.inspection;
@@ -538,6 +542,12 @@ QString DesignController::send(const QString &destination, const Target &target,
     if (!ownsPage)
         return QStringLiteral("Only pages open in Omastrator's browser with their code on this machine take changes. Send it to the Desk, "
                               "a document or the agent instead.");
+    // Lifted art that was changed goes back as page edits, then into the code like any Live edit.
+    const std::vector<QUuid> roots = !target.artSurface.isEmpty() && m_overlays.selectedSurface() == key ? m_overlays.session().selection()
+                                                                                                        : m_overlays.art(key);
+    bool applied = false;
+    if (const QString failure = applyLifted(key, roots, &applied, result); !failure.isEmpty() || applied)
+        return failure;
     const auto picture = m_overlays.picture(key, 2);
     QString instruction = prompt.isEmpty() ? QStringLiteral("Make the page match the mock-up the user drew over it.") : prompt;
     if (picture)
