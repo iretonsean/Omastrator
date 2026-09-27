@@ -63,8 +63,9 @@ void EditorSession::selectSame(SameAttribute attribute)
 {
     runSelect([this, attribute] {
         const std::vector<QUuid> leaves = selectedLeaves();
-        if (!leaves.empty())
-            select(m_document->matching(leaves.front(), attribute));
+        // No match (a font asked of a shape) leaves the selection as it was.
+        if (const std::vector<QUuid> found = leaves.empty() ? std::vector<QUuid>() : m_document->matching(leaves.front(), attribute); !found.empty())
+            select(found);
     });
 }
 

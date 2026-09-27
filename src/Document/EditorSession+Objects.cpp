@@ -212,8 +212,9 @@ void EditorSession::duplicateSelection(QPointF offset)
 {
     if (!m_document || m_selection.empty())
         return;
-    edit(QStringLiteral("Duplicate"), [&](VectorDocument &document) { m_selection = duplicateInto(document, offset); });
+    // Set first: the edit's notification is what refreshes Transform Again's entry.
     m_lastTransform = RepeatTransform{QTransform::fromTranslate(offset.x(), offset.y()), true, std::nullopt};
+    edit(QStringLiteral("Duplicate"), [&](VectorDocument &document) { m_selection = duplicateInto(document, offset); });
 }
 
 void EditorSession::previewDuplicateSelection()
@@ -428,13 +429,14 @@ void EditorSession::transformSelection(const QTransform &transform, const QStrin
 {
     if (!m_document || m_selection.empty() || transform.isIdentity())
         return;
+    // Set first: the edit's notification is what refreshes Transform Again's entry.
+    m_lastTransform = RepeatTransform{transform, false, std::nullopt};
     edit(editName, [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {
             if (!document.isEffectivelyLocked(id))
                 document.transform(id, transform);
         }
     });
-    m_lastTransform = RepeatTransform{transform, false, std::nullopt};
 }
 
 void EditorSession::rotateSelection(double degrees)

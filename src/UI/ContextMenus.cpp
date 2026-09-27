@@ -86,7 +86,7 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
     const auto layerPicker = [&] {
         if (underPointer.size() < 2)
             return;
-        QMenu *picker = submenu(menu, QStringLiteral("selectLayerMenu"), QStringLiteral("Select Layer"));
+        QMenu *picker = submenu(menu, QStringLiteral("selectLayerMenu"), QStringLiteral("Select"));
         const QColor ink = menu->palette().color(QPalette::WindowText);
         for (const QUuid &id : underPointer) {
             const VectorObject *object = document.find(id);

@@ -77,6 +77,18 @@ QPlainTextEdit *prompt(QDialog *dialog, const QString &name, const QString &plac
     field->setFixedHeight(92);
     return field;
 }
+
+// Names what the instruction will touch, so a right-click's Ask AI shows its target.
+QString instructionScope(const EditorSession &session)
+{
+    const std::vector<QUuid> &selected = session.selection();
+    if (selected.empty())
+        return QStringLiteral("Applies to the whole document.");
+    const VectorObject *object = selected.size() == 1 ? session.document()->find(selected.front()) : nullptr;
+    if (object && !object->name.isEmpty())
+        return QStringLiteral("Applies to “%1”.").arg(object->name);
+    return selected.size() == 1 ? QStringLiteral("Applies to the selection.") : QStringLiteral("Applies to %1 selected objects.").arg(selected.size());
+}
 }
 
 namespace AgentSheets {
@@ -109,8 +121,7 @@ QDialog *editWithInstruction(AgentBridge &bridge, QWidget *window)
     QFormLayout *form = nullptr;
     QLabel *error = nullptr;
     QDialog *dialog = sheet(window, QStringLiteral("editInstructionSheet"), QStringLiteral("Edit with Instruction"), form, error);
-    const bool selected = bridge.session()->hasSelection();
-    auto *scope = new QLabel(selected ? QStringLiteral("Applies to the selection.") : QStringLiteral("Applies to the whole document."), dialog);
+    auto *scope = new QLabel(instructionScope(*bridge.session()), dialog);
     scope->setObjectName(QStringLiteral("instructionScope"));
     QPlainTextEdit *field = prompt(dialog, QStringLiteral("instructionField"), QStringLiteral("Recolor to this palette: #1e66f5, #fe640b"), QString());
     form->addRow(QStringLiteral("Instruction:"), field);

@@ -4,6 +4,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <utility>
 
 namespace {
 PanelIcon kindIcon(ObjectKind kind)
@@ -58,7 +59,7 @@ LayerCell::LayerCell(NativeLayerList &list)
     // Alt-click, as in Illustrator: the eye or lock of every other row, as one step.
     connect(m_eye, &QToolButton::clicked, this, [this] {
         EditorSession &session = m_list.session();
-        if (m_controlModifiers.testFlag(Qt::AltModifier)) {
+        if (std::exchange(m_controlModifiers, {}).testFlag(Qt::AltModifier)) {
             session.setOthersVisible(m_id, !session.anyOtherVisible(m_id));
             return;
         }
@@ -66,7 +67,7 @@ LayerCell::LayerCell(NativeLayerList &list)
     });
     connect(m_lock, &QToolButton::clicked, this, [this] {
         EditorSession &session = m_list.session();
-        if (m_controlModifiers.testFlag(Qt::AltModifier)) {
+        if (std::exchange(m_controlModifiers, {}).testFlag(Qt::AltModifier)) {
             session.setOthersLocked(m_id, session.anyOtherUnlocked(m_id));
             return;
         }

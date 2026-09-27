@@ -6,6 +6,7 @@
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
 #include <QApplication>
+#include <QClipboard>
 #include <QFileInfo>
 #include <QMenu>
 #include <QMessageBox>
@@ -22,6 +23,8 @@ Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentB
     connect(qApp, &QApplication::focusChanged, this, &Menus::focusMoved);
     connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &Menus::remap);
     connect(&m_workspace, &ProjectWorkspace::changed, this, &Menus::synchronize);
+    // Copying changes no document, but it's what the Paste entries wait for.
+    connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &Menus::synchronize);
     if (m_agent)
         connect(m_agent, &AgentBridge::proposalChanged, this, &Menus::synchronize);
     watchFront(nullptr);
