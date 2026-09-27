@@ -6,6 +6,7 @@
 #include <QFormLayout>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QSpinBox>
 
 namespace {
 // A window-modal sheet: its fields, then OK and Cancel.
@@ -111,6 +112,29 @@ QDialog *ObjectDialogs::offsetPath(EditorSession &session, QWidget *window)
     return dialog;
 }
 
+QDialog *ObjectDialogs::average(EditorSession &session, QWidget *window)
+{
+    QFormLayout *form = nullptr;
+    QDialog *dialog = sheet(window, QStringLiteral("averageDialog"), QStringLiteral("Average"), form);
+    auto *horizontal = new QRadioButton(QStringLiteral("Horizontal"), dialog);
+    horizontal->setObjectName(QStringLiteral("averageHorizontal"));
+    horizontal->setToolTip(QStringLiteral("Line the points up on one horizontal line"));
+    auto *vertical = new QRadioButton(QStringLiteral("Vertical"), dialog);
+    vertical->setObjectName(QStringLiteral("averageVertical"));
+    vertical->setToolTip(QStringLiteral("Line the points up on one vertical line"));
+    auto *both = new QRadioButton(QStringLiteral("Both"), dialog);
+    both->setObjectName(QStringLiteral("averageBoth"));
+    both->setToolTip(QStringLiteral("Move the points onto one spot"));
+    both->setChecked(true);
+    form->addRow(QStringLiteral("Axis:"), horizontal);
+    form->addRow(QString(), vertical);
+    form->addRow(QString(), both);
+    finish(dialog, form, [&session, horizontal, vertical] {
+        session.averagePoints(horizontal->isChecked() ? Qt::Horizontal : vertical->isChecked() ? Qt::Vertical : Qt::Horizontal | Qt::Vertical);
+    });
+    return dialog;
+}
+
 QDialog *ObjectDialogs::artboardSize(EditorSession &session, QWidget *window)
 {
     QFormLayout *form = nullptr;
@@ -131,6 +155,16 @@ QDialog *ObjectDialogs::preferences(QWidget *window)
     QDoubleSpinBox *increment = number(dialog, QStringLiteral("keyboardIncrement"), EditorCanvas::keyboardIncrement(), 0.01, 1000, QStringLiteral(" pt"));
     increment->setToolTip(QStringLiteral("How far an arrow key moves the selection. Shift moves ten times as far."));
     form->addRow(QStringLiteral("Keyboard increment:"), increment);
-    finish(dialog, form, [increment] { EditorCanvas::setKeyboardIncrement(increment->value()); });
+    auto *history = new QSpinBox(dialog);
+    history->setObjectName(QStringLiteral("historyLimit"));
+    history->setRange(1, 1000);
+    history->setValue(EditorSession::historyLimit());
+    history->setFixedWidth(120);
+    history->setToolTip(QStringLiteral("How many steps each document can undo. Past it, the oldest go first."));
+    form->addRow(QStringLiteral("History states:"), history);
+    finish(dialog, form, [increment, history] {
+        EditorCanvas::setKeyboardIncrement(increment->value());
+        EditorSession::setHistoryLimit(history->value());
+    });
     return dialog;
 }

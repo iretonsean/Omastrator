@@ -77,7 +77,7 @@ void EditorCanvas::contextMenuEvent(QContextMenuEvent *event)
 
 std::optional<QUuid> EditorCanvas::isolatedGroup() const
 {
-    return m_state->enteredGroup;
+    return m_session.isolatedGroup();
 }
 
 void EditorCanvas::isolateGroup(const QUuid &group)
@@ -85,19 +85,15 @@ void EditorCanvas::isolateGroup(const QUuid &group)
     const VectorObject *object = m_session.document() ? m_session.document()->find(group) : nullptr;
     if (!object || object->kind != ObjectKind::group)
         return;
-    // Isolation belongs to the Selection tool; switching tools ends it.
-    m_session.selectTool(Tool::select);
-    m_state->enteredGroup = group;
-    m_session.deselectAll();
+    if (m_session.tool() != Tool::select && m_session.tool() != Tool::directSelect)
+        m_session.selectTool(Tool::select);
+    m_session.isolate(group);
     update();
 }
 
 void EditorCanvas::exitIsolation()
 {
-    const std::optional<QUuid> group = m_state->enteredGroup;
-    m_state->enteredGroup.reset();
-    if (group && m_session.document() && m_session.document()->find(*group))
-        m_session.select({*group});
+    m_session.exitIsolation();
     update();
 }
 

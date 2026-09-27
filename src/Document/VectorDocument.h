@@ -10,6 +10,7 @@
 #include <QString>
 #include <QTransform>
 #include <QUuid>
+#include <array>
 #include <map>
 #include <cstdint>
 #include <optional>
@@ -84,6 +85,38 @@ struct TextContent {
     friend bool operator==(const TextContent &, const TextContent &) = default;
 };
 
+// Live Corners: how a rectangle's corner turns.
+enum class CornerStyle { round, inverted, chamfer };
+QString rawValue(CornerStyle style);
+std::optional<CornerStyle> cornerStyle(const QString &rawValue);
+
+// A rectangle kept live: its path is rebuilt from these until an anchor is edited.
+// Corners run top left, top right, bottom right, bottom left in the shape's own frame.
+struct LiveRectangle {
+    QRectF rect;
+    // Rotation, reflection and translation only: the shape's frame in document coordinates.
+    QTransform placement;
+    std::array<double, 4> radii{};
+    std::array<CornerStyle, 4> styles{CornerStyle::round, CornerStyle::round, CornerStyle::round, CornerStyle::round};
+
+    // Radii past half the shorter side are clamped when drawn.
+    double effectiveRadius(int corner) const;
+    VectorPath path() const;
+    // The corner's point and its inward diagonal (unit), in document coordinates.
+    QPointF corner(int corner) const;
+    QPointF inward(int corner) const;
+    // The same shape after `transform`; nullopt when it's no longer a rectangle.
+    std::optional<LiveRectangle> transformed(const QTransform &transform, bool scaleCorners = true) const;
+    friend bool operator==(const LiveRectangle &, const LiveRectangle &) = default;
+};
+
+// A ruler guide: a horizontal one runs along y = position, a vertical one along x.
+struct Guide {
+    Qt::Orientation orientation = Qt::Horizontal;
+    double position = 0;
+    friend bool operator==(const Guide &, const Guide &) = default;
+};
+
 // Select ▸ Same: what an object must share with the one picked.
 enum class SameAttribute { fillColor, strokeColor, fillAndStroke, strokeWeight, opacity, blendMode, fontFamily, fontFamilyStyleSize };
 // Select ▸ Object: kinds of object picked across the document.
@@ -116,6 +149,8 @@ struct VectorObject {
     QTransform transform;
     // Groups: the first child clips the rest.
     bool isClipGroup = false;
+    // Rectangles: the live shape, while the path is still what it makes.
+    std::optional<LiveRectangle> shape;
 
     bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group; }
     bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text; }
@@ -130,6 +165,8 @@ struct VectorObject {
     bool hasSimpleAppearance() const;
     // Fills, strokes, opacity and blend from `other`.
     void copyAppearance(const VectorObject &other);
+    // The live rectangle, when its path hasn't been edited since.
+    const LiveRectangle *liveShape() const;
     // The object's own shape in document coordinates (containers: empty).
     QPainterPath outline() const;
     friend bool operator==(const VectorObject &, const VectorObject &) = default;
@@ -142,6 +179,7 @@ struct VectorDocument {
     // The artboard's paper; transparent exports leave it out.
     QColor background = Qt::white;
     std::vector<VectorObject> objects;
+    std::vector<Guide> guides;
 
     // A document with one empty layer.
     static VectorDocument blank(QSizeF size);
@@ -189,6 +227,8 @@ struct VectorDocument {
     // A copy of an object's subtree with new ids.
     std::vector<VectorObject> copySubtree(const QUuid &id) const;
     QString uniqueName(const QString &base) const;
+    // Rectangles whose anchors were edited become plain paths.
+    void expandEditedShapes();
     friend bool operator==(const VectorDocument &, const VectorDocument &) = default;
 
 private:

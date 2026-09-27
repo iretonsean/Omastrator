@@ -50,6 +50,7 @@ ToolHeaderBar *ToolHeaders::make(EditorSession &session, Tool tool, QWidget *par
     case Tool::polygon:
     case Tool::star: return new ShapeControls(session, tool, parent);
     case Tool::shapeBuilder: return new ShapeBuilderControls(session, parent);
+    case Tool::scissors: return plainBar(tool, QStringLiteral("Click a path to cut it there"), parent);
     case Tool::rotate:
     case Tool::scale: return new TransformToolHeader(session, tool, parent);
     case Tool::eyedropper: return plainBar(tool, QStringLiteral("Click an object to take its fill and stroke. Alt-click gives it the selection's"), parent);

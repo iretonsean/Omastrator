@@ -294,6 +294,9 @@ QJsonObject encode(const VectorObject &object)
     switch (object.kind) {
     case ObjectKind::path:
         json["path"] = encode(object.path);
+        // Only a shape still live is worth keeping.
+        if (const LiveRectangle *shape = object.liveShape())
+            json["shape"] = encode(*shape);
         break;
     case ObjectKind::text:
         json["text"] = encode(object.text);
@@ -349,8 +352,14 @@ VectorObject decodeObject(const QJsonObject &json)
         object.layerColor = readColor(json["layerColor"]);
     object.isClipGroup = json["clip"].toBool();
     object.transform = readTransform(json["transform"]);
-    if (object.kind == ObjectKind::path)
+    if (object.kind == ObjectKind::path) {
         object.path = decodePath(json["path"].toObject());
+        if (json.contains("shape"))
+            object.shape = decodeShape(json["shape"].toObject());
+        // A shape that no longer makes this path was edited elsewhere.
+        if (!object.liveShape())
+            object.shape.reset();
+    }
     if (object.kind == ObjectKind::text) {
         object.text = decodeText(json["text"].toObject());
     }
@@ -368,6 +377,56 @@ VectorObject decodeObject(const QJsonObject &json)
     for (const QJsonValue &stroke : json["moreStrokes"].toArray())
         object.extraStrokes.push_back(decodeStroke(stroke.toObject()));
     return object;
+}
+
+QJsonObject encode(const LiveRectangle &shape)
+{
+    QJsonArray radii, styles;
+    for (int corner = 0; corner < 4; ++corner) {
+        radii.append(shape.radii[size_t(corner)]);
+        styles.append(rawValue(shape.styles[size_t(corner)]));
+    }
+    return {{"kind", "rectangle"}, {"rect", QJsonArray{shape.rect.x(), shape.rect.y(), shape.rect.width(), shape.rect.height()}},
+            {"placement", transform(shape.placement)}, {"radii", radii}, {"corners", styles}};
+}
+
+std::optional<LiveRectangle> decodeShape(const QJsonObject &json)
+{
+    const QJsonArray rect = json["rect"].toArray();
+    if (json["kind"].toString() != QLatin1String("rectangle") || rect.size() != 4)
+        return std::nullopt;
+    LiveRectangle shape;
+    shape.rect = QRectF(rect[0].toDouble(), rect[1].toDouble(), rect[2].toDouble(), rect[3].toDouble());
+    shape.placement = readTransform(json["placement"]);
+    const QJsonArray radii = json["radii"].toArray(), styles = json["corners"].toArray();
+    for (int corner = 0; corner < 4; ++corner) {
+        shape.radii[size_t(corner)] = std::max(0.0, radii.at(corner).toDouble());
+        shape.styles[size_t(corner)] = cornerStyle(styles.at(corner).toString()).value_or(CornerStyle::round);
+    }
+    if (!std::isfinite(shape.rect.width()) || !std::isfinite(shape.rect.height()))
+        return std::nullopt;
+    return shape;
+}
+
+QJsonArray encode(const std::vector<Guide> &guides)
+{
+    QJsonArray array;
+    for (const Guide &guide : guides)
+        array.append(QJsonObject{{"axis", guide.orientation == Qt::Horizontal ? "horizontal" : "vertical"}, {"position", guide.position}});
+    return array;
+}
+
+std::vector<Guide> decodeGuides(const QJsonArray &json)
+{
+    std::vector<Guide> guides;
+    for (const QJsonValue &value : json) {
+        const QJsonObject guide = value.toObject();
+        const double position = guide["position"].toDouble(std::nan(""));
+        if (!std::isfinite(position))
+            continue;
+        guides.push_back({guide["axis"].toString() == QLatin1String("vertical") ? Qt::Vertical : Qt::Horizontal, position});
+    }
+    return guides;
 }
 
 QJsonArray encode(const std::vector<VectorObject> &objects)
@@ -390,7 +449,7 @@ QJsonObject encode(const VectorDocument &document)
 {
     return {{"format", "omastrator"}, {"version", version},
             {"width", document.size.width()}, {"height", document.size.height()},
-            {"background", color(document.background)}, {"objects", encode(document.objects)}};
+            {"background", color(document.background)}, {"objects", encode(document.objects)}, {"guides", encode(document.guides)}};
 }
 
 VectorDocument decode(const QJsonObject &json)
@@ -405,6 +464,7 @@ VectorDocument decode(const QJsonObject &json)
         throw CodecError("the artboard size is out of range");
     document.background = readColor(json["background"], Qt::white);
     document.objects = decodeObjects(json["objects"].toArray());
+    document.guides = decodeGuides(json["guides"].toArray());
     // Every parent must exist, come first, and be a container; ids are unique.
     std::set<QUuid> seen;
     for (const VectorObject &object : document.objects) {

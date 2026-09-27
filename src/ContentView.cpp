@@ -3,6 +3,7 @@
 #include "UI/AgentBridge.h"
 #include "UI/AgentPanels.h"
 #include "UI/ColorPaletteControls.h"
+#include "UI/IsolationBar.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
 #include "UI/NewDocumentSheet.h"
@@ -23,7 +24,7 @@
 const std::vector<std::vector<Tool>> ContentView::railGroups{
     {Tool::select, Tool::directSelect},
     {Tool::pen, Tool::pencil, Tool::text, Tool::line},
-    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::shapeBuilder},
+    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::shapeBuilder, Tool::scissors},
     {Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper},
     {Tool::hand, Tool::zoom},
 };
@@ -243,6 +244,8 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
         canvasColumn->addWidget(m_proposalBar);
         connect(m_agent, &AgentBridge::proposalChanged, this, &ContentView::synchronize);
     }
+    // Isolation mode's breadcrumb, above the art it isolates.
+    canvasColumn->addWidget(new IsolationBar(session, canvas));
     canvasColumn->addLayout(m_canvasSlot, 1);
     m_canvasSlot->setContentsMargins(0, 0, 0, 0);
     // The welcome sits over the canvas.

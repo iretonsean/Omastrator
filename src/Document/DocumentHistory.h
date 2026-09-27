@@ -2,6 +2,7 @@
 #include "Document/VectorDocument.h"
 #include <QString>
 #include <QUuid>
+#include <algorithm>
 #include <optional>
 #include <vector>
 
@@ -14,7 +15,9 @@ public:
         QUuid revision;
     };
 
-    const int entryLimit;
+    int entryLimit() const { return m_entryLimit; }
+    // Fewer steps drop the oldest at the next edit.
+    void setEntryLimit(int limit) { m_entryLimit = std::max(1, limit); }
     const qint64 retainedByteLimit;
 
     explicit DocumentHistory(int entryLimit = 100, qint64 retainedByteLimit = 256LL * 1024 * 1024);
@@ -25,6 +28,8 @@ public:
     QString redoName() const { return m_future.empty() ? QString() : m_future.back().name; }
     bool isModified() const { return m_revision != m_savedRevision; }
     int undoCount() const { return int(m_past.size()); }
+    std::vector<QString> undoNames() const;
+    std::vector<QString> redoNames() const;
     void markSaved() { m_savedRevision = m_revision; }
     // What's shown matches no file any more, as when a cloud conflict detaches it.
     void markUnsaved() { m_savedRevision = QUuid::createUuid(); }
@@ -49,6 +54,7 @@ private:
 
     void trim(const std::optional<VectorDocument> &current);
 
+    int m_entryLimit;
     std::vector<Entry> m_past;
     std::vector<Entry> m_future;
     QUuid m_revision = QUuid::createUuid();

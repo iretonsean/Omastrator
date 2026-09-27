@@ -28,9 +28,13 @@ double degreesBetween(QPointF center, QPointF from, QPointF to)
 
 SmartGuides EditorCanvas::State::guidesExcluding(const std::vector<QUuid> &excluded) const
 {
-    if (!session.usesSmartGuides || !session.document())
+    if (!session.document())
         return {};
-    return SmartGuides(*session.document(), excluded);
+    SmartGuides guides = session.usesSmartGuides ? SmartGuides(*session.document(), excluded) : SmartGuides();
+    // Ruler guides pull whether or not smart guides are on, while they show.
+    if (session.showsGuides)
+        guides.addGuides(session.document()->guides);
+    return guides;
 }
 
 QPointF EditorCanvas::State::snapPoint(const SmartGuides &guides, QPointF point, std::optional<QPointF> anchor, bool constrained)
@@ -46,6 +50,13 @@ QPointF EditorCanvas::State::snapPoint(const SmartGuides &guides, QPointF point,
             snapped.setX(grid.x());
         if (!result.snappedY)
             snapped.setY(grid.y());
+    }
+    // Snap to Pixel: whole points on whatever axis is still free.
+    if (session.snapsToPixel && !constrained) {
+        if (!result.snappedX)
+            snapped.setX(std::round(snapped.x()));
+        if (!result.snappedY)
+            snapped.setY(std::round(snapped.y()));
     }
     return snapped;
 }
@@ -64,6 +75,14 @@ QPointF EditorCanvas::State::snapMovement(const SmartGuides &guides, const QRect
         if (!result.snappedY)
             moved.ry() += grid.y() - corner.y();
     }
+    // Snap to Pixel: the bounds' top left lands on whole points.
+    if (session.snapsToPixel && !constrained) {
+        const QPointF corner = bounds.topLeft() + moved;
+        if (!result.snappedX)
+            moved.rx() += std::round(corner.x()) - corner.x();
+        if (!result.snappedY)
+            moved.ry() += std::round(corner.y()) - corner.y();
+    }
     return moved;
 }
 
@@ -79,16 +98,25 @@ std::optional<QUuid> EditorCanvas::State::hitLeaf(QPointF document) const
 {
     if (!session.document())
         return std::nullopt;
+    // Isolated, only the group's own art answers; what's outside is dimmed and out of reach.
+    if (const std::optional<QUuid> group = session.isolatedGroup()) {
+        for (const QUuid &id : session.document()->hitTestAll(document, reach(3))) {
+            if (session.document()->isAncestor(*group, id))
+                return id;
+        }
+        return std::nullopt;
+    }
     return session.document()->hitTest(document, reach(3));
 }
 
 std::optional<QUuid> EditorCanvas::State::selectableTarget(const QUuid &leaf) const
 {
     const VectorDocument &document = *session.document();
-    if (enteredGroup && document.find(*enteredGroup) && document.isAncestor(*enteredGroup, leaf)) {
+    const std::optional<QUuid> group = session.isolatedGroup();
+    if (group && document.isAncestor(*group, leaf)) {
         QUuid id = leaf;
         while (const VectorObject *object = document.find(id)) {
-            if (object->parentID == enteredGroup)
+            if (object->parentID == group)
                 return id;
             if (!object->parentID)
                 break;
@@ -214,15 +242,7 @@ void EditorCanvas::State::selectPress(QPointF view, Qt::KeyboardModifiers modifi
         return;
     }
     const std::optional<QUuid> leaf = hitLeaf(document);
-    std::optional<QUuid> target = leaf ? selectableTarget(*leaf) : std::nullopt;
-    // Outside the entered group leaves it; on empty space a marquee may still pick within it.
-    if (!target && enteredGroup && leaf) {
-        enteredGroup.reset();
-        target = selectableTarget(*leaf);
-    } else if (leaf && enteredGroup && !session.document()->isAncestor(*enteredGroup, *leaf)) {
-        enteredGroup.reset();
-        target = selectableTarget(*leaf);
-    }
+    const std::optional<QUuid> target = leaf ? selectableTarget(*leaf) : std::nullopt;
     if (!target) {
         if (!modifiers.testFlag(Qt::ShiftModifier))
             session.deselectAll();
@@ -237,6 +257,12 @@ void EditorCanvas::State::selectPress(QPointF view, Qt::KeyboardModifiers modifi
             return;
     } else if (!session.isSelected(*target)) {
         session.select({*target});
+    } else if (session.selection().size() > 1) {
+        // Illustrator: a click on one of several selected objects makes it the key object.
+        beginDrag(DragKind::move, view);
+        drag->startBounds = session.selectionBounds();
+        drag->keyCandidate = target;
+        return;
     }
     beginDrag(DragKind::move, view);
     drag->startBounds = session.selectionBounds();
@@ -349,27 +375,12 @@ void EditorCanvas::State::dragMarquee(QPointF view)
 
 void EditorCanvas::State::finishMarquee()
 {
-    const bool inGroup = enteredGroup && session.document()->find(*enteredGroup);
-    if (!drag->started) {
-        // A click on empty space leaves the entered group.
-        enteredGroup.reset();
+    if (!drag->started)
         return;
-    }
     const QRectF area = QRectF(drag->pressDocument, toDocument(drag->lastView)).normalized();
     std::vector<QUuid> ids = drag->additive ? drag->selectionBefore : std::vector<QUuid>();
-    std::vector<QUuid> found;
-    if (inGroup) {
-        // Inside an entered group the marquee takes its children, as isolation does.
-        const VectorDocument &document = *session.document();
-        for (const QUuid &id : document.children(*enteredGroup)) {
-            if (!document.isEffectivelyVisible(id) || document.isEffectivelyLocked(id))
-                continue;
-            if (area.intersects(document.bounds(id).adjusted(-0.01, -0.01, 0.01, 0.01)))
-                found.push_back(id);
-        }
-    } else {
-        found = session.objectsIn(area, false);
-    }
+    // Isolated, the marquee takes the group's children only.
+    const std::vector<QUuid> found = session.objectsIn(area, false);
     for (const QUuid &id : found) {
         if (std::find(ids.begin(), ids.end(), id) == ids.end())
             ids.push_back(id);

@@ -10,6 +10,8 @@ QDialog *scale(EditorSession &session, QWidget *window);
 QDialog *move(EditorSession &session, QWidget *window);
 QDialog *offsetPath(EditorSession &session, QWidget *window);
 QDialog *artboardSize(EditorSession &session, QWidget *window);
-// Edit ▸ Preferences: the keyboard increment.
+// Object ▸ Path ▸ Average: horizontal, vertical or both.
+QDialog *average(EditorSession &session, QWidget *window);
+// Edit ▸ Preferences: the keyboard increment and how many history states to keep.
 QDialog *preferences(QWidget *window);
 }

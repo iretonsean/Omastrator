@@ -1,4 +1,5 @@
 #include "Canvas/EditorCanvasState.h"
+#include "Canvas/Rulers.h"
 #include <QGuiApplication>
 #include <QStyleHints>
 
@@ -35,6 +36,27 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
         beginDrag(DragKind::pan, view);
         return;
     }
+    // A press on a ruler draws a guide out of it: the top one a horizontal guide, the left one a vertical.
+    if (session.showsRulers && (view.x() < Rulers::thickness || view.y() < Rulers::thickness)) {
+        if (view.x() >= Rulers::thickness)
+            beginRulerGuide(Qt::Horizontal, view);
+        else if (view.y() >= Rulers::thickness)
+            beginRulerGuide(Qt::Vertical, view);
+        return;
+    }
+    // A guide under the Selection tools moves; a live corner's widget sets its radius.
+    if (session.tool() == Tool::select || session.tool() == Tool::directSelect) {
+        if (const std::optional<CornerWidget> corner = cornerWidgetAt(view)) {
+            cornerPress(*corner, view);
+            return;
+        }
+        if (!handleAt(view) && !hitLeaf(document)) {
+            if (const std::optional<int> guide = guideAt(view)) {
+                guidePress(*guide, view);
+                return;
+            }
+        }
+    }
     switch (session.tool()) {
     case Tool::select:
         selectPress(view, modifiers);
@@ -61,6 +83,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
         break;
     case Tool::shapeBuilder:
         builderPress(view, modifiers);
+        break;
+    case Tool::scissors:
+        scissorsPress(view);
         break;
     case Tool::rotate:
     case Tool::scale:
@@ -143,6 +168,12 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::gradient:
         dragGradient(view, modifiers);
         break;
+    case DragKind::guide:
+        dragGuide(view, modifiers);
+        break;
+    case DragKind::corner:
+        dragCorner(view, modifiers);
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -182,7 +213,19 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::shapeBuilder:
         finishBuilder(modifiers);
         break;
+    case DragKind::guide:
+        finishGuide(view);
+        break;
+    case DragKind::corner:
+        finishCorner(modifiers);
+        break;
     case DragKind::move:
+        // A click that moved nothing on an object already selected makes it the key object.
+        if (!drag->started && drag->keyCandidate)
+            session.setKeyObject(session.keyObject() == drag->keyCandidate ? std::nullopt : drag->keyCandidate);
+        if (drag->interacting && session.isInteracting())
+            session.commitInteraction();
+        break;
     case DragKind::scale:
     case DragKind::rotate:
     case DragKind::scaleTool:
@@ -241,8 +284,17 @@ void EditorCanvas::State::doubleClick(QPointF view, Qt::KeyboardModifiers modifi
     if (drag)
         release(view, modifiers);
     const std::optional<QUuid> leaf = hitLeaf(document);
-    if (!leaf)
+    if (!leaf) {
+        // A double-click on a guide types its place; elsewhere outside, isolation steps out a level.
+        if (const std::optional<int> guide = guideAt(view)) {
+            editGuide(*guide);
+        } else if (!session.isolation().empty()) {
+            const std::optional<QUuid> under = session.document()->hitTest(document, reach(3));
+            if (!under || !session.document()->isAncestor(*session.isolatedGroup(), *under))
+                session.exitIsolation(int(session.isolation().size()) - 1);
+        }
         return;
+    }
     const VectorDocument &doc = *session.document();
     const VectorObject *object = doc.find(*leaf);
     if (object->kind == ObjectKind::text) {
@@ -256,7 +308,7 @@ void EditorCanvas::State::doubleClick(QPointF view, Qt::KeyboardModifiers modifi
     // Isolate the group under the pointer, a level at a time.
     const std::optional<QUuid> target = selectableTarget(*leaf);
     if (target && doc.find(*target) && doc.find(*target)->kind == ObjectKind::group) {
-        enteredGroup = target;
+        session.isolate(*target);
         if (const std::optional<QUuid> inside = selectableTarget(*leaf))
             session.select({*inside});
     }
@@ -274,8 +326,6 @@ void EditorCanvas::State::toolChanged()
         finishPen();
     if (text && shownTool != Tool::text && was == Tool::text)
         finishText();
-    if (shownTool != Tool::select)
-        enteredGroup.reset();
     hovered.reset();
     hoverGuides.reset();
     builderRegion.reset();
@@ -300,14 +350,11 @@ void EditorCanvas::State::documentChanged()
             canvas.setAttribute(Qt::WA_InputMethodEnabled, false);
             emit canvas.textEditingChanged(false);
         }
-        enteredGroup.reset();
         hovered.reset();
         return;
     }
     if (pen && !document->find(pen->object))
         pen.reset();
-    if (enteredGroup && !document->find(*enteredGroup))
-        enteredGroup.reset();
     if (hovered && !document->find(*hovered))
         hovered.reset();
     // Undo or a panel changed the type being edited: follow it.

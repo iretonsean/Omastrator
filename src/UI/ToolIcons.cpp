@@ -158,6 +158,15 @@ void shapeBuilder(QPainter &painter)
     painter.fillPath(ink, painter.pen().color());
 }
 
+// Two finger loops and crossed blades.
+void scissors(QPainter &painter)
+{
+    painter.drawEllipse(QPointF(5, 13.4), 2.6, 2.6);
+    painter.drawEllipse(QPointF(13, 13.4), 2.6, 2.6);
+    painter.drawLine(QPointF(6.6, 11.3), QPointF(13.6, 2));
+    painter.drawLine(QPointF(11.4, 11.3), QPointF(4.4, 2));
+}
+
 void zoom(QPainter &painter)
 {
     painter.drawEllipse(QRectF(2, 2, 10.5, 10.5));
@@ -188,6 +197,7 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::polygon: painter.drawPolygon(ring(6, 7.2, 0)); break;
     case Tool::star: painter.drawPolygon(ring(5, 7.8, 3.3)); break;
     case Tool::shapeBuilder: shapeBuilder(painter); break;
+    case Tool::scissors: scissors(painter); break;
     case Tool::rotate: rotate(painter); break;
     case Tool::scale: scale(painter); break;
     case Tool::gradient: gradient(painter); break;

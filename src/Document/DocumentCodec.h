@@ -34,4 +34,8 @@ QJsonObject encode(const StrokeStyle &stroke);
 StrokeStyle decodeStroke(const QJsonObject &json);
 QJsonObject encode(const VectorPath &path);
 VectorPath decodePath(const QJsonObject &json);
+QJsonObject encode(const LiveRectangle &shape);
+std::optional<LiveRectangle> decodeShape(const QJsonObject &json);
+QJsonArray encode(const std::vector<Guide> &guides);
+std::vector<Guide> decodeGuides(const QJsonArray &json);
 }

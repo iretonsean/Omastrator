@@ -188,7 +188,7 @@ constexpr ToolName toolNames[] = {
     {"rotate", "rotate", "Rotate"},                          {"scale", "scale", "Scale"},
     {"eyedropper", "eyedropper", "Eyedropper"},              {"hand", "hand", "Hand"},
     {"zoom", "zoom", "Zoom"},                                {"shape builder", "shapeBuilder", "Shape Builder"},
-    {"gradient", "gradient", "Gradient"}};
+    {"gradient", "gradient", "Gradient"},                    {"scissors", "scissors", "Scissors"}};
 
 Dictation::Command command(const QString &kind, const QString &description, const QJsonObject &params)
 {

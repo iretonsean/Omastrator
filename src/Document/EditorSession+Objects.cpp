@@ -28,12 +28,15 @@ std::optional<QUuid> EditorSession::insertionParent() const
 {
     if (!m_document)
         return std::nullopt;
-    // Inside the group the selection sits in, else the active layer.
+    // Inside the group the selection sits in, else the isolated group, else the active layer.
+    const std::optional<QUuid> isolated = isolatedGroup();
     if (!m_selection.empty()) {
         const VectorObject *top = m_document->find(m_selection.back());
-        if (top && top->parentID)
+        if (top && top->parentID && (!isolated || *top->parentID == *isolated || m_document->isAncestor(*isolated, *top->parentID)))
             return top->parentID;
     }
+    if (isolated)
+        return isolated;
     return activeLayer();
 }
 
@@ -354,12 +357,14 @@ void EditorSession::align(AlignEdge edge, AlignTarget target)
 {
     if (!m_document || m_selection.empty())
         return;
-    const QRectF reference = target == AlignTarget::artboard || m_selection.size() == 1
-        ? QRectF(QPointF(0, 0), m_document->size)
-        : selectionBounds();
+    // A key object, once clicked, is what the selection aligns to.
+    const bool toKey = m_keyObject && target != AlignTarget::artboard;
+    const QRectF reference = toKey ? m_document->bounds(*m_keyObject)
+        : target == AlignTarget::artboard || m_selection.size() == 1 ? QRectF(QPointF(0, 0), m_document->size)
+                                                                     : selectionBounds();
     edit(QStringLiteral("Align"), [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {
-            if (document.isEffectivelyLocked(id))
+            if (document.isEffectivelyLocked(id) || (toKey && id == *m_keyObject))
                 continue;
             const QRectF bounds = document.bounds(id);
             QPointF delta;
@@ -384,27 +389,6 @@ void EditorSession::align(AlignEdge edge, AlignTarget target)
                 break;
             }
             document.transform(id, QTransform::fromTranslate(delta.x(), delta.y()));
-        }
-    });
-}
-
-void EditorSession::distribute(DistributeAxis axis)
-{
-    if (!m_document || m_selection.size() < 3)
-        return;
-    edit(QStringLiteral("Distribute"), [&](VectorDocument &document) {
-        std::vector<QUuid> ids = m_selection;
-        const bool horizontal = axis == DistributeAxis::horizontal;
-        auto center = [&](const QUuid &id) {
-            const QPointF c = document.bounds(id).center();
-            return horizontal ? c.x() : c.y();
-        };
-        std::sort(ids.begin(), ids.end(), [&](const QUuid &a, const QUuid &b) { return center(a) < center(b); });
-        const double first = center(ids.front()), last = center(ids.back());
-        const double step = (last - first) / double(ids.size() - 1);
-        for (size_t index = 1; index + 1 < ids.size(); ++index) {
-            const double shift = first + step * double(index) - center(ids[index]);
-            document.transform(ids[index], horizontal ? QTransform::fromTranslate(shift, 0) : QTransform::fromTranslate(0, shift));
         }
     });
 }
@@ -1055,7 +1039,7 @@ void EditorSession::paste(PastePosition position)
             renamed.emplace_back(object.id, fresh);
             object.id = fresh;
         }
-        const std::optional<QUuid> layer = neighbour ? document.find(*neighbour)->parentID : activeLayer();
+        const std::optional<QUuid> layer = neighbour ? document.find(*neighbour)->parentID : isolatedGroup() ? isolatedGroup() : activeLayer();
         if (!layer)
             return;
         std::vector<QUuid> roots;

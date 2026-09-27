@@ -27,6 +27,7 @@ enum class Tool {
     polygon,
     star,
     shapeBuilder,    // Shift-M
+    scissors,        // C
     rotate,          // R
     scale,           // S
     gradient,        // G
@@ -36,7 +37,7 @@ enum class Tool {
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
-                                     Tool::shapeBuilder, Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper, Tool::hand, Tool::zoom};
+                                     Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper, Tool::hand, Tool::zoom};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -47,8 +48,8 @@ bool isShapeTool(Tool tool);
 enum class ArrangeOrder { bringToFront, bringForward, sendBackward, sendToBack };
 enum class AlignEdge { left, horizontalCenter, right, top, verticalCenter, bottom };
 enum class DistributeAxis { horizontal, vertical };
-// Aligns to the selection's bounds, or the artboard's with one object.
-enum class AlignTarget { selection, artboard };
+// Aligns to the selection's bounds (the artboard's with one object), the artboard, or the key object.
+enum class AlignTarget { selection, artboard, keyObject };
 // Paste: offset from the last paste, where it was copied, or above or below the selection.
 enum class PastePosition { offset, inPlace, front, back };
 
@@ -123,6 +124,18 @@ public:
     // The layer new objects go in: the selection's, else the last one picked.
     std::optional<QUuid> activeLayer() const;
     void setActiveLayer(const QUuid &id);
+    // Align's key object: one of two or more selected objects that stays put; cleared with the selection.
+    std::optional<QUuid> keyObject() const { return m_keyObject; }
+    void setKeyObject(std::optional<QUuid> id);
+
+    // Isolation --------------------------------------------------------------
+    // The groups entered, outermost first; clicks and new objects stay inside the last.
+    const std::vector<QUuid> &isolation() const { return m_isolation; }
+    std::optional<QUuid> isolatedGroup() const;
+    // Enters `group`, keeping the entered groups that hold it.
+    void isolate(const QUuid &group);
+    // Back to `depth` groups entered; 0 leaves isolation. The group left stays selected.
+    void exitIsolation(int depth = 0);
 
     // History ----------------------------------------------------------------
     // Edits between begin and end are one undo step, named for the Edit menu.
@@ -135,6 +148,14 @@ public:
     void undo();
     void redo();
     bool isModified() const { return m_history.isModified(); }
+    // The History panel's rows: steps that undo, oldest first, and steps that redo, next first.
+    std::vector<QString> undoNames() const { return m_history.undoNames(); }
+    std::vector<QString> redoNames() const { return m_history.redoNames(); }
+    // Undoes (negative) or redoes that many steps at once.
+    void stepHistory(int steps);
+    // How many steps each document keeps; a preference shared by every session.
+    static int historyLimit();
+    static void setHistoryLimit(int steps);
     void markSaved();
     void markUnsaved();
 
@@ -187,7 +208,11 @@ public:
     void releaseClippingMask();
     void arrange(ArrangeOrder order);
     void align(AlignEdge edge, AlignTarget target = AlignTarget::selection);
+    // Distribute: centres along `axis`, or the chosen edge of each object.
     void distribute(DistributeAxis axis);
+    void distribute(AlignEdge edge);
+    // Distribute Spacing: an exact gap measured from the key object (else the first), or equal gaps when nullopt.
+    void distributeSpacing(DistributeAxis axis, std::optional<double> gap);
     void moveSelection(QPointF delta);
     // `reflowAreaText`: an upright scale resizes area type's box, as its handles do.
     void transformSelection(const QTransform &transform, const QString &editName, bool reflowAreaText = false);
@@ -241,6 +266,30 @@ public:
     void deletePickedNodes();
     // Pen tool: joins the picked end anchors of one open contour.
     void closePath(const QUuid &id, int contour);
+
+    // Path editing -----------------------------------------------------------
+    // Object ▸ Path ▸ Join: two picked end anchors, else the selected open paths nearest end to nearest end.
+    void joinPaths();
+    bool canJoin() const;
+    // Object ▸ Path ▸ Average: the picked anchors (else every anchor selected) onto one line (Horizontal: one y) or one point.
+    void averagePoints(Qt::Orientations along);
+    bool canAverage() const;
+    // Scissors: cuts a path at an anchor, or on the segment after `from` at `t`. Closed contours open; open ones split in two.
+    bool cutPath(const QUuid &id, NodeRef from, std::optional<double> t = std::nullopt);
+    // Object ▸ Path ▸ Reverse Path Direction.
+    void reversePaths();
+    // Selected paths with more than one contour, whose fill rule the Properties panel shows.
+    std::vector<QUuid> selectedCompoundPaths() const;
+    void setFillRuleOfSelection(Qt::FillRule rule);
+
+    // Live corners -------------------------------------------------------------
+    // Selected rectangles that are still live.
+    std::vector<QUuid> selectedShapes() const;
+    // One corner, or all four with nullopt.
+    void setCornerRadius(double radius, std::optional<int> corner = std::nullopt);
+    void setCornerStyle(CornerStyle style, std::optional<int> corner = std::nullopt);
+    // The object with `shape` and the path it makes.
+    static void reshape(VectorObject &object, const LiveRectangle &shape);
 
     // Type -------------------------------------------------------------------
     // Text objects among the selected leaves.
@@ -316,10 +365,32 @@ public:
     bool snapsToGrid = false;
     double gridSpacing = 10;
     bool showsOutline = false;
+    // Snap to Pixel: drawn points and moved bounds land on whole points; the pixel grid shows from 600 %.
+    bool snapsToPixel = false;
+    bool showsPixelGrid = true;
+    void setSnapsToPixel(bool snaps);
+    void setShowsPixelGrid(bool shown);
     void setShowsGrid(bool shown);
     void setSnapsToGrid(bool snaps);
     void setShowsOutline(bool shown);
     QPointF snapped(QPointF point) const;
+
+    // Rulers and guides ------------------------------------------------------
+    bool showsRulers = false;
+    bool showsGuides = true;
+    bool guidesLocked = false;
+    void setShowsRulers(bool shown);
+    void setShowsGuides(bool shown);
+    void setGuidesLocked(bool locked);
+    void addGuide(const Guide &guide);
+    void moveGuide(int index, double position);
+    void removeGuide(int index);
+    void clearGuides();
+    // View ▸ Guides ▸ Make Guides: selected paths become guides (a straight line one, anything else its bounds' edges).
+    void makeGuides();
+    bool canMakeGuides() const;
+    // Release Guides: each guide becomes a line across the artboard.
+    void releaseGuides();
 
     // Gates the menus read.
     bool hasSelection() const { return !m_selection.empty(); }
@@ -355,6 +426,8 @@ private:
     std::vector<QUuid> m_selection;
     std::vector<PickedNode> m_pickedNodes;
     std::optional<QUuid> m_activeLayer;
+    std::optional<QUuid> m_keyObject;
+    std::vector<QUuid> m_isolation;
     struct Interaction {
         QString name;
         VectorDocument before;

@@ -49,8 +49,28 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   copy; with only type selected, Alt+arrows adjust the type instead). Number keys set opacity: 5 is 50 %, 0 is
   100 %, and two quick digits make an exact value.
 - Zoom to Selection (Shift+2) and Fit Artboard (Shift+1).
+- Rulers (Ctrl+R) with the pointer marked on each. Drag a guide out of a
+  ruler, drag it back to remove it, or double-click it to type its place.
+  Objects snap to guides even with smart guides off. View ▸ Guides hides
+  (Ctrl+;), locks (Ctrl+Alt+;), clears, makes guides from selected paths
+  (Ctrl+5) and releases them back into lines (Ctrl+Alt+5). Guides save in the
+  `.omai`.
+- Snap to Pixel keeps drawn points and moved objects on whole points, and a
+  pixel grid shows from 600 %.
+- Isolation mode: double-click a group (or Isolate in its menus) to work
+  inside it. Everything else fades and can't be picked, new objects go in the
+  group, and a bar above the canvas shows the way back out. Esc, the bar, or a
+  double-click outside leaves.
+- Window ▸ History lists every step by name; click one to go back or forward
+  to it. Preferences sets how many steps each document keeps.
 - Pen, pencil, line, rectangle, rounded rectangle, ellipse, polygon and star
-  tools, all producing editable Bézier paths.
+  tools, all producing editable Bézier paths. Rectangles keep live corners:
+  one radius or four in Properties, round, inverted round or chamfer, and
+  with Direct Selection a widget in each corner to drag (Alt for one corner,
+  Alt-click to change its style). Editing an anchor makes it a plain path.
+- Join (Ctrl+J), Average (Ctrl+Alt+J), the Scissors tool (C), Reverse Path
+  Direction, and a non-zero or even-odd fill rule for compound paths that
+  SVG keeps.
 - Type, edited in place on the canvas: click for point type, drag a box for
   area type that wraps and justifies, and convert between them. A Character
   section in Properties holds font, the font's real styles, size, leading,
@@ -82,6 +102,9 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
 - Pathfinder (Unite, Minus Front, Intersect, Exclude), plus Outline Stroke,
   Offset Path and Simplify.
 - Align and distribute, arrange, and transform: move, rotate, reflect and scale.
+  Click one of several selected objects to make it the key object: the others
+  align to it, and Distribute Spacing puts an exact gap out from it (or even
+  gaps on Auto). Distribute works by left, right, top or bottom edges too.
 - Image Trace, which turns placed images into filled paths in black and white
   or in colour.
 - Files:

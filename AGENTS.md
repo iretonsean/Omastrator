@@ -45,8 +45,8 @@ Each folder builds as its own static library:
   with GitHub through `gh`). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
   tests run the fixtures in `tests/Live/fixtures` and skip without Chromium.
-- `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides` and
-  `InlineTextEditor`.
+- `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides`,
+  `Rulers` and `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,
   sheets, shortcuts and the Omarchy theme. Share with client
   (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and

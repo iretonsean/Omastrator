@@ -31,6 +31,8 @@ std::optional<Tool> toolForKey(int key)
         return Tool::eyedropper;
     case Qt::Key_G:
         return Tool::gradient;
+    case Qt::Key_C:
+        return Tool::scissors;
     case Qt::Key_H:
         return Tool::hand;
     case Qt::Key_Z:
@@ -87,9 +89,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             cancelDrag();
         } else if (pen) {
             finishPen();
-        } else if (enteredGroup) {
-            enteredGroup.reset();
-            canvas.update();
+        } else if (session.isolatedGroup()) {
+            session.exitIsolation();
         } else {
             return false;
         }

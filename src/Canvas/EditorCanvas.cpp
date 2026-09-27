@@ -1,5 +1,6 @@
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/EditorCanvasState.h"
+#include "Canvas/Rulers.h"
 #include <QApplication>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -37,10 +38,22 @@ EditorCanvas::EditorCanvas(EditorSession &session, QWidget *parent)
     });
     connect(&m_session, &EditorSession::changed, this, [this] {
         m_state->toolChanged();
+        m_state->syncRulers();
         update();
         noteGesture();
     });
+    m_state->rulers = new Rulers(session, this);
+    m_state->syncRulers();
     m_state->updateCursor();
+}
+
+void EditorCanvas::State::syncRulers()
+{
+    if (!rulers)
+        return;
+    rulers->setGeometry(canvas.rect());
+    rulers->setVisible(session.showsRulers && session.hasDocument());
+    rulers->update();
 }
 
 EditorCanvas::~EditorCanvas() = default;
@@ -195,6 +208,7 @@ void EditorCanvas::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     m_state->syncViewport();
+    m_state->syncRulers();
 }
 
 void EditorCanvas::paintEvent(QPaintEvent *)
@@ -239,6 +253,7 @@ void EditorCanvas::mouseMoveEvent(QMouseEvent *event)
     m_state->modifiers = event->modifiers();
     m_state->hover = event->position();
     const bool held = event->buttons() & (Qt::LeftButton | Qt::MiddleButton);
+    m_state->rulers->setMarker(event->position());
     m_state->move(event->position(), event->modifiers(), held);
     m_state->updateCursor();
     noteGesture();
@@ -313,6 +328,7 @@ void EditorCanvas::focusOutEvent(QFocusEvent *event)
 void EditorCanvas::leaveEvent(QEvent *event)
 {
     m_state->hover.reset();
+    m_state->rulers->setMarker(std::nullopt);
     m_state->updateHoverGuides(std::nullopt);
     m_state->updateBuilderHover(std::nullopt);
     if (m_state->hovered) {

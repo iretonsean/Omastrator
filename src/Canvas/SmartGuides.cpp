@@ -60,6 +60,11 @@ SmartGuides::SmartGuides(const VectorDocument &document, const std::vector<QUuid
     m_boards.push_back(QRectF(QPointF(0, 0), document.size));
 }
 
+void SmartGuides::addGuides(const std::vector<Guide> &guides)
+{
+    m_guides.insert(m_guides.end(), guides.begin(), guides.end());
+}
+
 SmartGuides::Result SmartGuides::point(QPointF point, double scale, std::optional<QPointF> anchor, bool constrained) const
 {
     const QPointF origin = anchor.value_or(point);
@@ -85,6 +90,13 @@ SmartGuides::Result SmartGuides::movement(const QRectF &bounds, QPointF delta, d
             if (std::abs(candidate.correction) <= tolerance && (!slot || std::abs(candidate.correction) < std::abs(slot->correction)))
                 slot = std::move(candidate);
         };
+        // A guide across this axis: the probes snap to its line.
+        for (const Guide &guide : m_guides) {
+            if ((guide.orientation == Qt::Vertical) != (axis == 0))
+                continue;
+            for (const double probe : probes)
+                offer({guide.position - probe, QLineF(unaxes(axis, guide.position, m.crossMin), unaxes(axis, guide.position, m.crossMax)), std::nullopt});
+        }
         for (const std::vector<QRectF> *targets : {&m_boards, &m_objects}) {
             for (const QRectF &target : *targets) {
                 const Axes t = axes(target, axis);

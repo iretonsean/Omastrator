@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QToolButton>
+#include <array>
 
 class CharacterSection;
 class NumberField;
@@ -57,6 +58,9 @@ private:
     PanelSection *strokeSection();
     PanelSection *alignSection();
     PanelSection *pathfinderSection();
+    // Live rectangles' corners and compound paths' fill rule.
+    PanelSection *shapeSection();
+    void synchronizeShape();
     QToolButton *iconButton(const QString &name, const QString &tip, PanelIcon icon, const std::function<void()> &run);
     // The reference point of the selection's bounds.
     QPointF reference() const;
@@ -94,6 +98,17 @@ private:
     PanelSection *m_stroke = nullptr;
     PanelSection *m_align = nullptr;
     PanelSection *m_pathfinder = nullptr;
+    PanelSection *m_shape = nullptr;
+    NumberField *m_radius = nullptr;
+    QToolButton *m_cornersLinked = nullptr;
+    QWidget *m_corners = nullptr;
+    std::array<NumberField *, 4> m_corner{};
+    QWidget *m_fillRuleRow = nullptr;
+    QComboBox *m_fillRule = nullptr;
+    // Distribute Spacing's gap; nullopt spaces evenly.
+    std::optional<double> m_spacing;
+    NumberField *m_spacingField = nullptr;
+    std::optional<QUuid> m_shownKey;
     ReferencePointPicker *m_reference = nullptr;
     NumberField *m_x = nullptr;
     NumberField *m_y = nullptr;
@@ -133,5 +148,6 @@ private:
     std::vector<std::pair<QToolButton *, PanelIcon>> m_iconButtons;
     std::vector<QToolButton *> m_alignButtons;
     std::vector<QToolButton *> m_distributeButtons;
+    std::vector<QToolButton *> m_spacingButtons;
     std::vector<QToolButton *> m_pathfinderButtons;
 };

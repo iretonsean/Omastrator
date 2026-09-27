@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 18> toolInfo{{
+const std::array<ToolInfo, 19> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -23,6 +23,7 @@ const std::array<ToolInfo, 18> toolInfo{{
     {Tool::polygon, "polygon", "Polygon"},
     {Tool::star, "star", "Star"},
     {Tool::shapeBuilder, "shapeBuilder", "Shape Builder"},
+    {Tool::scissors, "scissors", "Scissors"},
     {Tool::rotate, "rotate", "Rotate"},
     {Tool::scale, "scale", "Scale"},
     {Tool::gradient, "gradient", "Gradient"},
@@ -68,6 +69,7 @@ bool isShapeTool(Tool tool)
 
 EditorSession::EditorSession(QObject *parent) : QObject(parent)
 {
+    m_history.setEntryLimit(historyLimit());
 }
 
 void EditorSession::notify(bool documentToo)
@@ -91,6 +93,8 @@ void EditorSession::loadDocument(VectorDocument document)
     m_history.reset();
     m_selection.clear();
     m_pickedNodes.clear();
+    m_isolation.clear();
+    m_keyObject.reset();
     const auto layers = m_document->layers();
     m_activeLayer = layers.empty() ? std::nullopt : std::optional(layers.back());
     viewport.fit(m_document->size);
@@ -104,6 +108,8 @@ void EditorSession::closeDocument()
     m_history.reset();
     m_selection.clear();
     m_pickedNodes.clear();
+    m_isolation.clear();
+    m_keyObject.reset();
     m_activeLayer.reset();
     notify();
 }
@@ -209,6 +215,8 @@ void EditorSession::select(const std::vector<QUuid> &ids)
     if (kept == m_selection)
         return;
     m_selection = std::move(kept);
+    if (m_keyObject && (m_selection.size() < 2 || !isSelected(*m_keyObject)))
+        m_keyObject.reset();
     std::erase_if(m_pickedNodes, [&](const PickedNode &picked) {
         return !std::any_of(m_selection.begin(), m_selection.end(), [&](const QUuid &id) {
             return id == picked.object || (m_document && m_document->isAncestor(id, picked.object));
@@ -236,8 +244,10 @@ void EditorSession::selectAll()
     if (!m_document)
         return;
     std::vector<QUuid> ids;
-    for (const QUuid &layer : m_document->layers()) {
-        for (const QUuid &child : m_document->children(layer)) {
+    // Isolated, Select All stays inside the group.
+    const std::vector<QUuid> containers = isolatedGroup() ? std::vector<QUuid>{*isolatedGroup()} : m_document->layers();
+    for (const QUuid &container : containers) {
+        for (const QUuid &child : m_document->children(container)) {
             if (m_document->isEffectivelyVisible(child) && !m_document->isEffectivelyLocked(child))
                 ids.push_back(child);
         }
@@ -258,10 +268,16 @@ std::vector<QUuid> EditorSession::objectsIn(const QRectF &rect, bool deep) const
     if (!m_document)
         return result;
     const QRectF area = rect.normalized();
+    const std::optional<QUuid> isolated = isolatedGroup();
     for (const VectorObject &object : m_document->objects) {
+        // Isolated, only the group's own children count.
+        if (isolated && !deep && object.parentID != isolated)
+            continue;
+        if (isolated && !m_document->isAncestor(*isolated, object.id))
+            continue;
         if (object.kind == ObjectKind::layer || !m_document->isEffectivelyVisible(object.id) || m_document->isEffectivelyLocked(object.id))
             continue;
-        if (deep ? object.isContainer() : (!object.parentID || m_document->topLevelObject(object.id) != object.id))
+        if (deep ? object.isContainer() : (!isolated && (!object.parentID || m_document->topLevelObject(object.id) != object.id)))
             continue;
         const QRectF bounds = m_document->bounds(object.id);
         // Lines have no area; their box still counts.
@@ -342,9 +358,21 @@ void EditorSession::pruneSelection()
     if (!m_document) {
         m_selection.clear();
         m_pickedNodes.clear();
+        m_isolation.clear();
+        m_keyObject.reset();
         return;
     }
+    // An edited anchor ends a live shape.
+    m_document->expandEditedShapes();
     std::erase_if(m_selection, [&](const QUuid &id) { return !m_document->find(id); });
+    if (m_keyObject && (m_selection.size() < 2 || !isSelected(*m_keyObject)))
+        m_keyObject.reset();
+    // Isolation ends at the first group gone.
+    const auto gone = std::find_if(m_isolation.begin(), m_isolation.end(), [&](const QUuid &id) {
+        const VectorObject *group = m_document->find(id);
+        return !group || group->kind != ObjectKind::group;
+    });
+    m_isolation.erase(gone, m_isolation.end());
     std::erase_if(m_pickedNodes, [&](const PickedNode &picked) {
         const VectorObject *object = m_document->find(picked.object);
         return !object || !object->path.node(picked.node);
@@ -353,6 +381,8 @@ void EditorSession::pruneSelection()
 
 void EditorSession::beginEdit(const QString &name)
 {
+    // The preference may have changed since this document opened.
+    m_history.setEntryLimit(historyLimit());
     m_history.begin(name, m_document, m_selection);
 }
 
@@ -465,6 +495,7 @@ void EditorSession::commitInteraction()
     // Record the step as though it happened all at once.
     VectorDocument after = std::move(*m_document);
     m_document = std::move(interaction.before);
+    m_history.setEntryLimit(historyLimit());
     m_history.begin(interaction.name, m_document, interaction.selection);
     m_document = std::move(after);
     pruneSelection();

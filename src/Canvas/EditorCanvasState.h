@@ -8,6 +8,8 @@
 #include <QTimer>
 #include <memory>
 
+class Rulers;
+
 // The canvas's tools and gestures; each EditorCanvas+Part.cpp holds one group.
 struct EditorCanvas::State {
     State(EditorCanvas &canvas, EditorSession &session);
@@ -47,6 +49,10 @@ struct EditorCanvas::State {
         shapeBuilder,
         // Gradient tool: an end, a stop, or a new start-to-end drag.
         gradient,
+        // A ruler guide moved, or one drawn out of a ruler.
+        guide,
+        // Direct Selection: a live corner's widget.
+        corner,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -70,6 +76,12 @@ struct EditorCanvas::State {
         std::vector<EditorSession::PickedNode> pickedBefore;
         // Shapes and the pen: the interaction this drag opened.
         bool interacting = false;
+        // Guides: which one (-1 for a new one), its axis and where it would land.
+        int guide = -1;
+        Qt::Orientation guideAxis = Qt::Horizontal;
+        double guidePosition = 0;
+        // A click on what was already selected: it becomes the key object if nothing moves.
+        std::optional<QUuid> keyCandidate;
     };
     std::optional<Drag> drag;
     // A fresh drag of `kind` pressed at `view`.
@@ -98,9 +110,8 @@ struct EditorCanvas::State {
     void clearGuides();
 
     // Selection (V), Rotate (R), Scale (S) -----------------------------------
-    std::optional<QUuid> enteredGroup;
     std::optional<QUuid> hovered;
-    // What a click on `leaf` selects: a layer's child, or one inside the entered group.
+    // What a click on `leaf` selects: a layer's child, or one inside the isolated group.
     std::optional<QUuid> selectableTarget(const QUuid &leaf) const;
     std::optional<QUuid> hitLeaf(QPointF document) const;
     // The select tool's box in document coordinates, while it shows.
@@ -119,6 +130,37 @@ struct EditorCanvas::State {
     void dragMarquee(QPointF view);
     void finishMarquee();
     void updateHover(QPointF view);
+
+    // Rulers and guides --------------------------------------------------------
+    // The guide under `view` a drag would take, unless guides are hidden or locked.
+    std::optional<int> guideAt(QPointF view) const;
+    void guidePress(int index, QPointF view);
+    // A ruler began a drag: a new guide follows the pointer until release.
+    void beginRulerGuide(Qt::Orientation axis, QPointF view);
+    void dragGuide(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishGuide(QPointF view);
+    // Double-click: type the guide's position.
+    void editGuide(int index);
+    void drawGuides(QPainter &painter) const;
+    void drawPixelGrid(QPainter &painter, const QRectF &artboard) const;
+    // Isolation: everything but the group, faded.
+    void drawIsolated(QPainter &painter, const VectorDocument &document, const QUuid &group) const;
+
+    // Live corners (Direct Selection) ----------------------------------------------
+    struct CornerWidget {
+        QUuid object;
+        int corner = 0;
+        QPointF view;
+    };
+    std::vector<CornerWidget> cornerWidgets() const;
+    std::optional<CornerWidget> cornerWidgetAt(QPointF view) const;
+    void cornerPress(const CornerWidget &widget, QPointF view);
+    void dragCorner(QPointF view, Qt::KeyboardModifiers modifiers);
+    // A click without a drag: Alt cycles round, inverted and chamfer.
+    void finishCorner(Qt::KeyboardModifiers modifiers);
+
+    // Scissors (C) ------------------------------------------------------------------
+    void scissorsPress(QPointF view);
 
     // Direct selection (A) ----------------------------------------------------
     // Paths whose anchors show: the selected leaves.
@@ -219,6 +261,9 @@ struct EditorCanvas::State {
     void restartCaret();
 
     // Navigation --------------------------------------------------------------
+    // View ▸ Rulers, over the canvas's top and left edges.
+    Rulers *rulers = nullptr;
+    void syncRulers();
     bool spaceHeld = false;
     void zoomAt(double zoom, QPointF view);
     void finishZoom(QPointF view, Qt::KeyboardModifiers modifiers);

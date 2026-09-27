@@ -575,7 +575,12 @@ private slots:
         QCOMPARE(f.session.selection(), (std::vector<QUuid>{a, b}));
         f.drag({140, 40}, {200, 100});
         QCOMPARE(f.session.selection(), std::vector<QUuid>{b});
-        // A click on nothing leaves the group; marquees pick top-level objects again.
+        // A click on nothing stays inside; a double-click there leaves, and marquees pick top-level objects again.
+        f.click({300, 250});
+        QVERIFY(f.session.isolatedGroup());
+        QTest::mouseDClick(&f.canvas, Qt::LeftButton, Qt::NoModifier, f.view({300, 250}));
+        QVERIFY(!f.session.isolatedGroup());
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{group});
         f.click({300, 250});
         f.drag({40, 40}, {300, 100});
         QCOMPARE(f.session.selection(), (std::vector<QUuid>{group, outside}));

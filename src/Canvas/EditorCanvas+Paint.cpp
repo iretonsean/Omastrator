@@ -70,15 +70,19 @@ void EditorCanvas::State::paint(QPainter &painter)
     options.outlineWidth = 1;
     if (options.outlineMode)
         painter.fillRect(QRectF(QPointF(0, 0), document->size), Qt::white);
+    std::optional<VectorDocument> shown;
     if (text && text->inDocument && !text->preedit.isEmpty() && document->find(text->object.id)) {
         // The input method's preedit shows in the type itself, pushing the rest along.
-        VectorDocument shown = *document;
-        shown.find(text->object.id)->text.text = text->displayText();
-        VectorRenderer::draw(painter, shown, options);
-    } else {
-        VectorRenderer::draw(painter, *document, options);
+        shown = *document;
+        shown->find(text->object.id)->text.text = text->displayText();
     }
+    const VectorDocument &drawn = shown ? *shown : *document;
+    if (const std::optional<QUuid> group = session.isolatedGroup(); group && drawn.find(*group))
+        drawIsolated(painter, drawn, *group);
+    else
+        VectorRenderer::draw(painter, drawn, options);
     painter.restore();
+    drawPixelGrid(painter, artboard);
     if (session.showsGrid)
         drawGrid(painter, artboard);
     // A hairline astride the artboard's edge.
@@ -88,6 +92,7 @@ void EditorCanvas::State::paint(QPainter &painter)
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(artboard);
     painter.restore();
+    drawGuides(painter);
     drawOverlay(painter);
 }
 
@@ -216,6 +221,15 @@ void EditorCanvas::State::drawSelection(QPainter &painter) const
     if (!session.hasSelection())
         return;
     const QColor edge = layerColor(session.selection().back());
+    // The key object: a heavier box, as Illustrator marks it.
+    if (const std::optional<QUuid> key = session.keyObject(); key && document.find(*key)) {
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setPen(cosmetic(layerColor(*key), 3));
+        const QRectF bounds = document.bounds(*key);
+        painter.drawRect(QRectF(toView(bounds.topLeft()), toView(bounds.bottomRight())));
+        painter.restore();
+    }
     if (const std::optional<QRectF> box = selectionBox()) {
         painter.setRenderHint(QPainter::Antialiasing, false);
         painter.setPen(cosmetic(edge));
@@ -278,6 +292,14 @@ void EditorCanvas::State::drawDirectSelection(QPainter &painter) const
         }
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setBrush(Qt::NoBrush);
+    }
+    // Live corners: a small ring per corner, dragged for its radius.
+    for (const CornerWidget &widget : cornerWidgets()) {
+        painter.setPen(cosmetic(layerColor(widget.object), 1));
+        painter.setBrush(Qt::white);
+        painter.drawEllipse(widget.view, 3.5, 3.5);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(widget.view, 1.2, 1.2);
     }
 }
 

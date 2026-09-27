@@ -36,6 +36,8 @@ public:
     Result point(QPointF point, double scale, std::optional<QPointF> anchor = std::nullopt, bool constrained = false) const;
 
     const std::vector<QRectF> &objects() const { return m_objects; }
+    // Ruler guides: bounds and points snap to them too.
+    void addGuides(const std::vector<Guide> &guides);
 
     // Alt-hover measuring: a line per gap between `from` and `to` on each axis, as long as the gap.
     static std::vector<QLineF> distances(const QRectF &from, const QRectF &to);
@@ -45,6 +47,7 @@ public:
 private:
     std::vector<QRectF> m_objects;
     std::vector<QRectF> m_boards;
+    std::vector<Guide> m_guides;
 };
 
 // The delta turned to the nearest 45° and projected onto it.

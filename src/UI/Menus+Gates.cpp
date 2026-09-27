@@ -111,6 +111,24 @@ void Menus::synchronize()
         action(QString::fromLatin1(name))->setEnabled(drawn);
     action(QStringLiteral("reselect"))->setEnabled(editing && drawn && s.canReselect());
     action(QStringLiteral("zoomToSelection"))->setEnabled(drawn && selected && !typing);
+    action(QStringLiteral("join"))->setEnabled(editing && s.canJoin());
+    action(QStringLiteral("average"))->setEnabled(editing && s.canAverage());
+    action(QStringLiteral("reversePathDirection"))->setEnabled(editing && selectionHas(s, ObjectKind::path));
+    const std::vector<QUuid> compound = drawn ? s.selectedCompoundPaths() : std::vector<QUuid>();
+    action(QStringLiteral("evenOddFillRule"))->setEnabled(editing && !compound.empty());
+    action(QStringLiteral("evenOddFillRule"))->setChecked(!compound.empty() && s.document()->find(compound.front())->path.fillRule == Qt::OddEvenFill);
+    for (const char *name : {"snapToPixel", "pixelGrid", "rulers", "guidesMenu", "hideGuides", "lockGuides"})
+        action(QString::fromLatin1(name))->setEnabled(drawn);
+    action(QStringLiteral("snapToPixel"))->setChecked(s.snapsToPixel);
+    action(QStringLiteral("pixelGrid"))->setChecked(s.showsPixelGrid);
+    action(QStringLiteral("rulers"))->setChecked(s.showsRulers);
+    action(QStringLiteral("hideGuides"))->setText(s.showsGuides ? QStringLiteral("Hide Guides") : QStringLiteral("Show Guides"));
+    action(QStringLiteral("lockGuides"))->setChecked(s.guidesLocked);
+    action(QStringLiteral("makeGuides"))->setEnabled(editing && drawn && s.canMakeGuides());
+    const bool guides = drawn && !s.document()->guides.empty();
+    action(QStringLiteral("releaseGuides"))->setEnabled(editing && guides);
+    action(QStringLiteral("clearGuides"))->setEnabled(editing && guides);
+    action(QStringLiteral("showHistory"))->setEnabled(drawn);
     action(QStringLiteral("contextualTaskBar"))->setChecked(TaskBar::isTurnedOn());
     action(QStringLiteral("showLayers"))->setChecked(ContentView::showsPanel(ContentView::layersKey));
     action(QStringLiteral("showProperties"))->setChecked(ContentView::showsPanel(ContentView::propertiesKey));
