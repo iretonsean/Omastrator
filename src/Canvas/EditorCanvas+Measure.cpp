@@ -18,7 +18,7 @@ std::optional<QRectF> EditorCanvas::State::measureTarget() const
         if (!inside)
             return document.bounds(*hovered);
     }
-    return QRectF(QPointF(0, 0), document.size);
+    return document.artboard(session.activeArtboard()).rect;
 }
 
 std::vector<QLineF> EditorCanvas::State::measureLines() const

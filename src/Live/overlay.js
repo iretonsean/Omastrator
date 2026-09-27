@@ -20,8 +20,14 @@
     panel: "",
     editing: null,
     handles: false,
-    notice: ""
+    notice: "",
+    // A site that isn't the user's: {origin, notice, sets: [{name, enabled, edits}], pending, suggested}.
+    site: null,
+    setsOpen: false
   };
+
+  // Each element as it was before anything here changed it, so edits can be taken off again.
+  const originals = new Map();
 
   // ------------------------------------------------------------ colours and lengths
 
@@ -106,6 +112,20 @@
     return element.children.length === 0 && element.textContent.trim().length > 0;
   }
 
+  // The page as edit sets record it: its path, or a file page's name.
+  function here() {
+    return location.protocol === "file:" ? decodeURIComponent(location.pathname.split("/").pop()) : (location.pathname || "/");
+  }
+
+  function remember(element) {
+    if (originals.has(element)) return;
+    originals.set(element, {
+      style: element.getAttribute("style"),
+      cls: element.getAttribute("class"),
+      text: element.children.length === 0 ? element.textContent : null
+    });
+  }
+
   function info(element) {
     const computed = getComputedStyle(element);
     const styles = {};
@@ -124,6 +144,7 @@
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       styles,
       inlineStyle: element.getAttribute("style") || "",
+      path: here(),
       html: element.outerHTML.slice(0, 4000)
     };
   }
@@ -161,6 +182,12 @@
       .handle.margin { background: #f5a524; }
       .handle.x { cursor: ew-resize; width: 6px; }
       .handle.y { cursor: ns-resize; height: 6px; }
+      .site { position: fixed; right: 12px; bottom: 12px; pointer-events: auto; display: none; flex-direction: column; gap: 6px;
+              padding: 8px; border-radius: 10px; background: var(--bg); color: var(--fg); max-width: 520px;
+              box-shadow: 0 8px 28px rgba(0,0,0,.35); border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+      .site-line { font-weight: 600; }
+      .site-count:empty, .site-sets:empty { display: none; }
+      .site-sets label { display: block; opacity: 1; }
     </style>
     <div class="box hover"></div>
     <div class="selections"></div>
@@ -178,6 +205,19 @@
       </div>
       <div class="panel"></div>
       <div class="notice"></div>
+    </div>
+    <div class="site" role="region" aria-label="Not your site">
+      <div class="site-line">Not your site: changes stay on this machine.</div>
+      <div class="site-count"></div>
+      <div class="row">
+        <input class="site-name" aria-label="Edit set name" placeholder="Edit set name">
+        <button data-site="keep">Keep Edits</button>
+        <button data-site="sets">Edit Sets</button>
+        <button data-site="export">Export CSS…</button>
+        <button data-site="beforeAfter">Before and After to Desk</button>
+        <button data-site="handoff">Hand to Agent…</button>
+      </div>
+      <div class="site-sets"></div>
     </div>`;
   const hoverBox = root.querySelector(".hover");
   const selections = root.querySelector(".selections");
@@ -185,6 +225,76 @@
   const bar = root.querySelector(".bar");
   const panel = root.querySelector(".panel");
   const notice = root.querySelector(".notice");
+  const site = root.querySelector(".site");
+  const siteCount = root.querySelector(".site-count");
+  const siteName = root.querySelector(".site-name");
+  const siteSets = root.querySelector(".site-sets");
+
+  function drawSite() {
+    const about = state.site;
+    site.style.display = about ? "flex" : "none";
+    if (!about) return;
+    const on = (about.sets || []).filter((set) => set.enabled);
+    const parts = [];
+    if (about.pending) parts.push(about.pending + (about.pending === 1 ? " edit not kept yet" : " edits not kept yet"));
+    if (on.length) parts.push("Showing " + on.map((set) => set.name).join(", "));
+    siteCount.textContent = parts.join(". ");
+    if (about.suggested) siteName.placeholder = about.suggested;
+    siteSets.innerHTML = "";
+    if (!state.setsOpen) return;
+    if (!(about.sets || []).length) siteSets.textContent = "No edit sets for this site yet.";
+    for (const set of about.sets || []) {
+      const row = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !!set.enabled;
+      box.addEventListener("change", () => send({ type: "site", action: "toggle", name: set.name, on: box.checked }));
+      row.appendChild(box);
+      row.appendChild(document.createTextNode(" " + set.name + " (" + set.edits + ")"));
+      siteSets.appendChild(row);
+    }
+  }
+
+  for (const button of root.querySelectorAll("[data-site]")) {
+    button.addEventListener("click", () => {
+      const action = button.dataset.site;
+      if (action === "sets") { state.setsOpen = !state.setsOpen; drawSite(); return; }
+      send({ type: "site", action, name: siteName.value.trim() || (state.site && state.site.suggested) || "" });
+      if (action === "keep") siteName.value = "";
+    });
+  }
+  siteName.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") root.querySelector('[data-site="keep"]').click();
+  });
+
+  // Edits put back when the page is visited again. Elements a framework renders late are caught for a few seconds.
+  let late = [];
+  let lateWatch = null;
+  function applyOne(edit) {
+    if (edit.path && edit.path !== here()) return true;
+    let element = null;
+    try { element = document.querySelector(edit.selector); } catch (e) { return true; }
+    if (!element) return false;
+    remember(element);
+    if (edit.property === "text") {
+      if (element.children.length === 0) element.textContent = edit.value;
+    } else {
+      if (edit.removeClass) element.classList.remove(edit.removeClass);
+      if (edit.addClass) element.classList.add(edit.addClass);
+      element.style.setProperty(edit.property, edit.value);
+    }
+    return true;
+  }
+  function watchLate() {
+    if (lateWatch || !late.length) return;
+    lateWatch = new MutationObserver(() => {
+      late = late.filter((edit) => !applyOne(edit));
+      if (!late.length) { lateWatch.disconnect(); lateWatch = null; }
+    });
+    lateWatch.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => { if (lateWatch) { lateWatch.disconnect(); lateWatch = null; late = []; } }, 10000);
+  }
 
   function attach() {
     if (!host.isConnected) document.documentElement.appendChild(host);
@@ -301,7 +411,7 @@
   }
 
   function preview(property, value) {
-    for (const element of state.selection) element.style.setProperty(property, value);
+    for (const element of state.selection) { remember(element); element.style.setProperty(property, value); }
     redraw();
   }
 
@@ -323,6 +433,7 @@
       redraw();
       return;
     }
+    remember(element);
     state.editing = element;
     state.editingBefore = info(element);
     element.dataset.omaTextBefore = element.textContent;
@@ -505,6 +616,7 @@
       const element = document.querySelector(selector);
       if (!element || !textOnly(element)) return false;
       const before = info(element);
+      remember(element);
       element.textContent = text;
       send({ type: "edit", selector: selectorFor(element), property: "text", value: text, before: before.text, element: before });
       redraw();
@@ -517,6 +629,7 @@
       const element = document.querySelector(resolution.selector);
       if (!element) return null;
       const before = info(element);
+      remember(element);
       if (resolution.property === "text") {
         element.textContent = resolution.value;
       } else {
@@ -530,7 +643,35 @@
       }
       redraw();
       return { before, after: info(element) };
-    }
+    },
+    // A site that isn't the user's: the label and its edit sets; null for the user's own.
+    setSite(about) {
+      state.site = about || null;
+      drawSite();
+    },
+    // Puts edits back: [{path, selector, property, value, addClass, removeClass}]. Returns how many found their element.
+    applyEdits(list) {
+      const all = list || [];
+      late = all.filter((edit) => !applyOne(edit));
+      watchLate();
+      redraw();
+      return all.length - late.length;
+    },
+    // Takes every change off the page, so it looks as the site made it.
+    revertAll() {
+      if (lateWatch) { lateWatch.disconnect(); lateWatch = null; }
+      late = [];
+      for (const [element, was] of originals) {
+        if (was.style === null) element.removeAttribute("style"); else element.setAttribute("style", was.style);
+        if (was.cls === null) element.removeAttribute("class"); else element.setAttribute("class", was.cls);
+        if (was.text !== null && element.children.length === 0) element.textContent = was.text;
+      }
+      const count = originals.size;
+      originals.clear();
+      redraw();
+      return count;
+    },
+    here
   };
 
   paintTheme();

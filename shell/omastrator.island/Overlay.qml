@@ -28,6 +28,7 @@ Item {
   readonly property var proposal: design.proposal || null
   readonly property string tool: design.tool || "inspect"
   readonly property var lifting: design.lift || null
+  readonly property var look: design.look || null
 
   readonly property color ink: Color.popups.text
   readonly property color paper: Color.popups.background
@@ -113,7 +114,7 @@ Item {
       readonly property var place: root.placeOf(modelData)
       readonly property bool mine: root.on && root.design.monitor === modelData.name
       readonly property bool drawing: mine && root.tool !== "inspect"
-      readonly property bool panelsShown: barCard.visible || onboardingCard.visible || detailCard.visible || typing.visible
+      readonly property bool panelsShown: barCard.visible || onboardingCard.visible || detailCard.visible || typing.visible || gapGrip.visible
       readonly property string maskMode: Logic.maskMode(root.design, place, panelsShown)
       readonly property var myArt: root.overlays.filter(function (each) { return each.monitor === window.modelData.name })
 
@@ -138,6 +139,7 @@ Item {
         Region { item: window.maskMode === "panels" && detailCard.visible ? detailCard : null }
         Region { item: window.maskMode === "panels" && onboardingCard.visible ? onboardingCard : null }
         Region { item: window.maskMode === "panels" && typing.visible ? typing : null }
+        Region { item: window.maskMode === "panels" && gapGrip.visible ? gapGrip : null }
       }
 
       Item {
@@ -347,6 +349,16 @@ Item {
           }
           Keys.onEscapePressed: typing.visible = false
         }
+      }
+
+      // ------------------------------------------------------------ Desktop Look's gap handle
+
+      GapHandle {
+        id: gapGrip
+        handleData: window.mine && !window.drawing && root.shownBar && root.shownBar.kind === "window"
+                    ? Logic.gapHandle(root.look, root.shownBar.bounds, window.place) : null
+        accent: root.accent
+        onDropped: function (args) { root.run(args) }
       }
 
       // ------------------------------------------------------------ the floating bar

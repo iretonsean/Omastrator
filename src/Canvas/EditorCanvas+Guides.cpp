@@ -165,8 +165,10 @@ void EditorCanvas::State::drawIsolated(QPainter &painter, const VectorDocument &
 {
     VectorRenderer::Options options;
     options.outlineMode = session.showsOutline;
-    if (!options.outlineMode)
-        painter.fillRect(QRectF(QPointF(0, 0), document.size), document.background);
+    if (!options.outlineMode) {
+        for (const Artboard &board : document.allArtboards())
+            painter.fillRect(board.rect, board.background);
+    }
     // The rest at half strength, then the group on top at full.
     VectorRenderer::Options faded = options;
     faded.drawBackground = false;

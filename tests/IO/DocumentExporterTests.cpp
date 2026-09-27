@@ -149,6 +149,43 @@ private slots:
         QVERIFY(QFileInfo(dir.filePath(QStringLiteral("low.jpg"))).size() < QFileInfo(dir.filePath(QStringLiteral("high.jpg"))).size());
     }
 
+    void opacityMaskFadesInPngAndSurvivesPdf()
+    {
+        VectorDocument document = VectorDocument::blank({100, 20});
+        VectorObject art;
+        art.path = Shapes::rectangle({0, 0, 100, 20});
+        art.fill = Paint::solid(Qt::red);
+        art.stroke.paint = Paint::none();
+        document.insert(art, document.layers().front());
+        VectorObject fade;
+        fade.path = Shapes::rectangle({0, 0, 100, 20});
+        fade.fill = Paint::linear(Qt::white, Qt::black);
+        fade.stroke.paint = Paint::none();
+        document.insert(fade, document.layers().front());
+        VectorObject group;
+        group.kind = ObjectKind::group;
+        group.mask = OpacityMask();
+        document.insert(group, document.layers().front());
+        document.move(art.id, group.id, -1);
+        document.move(fade.id, group.id, -1);
+
+        QTemporaryDir dir;
+        const QString png = dir.filePath(QStringLiteral("mask.png"));
+        DocumentExporter::writePng(document, png, 1);
+        const QImage image(png);
+        QVERIFY(close(image.pixelColor(2, 10), Qt::red, 20));
+        QVERIFY(qGray(image.pixelColor(98, 10).rgb()) > qGray(image.pixelColor(2, 10).rgb()));
+
+        const QString pdf = dir.filePath(QStringLiteral("mask.pdf"));
+        DocumentExporter::writePdf(document, pdf);
+        QFile file(pdf);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QVERIFY(bytes.startsWith("%PDF"));
+        // No live soft mask in Qt's PDF writer: the masked patch rasterizes instead.
+        QVERIFY(bytes.contains("/Subtype /Image"));
+    }
+
     void hugeScaleIsRefused()
     {
         QTemporaryDir dir;

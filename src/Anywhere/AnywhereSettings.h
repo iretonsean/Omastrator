@@ -47,6 +47,9 @@ bool needsOnboarding();
 const QStringList &destinations();
 QString destination(const QString &surfaceKey);
 QString setDestination(const QString &surfaceKey, const QString &destination);
+// The app's source folder Hand to Agent last used for a surface, offered again next time.
+QString handoffFolder(const QString &surfaceKey);
+QString setHandoffFolder(const QString &surfaceKey, const QString &folder);
 
 // The Desk's Hyprland workspace: a named special workspace unless changed.
 QString deskWorkspace();

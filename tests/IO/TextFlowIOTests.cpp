@@ -95,8 +95,9 @@ private slots:
         document.reflowText();
 
         const QJsonObject json = DocumentCodec::encode(document);
-        // Additive keys, no version bump: still version 4.
-        QCOMPARE(json["version"].toInt(), 4);
+        // Additive keys, no version bump of their own: version tracks whatever
+        // other work (artboards) last bumped it to.
+        QCOMPARE(json["version"].toInt(), DocumentCodec::version);
         const VectorDocument back = DocumentCodec::decode(json);
 
         QCOMPARE(back.find(pathID)->textWrap, path.textWrap);

@@ -80,8 +80,12 @@ bool ShareController::sharesSelection() const
 
 QString ShareController::scopeText() const
 {
-    return sharesSelection() ? QStringLiteral("the selection (%1)").arg(count(m_workspace.current().session.selection().size()))
-                             : QStringLiteral("the artboard");
+    if (sharesSelection())
+        return QStringLiteral("the selection (%1)").arg(count(m_workspace.current().session.selection().size()));
+    const EditorSession &session = m_workspace.current().session;
+    if (const std::optional<VectorDocument> &document = session.document(); document && document->artboardCount() > 1)
+        return QStringLiteral("the artboard “%1”").arg(document->artboard(session.activeArtboard()).name);
+    return QStringLiteral("the artboard");
 }
 
 Share::DocumentShares ShareController::shares() const
@@ -234,7 +238,8 @@ QString ShareController::start(const Options &options)
     const EditorSession &session = tab.session;
     const Share::Format format = options.format.value_or(chosenFormat());
     const bool selection = sharesSelection();
-    const VectorDocument document = selection ? Share::selectionDocument(*session.document(), session.selection()) : *session.document();
+    const VectorDocument document = selection ? Share::selectionDocument(*session.document(), session.selection())
+        : session.document()->artboards.empty() ? *session.document() : session.document()->artboardDocument(session.activeArtboard());
     m_folder = std::make_unique<QTemporaryDir>(QDir::temp().filePath(QStringLiteral("omastrator-share-XXXXXX")));
     const QDateTime now = QDateTime::currentDateTime();
     const QString file = m_folder->filePath(QStringLiteral("%1-%2.%3").arg(Share::safeName(tab.title()), Share::stamp(now), Share::suffix(format)));

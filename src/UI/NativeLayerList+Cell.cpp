@@ -102,8 +102,10 @@ void LayerCell::configure(const VectorObject &object, int depth, bool visible, c
     font.setWeight(m_isLayer ? QFont::DemiBold : QFont::Normal);
     m_name->setFont(font);
     m_objectName = object.name;
-    if (!m_renaming)
-        m_name->setText(object.isClipGroup ? object.name + QStringLiteral(" (clip)") : object.name);
+    if (!m_renaming) {
+        const QString suffix = object.isClipGroup ? QStringLiteral(" (clip)") : object.mask ? QStringLiteral(" (mask)") : QString();
+        m_name->setText(object.name + suffix);
+    }
     m_fade->setOpacity(visible ? 1 : 0.4);
     relayout();
     QWidget::update();

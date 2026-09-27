@@ -35,7 +35,8 @@ std::vector<std::pair<QString, QColor>> omarchyColors()
 QJsonObject LiveEdit::toJson() const
 {
     return {{"selector", selector}, {"property", property}, {"before", before}, {"after", after}, {"token", token},
-            {"removeClass", removeClass}, {"addClass", addClass}, {"classesBefore", classesBefore}, {"classesAfter", classesAfter}};
+            {"removeClass", removeClass}, {"addClass", addClass}, {"classesBefore", classesBefore}, {"classesAfter", classesAfter},
+            {"path", path}};
 }
 
 LiveSession::LiveSession(QObject *parent) : QObject(parent)
@@ -130,8 +131,8 @@ void LiveSession::run(Target target)
         m_url = QUrl(evaluate(QStringLiteral("location.href")).toString());
         if (m_project.isEmpty() && (m_url.scheme() == QLatin1String("http") || m_url.scheme() == QLatin1String("https")))
             m_project = ProjectRegistry::folderFor(m_url).value_or(QString());
-        rescanTokens();
         setState(State::running, isMockup() ? QStringLiteral("Mock-up: changes stay in the app.") : QString());
+        pageLoaded();
         return;
     }
     QUrl url = target.url;
@@ -171,8 +172,8 @@ void LiveSession::run(Target target)
         return cancelled() ? void() : fail(failure);
     if (cancelled())
         return;
-    rescanTokens();
-    setState(State::running, isMockup() ? QStringLiteral("Mock-up: changes stay in the browser.") : QString());
+    setState(State::running, isMockup() ? QStringLiteral("Not your site: changes stay on this machine.") : QString());
+    pageLoaded();
 }
 
 QString LiveSession::prepare()
@@ -213,7 +214,15 @@ void LiveSession::setState(State state, const QString &message)
 QJsonObject LiveSession::status() const
 {
     static const char *names[] = {"off", "starting", "running", "failed"};
+    QJsonObject site;
+    if (m_state == State::running && isMockup()) {
+        QJsonArray sets;
+        for (const EditSets::Set &set : editSets())
+            sets.append(set.summary());
+        site = {{"origin", origin()}, {"notice", QStringLiteral("Not your site: changes stay on this machine.")}, {"sets", sets}};
+    }
     return {{"state", QLatin1String(names[int(m_state)])},
+            {"site", site},
             {"url", m_url.toString()},
             {"project", m_project},
             {"mockup", isMockup()},
@@ -263,7 +272,7 @@ void LiveSession::onEvent(const QString &method, const QJsonObject &params, cons
         handle(QJsonDocument::fromJson(params["payload"].toString().toUtf8()).object());
     } else if (method == QLatin1String("Page.loadEventFired") && m_state == State::running) {
         // A reload (a dev server's, or the user's) brings a fresh overlay that needs the tokens again.
-        QTimer::singleShot(0, this, &LiveSession::rescanTokens);
+        QTimer::singleShot(0, this, &LiveSession::pageLoaded);
     }
 }
 
@@ -284,6 +293,8 @@ void LiveSession::handle(const QJsonObject &message)
         edit(message["selector"].toString(), property, message["value"].toString());
     } else if (type == QLatin1String("ask")) {
         emit askRequested(message["prompt"].toString(), message["elements"].toArray());
+    } else if (type == QLatin1String("site") && isMockup()) {
+        emit siteRequested(message["action"].toString(), message);
     }
 }
 
@@ -293,6 +304,19 @@ QString LiveSession::edit(const QString &selector, const QString &property, cons
     const QJsonObject element = evaluate(QStringLiteral("window.__oma.info(%1)").arg(json(selector)), &error).toObject();
     if (element.isEmpty())
         return error.isEmpty() ? QStringLiteral("That element is gone from the page.") : error;
+    if (property == QLatin1String("text")) {
+        // Only an element that holds text alone takes new text, as editing it in place does.
+        if (!element["textOnly"].toBool())
+            return QStringLiteral("%1 holds more than text, so its text can't be replaced.").arg(selector);
+        const QJsonObject applied = evaluate(QStringLiteral("window.__oma.applyResolved(%1)")
+                                                 .arg(json(QJsonObject{{"selector", selector}, {"property", property}, {"value", value}})),
+                                             &error)
+                                        .toObject();
+        if (applied.isEmpty())
+            return error.isEmpty() ? QStringLiteral("The page didn't take the change.") : error;
+        record(element, TokenSet::Resolution{property, value, {}, {}, {}}, applied, element["text"].toString());
+        return {};
+    }
     const QStringList classes = element["classes"].toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
     TokenSet::Resolution resolution = m_tokens.resolve(property, value, classes);
     QJsonObject request{{"selector", selector}, {"property", resolution.property}, {"value", resolution.value},
@@ -319,6 +343,7 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
     edit.classesBefore = element["classes"].toString();
     edit.classesAfter = after["classes"].toString();
     edit.element = element;
+    edit.path = element["path"].toString(EditSets::pathOf(m_url));
     // A second change to the same thing keeps the first one's "before".
     for (LiveEdit &existing : m_edits) {
         if (existing.selector == selector && existing.property == edit.property) {
@@ -336,6 +361,9 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
     m_edits.push_back(edit);
     emit editApplied(edit);
     emit changed();
+    // Later: a record can arrive inside another DevTools call, which mustn't be nested.
+    if (isMockup())
+        QTimer::singleShot(0, this, &LiveSession::describeSite);
 }
 
 void LiveSession::clearEdits()
@@ -391,4 +419,112 @@ QString LiveSession::screenshot(const QString &path, const QString &selector)
     if (!file.open(QIODevice::WriteOnly) || file.write(QByteArray::fromBase64(shot["data"].toString().toLatin1())) <= 0)
         return QStringLiteral("Couldn't write %1.").arg(path);
     return {};
+}
+
+void LiveSession::pageLoaded()
+{
+    if (!m_page)
+        return;
+    const QUrl now(evaluate(QStringLiteral("location.href")).toString());
+    if (now.isValid() && !now.isEmpty() && now != m_url) {
+        m_url = now;
+        emit changed();
+    }
+    rescanTokens();
+    if (isMockup())
+        evaluate(QStringLiteral("window.__oma && window.__oma.applyEdits(%1)").arg(json(EditSets::toJson(editsShown()))));
+    describeSite();
+}
+
+void LiveSession::describeSite()
+{
+    if (!m_page)
+        return;
+    if (!isMockup()) {
+        evaluate(QStringLiteral("window.__oma && window.__oma.setSite(null)"));
+        return;
+    }
+    QJsonArray sets;
+    for (const EditSets::Set &set : editSets())
+        sets.append(set.summary());
+    const QJsonObject site{{"origin", origin()}, {"sets", sets}, {"pending", int(m_edits.size())}, {"suggested", EditSets::suggestedName(origin())}};
+    evaluate(QStringLiteral("window.__oma && window.__oma.setSite(%1)").arg(json(site)));
+}
+
+QString LiveSession::origin() const
+{
+    return m_url.isEmpty() ? QString() : EditSets::originOf(m_url);
+}
+
+std::vector<EditSets::Set> LiveSession::editSets() const
+{
+    return origin().isEmpty() ? std::vector<EditSets::Set>{} : EditSets::read(origin());
+}
+
+std::vector<EditSets::Edit> LiveSession::editsShown(const QString &name) const
+{
+    if (!name.isEmpty()) {
+        for (const EditSets::Set &set : editSets())
+            if (set.name == name)
+                return set.edits;
+        return {};
+    }
+    const QString path = EditSets::pathOf(m_url);
+    std::vector<EditSets::Edit> edits = EditSets::active(origin(), path);
+    for (const LiveEdit &edit : m_edits)
+        if (edit.path.isEmpty() || edit.path == path)
+            edits.push_back(EditSets::Edit::fromLive(edit));
+    return edits;
+}
+
+QString LiveSession::keepEdits(const QString &name, QString *kept)
+{
+    if (!isMockup())
+        return QStringLiteral("This is your site: its edits go to the code with Deploy.");
+    if (m_edits.empty())
+        return QStringLiteral("There are no edits on this page to keep.");
+    const QString chosen = name.trimmed().isEmpty() ? EditSets::suggestedName(origin()) : name.trimmed();
+    std::vector<EditSets::Edit> edits;
+    for (const LiveEdit &edit : m_edits)
+        edits.push_back(EditSets::Edit::fromLive(edit));
+    if (const QString failure = EditSets::keep(origin(), chosen, edits); !failure.isEmpty())
+        return failure;
+    if (kept)
+        *kept = chosen;
+    // They're in the set now, and stay on the page.
+    m_edits.clear();
+    emit changed();
+    describeSite();
+    notice(QStringLiteral("Kept as “%1”. It comes back every time you open this site in Omastrator.").arg(chosen));
+    return {};
+}
+
+QString LiveSession::setEditSetEnabled(const QString &name, bool enabled)
+{
+    if (const QString failure = EditSets::setEnabled(origin(), name, enabled); !failure.isEmpty())
+        return failure;
+    const QString failure = showOriginal(false);
+    emit changed();
+    return failure;
+}
+
+QString LiveSession::removeEditSet(const QString &name)
+{
+    if (const QString failure = EditSets::remove(origin(), name); !failure.isEmpty())
+        return failure;
+    const QString failure = showOriginal(false);
+    emit changed();
+    return failure;
+}
+
+QString LiveSession::showOriginal(bool original)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    evaluate(QStringLiteral("window.__oma.revertAll()"), &error);
+    if (error.isEmpty() && !original)
+        evaluate(QStringLiteral("window.__oma.applyEdits(%1)").arg(json(EditSets::toJson(editsShown()))), &error);
+    describeSite();
+    return error;
 }

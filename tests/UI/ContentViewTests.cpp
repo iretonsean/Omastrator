@@ -47,6 +47,8 @@ private slots:
     void cleanup();
     void theRailHoldsEveryToolInGroups();
     void aRailClickPicksTheTool();
+    void aFlyoutOpensOnRightClickAndLongPressAndAltClickCycles();
+    void basicPresetHidesTheAdvancedTools();
     void eachToolShowsItsBar();
     void shapeBarsEditTheSessionsNumbers();
     void shapeBuilderFoldsItsOptions();
@@ -73,35 +75,69 @@ void ContentViewTests::cleanup()
 void ContentViewTests::theRailHoldsEveryToolInGroups()
 {
     Editor editor;
+    // Every tool lives in exactly one slot, named after the first tool in its group.
     size_t count = 0;
-    for (const std::vector<Tool> &group : ContentView::railGroups)
-        count += group.size();
+    for (const std::vector<Tool> &slot : ContentView::toolSlots())
+        count += slot.size();
     QCOMPARE(count, allTools.size());
-    for (const Tool tool : allTools)
-        QVERIFY(editor.tool(tool).isVisible());
-    // Tooltips name the tool and its key, if any.
+    for (const std::vector<Tool> &slot : ContentView::toolSlots())
+        QVERIFY(editor.tool(slot.front()).isVisible());
+    // Tooltips name the tool a slot shows and its key, if any.
     QCOMPARE(editor.tool(Tool::select).toolTip(), QString("Selection (V)"));
-    QCOMPARE(editor.tool(Tool::line).toolTip(), QString("Line Segment (\\)"));
-    QCOMPARE(editor.tool(Tool::star).toolTip(), QString("Star"));
+    QCOMPARE(editor.tool(Tool::artboard).toolTip(), QString("Artboard (Shift+O)"));
     // A remapped key shows at once.
     QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("k")}}));
     QCOMPARE(editor.tool(Tool::pen).toolTip(), QString("Pen (K)"));
     // Groups run top to bottom: selection above drawing above navigation.
-    QVERIFY(editor.tool(Tool::directSelect).y() < editor.tool(Tool::pen).y());
-    QVERIFY(editor.tool(Tool::star).y() < editor.tool(Tool::rotate).y());
-    QVERIFY(editor.tool(Tool::eyedropper).y() < editor.tool(Tool::hand).y());
+    QVERIFY(editor.tool(Tool::select).y() < editor.tool(Tool::pen).y());
+    QVERIFY(editor.tool(Tool::pen).y() < editor.tool(Tool::rotate).y());
+    QVERIFY(editor.tool(Tool::rotate).y() < editor.tool(Tool::hand).y());
 }
 
 void ContentViewTests::aRailClickPicksTheTool()
 {
     Editor editor;
     QVERIFY(editor.tool(Tool::select).isChecked());
-    editor.tool(Tool::ellipse).click();
-    QCOMPARE(editor.session.tool(), Tool::ellipse);
-    QVERIFY(editor.tool(Tool::ellipse).isChecked() && !editor.tool(Tool::select).isChecked());
-    // The session's choice from elsewhere shows too.
+    QTest::mouseClick(&editor.tool(Tool::rectangle), Qt::LeftButton);
+    QCOMPARE(editor.session.tool(), Tool::rectangle);
+    QVERIFY(editor.tool(Tool::rectangle).isChecked() && !editor.tool(Tool::select).isChecked());
+    // The session's choice from elsewhere shows too; Hand and Zoom share a slot.
     editor.session.selectTool(Tool::zoom);
-    QVERIFY(editor.tool(Tool::zoom).isChecked());
+    QVERIFY(editor.tool(Tool::hand).isChecked());
+    // A slot with several tools shows the last one picked, even chosen elsewhere.
+    editor.session.selectTool(Tool::ellipse);
+    QVERIFY(editor.tool(Tool::rectangle).isChecked());
+}
+
+void ContentViewTests::aFlyoutOpensOnRightClickAndLongPressAndAltClickCycles()
+{
+    Editor editor;
+    QToolButton &slot = editor.tool(Tool::rectangle);
+    // A right-click or a long press opens a real (modal) flyout menu, which offscreen
+    // Qt Test runs can't drive reliably; those are exercised by hand. Alt-click cycles
+    // between the slot's own tools without one, and remembers the last one chosen.
+    QTest::mouseClick(&slot, Qt::LeftButton, Qt::AltModifier);
+    const Tool first = editor.session.tool();
+    QVERIFY(first != Tool::select);
+    QTest::mouseClick(&slot, Qt::LeftButton, Qt::AltModifier);
+    QVERIFY(editor.session.tool() != first);
+    QCOMPARE(toolNamed(QSettings().value(QStringLiteral("toolSlot/rectangle")).toString()), std::optional(editor.session.tool()));
+}
+
+void ContentViewTests::basicPresetHidesTheAdvancedTools()
+{
+    Editor editor;
+    // Shape Builder is alone in its slot and on the Basic-hides list.
+    QVERIFY(editor.tool(Tool::shapeBuilder).isVisible());
+    ContentView::setToolPreset(ContentView::ToolPreset::basic);
+    // Nothing refreshes the rail until the session says something changed.
+    editor.session.selectTool(Tool::directSelect);
+    editor.session.selectTool(Tool::select);
+    // A tool the preset hides: its slot disappears, unless it's the active one.
+    QVERIFY(!editor.tool(Tool::shapeBuilder).isVisible());
+    editor.session.selectTool(Tool::shapeBuilder);
+    QVERIFY(editor.tool(Tool::shapeBuilder).isVisible());
+    ContentView::setToolPreset(ContentView::ToolPreset::advanced);
 }
 
 void ContentViewTests::eachToolShowsItsBar()

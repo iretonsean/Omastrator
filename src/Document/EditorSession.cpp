@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 20> toolInfo{{
+const std::array<ToolInfo, 22> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -28,9 +28,11 @@ const std::array<ToolInfo, 20> toolInfo{{
     {Tool::rotate, "rotate", "Rotate"},
     {Tool::scale, "scale", "Scale"},
     {Tool::gradient, "gradient", "Gradient"},
+    {Tool::width, "width", "Width"},
     {Tool::eyedropper, "eyedropper", "Eyedropper"},
     {Tool::hand, "hand", "Hand"},
     {Tool::zoom, "zoom", "Zoom"},
+    {Tool::artboard, "artboard", "Artboard"},
 }};
 }
 
@@ -81,6 +83,13 @@ void EditorSession::notify(bool documentToo)
     // Wrap and thread previews follow a drag live, same as the committed edit.
     if (documentToo && m_document)
         m_document->reflowText();
+    // Artboard 1's size double as the viewport's reference point; keep the document
+    // origin still on screen when it changes (a drag on the Artboard tool, or undo).
+    if (documentToo && m_document && m_document->size != m_viewportDocumentSize) {
+        const QSizeF delta = m_document->size - m_viewportDocumentSize;
+        viewport.pan += QSizeF(delta.width() * viewport.pointsPerPixel() / 2, delta.height() * viewport.pointsPerPixel() / 2);
+        m_viewportDocumentSize = m_document->size;
+    }
     if (documentToo)
         emit documentChanged();
     emit changed();
@@ -105,7 +114,9 @@ void EditorSession::loadDocument(VectorDocument document)
     m_keyObject.reset();
     const auto layers = m_document->layers();
     m_activeLayer = layers.empty() ? std::nullopt : std::optional(layers.back());
+    m_activeArtboard = 0;
     viewport.fit(m_document->size);
+    m_viewportDocumentSize = m_document->size;
     notify();
 }
 
@@ -124,16 +135,30 @@ void EditorSession::closeDocument()
 
 void EditorSession::setArtboardSize(QSizeF size)
 {
-    if (!m_document || !(size.width() > 0 && size.height() > 0) || m_document->size == size)
+    if (!m_document || !(size.width() > 0 && size.height() > 0))
         return;
-    edit(QStringLiteral("Artboard Size"), [&](VectorDocument &document) { document.size = size; });
+    const int index = activeArtboard();
+    if (m_document->artboard(index).rect.size() == size)
+        return;
+    edit(QStringLiteral("Artboard Size"), [&](VectorDocument &document) {
+        std::vector<Artboard> boards = document.allArtboards();
+        boards[size_t(index)].rect.setSize(size);
+        document.setArtboards(boards);
+    });
 }
 
 void EditorSession::setArtboardBackground(const QColor &color)
 {
-    if (!m_document || m_document->background == color)
+    if (!m_document)
         return;
-    edit(QStringLiteral("Artboard Colour"), [&](VectorDocument &document) { document.background = color; });
+    const int index = activeArtboard();
+    if (m_document->artboard(index).background == color)
+        return;
+    edit(QStringLiteral("Artboard Colour"), [&](VectorDocument &document) {
+        std::vector<Artboard> boards = document.allArtboards();
+        boards[size_t(index)].background = color;
+        document.setArtboards(boards);
+    });
 }
 
 void EditorSession::selectTool(Tool tool)
@@ -233,6 +258,10 @@ void EditorSession::select(const std::vector<QUuid> &ids)
     if (!m_selection.empty() && m_document) {
         if (const auto layer = m_document->layerOf(m_selection.back()))
             m_activeLayer = layer;
+        // The selection's centre lands the active artboard on it too.
+        const int at = m_document->artboardAt(selectionBounds().center());
+        if (at >= 0)
+            m_activeArtboard = at;
     }
     notify(false);
 }
@@ -545,8 +574,13 @@ void EditorSession::zoomToFit()
 {
     if (!m_document)
         return;
-    viewport.fit(m_document->size);
-    notify(false);
+    const Artboard first = m_document->artboard(0);
+    if (m_document->artboardCount() == 1 && first.rect.topLeft() == QPointF(0, 0)) {
+        viewport.fit(m_document->size);
+        notify(false);
+        return;
+    }
+    zoomToRect(m_document->artboard(activeArtboard()).rect);
 }
 
 void EditorSession::actualSize()

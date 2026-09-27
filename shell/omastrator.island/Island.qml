@@ -86,7 +86,7 @@ Item {
     live: [
       { id: "live", tip: "Open a page or project in Live", idleOnly: true },
       { id: "element", tip: "Select elements: click to select, Shift-click to add (click again to browse the page normally)", runningOnly: true },
-      { id: "deploy", tip: "Deploy: writes your live edits into the code, commits, pushes, and deploys to production with your project's setup", label: "Deploy", primary: true, projectOnly: true },
+      { id: "deploy", tip: "Deploy: writes your live edits into the code, commits, pushes, and deploys to production with your project's setup", label: "Deploy", primary: true, projectOnly: true, notOnMockup: true },
       { id: "changes", icon: "review", tip: "Review changes: the diff of every write-back, with Discard", projectOnly: true },
       { id: "history", tip: "History: commits, what was deployed, and Restore", projectOnly: true },
       { id: "stop", tip: "Stop Live", runningOnly: true }
@@ -162,7 +162,7 @@ Item {
     if (next.state === prev.state) return ""
     if (next.state === "starting") return "Live: " + (next.message || "starting…")
     if (next.state === "failed") return next.message || "Live couldn't start"
-    if (next.state === "running") return "Live: " + next.url + (next.mockup ? " (mock-up)" : "")
+    if (next.state === "running") return "Live: " + next.url + (next.mockup ? " (not your site: changes stay on this machine)" : "")
     if (next.state === "off" && prev.state === "running") return next.message || "Live stopped"
     return ""
   }
@@ -241,6 +241,8 @@ Item {
 
   function shows(item) {
     if (item.runningOnly) return root.liveState === "running"
+    // A site that isn't yours never deploys: its edits stay on this machine.
+    if (item.notOnMockup && root.liveState === "running" && root.live.mockup) return false
     if (item.projectOnly) return !!(root.live.project || root.live.deployProject)
     if (item.idleOnly) return root.liveState !== "running" && root.liveState !== "starting"
     if (item.waitingOnly) return status.value("waiting", "") !== ""

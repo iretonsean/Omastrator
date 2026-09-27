@@ -136,6 +136,59 @@ void drawLeaf(QPainter &painter, const VectorObject &object, const VectorRendere
     }
 }
 
+// How many device pixels a mask group rasterizes per document unit: sharp on the
+// canvas and PNG, and never so coarse that a print PDF's embedded patch looks soft.
+double maskRasterScale(const QPainter &painter)
+{
+    double scale = std::sqrt(std::abs(painter.transform().determinant()));
+    if (painter.device() && painter.device()->devType() == QInternal::Image)
+        scale *= painter.device()->devicePixelRatioF();
+    else
+        scale = std::max(scale, 3.0);
+    return std::clamp(scale, 0.25, 8.0);
+}
+
+// `ids` drawn alone, in `bounds` (document coordinates), at `scale` pixels per unit.
+QImage renderIsolated(const VectorDocument &document, const std::vector<QUuid> &ids, const QRectF &bounds, double scale,
+                      const QPainter &like, const VectorRenderer::Options &options)
+{
+    const QSize size(std::max(1, int(std::ceil(bounds.width() * scale))), std::max(1, int(std::ceil(bounds.height() * scale))));
+    QImage image(size, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter local(&image);
+    local.setRenderHints(like.renderHints());
+    local.setRenderHint(QPainter::Antialiasing);
+    local.scale(scale, scale);
+    local.translate(-bounds.left(), -bounds.top());
+    for (const QUuid &id : ids)
+        VectorRenderer::drawObject(local, document, id, options);
+    local.end();
+    return image;
+}
+
+// `content`'s alpha, multiplied by the mask's luminance (P2-9); `clip` off treats
+// what the mask never covers as fully visible instead of fully hidden.
+void applyLuminanceMask(QImage &content, const QImage &maskImage, const OpacityMask &mask)
+{
+    const QImage source = maskImage.convertToFormat(QImage::Format_RGBA8888);
+    QImage target = content.convertToFormat(QImage::Format_RGBA8888);
+    for (int y = 0; y < target.height(); ++y) {
+        auto *row = target.scanLine(y);
+        const auto *maskRow = source.constScanLine(y);
+        for (int x = 0; x < target.width(); ++x) {
+            uchar *pixel = row + x * 4;
+            const uchar *maskPixel = maskRow + x * 4;
+            const double coverage = maskPixel[3] / 255.0;
+            const double luminance = (0.2126 * maskPixel[0] + 0.7152 * maskPixel[1] + 0.0722 * maskPixel[2]) / 255.0;
+            double effective = mask.clip ? luminance * coverage : (coverage > 0 ? luminance : 1.0);
+            if (mask.inverted)
+                effective = 1.0 - effective;
+            pixel[3] = uchar(std::clamp(pixel[3] * effective, 0.0, 255.0));
+        }
+    }
+    content = target.convertToFormat(QImage::Format_ARGB32);
+}
+
 void drawChildren(QPainter &painter, const VectorDocument &document, const VectorObject &container,
                   const VectorRenderer::Options &options)
 {
@@ -152,6 +205,19 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
                 drawLeaf(painter, *clip, options);
         }
         first = 1;
+    } else if (container.mask && !options.outlineMode && children.size() >= 2) {
+        // The top child is the mask; everything under it is what it masks.
+        const QRectF bounds = document.bounds(container.id, true);
+        if (bounds.width() > 0 && bounds.height() > 0) {
+            const double scale = maskRasterScale(painter);
+            const std::vector<QUuid> content(children.begin(), children.end() - 1);
+            QImage rendered = renderIsolated(document, content, bounds, scale, painter, options);
+            const QImage maskImage = renderIsolated(document, {children.back()}, bounds, scale, painter, options);
+            applyLuminanceMask(rendered, maskImage, *container.mask);
+            painter.drawImage(bounds, rendered);
+            painter.restore();
+            return;
+        }
     }
     for (size_t index = first; index < children.size(); ++index)
         VectorRenderer::drawObject(painter, document, children[index], options);
@@ -164,6 +230,11 @@ void drawStroke(QPainter &painter, const QPainterPath &path, const StrokeStyle &
 {
     if (stroke.isPlain()) {
         painter.strokePath(path, stroke.pen(bounds));
+        return;
+    }
+    if (!stroke.widthPoints.empty()) {
+        // Width tool (P2-7): no single pen width draws this, so it fills the outline instead.
+        painter.fillPath(StrokeGeometry::area(path, stroke), stroke.paint.brush(bounds));
         return;
     }
     // Inside and outside: a double-width stroke, clipped to one side of the path.
@@ -254,23 +325,27 @@ void drawObject(QPainter &painter, const VectorDocument &document, const QUuid &
 void draw(QPainter &painter, const VectorDocument &document, const Options &options)
 {
     painter.setRenderHint(QPainter::Antialiasing);
-    if (options.drawBackground && !options.outlineMode)
-        painter.fillRect(QRectF(QPointF(0, 0), document.size), document.background);
+    if (options.drawBackground && !options.outlineMode) {
+        for (const Artboard &board : document.allArtboards())
+            painter.fillRect(board.rect, board.background);
+    }
     for (const QUuid &layer : document.layers())
         drawObject(painter, document, layer, options);
 }
 
 QImage render(const VectorDocument &document, double scale, bool transparent)
 {
-    const QSize size(std::max(1, int(std::ceil(document.size.width() * scale))),
-                     std::max(1, int(std::ceil(document.size.height() * scale))));
+    // Several artboards: render the first one alone, moved to the origin.
+    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    const QSize size(std::max(1, int(std::ceil(page.size.width() * scale))),
+                     std::max(1, int(std::ceil(page.size.height() * scale))));
     QImage image(size, QImage::Format_RGBA8888_Premultiplied);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.scale(scale, scale);
     Options options;
     options.drawBackground = !transparent;
-    draw(painter, document, options);
+    draw(painter, page, options);
     painter.end();
     return image;
 }

@@ -250,6 +250,50 @@ private slots:
         QCOMPARE(image.pixelColor(30, 10), QColor(Qt::white));
     }
 
+    void opacityMaskFadesWithLuminanceAndKeepsThroughRelease()
+    {
+        EditorSession session;
+        session.createDocument({100, 20});
+        {
+            StrokeStyle none;
+            none.paint = Paint::none();
+            session.setDefaultStroke(none);
+        }
+        session.setDefaultFill(Paint::solid(Qt::red));
+        const QUuid art = rectangle(session, {0, 0, 100, 20});
+        const QUuid maskShape = rectangle(session, {0, 0, 100, 20});
+        session.select({maskShape});
+        session.setFillOfSelection(Paint::linear(Qt::white, Qt::black));
+        session.select({art, maskShape});
+        session.makeOpacityMask();
+        QCOMPARE(session.undoName(), QStringLiteral("Make Mask"));
+        const QUuid group = session.selection().front();
+        QVERIFY(session.document()->find(group)->mask.has_value());
+
+        // White end: still strongly red. Black end: faded toward the white page behind it.
+        const QImage image = VectorRenderer::render(*session.document(), 1, false);
+        QVERIFY(image.pixelColor(2, 10).red() > 200);
+        QVERIFY(qGray(image.pixelColor(98, 10).rgb()) > qGray(image.pixelColor(2, 10).rgb()));
+
+        // Invert Mask flips which end fades.
+        session.select({group});
+        session.setOpacityMaskInverted(true);
+        QCOMPARE(session.undoName(), QStringLiteral("Invert Mask"));
+        const QImage inverted = VectorRenderer::render(*session.document(), 1, false);
+        // Red vs. white only differs in green and blue, so gray (not the red channel) shows the fade.
+        QVERIFY(qGray(inverted.pixelColor(98, 10).rgb()) < qGray(image.pixelColor(98, 10).rgb()));
+        QVERIFY(qGray(inverted.pixelColor(2, 10).rgb()) > qGray(image.pixelColor(2, 10).rgb()));
+
+        session.setOpacityMaskInverted(false);
+        session.setOpacityMaskClip(false);
+        QCOMPARE(session.undoName(), QStringLiteral("Mask Clip"));
+        QVERIFY(!session.document()->find(group)->mask->clip);
+
+        session.releaseOpacityMask();
+        QCOMPARE(session.undoName(), QStringLiteral("Release Mask"));
+        QVERIFY(!session.document()->find(group)->mask.has_value());
+    }
+
     void layersMoveAmongLayersAsOneStep()
     {
         EditorSession session;

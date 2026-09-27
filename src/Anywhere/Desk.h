@@ -31,6 +31,8 @@ struct Frame {
 QString label(const QString &source, const QDateTime &time);
 // Adds `frame` as one undo step, "Send to Desk". Returns the frame group's id, or null with `error` set.
 QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error = nullptr);
+// Several frames side by side as one undo step named `step` (Before and After); their ids, or none with `error` set.
+std::vector<QUuid> addFrames(EditorSession &desk, const std::vector<Frame> &frames, const QString &step, QString *error = nullptr);
 // The frames on the Desk: each group's id and label, in the order they were added.
 std::vector<std::pair<QUuid, QString>> frames(const VectorDocument &desk);
 }

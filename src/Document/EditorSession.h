@@ -32,13 +32,16 @@ enum class Tool {
     rotate,          // R
     scale,           // S
     gradient,        // G
+    width,           // Shift-W
     eyedropper,      // I
     hand,            // H
     zoom,            // Z
+    artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::typeOnPath, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
-                                     Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper, Tool::hand, Tool::zoom};
+                                     Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
+                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -71,6 +74,33 @@ public:
     void closeDocument();
     void setArtboardSize(QSizeF size);
     void setArtboardBackground(const QColor &color);
+
+    // Artboards (EditorSession+Artboards.cpp) ---------------------------------
+    // The Artboard tool, the list, next/previous and select() all set this.
+    int activeArtboard() const;
+    void setActiveArtboard(int index);
+    // Placed to the right of the active one with a 20 pt gap unless `rect` is given.
+    QUuid addArtboard(QRectF rect = {});
+    // To the right of `index` with a 20 pt gap, copying its art.
+    QUuid duplicateArtboard(int index);
+    void renameArtboard(int index, const QString &name);
+    // Never the last artboard; its art is untouched.
+    void deleteArtboard(int index);
+    // A drag: beginInteraction("Move Artboard" or "Resize Artboard"), a preview per
+    // move, then commitInteraction. Art whose centre was on it moves too when `artboardMovesArt`.
+    void previewArtboardRect(int index, QRectF rect);
+    // Object ▸ Artboards ▸ Fit to Artwork Bounds: the art overlapping it, or every
+    // visible object when none does, strokes included.
+    void fitArtboardToArtwork(int index);
+    void switchArtboardOrientation(int index);
+    // Activates and zooms to the next or previous artboard, wrapping around.
+    void showArtboard(bool next);
+    void fitAllArtboards();
+    // Export for Screens' asset list.
+    void collectForExport(const std::vector<QUuid> &ids);
+    void removeFromExport(const std::vector<QUuid> &ids);
+    // The Artboard tool's "Move art with artboard" option.
+    bool artboardMovesArt = true;
 
     // Tools and default style ------------------------------------------------
     Tool tool() const { return m_tool; }
@@ -207,6 +237,14 @@ public:
     // Object ▸ Clipping Mask ▸ Make: the topmost object clips the rest.
     void makeClippingMask();
     void releaseClippingMask();
+    // Object ▸ Opacity Mask ▸ Make (P2-9): the topmost object's luminance masks the rest.
+    void makeOpacityMask();
+    void releaseOpacityMask();
+    // Whether the mask hides what falls outside its own rendered coverage.
+    void setOpacityMaskClip(bool clip);
+    void setOpacityMaskInverted(bool inverted);
+    // The single selected mask group, for the Clip and Invert Mask menu checks.
+    std::optional<QUuid> selectedMaskGroup() const;
     void arrange(ArrangeOrder order);
     void align(AlignEdge edge, AlignTarget target = AlignTarget::selection);
     // Distribute: centres along `axis`, or the chosen edge of each object.
@@ -529,6 +567,10 @@ private:
     std::vector<QUuid> m_selection;
     std::vector<PickedNode> m_pickedNodes;
     std::optional<QUuid> m_activeLayer;
+    // Not saved; clamped to range whenever it's read.
+    int m_activeArtboard = 0;
+    // Artboard 1's size the last time notify() ran, to compensate the viewport when it changes.
+    QSizeF m_viewportDocumentSize;
     std::optional<QUuid> m_keyObject;
     std::vector<QUuid> m_isolation;
     struct Interaction {

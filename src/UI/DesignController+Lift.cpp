@@ -1,7 +1,10 @@
 #include "Anywhere/AnywhereSettings.h"
+#include "Anywhere/LiftDiff.h"
 #include "UI/AgentBridge.h"
 #include "UI/DesignController.h"
 #include "UI/ProjectWorkspace.h"
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 
 // Lift into vectors from the floating bar (docs/ANYWHERE.md): the job runs in
@@ -163,8 +166,17 @@ void DesignController::landLift()
         placedWhere = QStringLiteral(" in a new document");
     } else {
         QString error;
-        if (m_overlays.place(m_liftSurface, lifted.art, lifted.root, step, &error).isNull())
+        const QUuid placed = m_overlays.place(m_liftSurface, lifted.art, lifted.root, step, &error);
+        if (placed.isNull())
             return say(error);
+        // A page's lift remembers how it landed, so Apply to Source can tell what was changed since.
+        if (m_liftSurface.kind == Surface::Kind::web && lifted.method == QLatin1String("dom")) {
+            QJsonObject baselines = LiftDiff::readBaselines(liftedPath());
+            const QJsonObject shot = LiftDiff::snapshot(*m_overlays.session().document(), placed);
+            for (auto it = shot.begin(); it != shot.end(); ++it)
+                baselines[it.key()] = it.value();
+            LiftDiff::writeBaselines(liftedPath(), baselines);
+        }
         m_mode->select(0);
         updatePlacements();
     }
@@ -172,4 +184,72 @@ void DesignController::landLift()
     if (!lifted.notes.isEmpty())
         line += QLatin1Char(' ') + lifted.notes.join(QLatin1Char(' '));
     say(line);
+}
+
+QString DesignController::liftedPath() const
+{
+    const QString overlays = m_overlays.path().isEmpty() ? OverlayStore::defaultPath() : m_overlays.path();
+    return QFileInfo(overlays).dir().filePath(QStringLiteral("lifted.json"));
+}
+
+QString DesignController::beforeAfter(QJsonObject &result)
+{
+    LiveSession &live = m_bridge.liveSession();
+    if (live.state() != LiveSession::State::running)
+        return QStringLiteral("Open the page in Omastrator's browser first.");
+    if (m_lift && m_lift->isRunning())
+        return QStringLiteral("Already lifting %1. Wait for it, or cancel it from the bar.").arg(m_lift->label());
+    if (live.editsShown().empty())
+        return QStringLiteral("There are no edits on this page to compare.");
+    const QUrl url = live.url();
+    m_beforeAfter = url.host().isEmpty() ? url.fileName() : url.host() + (url.path().size() > 1 ? url.path() : QString());
+    m_before.reset();
+    // First the page as the site made it.
+    if (const QString failure = live.showOriginal(true); !failure.isEmpty())
+        return failure;
+    m_lift = LiftJob::web(live, false, QRectF(), m_beforeAfter + QStringLiteral(" before"));
+    connect(m_lift.get(), &LiftJob::progressed, this, &DesignController::changed);
+    connect(m_lift.get(), &LiftJob::finished, this,
+            [this] { QMetaObject::invokeMethod(this, &DesignController::beforeAfterLifted, Qt::QueuedConnection); });
+    m_lift->start();
+    result["lifting"] = m_lift->label();
+    say(QStringLiteral("Lifting %1 without its edits…").arg(m_beforeAfter));
+    return {};
+}
+
+void DesignController::beforeAfterLifted()
+{
+    if (!m_lift || m_lift->isRunning())
+        return;
+    std::unique_ptr<LiftJob> job = std::move(m_lift);
+    LiveSession &live = m_bridge.liveSession();
+    // The edits go back on, whatever happened to the lift.
+    if (live.state() == LiveSession::State::running)
+        live.showOriginal(false);
+    if (!job->result()) {
+        m_before.reset();
+        return say(job->wasCancelled() ? QStringLiteral("Before and After cancelled.") : job->error());
+    }
+    if (!m_before) {
+        m_before = *job->result();
+        m_lift = LiftJob::web(live, false, QRectF(), m_beforeAfter + QStringLiteral(" after"));
+        connect(m_lift.get(), &LiftJob::progressed, this, &DesignController::changed);
+        connect(m_lift.get(), &LiftJob::finished, this,
+                [this] { QMetaObject::invokeMethod(this, &DesignController::beforeAfterLifted, Qt::QueuedConnection); });
+        m_lift->start();
+        return say(QStringLiteral("Lifting %1 with its edits…").arg(m_beforeAfter));
+    }
+    Desk::Frame before, after;
+    before.source = m_beforeAfter + QStringLiteral(", before");
+    before.art = normalized(*m_before, &before.size);
+    after.source = m_beforeAfter + QStringLiteral(", after");
+    after.art = normalized(*job->result(), &after.size);
+    m_before.reset();
+    ProjectTab *tab = deskTab();
+    if (!tab)
+        return say(QStringLiteral("The Desk couldn't be opened."));
+    QString error;
+    if (Desk::addFrames(tab->session, {before, after}, QStringLiteral("Before and After to Desk"), &error).empty())
+        return say(error);
+    say(QStringLiteral("Sent Before and After to the Desk: %1.").arg(m_beforeAfter));
 }

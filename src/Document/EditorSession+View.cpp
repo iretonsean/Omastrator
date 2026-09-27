@@ -184,11 +184,12 @@ void EditorSession::releaseGuides()
     edit(QStringLiteral("Release Guides"), [&](VectorDocument &document) {
         std::vector<QUuid> made;
         const std::vector<Guide> guides = std::exchange(document.guides, {});
+        const QRectF extent = document.artboard(activeArtboard()).rect;
         m_selection.clear();
         for (const Guide &guide : guides) {
-            const QPointF from = guide.orientation == Qt::Horizontal ? QPointF(0, guide.position) : QPointF(guide.position, 0);
-            const QPointF to = guide.orientation == Qt::Horizontal ? QPointF(document.size.width(), guide.position)
-                                                                   : QPointF(guide.position, document.size.height());
+            const QPointF from = guide.orientation == Qt::Horizontal ? QPointF(extent.left(), guide.position) : QPointF(guide.position, extent.top());
+            const QPointF to = guide.orientation == Qt::Horizontal ? QPointF(extent.right(), guide.position)
+                                                                   : QPointF(guide.position, extent.bottom());
             VectorObject object = pathObject(Shapes::line(from, to), QStringLiteral("Guide"));
             object.fill = Paint::none();
             made.push_back(object.id);

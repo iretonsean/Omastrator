@@ -343,6 +343,8 @@ void EditorCanvas::State::updateCursor()
         kind = drag->guideAxis == Qt::Horizontal ? CursorKind::sizeVertical : CursorKind::sizeHorizontal;
     } else if (drag && drag->kind == DragKind::scale) {
         kind = handleCursor(drag->handle);
+    } else if (drag && drag->kind == DragKind::artboard && drag->handle >= 0) {
+        kind = handleCursor(drag->handle);
     } else if (drag && drag->kind == DragKind::rotate && tool == Tool::select) {
         kind = CursorKind::rotate;
     } else if (spaceHeld || tool == Tool::hand) {
@@ -411,6 +413,16 @@ void EditorCanvas::State::updateCursor()
             break;
         case Tool::zoom:
             kind = alt ? CursorKind::zoomOut : CursorKind::zoomIn;
+            break;
+        case Tool::artboard:
+            if (hover && !drag) {
+                if (const std::optional<int> handle = artboardHandleAt(*hover))
+                    kind = handleCursor(*handle);
+                else
+                    kind = CursorKind::cross;
+            } else {
+                kind = CursorKind::cross;
+            }
             break;
         default:
             kind = CursorKind::cross;

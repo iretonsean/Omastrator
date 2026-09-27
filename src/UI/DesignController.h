@@ -3,6 +3,8 @@
 #include "Anywhere/Desk.h"
 #include "Anywhere/Lift.h"
 #include "Anywhere/Overlays.h"
+#include "System/AppStyle.h"
+#include "UI/DesktopLookPanel.h"
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -49,8 +51,35 @@ public:
     // The lift under way, if any.
     LiftJob *liftJob() const { return m_lift.get(); }
 
+    // Omarchy's own look (phase 4): `op` get, fonts, history, preview (with `edits`), discard, save, revert (`id`),
+    // panel, handles, wallpaperFromArtboard. Saving and reverting go through the confirmation dialog.
+    QString look(const QJsonObject &params, QJsonObject &result);
+    // Restyling the app pointed at (`target`) through its toolkit: `op` get, preview (with `style`), save, discard.
+    QString restyle(const QJsonObject &params, QJsonObject &result);
+    // Desktop Look, on `section` (windows, bar, font, wallpaper, colours, app); `window` restyles that app.
+    void openLookPanel(const QString &section, const std::optional<Inspection> &window);
+    DesktopLookPanel *lookPanel() const { return m_lookPanel; }
+    // The edit shown on the desktop and not yet saved.
+    const QJsonObject &lookEdits() const { return m_lookEdits; }
+    // The app being restyled, and why it can't be, if it can't.
+    const std::optional<AppStyle::App> &styleApp() const { return m_styleApp; }
+    QString restyleError() const { return m_restyleError; }
+    // Tests describe the app instead of reading /proc.
+    std::function<AppStyle::App(qint64 pid, const QString &className)> describeApp;
+
+    // A site that isn't yours: the page lifted without its edits, then with them, as two frames on the Desk in one
+    // undo step. Returns why it couldn't start, or empty; it lands in the background.
+    QString beforeAfter(QJsonObject &result);
+    // Hand to Agent with the page in Omastrator's browser: its edits, art and screenshots. Without `folder` in
+    // `params`, the Hand to Agent sheet asks (offering the folder used last for this site).
+    QString handOffPage(const QJsonObject &params, QJsonObject &result);
+    // lifted.json beside the overlays: each lifted object as it landed, for Apply to Source.
+    QString liftedPath() const;
+
 signals:
     void changed();
+    // The look's edit, a save or a revert: the panel reads it again.
+    void lookChanged();
 
 private:
     struct Target {
@@ -69,6 +98,12 @@ private:
     QString artAction(const QString &id, const QString &surface);
     QString ask(const QString &prompt, const Target &target, QJsonObject &result);
     QString send(const QString &destination, const Target &target, const QString &prompt, QJsonObject &result);
+    // Hand to Agent… from any surface: its art, what it was lifted from, a page's edits and a screenshot.
+    QString handOff(const Target &target, const QJsonObject &params, QJsonObject &result);
+    // Apply to Source for lifted art on your own page: its changes become page edits, then Live's write-back.
+    // Returns why it couldn't, or empty; `applied` is false when there were no lifted changes to apply.
+    QString applyLifted(const QString &key, const std::vector<QUuid> &roots, bool *applied, QJsonObject &result);
+    void beforeAfterLifted();
     QString captureToDesk(const Target &target, QJsonObject &result);
     // The surface as a frame: its screenshot, where it can be taken, with its art (or the selected part) over it.
     Desk::Frame frameFor(const Target &target, bool screenshot, QString *error);
@@ -83,6 +118,8 @@ private:
     // A screenshot of `rect` kept in the captures folder; empty when grim can't.
     QString keepScreenshot(const QRect &rect, QImage *image = nullptr);
     void say(const QString &line);
+    QJsonObject lookStatus();
+    void stopStylePreview();
     // `mark`: the tab shows as saved (not while the window is being torn down).
     void autosaveDesk(bool mark = true);
 
@@ -105,4 +142,16 @@ private:
     std::unique_ptr<LiftJob> m_lift;
     Surface m_liftSurface;
     QString m_liftDestination;
+    QJsonObject m_lookEdits;
+    QPointer<DesktopLookPanel> m_lookPanel;
+    bool m_gapHandles = false;
+    std::optional<AppStyle::App> m_styleApp;
+    QString m_styleRole;
+    std::optional<Inspection> m_styleSeen;
+    QString m_restyleError;
+    qint64 m_stylePreviewPid = 0;
+    QString m_stylePreviewFolder;
+    // Before and After: the page's label, and the lift without its edits once it's done.
+    QString m_beforeAfter;
+    std::optional<Lift::Result> m_before;
 };

@@ -4,6 +4,7 @@
 #include <QTransform>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
 // One line or cubic of a subpath.
@@ -246,6 +247,54 @@ void configure(QPainterPathStroker &stroker, const StrokeStyle &stroke, double w
     stroker.setJoinStyle(stroke.join);
     stroker.setMiterLimit(stroke.miterLimit);
 }
+
+// A segment's point and tangent direction at its own parameter (0..1).
+QPointF pointAt(const Segment &segment, double t)
+{
+    if (!segment.curve)
+        return lerp(segment.p0, segment.p1, t);
+    const QPointF a = lerp(segment.p0, segment.c1, t), b = lerp(segment.c1, segment.c2, t), c = lerp(segment.c2, segment.p1, t);
+    return lerp(lerp(a, b, t), lerp(b, c, t), t);
+}
+
+QPointF tangentAt(const Segment &segment, double t)
+{
+    if (!segment.curve)
+        return unit(segment.p1 - segment.p0);
+    const QPointF a = segment.c1 - segment.p0, b = segment.c2 - segment.c1, c = segment.p1 - segment.c2;
+    // The derivative is 3x a quadratic Bézier in the control points' differences; a cusp tries nearby t.
+    for (const double tt : {t, std::clamp(t + 1e-4, 0.0, 1.0), std::clamp(t - 1e-4, 0.0, 1.0)}) {
+        const QPointF deriv = lerp(lerp(a, b, tt), lerp(b, c, tt), tt);
+        if (std::hypot(deriv.x(), deriv.y()) > 1e-9)
+            return unit(deriv);
+    }
+    return unit(segment.p1 - segment.p0);
+}
+
+struct Located {
+    QPointF point;
+    QPointF tangent{1, 0};
+};
+
+// The point and tangent at arc-length `distance` into a subpath.
+Located locateInSubpath(const Subpath &subpath, double distance)
+{
+    double at = 0;
+    for (const Segment &segment : subpath.segments) {
+        const double end = at + segment.length;
+        if (distance <= end + 1e-9 || &segment == &subpath.segments.back()) {
+            const double local = parameterAt(segment, std::clamp(distance - at, 0.0, segment.length));
+            return {pointAt(segment, local), tangentAt(segment, local)};
+        }
+        at = end;
+    }
+    return {subpath.segments.back().p1, tangentAt(subpath.segments.back(), 1)};
+}
+
+QPointF outwardNormal(QPointF tangent)
+{
+    return unit(QPointF(-tangent.y(), tangent.x()));
+}
 }
 
 namespace StrokeGeometry {
@@ -416,6 +465,14 @@ QPainterPath alignedDashes(const QPainterPath &path, const std::vector<double> &
 
 QPainterPath area(const QPainterPath &path, const StrokeStyle &stroke)
 {
+    if (!stroke.widthPoints.empty()) {
+        QPainterPath covered = variableArea(path, stroke);
+        const QPainterPath ends = heads(path, stroke);
+        if (!ends.isEmpty())
+            covered.addPath(ends);
+        covered.setFillRule(Qt::WindingFill);
+        return covered;
+    }
     const bool aligned = stroke.alignment != StrokeAlignment::center && isClosed(path);
     const double width = aligned ? stroke.width * 2 : stroke.width;
     QPainterPath line = body(path, stroke);
@@ -438,5 +495,155 @@ QPainterPath area(const QPainterPath &path, const StrokeStyle &stroke)
         covered.addPath(ends);
     covered.setFillRule(Qt::WindingFill);
     return covered;
+}
+
+std::pair<double, double> widthAt(const StrokeStyle &stroke, double t)
+{
+    const double half = std::max(0.0, stroke.width) / 2;
+    if (stroke.widthPoints.empty())
+        return {half, half};
+    std::vector<StrokeWidthPoint> points = stroke.widthPoints;
+    std::sort(points.begin(), points.end(), [](const StrokeWidthPoint &a, const StrokeWidthPoint &b) { return a.t < b.t; });
+    if (t <= points.front().t)
+        return {std::max(0.0, points.front().left), std::max(0.0, points.front().right)};
+    if (t >= points.back().t)
+        return {std::max(0.0, points.back().left), std::max(0.0, points.back().right)};
+    for (size_t index = 0; index + 1 < points.size(); ++index) {
+        const StrokeWidthPoint &from = points[index], &to = points[index + 1];
+        if (t < from.t || t > to.t)
+            continue;
+        const double span = to.t - from.t;
+        const double u = span > 1e-9 ? (t - from.t) / span : 0;
+        // Smoothstep: the profile eases in and out of each point, rather than kinking.
+        const double eased = u * u * (3 - 2 * u);
+        return {std::max(0.0, from.left + (to.left - from.left) * eased), std::max(0.0, from.right + (to.right - from.right) * eased)};
+    }
+    return {half, half};
+}
+
+std::vector<StrokeWidthPoint> presetWidthPoints(StrokeWidthProfile profile, double width)
+{
+    const double half = std::max(0.0, width) / 2;
+    switch (profile) {
+    case StrokeWidthProfile::taperStart:
+        return {{0, 0, 0}, {0.2, half, half}, {1, half, half}};
+    case StrokeWidthProfile::taperEnd:
+        return {{0, half, half}, {0.8, half, half}, {1, 0, 0}};
+    case StrokeWidthProfile::bulge:
+        return {{0, half, half}, {0.5, half * 2, half * 2}, {1, half, half}};
+    case StrokeWidthProfile::uniform:
+    case StrokeWidthProfile::custom:
+        break;
+    }
+    return {};
+}
+
+QPainterPath variableArea(const QPainterPath &path, const StrokeStyle &stroke)
+{
+    const std::vector<Subpath> all = subpaths(path);
+    double total = 0;
+    for (const Subpath &subpath : all)
+        total += subpath.length();
+    QPainterPath out;
+    out.setFillRule(Qt::WindingFill);
+    if (total <= 1e-9)
+        return out;
+    double cumulative = 0;
+    for (const Subpath &subpath : all) {
+        const double localLength = subpath.length();
+        if (localLength <= 1e-9) {
+            cumulative += localLength;
+            continue;
+        }
+        const int samples = std::clamp(int(std::round(localLength / 2.5)), 8, 240);
+        std::vector<QPointF> left, right;
+        left.reserve(size_t(samples) + 1);
+        right.reserve(size_t(samples) + 1);
+        for (int index = 0; index <= samples; ++index) {
+            const double distance = localLength * index / samples;
+            const Located at = locateInSubpath(subpath, distance);
+            const QPointF normal = outwardNormal(at.tangent);
+            const auto [halfLeft, halfRight] = widthAt(stroke, (cumulative + distance) / total);
+            left.push_back(at.point + normal * halfLeft);
+            right.push_back(at.point - normal * halfRight);
+        }
+        QPainterPath piece;
+        piece.moveTo(left.front());
+        for (size_t index = 1; index < left.size(); ++index)
+            piece.lineTo(left[index]);
+        if (subpath.closed) {
+            piece.closeSubpath();
+            piece.moveTo(right.back());
+            for (int index = int(right.size()) - 2; index >= 0; --index)
+                piece.lineTo(right[size_t(index)]);
+        } else {
+            // The flat edge at the far end, then back along the other side: a ribbon, tapering to a point at 0 width.
+            for (int index = int(right.size()) - 1; index >= 0; --index)
+                piece.lineTo(right[size_t(index)]);
+        }
+        piece.closeSubpath();
+        piece.setFillRule(Qt::WindingFill);
+        out.addPath(piece);
+        cumulative += localLength;
+    }
+    return out;
+}
+
+PathLocation locate(const QPainterPath &path, QPointF at)
+{
+    const std::vector<Subpath> all = subpaths(path);
+    double total = 0;
+    for (const Subpath &subpath : all)
+        total += subpath.length();
+    PathLocation best;
+    best.distance = std::numeric_limits<double>::max();
+    if (total <= 1e-9)
+        return best;
+    double cumulative = 0;
+    for (const Subpath &subpath : all) {
+        const double localLength = subpath.length();
+        if (localLength > 1e-9) {
+            const int samples = std::clamp(int(std::round(localLength / 2.0)), 16, 400);
+            for (int index = 0; index <= samples; ++index) {
+                const double distance = localLength * index / samples;
+                const Located here = locateInSubpath(subpath, distance);
+                const double d = QLineF(here.point, at).length();
+                if (d < best.distance) {
+                    best.distance = d;
+                    best.point = here.point;
+                    best.normal = outwardNormal(here.tangent);
+                    best.t = (cumulative + distance) / total;
+                }
+            }
+        }
+        cumulative += localLength;
+    }
+    return best;
+}
+
+PathLocation locateAtT(const QPainterPath &path, double t)
+{
+    const std::vector<Subpath> all = subpaths(path);
+    double total = 0;
+    for (const Subpath &subpath : all)
+        total += subpath.length();
+    PathLocation result;
+    result.t = std::clamp(t, 0.0, 1.0);
+    if (total <= 1e-9)
+        return result;
+    const double target = result.t * total;
+    double cumulative = 0;
+    for (size_t index = 0; index < all.size(); ++index) {
+        const Subpath &subpath = all[index];
+        const double localLength = subpath.length();
+        if (target <= cumulative + localLength + 1e-9 || index + 1 == all.size()) {
+            const Located here = locateInSubpath(subpath, std::clamp(target - cumulative, 0.0, localLength));
+            result.point = here.point;
+            result.normal = outwardNormal(here.tangent);
+            return result;
+        }
+        cumulative += localLength;
+    }
+    return result;
 }
 }
