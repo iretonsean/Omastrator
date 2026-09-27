@@ -1,4 +1,5 @@
 #include "UI/ProjectWorkspaceView.h"
+#include "UI/SharePanels.h"
 #include <QCloseEvent>
 #include <QToolButton>
 
@@ -36,10 +37,31 @@ ProjectWorkspaceView::ProjectWorkspaceView(ProjectWorkspace &workspace, QWidget 
     m_actualSize = action(m_toolbar, QStringLiteral("100%"), QStringLiteral("Actual size (Ctrl+1)"), QStringLiteral("actualSizeToolbar"));
     m_zoomIn = action(m_toolbar, QStringLiteral("+"), QStringLiteral("Zoom in (Ctrl+=)"), QStringLiteral("zoomInToolbar"));
     m_zoomOut = action(m_toolbar, QStringLiteral("−"), QStringLiteral("Zoom out (Ctrl+−)"), QStringLiteral("zoomOutToolbar"));
+    m_toolbar->addSeparator();
+    // Share, at the top right: one press shares; the arrow beside it holds the choices.
+    m_shareButton = new QToolButton(m_toolbar);
+    m_shareButton->setObjectName(QStringLiteral("shareToolbar"));
+    m_shareButton->setText(QStringLiteral("Share"));
+    m_shareButton->setAccessibleName(QStringLiteral("Share"));
+    m_shareButton->setAutoRaise(true);
+    m_toolbar->addWidget(m_shareButton);
+    m_shareOptions = new QToolButton(m_toolbar);
+    m_shareOptions->setObjectName(QStringLiteral("shareOptionsToolbar"));
+    m_shareOptions->setArrowType(Qt::DownArrow);
+    m_shareOptions->setAccessibleName(QStringLiteral("Share Options"));
+    m_shareOptions->setToolTip(QStringLiteral("Share options: format, destination, and what's been shared"));
+    m_shareOptions->setAutoRaise(true);
+    m_toolbar->addWidget(m_shareOptions);
     addToolBar(Qt::TopToolBarArea, m_toolbar);
     m_workspace.window = this;
     m_agent = new AgentBridge(m_workspace, *this);
-    m_menus = new Menus(m_workspace, *menuBar(), *this, m_agent);
+    m_share = new ShareController(m_workspace, m_agent, *this);
+    new ShareToast(*m_share, *this);
+    connect(m_share, &ShareController::githubQuestion, this, [this] { SharePanels::confirmGitHub(*m_share, *this); });
+    connect(m_share, &ShareController::changed, this, &ProjectWorkspaceView::synchronizeSession);
+    connect(m_shareButton, &QToolButton::clicked, this, [this] { SharePanels::shareNow(*m_share); });
+    connect(m_shareOptions, &QToolButton::clicked, this, [this] { SharePanels::showOptions(*m_share, *this); });
+    m_menus = new Menus(m_workspace, *menuBar(), *this, m_agent, m_share);
     connect(m_menus, &Menus::layersToggled, this, [this] { m_content->synchronizePanels(); });
     connect(m_menus, &Menus::propertiesToggled, this, [this] { m_content->synchronizePanels(); });
     connect(m_newTab, &QAction::triggered, this, [this] { m_workspace.newTab(); });
@@ -87,6 +109,12 @@ void ProjectWorkspaceView::synchronizeSession()
     m_newTab->setEnabled(!m_workspace.isManaging());
     for (QAction *zoom : {m_fit, m_actualSize, m_zoomIn, m_zoomOut})
         zoom->setEnabled(drawn);
+    // Share says what it will share; this runs on every edit, so it reads no files.
+    const bool site = m_share->liveRunning() || (!drawn && !m_share->liveProject().isEmpty());
+    m_shareButton->setEnabled(!m_share->running() && (drawn || site));
+    const QString key = m_menus ? m_menus->action(QStringLiteral("shareWithClient"))->shortcut().toString(QKeySequence::NativeText) : QString();
+    const QString what = site ? QStringLiteral("Share a preview of the Live site") : QStringLiteral("Share %1").arg(m_share->scopeText());
+    m_shareButton->setToolTip(key.isEmpty() ? what : QStringLiteral("%1 (%2)").arg(what, key));
     setWindowTitle(front.title() + QStringLiteral("[*] — Omastrator"));
     setWindowModified(drawn && front.session.isModified());
     setWindowFilePath(front.path.value_or(QString()));

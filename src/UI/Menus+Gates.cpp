@@ -1,6 +1,7 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/Menus.h"
+#include "UI/ShareController.h"
 #include "Canvas/TaskBar.h"
 
 namespace {
@@ -34,6 +35,10 @@ void Menus::synchronize()
     for (const char *name : {"exportPNG", "exportJPEG", "exportSVG", "exportPDF"})
         action(QString::fromLatin1(name))->setEnabled(free && drawn);
     action(QStringLiteral("exportMenu"))->setEnabled(free && drawn);
+    const bool site = m_share && !m_share->liveProject().isEmpty();
+    for (const char *name : {"shareWithClient", "shareOptions"})
+        action(QString::fromLatin1(name))->setEnabled(m_share && free && !m_share->running() && (drawn || site));
+    action(QStringLiteral("sharedLinks"))->setEnabled(m_share != nullptr);
     action(QStringLiteral("undo"))->setText(!field && s.canUndo() ? QStringLiteral("Undo %1").arg(s.undoName()) : QStringLiteral("Undo"));
     action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && s.canUndo()));
     action(QStringLiteral("redo"))->setText(!field && s.canRedo() ? QStringLiteral("Redo %1").arg(s.redoName()) : QStringLiteral("Redo"));

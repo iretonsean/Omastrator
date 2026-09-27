@@ -6,6 +6,8 @@
 #include "UI/ContextMenus.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
+#include "UI/ShareController.h"
+#include "UI/SharePanels.h"
 #include "UI/TaskBarActions.h"
 #include <QApplication>
 #include <QClipboard>
@@ -13,8 +15,8 @@
 #include <QMenu>
 #include <QMessageBox>
 
-Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentBridge *agent)
-    : QObject(&bar), m_workspace(workspace), m_window(window), m_agent(agent)
+Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentBridge *agent, ShareController *share)
+    : QObject(&bar), m_workspace(workspace), m_window(window), m_agent(agent), m_share(share)
 {
     buildFile(bar);
     buildEdit(bar);
@@ -29,6 +31,8 @@ Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentB
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &Menus::synchronize);
     if (m_agent)
         connect(m_agent, &AgentBridge::proposalChanged, this, &Menus::synchronize);
+    if (m_share)
+        connect(m_share, &ShareController::changed, this, &Menus::synchronize);
     watchFront(nullptr);
 }
 
@@ -89,6 +93,19 @@ void Menus::buildFile(QMenuBar &bar)
     add(file, QStringLiteral("handToAgent"), QStringLiteral("Hand to Agent…"), QKeySequence(), [this] {
         if (m_agent)
             AgentSheets::handoff(*m_agent, &m_window);
+    });
+    // Share with client: one press shares and copies the link; the options and the list are one step away.
+    add(file, QStringLiteral("shareWithClient"), QStringLiteral("Share"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S), [this] {
+        if (m_share)
+            SharePanels::shareNow(*m_share);
+    });
+    add(file, QStringLiteral("shareOptions"), QStringLiteral("Share Options…"), QKeySequence(), [this] {
+        if (m_share)
+            SharePanels::showOptions(*m_share, m_window);
+    });
+    add(file, QStringLiteral("sharedLinks"), QStringLiteral("Shared Links…"), QKeySequence(), [this] {
+        if (m_share)
+            SharePanels::showShared(*m_share, m_window);
     });
     QMenu *exports = file->addMenu(QStringLiteral("Export"));
     exports->menuAction()->setObjectName(QStringLiteral("exportMenu"));

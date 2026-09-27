@@ -712,3 +712,16 @@ user's own setup and `.env`, and GitHub keeps the history.
   `WriteBack::publishOptions`, and the `live` actions `keep` and `publish`.
   New `live` actions: `deploy`, `cancel`, `history`, `restore`, `details`,
   `remember`, `github`; new method `live_deployed`.
+
+### Share and preview deploys
+
+Decided 2026-09-27 with Share with client (docs/SHARE.md). Share in a Live
+project copies the latest deploy's URL when it's of the current commit and
+nothing is unsaved; otherwise it runs a preview deploy, never production.
+`Deploy::resolvePreview` finds it: `omastrator.json`'s `"preview": {"command",
+"cwd"}`, package.json's `deploy:preview` or `preview:deploy`, `vercel deploy`,
+a `netlify deploy` draft, `wrangler pages deploy --branch preview` or
+`wrangler versions upload`. A Makefile, `deploy.sh` or Fly has no preview, and
+the agent isn't asked to make one: Share says there's none. The run is a
+`DeployJob` with `push` off and `preview` on; its record has `"preview": true`,
+so History never marks a commit deployed from it.

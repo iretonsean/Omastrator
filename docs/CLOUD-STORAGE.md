@@ -96,7 +96,8 @@ Omastrator never reads, keeps or logs a credential:
 
 - `src/Cloud` (`oma_cloud`):
   - `CloudStorage` runs rclone (`listremotes`, `lsjson`, `copyto`, `mkdir`,
-    `config create/update/delete` with `--non-interactive`).
+    `config create/update/delete` with `--non-interactive`, and `link` and
+    `deletefile` for Share with client, docs/SHARE.md).
   - `CloudLocation` is `remote:path`, and `CloudStamp` is a version to compare
     against. `CloudCache` holds the cache paths and the stamps recorded for
     them.

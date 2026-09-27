@@ -93,9 +93,9 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Forty-eight menu entries, eleven type keys, fourteen tools, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 86);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 59);
+    // Forty-nine menu entries, eleven type keys, fourteen tools, five keys, eight nudges.
+    QCOMPARE(int(all.size()), 87);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 60);
     QSet<QString> ids;
     for (const ShortcutDefinition &definition : all)
         ids.insert(definition.id());

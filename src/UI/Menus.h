@@ -9,13 +9,15 @@
 
 class AgentBridge;
 class CommandPalette;
+class ShareController;
 
 // The menu bar: Illustrator's commands whose session functions exist.
 class Menus : public QObject {
     Q_OBJECT
 public:
     // Without a bridge the AI entries stay disabled.
-    Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentBridge *agent = nullptr);
+    // Without a share controller, Share stays disabled.
+    Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentBridge *agent = nullptr, ShareController *share = nullptr);
     ~Menus() override;
 
     QAction *action(const QString &name) const;
@@ -23,6 +25,7 @@ public:
     void watchFront(EditorCanvas *canvas);
     EditorCanvas *canvas() const { return m_canvas; }
     AgentBridge *agent() const { return m_agent; }
+    ShareController *share() const { return m_share; }
     ProjectWorkspace &workspace() const { return m_workspace; }
     QWidget &window() const { return m_window; }
     // Help ▸ Command Palette (Ctrl+K), made on first use.
@@ -52,6 +55,7 @@ private:
     ProjectWorkspace &m_workspace;
     QWidget &m_window;
     AgentBridge *const m_agent;
+    ShareController *const m_share;
     QMenu *m_recent = nullptr;
     FloatingPanel m_shortcutsPanel{QStringLiteral("keyboardShortcuts"), m_window};
     QMetaObject::Connection m_sessionWatch;

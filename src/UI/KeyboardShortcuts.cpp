@@ -143,7 +143,7 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
         // The menus' keys, as Illustrator's with Ctrl for Cmd.
         std::vector<ShortcutDefinition> result{
             entry("New", "n", 1, true), entry("Open", "o", 1, true), entry("Close", "w", 1, true), entry("Save", "s", 1, true),
-            entry("Save As", "s", 9, true), entry("Place", "p", 9, true), entry("Export PNG", "e", 3, true), entry("Quit", "q", 1, true),
+            entry("Save As", "s", 9, true), entry("Place", "p", 9, true), entry("Share", "s", 11, true), entry("Export PNG", "e", 3, true), entry("Quit", "q", 1, true),
             entry("Undo", "z", 1, true), entry("Redo", "z", 9, true), entry("Cut", "x", 1, true), entry("Copy", "c", 1, true),
             entry("Paste", "v", 1, true), entry("Paste in Place", "v", 9, true), entry("Duplicate", "d", 3, true),
             entry("Paste in Front", "f", 1, true), entry("Paste in Back", "b", 1, true), entry("Transform Again", "d", 1, true),

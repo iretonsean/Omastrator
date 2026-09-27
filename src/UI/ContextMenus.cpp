@@ -136,6 +136,9 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
         share(menu, &menus, "imageTraceMake");
         share(menu, &menus, "vectorizeWithAI");
     }
+    // Share with client, saying it's the selection that goes.
+    if (QAction *shareEntry = menus.action(QStringLiteral("shareWithClient")); shareEntry && shareEntry->isEnabled())
+        local(menu, QStringLiteral("shareSelection"), QStringLiteral("Share Selection"), [shareEntry] { shareEntry->trigger(); });
     menu->addSeparator();
     QMenu *arrange = submenu(menu, QStringLiteral("contextArrange"), QStringLiteral("Arrange"));
     for (const char *name : {"bringToFront", "bringForward", "sendBackward", "sendToBack"})

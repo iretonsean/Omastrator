@@ -80,6 +80,8 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   - places JPEG, PNG, TIFF, WebP and GIF images
   - opens and saves on cloud storage as well as on this computer
     ([Cloud storage](#cloud-storage))
+  - shares the artboard or the selection as a link in one press
+    ([Share with client](#share-with-client))
 - Tabs for several documents at once, and every keyboard shortcut can be
   remapped.
 
@@ -103,6 +105,35 @@ reaches.
 - **Recent files** show which service each document lives on.
 
 More in [docs/CLOUD-STORAGE.md](docs/CLOUD-STORAGE.md).
+
+## Share with client
+
+**Share**, at the top right of the window (also File ▸ Share, Ctrl+Alt+Shift+S,
+Ctrl+K, and Share Selection in the right-click menu and the task bar's ⋯),
+shares the artboard, or the selection if something is selected. The link goes
+on the clipboard and a toast says "Link copied — Google Drive", with Open and
+Copy Again. There's no dialog.
+
+- **Where it goes:** a connected cloud service that makes links (Google Drive,
+  Dropbox, OneDrive, Box, pCloud, S3, B2 and others), into
+  `Omastrator Shares/<document>/` there. Otherwise GitHub through `gh`: SVG as
+  a secret gist, PNG and PDF as an asset on a release in a public
+  `omastrator-shares` repository on your account. GitHub asks once before the
+  first upload, because neither of those is private. With neither connected,
+  the toast says so and offers Connect Cloud Storage… and Connect GitHub.
+- **Live:** with a project in Live, Share copies the latest deploy's URL if
+  nothing has changed since, and otherwise runs a preview deploy (`vercel
+  deploy`, a `netlify deploy` draft, Cloudflare's preview, or your own
+  `"preview"` command). It never deploys to production.
+- **Options:** the arrow beside Share picks the format (PNG at 2× by default,
+  PDF or SVG) and the destination. Each document remembers them.
+- **Shared Links…** lists what each document has shared, with Copy, Open and
+  Unshare (which deletes the file, gist or release). **Paste Client
+  Feedback…** takes the client's reply and runs Edit with Instruction on what
+  was shared. The result is a preview you keep or discard.
+
+The list lives in `~/.config/omastrator/shares.json`, never in the `.omai`.
+More in [docs/SHARE.md](docs/SHARE.md).
 
 ## AI, with the agent you already use
 

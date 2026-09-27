@@ -4,9 +4,11 @@
 #include "UI/Menus.h"
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspace.h"
+#include "UI/ShareController.h"
 #include <QLabel>
 #include <QMainWindow>
 #include <QToolBar>
+#include <QToolButton>
 
 // The window: the front tab's editor under the tab strip.
 class ProjectWorkspaceView : public QMainWindow {
@@ -19,6 +21,8 @@ public:
     Menus *menus() const { return m_menus; }
     // The agent bridge; main starts its server.
     AgentBridge *agent() const { return m_agent; }
+    // Share with client.
+    ShareController *share() const { return m_share; }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -31,6 +35,9 @@ private:
     QToolBar *const m_toolbar;
     ProjectTabStrip *const m_tabs;
     AgentBridge *m_agent = nullptr;
+    ShareController *m_share = nullptr;
+    QToolButton *m_shareButton = nullptr;
+    QToolButton *m_shareOptions = nullptr;
     Menus *m_menus = nullptr;
     QAction *m_newTab = nullptr;
     QAction *m_fit = nullptr;

@@ -48,7 +48,9 @@ Each folder builds as its own static library:
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides` and
   `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,
-  sheets, shortcuts and the Omarchy theme.
+  sheets, shortcuts and the Omarchy theme. Share with client
+  (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and
+  `SharePanels`; its tests use the fake rclone and a fake `gh`.
 - `src/OmastratorApp.cpp` holds `main`.
 - Tests live in `tests/<Folder>/*Tests.cpp`, one executable per file, found by a
   glob.
