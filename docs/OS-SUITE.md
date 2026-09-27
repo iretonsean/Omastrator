@@ -498,3 +498,45 @@ Choices the spec left open, made while building it, in build order.
   one and the CLI is installed. None deploys production. Each option states
   what it will run; it runs only when chosen, and only once everything is
   saved. The tests publish only to a local bare repository.
+
+### Phase 7: dictation
+
+- **Capture without typing.** Voxtype's daemon types into the focused window,
+  so Omastrator doesn't use it. Push-to-talk records with `pw-record` (16 kHz
+  mono, into the runtime folder, a minute at most), then runs
+  `voxtype -q --initial-prompt <vocabulary> transcribe <wav>`, which reads the
+  user's model settings and prints the text. Voxtype's config and service are
+  never changed, and the recording is deleted once transcribed. Without
+  voxtype, Dictate says so with `omarchy voxtype install`.
+- **Vocabulary.** `--initial-prompt` is a global voxtype option (it goes before
+  `transcribe`). The prompt is the vocabulary file (setup writes the default;
+  the user can add words) with a spelled-hex example, cut to 800 characters,
+  which is about Whisper's limit. With it, "hash F F six six zero zero" comes
+  back spelled out rather than as "hat F6600".
+- **Normalising** runs after: lowercase, punctuation out, colour/centre/grey
+  one way, "path finder", "minus fronts", "eye dropper" and "pt" corrected,
+  number words to digits ("twenty four", "one hundred five", "zero point
+  five"; "six six" stays two numbers), and spoken hex after hash, hashtag,
+  pound, hex or the common mishearing "hat" joined into `#rrggbb` when it
+  spells 3, 6 or 8 digits. Anything else is left for the agent to read.
+- **Tier 1** is a local grammar: tools ("select the pen tool", "use circle"),
+  undo and redo, zoom, select all and deselect, group and ungroup, delete,
+  duplicate, arrange, align (to the selection or the artboard), distribute,
+  fill and stroke colours (hex or CSS names), stroke weight and opacity. They
+  run through a new desktop method, `command`, as the user's own undo steps,
+  not proposals.
+- **Tier 2** is everything else: Edit with Instruction with the normalised
+  words, as a proposal; in Live mode it is Live's "Ask AI…" instead.
+- **Heard.** The island shows "Heard: “…” → what it will do". The first time a
+  kind of tier-1 command is used, and for every tier-2 request, it waits
+  2.5 seconds for Esc (through a Hyprland submap the keys file defines),
+  a click on the island, or a spoken "cancel"; after that first use, the same
+  kind runs at once. The kinds used are kept in
+  `$XDG_STATE_HOME/omastrator/dictation-seen.json`.
+- **Push-to-talk.** The island's Dictate button records while held. The keys
+  file binds Super+Alt+V the same way, with a release bind; it passes
+  `Hyprland --verify-config`.
+- **Test recordings.** Two phrases, "Select the pen tool." (tier 1) and "Make
+  the logo rounder." (tier 2), synthesised with Piper's LJ Speech voice
+  (public-domain data) and resampled to 16 kHz mono. The test transcribes them
+  with the installed voxtype and skips, saying why, when it is absent.

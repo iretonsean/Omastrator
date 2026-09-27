@@ -112,6 +112,13 @@ QByteArray hyprlandLua(const QString &command)
     for (const Mode &mode : modeKeys)
         text += QStringLiteral("hl.bind(\"SUPER + ALT + %1\", enter(\"%2\"), { description = \"Omastrator: %3 mode\" })\n")
                     .arg(QLatin1String(mode.key), QLatin1String(mode.mode), QLatin1String(mode.label));
+    text += QStringLiteral(
+        "\n-- Dictation: hold Super+Alt+V and speak; release to hear it back. Esc cancels while it waits.\n"
+        "hl.bind(\"SUPER + ALT + V\", island(\"dictate start\"), { description = \"Omastrator: dictate (hold)\" })\n"
+        "hl.bind(\"SUPER + ALT + V\", island(\"dictate stop\"), { release = true })\n"
+        "hl.define_submap(\"omastrator-heard\", function()\n"
+        "  hl.bind(\"Escape\", leave(\"dictate cancel\"), { description = \"Cancel what was heard\" })\n"
+        "end)\n");
     text += QStringLiteral("\nhl.define_submap(\"omastrator-draw\", function()\n");
     for (const Key &key : drawKeys)
         text += QStringLiteral("  hl.bind(\"%1\", island(\"tool %2\"), { description = \"%3\" })\n")
@@ -160,6 +167,10 @@ QByteArray hyprlandConf(const QString &command)
     auto back = [&](const QString &key, const QString &args) {
         return QStringLiteral("bind = , %1, exec, %2%3\nbind = , %1, submap, reset\n").arg(key, island, args);
     };
+    text += QStringLiteral("\nbindd = SUPER ALT, V, Omastrator: dictate (hold), exec, %1dictate start\n"
+                           "bindr = SUPER ALT, V, exec, %1dictate stop\n"
+                           "\nsubmap = omastrator-heard\n").arg(island)
+            + back(QStringLiteral("escape"), QStringLiteral("dictate cancel")) + QStringLiteral("submap = reset\n");
     text += QStringLiteral("\nsubmap = omastrator-draw\n");
     for (const Key &key : drawKeys)
         text += QStringLiteral("bind = , %1, exec, %2tool %3\n").arg(QLatin1String(key.key), island, QLatin1String(key.tool));

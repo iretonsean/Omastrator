@@ -204,6 +204,18 @@ constexpr const char *methodTable = R"json([
    "selector": {"type": "string"},
    "property": {"type": "string"},
    "value": {"type": "string"}}}},
+{"name": "command", "group": "desktop", "mcp": false,
+ "description": "One of the user's own commands, as a voice command runs it: each is a normal undo step.",
+ "inputSchema": {"type": "object", "required": ["name"], "properties": {
+   "name": {"type": "string", "enum": ["undo", "redo", "zoomIn", "zoomOut", "zoomToFit", "actualSize", "selectAll", "deselect", "group", "ungroup",
+                                       "delete", "duplicate", "arrange", "align", "distribute", "fill", "stroke", "strokeWidth", "opacity"]},
+   "order": {"type": "string", "enum": ["bringToFront", "bringForward", "sendBackward", "sendToBack"]},
+   "edge": {"type": "string", "enum": ["left", "horizontalCenter", "right", "top", "verticalCenter", "bottom"]},
+   "target": {"type": "string", "enum": ["selection", "artboard"]},
+   "axis": {"type": "string", "enum": ["horizontal", "vertical"]},
+   "color": {"type": "string"},
+   "width": {"type": "number", "minimum": 0},
+   "value": {"type": "number", "minimum": 0, "maximum": 1}}}},
 {"name": "paste_svg", "group": "desktop", "mcp": false,
  "description": "The user's paste of SVG from the clipboard: editable paths, grouped and centred, as one undo step. A new document is made when none is open.",
  "inputSchema": {"type": "object", "required": ["svg"], "properties": {

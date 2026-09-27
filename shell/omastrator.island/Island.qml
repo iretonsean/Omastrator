@@ -71,6 +71,7 @@ Item {
       { id: "edit", tip: "Edit with Instruction…" },
       { id: "roast", tip: "Roast My Design" },
       { id: "vectorize", tip: "Vectorize with AI: click for Logo & icon, Shift-click for Sketch & line art" },
+      { id: "dictate", tip: "Dictate: hold while you speak; Omastrator shows what it heard before it acts" },
       { id: "stop", tip: "Stop waiting for the agent", waitingOnly: true }
     ],
     live: [
@@ -173,6 +174,7 @@ Item {
   }
 
   function runAction(item, mouse) {
+    if (item.id === "dictate") return
     if (root.mode === "draw") chooseTool(item.id)
     else if (root.mode === "live") status.run(liveArgs(item.id))
     else if (item.id === "vectorize" || root.mode === "ai") status.run(aiArgs(item.id, mouse))
@@ -233,6 +235,8 @@ Item {
     property bool selected: false
     property bool dim: false
     signal clicked(var mouse)
+    // Press and release, for push-to-talk.
+    signal held(bool down)
 
     width: root.buttonSize
     height: root.buttonSize
@@ -259,6 +263,8 @@ Item {
       cursorShape: Qt.PointingHandCursor
       acceptedButtons: Qt.LeftButton | Qt.RightButton
       onClicked: function (mouse) { button.clicked(mouse) }
+      onPressed: button.held(true)
+      onReleased: button.held(false)
       onContainsMouseChanged: {
         if (containsMouse) root.hoveredButton = button
         else if (root.hoveredButton === button) root.hoveredButton = null
@@ -334,6 +340,14 @@ Item {
             font.pixelSize: Style.font.body
             elide: Text.ElideRight
             width: Math.min(implicitWidth, Style.space(420))
+
+            // While "Heard: …" waits, a click on it cancels, as Esc does.
+            MouseArea {
+              anchors.fill: parent
+              enabled: status.value("dictation", "idle") === "heard"
+              cursorShape: Qt.PointingHandCursor
+              onClicked: status.run(["island", "dictate", "cancel"])
+            }
           }
 
           IslandButton {
@@ -361,6 +375,8 @@ Item {
               tip: modelData.tip
               selected: (root.mode === "draw" && root.running && root.tool === modelData.id)
                         || (root.mode === "live" && modelData.id === "element" && root.selecting)
+                        || (modelData.id === "dictate" && status.value("dictation", "idle") === "listening")
+              onHeld: function (down) { if (modelData.id === "dictate") status.run(["island", "dictate", down ? "start" : "stop"]) }
               dim: modelData.enabled === false
               onClicked: function (mouse) { if (modelData.enabled !== false) root.runAction(modelData, mouse) }
             }

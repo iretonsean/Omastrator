@@ -23,7 +23,8 @@ Each folder builds as its own static library:
   `Cli` dispatches every GUI-less command, `Island` keeps the island's mode
   file and `omastrator island …`, `StatusStream` is `omastrator status
   --follow`, `Capture` runs hyprpicker, slurp, grim and wl-paste, `Setup` is
-  `omastrator setup`, and `Vocabulary` is dictation's word list.
+  `omastrator setup`, `Dictation` is push-to-talk (normalising, the grammar,
+  Heard), and `Vocabulary` is dictation's word list.
 - `shell/` → the omarchy-shell plugins, QML: `omastrator.island` (the island),
   `omastrator.ai` (the tray light) and `omastrator-ui` (what they share).
   Setup copies them to `~/.config/omarchy/plugins/`. To try a change without
@@ -74,3 +75,6 @@ Each folder builds as its own static library:
   `SmartGuides`, ported from Rust.
 - **nanosvg** (memononen/nanosvg, zlib): SVG parsing, with one patch marked
   "OmaIllustrator patch".
+- **Dictation test recordings** (`tests/Agent/fixtures/dictation/*.wav`):
+  synthesised with Piper's `en_US-ljspeech-medium` voice, trained on the
+  public-domain LJ Speech dataset, then resampled to 16 kHz mono.

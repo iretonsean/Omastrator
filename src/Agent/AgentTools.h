@@ -92,6 +92,7 @@ private:
     QJsonObject showPanel(const QJsonObject &params);
     QJsonObject aiStart(const QJsonObject &params);
     QJsonObject live(const QJsonObject &params);
+    QJsonObject command(const QJsonObject &params);
     // The session to act on for the user; refused while a drag or proposal is open.
     EditorSession &idleSession();
     // Commits `document` as one undo step named `name`.

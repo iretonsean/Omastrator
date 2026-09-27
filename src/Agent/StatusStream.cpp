@@ -3,6 +3,7 @@
 #include "Agent/AgentProtocol.h"
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 
@@ -15,6 +16,10 @@ QJsonObject compose(const QJsonObject &app, const Island::State &island)
                        {"roastId", ""}, {"offer", ""}, {"ready", false}, {"error", ""}, {"live", QJsonObject{{"state", "off"}}}};
     for (auto it = app.begin(); it != app.end(); ++it)
         status.insert(it.key(), it.value());
+    // Dictation's state, from its own file beside the island's.
+    QFile dictation(QDir(Island::runtimeDirectory()).filePath(QStringLiteral("dictation.json")));
+    const QJsonObject heard = dictation.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(dictation.readAll()).object() : QJsonObject();
+    status.insert(QStringLiteral("dictation"), heard["state"].toString(QStringLiteral("idle")));
     const QJsonObject own = island.toJson();
     for (auto it = own.begin(); it != own.end(); ++it)
         status.insert(it.key(), it.value());

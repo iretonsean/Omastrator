@@ -124,6 +124,9 @@ it only reads.
   traced.
 - `paste_svg {svg, name?}`
 - `new_document {}`, `show_panel {panel}`: bring the window forward.
+- `command {name, …}`: the user's own commands for voice (undo, redo, zoom,
+  select all, group, delete, duplicate, arrange, align, distribute, fill,
+  stroke, strokeWidth, opacity), each a normal undo step.
 - `live {action, …}`: Live mode ([OS-SUITE.md](OS-SUITE.md)). Actions:
   `start`, `stop`, `select`, `edit`, `status`, `screenshot`, `writeBack`,
   `ask`, `agentDone`, `review`, `keep`, `discard`, `save`, `publish`. An agent

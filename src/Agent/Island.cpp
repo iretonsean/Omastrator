@@ -2,6 +2,7 @@
 #include "Agent/AgentClient.h"
 #include "Agent/AgentProtocol.h"
 #include "Agent/Capture.h"
+#include "Agent/Dictation.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -189,6 +190,11 @@ QString helpText()
         "       | discard [ID] | save | publish [OPTION] [--confirm]\n"
         "                     Live mode: edit a page in Omastrator's Chromium. start\n"
         "                     with neither option opens the Live sheet.\n"
+        "  dictate start | stop | cancel\n"
+        "                     Push-to-talk: start listens, stop transcribes with voxtype,\n"
+        "                     shows what was heard, and runs it unless cancelled.\n"
+        "  dictate file WAV | transcribe WAV | parse TEXT\n"
+        "                     The same from a recording, or just the parse.\n"
         "  capture color [fill|stroke|swatch]\n"
         "                     Pick a colour anywhere on screen (hyprpicker).\n"
         "  capture screenshot Choose a region (slurp, grim), open it and trace it.\n"
@@ -370,6 +376,8 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
     }
     if (verb == QLatin1String("capture"))
         return Capture::runCli(args.mid(1), out, err);
+    if (verb == QLatin1String("dictate"))
+        return Dictation::runCli(args.mid(1), out, err);
     if (verb == QLatin1String("tool")) {
         if (args.size() != 2)
             return failed(QStringLiteral("Name one tool, such as: omastrator island tool pen"));

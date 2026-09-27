@@ -224,3 +224,79 @@ QJsonObject AgentTools::live(const QJsonObject &params)
         throw Error(AgentProtocol::busy, failure);
     return result;
 }
+
+QJsonObject AgentTools::command(const QJsonObject &params)
+{
+    static const QStringList names{"undo", "redo", "zoomIn", "zoomOut", "zoomToFit", "actualSize", "selectAll", "deselect", "group", "ungroup",
+                                   "delete", "duplicate", "arrange", "align", "distribute", "fill", "stroke", "strokeWidth", "opacity"};
+    const QString name = names.value(*choice(params, QStringLiteral("name"), names, true));
+    // Colours reuse the Capture path: the selection's, else the next shape's.
+    if (name == QLatin1String("fill") || name == QLatin1String("stroke"))
+        return applyColor({{"color", params["color"]}, {"target", name}});
+    EditorSession &current = session();
+    // The view can change mid-proposal; the document can't.
+    if (name == QLatin1String("zoomIn"))
+        current.zoomIn();
+    else if (name == QLatin1String("zoomOut"))
+        current.zoomOut();
+    else if (name == QLatin1String("zoomToFit"))
+        current.zoomToFit();
+    else if (name == QLatin1String("actualSize"))
+        current.actualSize();
+    else {
+        EditorSession &editing = idleSession();
+        const bool needsSelection = !QStringList{"undo", "redo", "selectAll", "deselect"}.contains(name);
+        if (needsSelection && !editing.hasSelection())
+            throw Error(AgentProtocol::invalidParams, QStringLiteral("Nothing is selected. Select something first."));
+        if (name == QLatin1String("undo")) {
+            if (!editing.canUndo())
+                throw Error(AgentProtocol::invalidParams, QStringLiteral("There's nothing to undo."));
+            editing.undo();
+        } else if (name == QLatin1String("redo")) {
+            if (!editing.canRedo())
+                throw Error(AgentProtocol::invalidParams, QStringLiteral("There's nothing to redo."));
+            editing.redo();
+        } else if (name == QLatin1String("selectAll")) {
+            editing.selectAll();
+        } else if (name == QLatin1String("deselect")) {
+            editing.deselectAll();
+        } else if (name == QLatin1String("group")) {
+            editing.groupSelection();
+        } else if (name == QLatin1String("ungroup")) {
+            editing.ungroupSelection();
+        } else if (name == QLatin1String("delete")) {
+            editing.deleteSelection();
+        } else if (name == QLatin1String("duplicate")) {
+            editing.duplicateSelection();
+        } else if (name == QLatin1String("arrange")) {
+            static const QStringList orders{"bringToFront", "bringForward", "sendBackward", "sendToBack"};
+            editing.arrange(ArrangeOrder(*choice(params, QStringLiteral("order"), orders, true)));
+        } else if (name == QLatin1String("align")) {
+            static const QStringList edges{"left", "horizontalCenter", "right", "top", "verticalCenter", "bottom"};
+            const int edge = *choice(params, QStringLiteral("edge"), edges, true);
+            const bool artboard = choice(params, QStringLiteral("target"), {QStringLiteral("selection"), QStringLiteral("artboard")}).value_or(0) == 1;
+            editing.align(AlignEdge(edge), artboard ? AlignTarget::artboard : AlignTarget::selection);
+        } else if (name == QLatin1String("distribute")) {
+            editing.distribute(*choice(params, QStringLiteral("axis"), {QStringLiteral("horizontal"), QStringLiteral("vertical")}, true) == 0
+                                   ? DistributeAxis::horizontal
+                                   : DistributeAxis::vertical);
+        } else if (name == QLatin1String("strokeWidth")) {
+            const auto width = number(params, QStringLiteral("width"));
+            if (!width || *width < 0)
+                fail(QStringLiteral("“width” must be a number, zero or more."));
+            VectorDocument edited = *editing.document();
+            for (const QUuid &id : editing.selectedLeaves()) {
+                VectorObject *object = edited.find(id);
+                if (object && object->hasPaint() && !edited.isEffectivelyLocked(id))
+                    object->stroke.width = *width;
+            }
+            commit(editing, QStringLiteral("Stroke"), edited, editing.selection());
+        } else if (name == QLatin1String("opacity")) {
+            const auto value = number(params, QStringLiteral("value"));
+            if (!value || *value < 0 || *value > 1)
+                fail(QStringLiteral("“value” must be 0 to 1."));
+            editing.setOpacityOfSelection(*value);
+        }
+    }
+    return {{"done", name}, {"undo", current.undoName()}};
+}

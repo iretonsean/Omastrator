@@ -77,6 +77,11 @@ Omastrator also works outside its window, through Omarchy's own shell
   custom property), the rest through your agent on a branch of its own. Each
   shows as a diff to keep or discard; **Save** commits, and **Publish**
   (a git push, or a Vercel, Netlify or Cloudflare preview) is its own step.
+- **Dictate**: hold the island's microphone (or Super+Alt+V) and speak. "Select
+  the pen tool", "align left", "fill hash F F six six zero zero" run at once;
+  anything else goes to your agent as an instruction. The island shows what it
+  heard first, and Esc cancels. It uses Omarchy's voxtype
+  (`omarchy voxtype install`), transcribing on your machine.
 - **The tray light**: one glyph in the bar that shows when your agent is
   working, when results are ready, or when something went wrong. Click it for
   the island's AI mode.
