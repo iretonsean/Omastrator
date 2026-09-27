@@ -1,7 +1,9 @@
 # Handoff: text flow (P2-3 type on a path, P2-4 wrap and threads, P2-5 hyphenation)
 
-Paused on 2026-09-27 to save usage budget. Code research and the design are
-done. **No source code has changed yet.** The branch has only this file.
+Paused on 2026-09-27 to save usage budget, then finished the same day: the
+design below shipped as written, merged with main's artboards (.omai v5),
+width tool and phase-4 work. See the P2-3/4/5 note in QOL-RESEARCH.md and the
+README's Type on a Path/wrap/threads/hyphenation entry for the final summary.
 
 ## Done
 
@@ -155,39 +157,24 @@ done. **No source code has changed yet.** The branch has only this file.
 - Create Outlines works through `fills()` without changes. Check that
   `convertTextToPaths` uses `fills()`.
 
-## Left (checklist)
+## Done (finished 2026-09-27)
 
-- [ ] Model fields, codec keys, version 4, `reflowText()`, and the remove/copy
-      id fixes.
-- [ ] Frames and exclusions in the TextLayout rows; the path mode; `warp`;
+- [x] Model fields, codec keys (still additive, no bump of their own),
+      `reflowText()`, and the remove/copy id fixes.
+- [x] Frames and exclusions in the TextLayout rows; the path mode; `warp`;
       `positionAt`.
-- [ ] Hyphenator (`src/Document/Hyphenator.{h,cpp}`, Liang). Vendor the
-      patterns in `third_party/hyph-utf8/` with a LICENSE/README. Compile them
-      in the way `cmake/OverlayScript.h.in` does, into `oma_core`'s generated
-      include dir. Add a Provenance line in AGENTS.md.
-- [ ] Editor warp; Type on a Path tool; bracket and flip; thread ports and link
-      mode; wrap menu/Properties; Paragraph Hyphenate toggle.
-- [ ] SVG export/import (`<textPath>`, hyphens, frames).
-- [ ] Tests:
-  - `tests/Document/TextFlowTests.cpp`: outlines follow a circle (glyph
-    centres lie about r + ascent/2 from the centre); bracket slide moves the
-    first glyph; flip puts glyphs on the other side; wrap avoids bounds+offset
-    (no glyph in the rect); thread overflow continues in box 2; relink and
-    unlink; a soft hyphen shows a hyphen only at a line end (compare glyph
-    counts with wide and narrow widths); automatic hyphenation of
-    "hyphenation" → `hy-phen-ation`, and a narrow box breaks inside the word.
-  - `tests/IO/TextFlowIOTests.cpp`: `<textPath>` round trip, and `.omai`
-    round trip of the new keys.
-- [ ] Mark P2-3/4/5 done in QOL-RESEARCH.md (in the style of the P2-8 note) and
-      in the README.
-- [ ] Build `-j1`, then run the full suite.
-
-## Exact next steps
-
-1. `git merge origin/main` (other agents are adding artboards and tokens to the
-   model and codec).
-2. Add the model fields and `reflowText()`, then the codec and version 4.
-3. Update TextLayout (frames, path, hyphenation display map), then the
-   Hyphenator and vendored patterns.
-4. Add the tests in `TextFlowTests.cpp` and get them green before the UI work.
-5. Canvas/UI, then SVG, docs, full suite, commit, push.
+- [x] Hyphenator (`src/Document/Hyphenator.{h,cpp}`, Liang). Patterns vendored
+      in `third_party/hyph-utf8/` with the licence kept, compiled in via
+      `cmake/HyphenPatterns.h.in`. Provenance line in AGENTS.md.
+- [x] Editor warp; Type on a Path tool (Shift+T — free even after main's
+      Width tool took Shift+W and Artboard took Shift+O); bracket and flip;
+      thread ports and link mode; wrap menu/Properties; Paragraph Hyphenate
+      toggle.
+- [x] SVG export/import (`<textPath>`, hyphens, frames).
+- [x] Tests: `tests/Document/TextFlowTests.cpp` and `tests/IO/TextFlowIOTests.cpp`,
+      per the list below this once had; both green.
+- [x] Marked P2-3/4/5 done in QOL-RESEARCH.md and in the README.
+- [x] Merged `origin/main` (artboards/.omai v5, width tool + opacity masks,
+      phase-4 sites and Desktop Look); resolved the tool-list/rail/shortcut
+      conflicts so Type on a Path, Width and Artboard all keep their keys and
+      slots. `CHECK OK` at 100% (92 suites), `SWEEP OK` against origin/main.
