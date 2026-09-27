@@ -397,6 +397,18 @@ private slots:
         QCOMPARE(host.roast->suggestedPrompt, QStringLiteral("Flatter, one shadow"));
         QCOMPARE(failure(tools, QStringLiteral("show_roast"), {{"requestId", "r1"}, {"roast", "x"}, {"feedback", QJsonArray{}}, {"suggestedPrompt", "y"}}),
                  int(AgentProtocol::invalidParams));
+        // Short parts only: a long speech or a list of fixes is sent back.
+        const QJsonArray fix{QJsonObject{{"title", "Fix"}, {"detail", "Do it."}}};
+        QString tooLong;
+        for (int word = 0; word < 80; ++word)
+            tooLong += QStringLiteral("word ");
+        QString why;
+        QCOMPARE(failure(tools, QStringLiteral("show_roast"), {{"requestId", "r1"}, {"roast", tooLong}, {"feedback", fix}, {"suggestedPrompt", "y"}}, &why),
+                 int(AgentProtocol::invalidParams));
+        QVERIFY(why.contains(QStringLiteral("60 words")));
+        QCOMPARE(failure(tools, QStringLiteral("show_roast"), {{"requestId", "r1"}, {"roast", "Short."}, {"feedback", QJsonArray{fix[0], fix[0], fix[0], fix[0], fix[0]}}, {"suggestedPrompt", "y"}}, &why),
+                 int(AgentProtocol::invalidParams));
+        QVERIFY(why.contains(QStringLiteral("the 3 with the most impact")));
 
         tools.call(QStringLiteral("show_variations"), {{"requestId", "g1"}, {"variations", QJsonArray{QJsonObject{{"name", "Bold"}, {"svg", square}}}}});
         QCOMPARE(host.variationsRequest, QStringLiteral("g1"));

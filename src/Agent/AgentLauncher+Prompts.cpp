@@ -62,13 +62,15 @@ QString instructions(const QString &binary)
         "- **Results for the panels.** `show_variations` and `show_roast` fill panels in the app; they are not edits. "
         "Always pass the `requestId` your task gave you.\n\n"
         "## Roast My Design\n\n"
-        "When asked to roast, it goes in this order:\n\n"
-        "1. **The roast.** Full comedy-roast energy, deadpan and specific, aimed only at the design, never at the "
-        "person: layout, type, colour, alignment, the fourth drop shadow. Design-world references (clients, kerning, "
-        "Comic Sans, \"make the logo bigger\", feedback rounds) land best. No exclamation marks, no emoji.\n"
-        "2. **Then sincere feedback,** clearly separate: specific, actionable fixes in order of impact, each pointing "
-        "at the actual objects by id.\n"
-        "3. **Then `suggestedPrompt`:** one brief for a new round of variations that applies that feedback.\n\n"
+        "When asked to roast, it goes in this order, and short beats thorough:\n\n"
+        "1. **The roast: 2 to 4 lines, 60 words at most, one line each.** Savage and deadpan: name the crime, deliver "
+        "the verdict, stop. No softeners (\"presumably\", \"a bit\", \"arguably\"), no compliments, no explaining "
+        "the joke, no exclamation marks, no emoji. Design-world references land best (clients, kerning, Comic Sans, "
+        "\"make the logo bigger\"). Aim only at the design, never at the person.\n"
+        "2. **Then 3 fixes,** highest impact first. `title`: 5 words at most. `detail`: one sentence, 25 words at most, "
+        "with the concrete value to use. Point at the objects by id.\n"
+        "3. **Then `suggestedPrompt`:** one sentence, a brief for variations that apply the fixes.\n\n"
+        "The app refuses a longer roast or more than 4 fixes; shorten and call again.\n\n"
         "## Methods\n")
                        .arg(binary);
     QString group;
@@ -165,9 +167,10 @@ QString roastPrompt(const QString &requestId, const QString &renderPath, bool se
                 .arg(selectionOnly ? QStringLiteral("the selection") : QStringLiteral("the whole artboard"), renderPath,
                      selectionOnly ? QStringLiteral("selection_get") : QStringLiteral("document_get"));
     text += QStringLiteral(
-                "Follow the Roast My Design section of AGENTS.md: first the roast (savage, deadpan, about the design and never "
-                "the person), then sincere, specific feedback in order of impact, pointing at object ids, then one "
-                "suggestedPrompt for a round of variations that applies the feedback. Deliver it in one call:\n\n"
+                "Follow the Roast My Design section of AGENTS.md: a savage roast of 2 to 4 one-line burns (60 words at most, "
+                "about the design and never the person, no softeners), then exactly 3 fixes (title of 5 words, one-sentence "
+                "detail with the value to use, object ids), then a one-sentence suggestedPrompt. Deliver it in one call, "
+                "roast lines separated by \\n:\n\n"
                 "show_roast {\"requestId\": \"%1\", \"roast\": \"…\", \"feedback\": [{\"title\": \"…\", \"detail\": \"…\", "
                 "\"objectIds\": [\"…\"]}], \"suggestedPrompt\": \"…\"}\n\n"
                 "Do not edit the document. Stop after show_roast succeeds.")
