@@ -7,6 +7,8 @@
 #include <QCommandLinkButton>
 #include <QComboBox>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -146,9 +148,17 @@ QString connectText(const AgentBridge &bridge)
     text += QStringLiteral("Connect Claude Code with:\n  claude mcp add omastrator -- omastrator --mcp\n\n");
     QString error;
     const QString agent = AgentLauncher::defaultAgent(&error);
-    text += agent.isEmpty() ? QStringLiteral("Default agent: none. %1\n\n").arg(error)
-                            : QStringLiteral("Default agent: %1, which Generate, Edit with Instruction, Vectorize with AI and "
-                                             "Roast My Design launch.\n\n").arg(AgentBridge::displayName(agent));
+    if (agent.isEmpty()) {
+        text += QStringLiteral("Default agent: none. %1\n\n").arg(error);
+    } else {
+        const bool headless = !AgentLauncher::showTerminal() && AgentLauncher::headlessCommand(agent, AgentAccess::omastrator, QString(), QString());
+        text += QStringLiteral("Default agent: %1, which Generate, Edit with Instruction, Vectorize with AI and Roast My Design "
+                               "run %2.\n")
+                    .arg(AgentBridge::displayName(agent),
+                         headless ? QStringLiteral("in the background, with no terminal and no MCP servers")
+                                  : QStringLiteral("in a terminal, through `omarchy agent prompt`"));
+        text += QStringLiteral("Logs of background runs: %1\n\n").arg(AgentLauncher::logFolder());
+    }
     text += QStringLiteral("Any agent can also use the command line:\n\n") + AgentProtocol::helpText();
     return text;
 }
@@ -235,7 +245,7 @@ QDialog *handoff(AgentBridge &bridge, QWidget *window)
     QLabel *error = nullptr;
     QDialog *dialog = sheet(window, QStringLiteral("handoffSheet"), QStringLiteral("Hand to Agent"), form, error);
     auto *intro = new QLabel(QStringLiteral("Your agent changes the app's source to match the document in front, on a git branch of its "
-                                            "own. You review the diff before anything is kept."),
+                                            "own. Its change is written into the source, and Review changes shows the diff."),
                              dialog);
     intro->setWordWrap(true);
     form->addRow(intro);
@@ -256,42 +266,97 @@ QDialog *handoff(AgentBridge &bridge, QWidget *window)
                                    QString());
     form->addRow(QStringLiteral("Notes:"), field);
     finish(dialog, form, error, QStringLiteral("Hand to Agent"),
-           [&bridge, folder, field] { return bridge.handToAgent(folder->text().trimmed(), field->toPlainText().trimmed(), false); });
+           [&bridge, folder, field] { return bridge.handToAgent(folder->text().trimmed(), field->toPlainText().trimmed()); });
     return dialog;
 }
 
-QDialog *publish(AgentBridge &bridge, QWidget *window)
+QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder, bool deploying)
 {
     QFormLayout *form = nullptr;
     QLabel *error = nullptr;
-    QDialog *dialog = sheet(window, QStringLiteral("publishSheet"), QStringLiteral("Publish"), form, error);
-    const auto options = bridge.publishOptions();
-    auto *intro = new QLabel(options.empty() ? QStringLiteral("This project has nothing set up to publish with: no git upstream, and no "
-                                                              "Vercel, Netlify or Cloudflare CLI.")
-                                             : QStringLiteral("Publishing sends what you've saved. Choose one; it runs when you click it."),
-                             dialog);
-    intro->setWordWrap(true);
-    form->addRow(intro);
-    for (const auto &option : options) {
-        auto *button = new QCommandLinkButton(option.label, option.description, dialog);
-        button->setObjectName(QStringLiteral("publish-") + option.id);
-        form->addRow(button);
-        QObject::connect(button, &QCommandLinkButton::clicked, dialog, [&bridge, dialog, error, id = option.id] {
-            QString output;
-            const QString failure = bridge.livePublish(id, true, &output);
-            if (failure.isEmpty()) {
-                dialog->accept();
-                return;
-            }
-            error->setText(failure);
-            error->show();
-        });
+    const AgentBridge::DeployQuestion question = bridge.deployQuestion(folder);
+    QDialog *dialog = sheet(window, QStringLiteral("deploySheet"), deploying ? QStringLiteral("Deploy") : QStringLiteral("Save"), form, error);
+    QCheckBox *dontAsk = nullptr;
+    if (deploying && question.confirm) {
+        const QString how = question.command.viaAgent()
+                                ? QStringLiteral("Deploy to production with %1? It deploys with the project's own setup and .env files.")
+                                      .arg(question.agent.isEmpty() ? QStringLiteral("your agent") : question.agent)
+                                : QStringLiteral("Deploy to production with <code>%1</code>?").arg(question.command.command.toHtmlEscaped());
+        auto *ask = new QLabel(how, dialog);
+        ask->setObjectName(QStringLiteral("deployQuestion"));
+        ask->setWordWrap(true);
+        ask->setTextFormat(Qt::RichText);
+        form->addRow(ask);
+        QStringList files;
+        // Names only: the values stay in the files and the deploy's own environment.
+        const QStringList keys = Deploy::keys(Deploy::projectEnv(question.folder, question.command.cwd, &files));
+        auto *environment = new QLabel(keys.isEmpty() ? QStringLiteral("No .env files: the deploy uses your environment as it is.")
+                                                       : QStringLiteral("With %1 from %2.").arg(keys.join(QStringLiteral(", ")),
+                                                                                              [&] {
+                                                                                                  QStringList names;
+                                                                                                  for (const QString &file : files)
+                                                                                                      names << QFileInfo(file).fileName();
+                                                                                                  return names.join(QStringLiteral(", "));
+                                                                                              }()),
+                                       dialog);
+        environment->setObjectName(QStringLiteral("deployEnvironment"));
+        environment->setWordWrap(true);
+        form->addRow(environment);
+        dontAsk = new QCheckBox(QStringLiteral("Don't ask again for this project"), dialog);
+        dontAsk->setObjectName(QStringLiteral("deployDontAsk"));
+        form->addRow(dontAsk);
     }
-    form->addRow(error);
+    QCheckBox *create = nullptr;
+    QLineEdit *name = nullptr;
+    if (!question.github.isEmpty()) {
+        create = new QCheckBox(QStringLiteral("Keep its history on GitHub: create a private repository"), dialog);
+        create->setObjectName(QStringLiteral("deployCreateRepository"));
+        create->setChecked(true);
+        form->addRow(create);
+        name = new QLineEdit(question.github, dialog);
+        name->setObjectName(QStringLiteral("deployRepositoryName"));
+        form->addRow(QStringLiteral("Name:"), name);
+        QObject::connect(create, &QCheckBox::toggled, name, &QLineEdit::setEnabled);
+    }
+    finish(dialog, form, error, deploying ? QStringLiteral("Deploy") : QStringLiteral("Save"), [&bridge, question, deploying, dontAsk, create, name] {
+        AgentBridge::DeployRequest request;
+        request.deploy = deploying;
+        request.confirm = true;
+        request.remember = dontAsk && dontAsk->isChecked();
+        request.folder = question.folder;
+        if (create)
+            request.github = create->isChecked() ? name->text().trimmed() : QString();
+        if (create && create->isChecked() && name->text().trimmed().isEmpty())
+            return QStringLiteral("Name the repository.");
+        return bridge.liveDeploy(request);
+    });
+    return dialog;
+}
+
+QDialog *deployLog(QWidget *window, const QString &path)
+{
+    auto *dialog = new QDialog(window);
+    dialog->setObjectName(QStringLiteral("deployLog"));
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowModality(Qt::WindowModal);
+    dialog->setWindowTitle(QStringLiteral("Deploy Details"));
+    auto *column = new QVBoxLayout(dialog);
+    column->setContentsMargins(24, 20, 24, 20);
+    auto *where = new QLabel(path, dialog);
+    where->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    column->addWidget(where);
+    QFile file(path);
+    auto *text = new QPlainTextEdit(file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QStringLiteral("The log is gone."), dialog);
+    text->setObjectName(QStringLiteral("deployLogText"));
+    text->setReadOnly(true);
+    text->setLineWrapMode(QPlainTextEdit::NoWrap);
+    text->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    text->setMinimumSize(680, 420);
+    text->moveCursor(QTextCursor::End);
+    column->addWidget(text);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
-    buttons->button(QDialogButtonBox::Close)->setObjectName(QStringLiteral("dialogCancel"));
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    form->addRow(buttons);
+    column->addWidget(buttons);
     dialog->open();
     return dialog;
 }
@@ -311,6 +376,14 @@ QDialog *connectAgent(AgentBridge &bridge, QWidget *window)
     text->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     text->setMinimumSize(640, 420);
     column->addWidget(text);
+    auto *terminal = new QCheckBox(QStringLiteral("Open the agent in a terminal while it works"), dialog);
+    terminal->setObjectName(QStringLiteral("showTerminal"));
+    terminal->setChecked(AgentLauncher::showTerminal());
+    QObject::connect(terminal, &QCheckBox::toggled, dialog, [&bridge, text](bool on) {
+        AgentLauncher::setShowTerminal(on);
+        text->setPlainText(connectText(bridge));
+    });
+    column->addWidget(terminal);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     column->addWidget(buttons);

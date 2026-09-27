@@ -108,7 +108,7 @@ private slots:
         QVERIFY(WriteBack::apply(plan.changes).isEmpty());
         QVERIFY(read(repo + "/index.html").contains(">Tailwind, edited</h1>"));
         QCOMPARE(read(repo + "/index.html").size(), page.size());
-        WriteBack::Review review{"r", "Live edits", plan.done.join('\n'), plan.changes, repo};
+        WriteBack::Review review{"r", "Live edits", plan.done.join('\n'), plan.changes, repo, {}, QDateTime::currentDateTime()};
         QVERIFY(review.diff(repo).contains("+  <h1 id=\"title\" class=\"text-3xl font-bold\">Tailwind, edited</h1>"));
         QVERIFY(review.diff(repo).startsWith("--- index.html"));
         QVERIFY(WriteBack::restore(plan.changes).isEmpty());
@@ -183,7 +183,7 @@ private slots:
         QVERIFY(!WriteBack::isGitRepository(m_directory.path()));
     }
 
-    void saveCommitsOnlyTheKeptFiles()
+    void commitsTakeOnlyOmastratorsOwnChange()
     {
         const QString repo = repository();
         write(repo + "/src/other.html", "<p>The user's own work</p>\n");
@@ -192,39 +192,52 @@ private slots:
         QVERIFY(WriteBack::apply(plan.changes).isEmpty());
         const QString message = WriteBack::commitMessage(plan.done);
         QCOMPARE(message, QStringLiteral("Change the text “Buy now” to “Order now”"));
-        QVERIFY(WriteBack::commit(repo, {repo + "/index.html"}, message).isEmpty());
+        QString sha;
+        QVERIFY(WriteBack::commit(repo, {{repo + "/index.html", plan.changes.front().before}}, message, &sha).isEmpty());
+        QCOMPARE(run(repo, {"rev-parse", "HEAD"}).trimmed(), sha);
         QCOMPARE(run(repo, {"log", "-1", "--format=%s"}).trimmed(), message);
         QCOMPARE(run(repo, {"show", "--name-only", "--format=", "HEAD"}).trimmed(), QStringLiteral("index.html"));
-        // What the user staged stays staged, not committed.
+        // What the user staged stays staged, not committed; the committed file is clean.
         QCOMPARE(run(repo, {"diff", "--cached", "--name-only"}).trimmed(), QStringLiteral("src/other.html"));
+        QVERIFY(WriteBack::dirtyFiles(repo, {"index.html"}).isEmpty());
         QVERIFY(WriteBack::commitMessage({"a", "b"}).startsWith(QLatin1String("Live edits from Omastrator\n\n- a\n- b")));
+
+        // The user's uncommitted edit in the same file stays on disk and out of the commit.
+        const QByteArray mine = read(repo + "/index.html").replace("<body class=\"p-4\">", "<body class=\"p-4\"><!-- mine -->");
+        write(repo + "/index.html", mine);
+        const WriteBack::Plan second = WriteBack::plan(repo, {textEdit("p", "Shared words", "Kept words", "<p data-oma-src=\"index.html:5:3\">")});
+        QCOMPARE(second.changes.size(), size_t(1));
+        QVERIFY(WriteBack::apply(second.changes).isEmpty());
+        QVERIFY(WriteBack::commit(repo, {{repo + "/index.html", second.changes.front().before}}, "Second", &sha).isEmpty());
+        const QString committed = run(repo, {"show", "HEAD:index.html"});
+        QVERIFY(committed.contains("Kept words") && !committed.contains("<!-- mine -->"));
+        QVERIFY(read(repo + "/index.html").contains("<!-- mine -->") && read(repo + "/index.html").contains("Kept words"));
+        QCOMPARE(WriteBack::dirtyFiles(repo, {"index.html"}), QStringList{"index.html"});
+        QCOMPARE(run(repo, {"diff", "HEAD", "--", "index.html"}).count(QStringLiteral("\n+<")), 1);
+
+        // Omastrator's change and HEAD's differ on the very same line: a real clash, and nothing is committed.
+        const QString before = run(repo, {"rev-parse", "HEAD"}).trimmed();
+        const QByteArray base = read(repo + "/index.html");
+        write(repo + "/index.html", QByteArray(base).replace("Kept words", "Kept words, twice"));
+        QVERIFY(WriteBack::commit(repo, {{repo + "/index.html", QByteArray(base).replace("<p>Kept words</p>", "<p>Mine</p>")}}, "Clash", &sha)
+                    .contains(QLatin1String("overlap")));
+        QCOMPARE(run(repo, {"rev-parse", "HEAD"}).trimmed(), before);
     }
 
-    void publishOffersOnlyWhatTheRepoHasAndPushesWhenAsked()
+    void reverseTakesOutOneChangeAroundNewerEdits()
     {
         const QString repo = repository();
-        QVERIFY(WriteBack::publishOptions(repo).empty());
-        const QString bare = m_directory.filePath(QStringLiteral("remote.git"));
-        QVERIFY(QProcess::execute(QStringLiteral("git"), {"init", "-q", "--bare", bare}) == 0);
-        run(repo, {"remote", "add", "origin", bare});
-        run(repo, {"push", "-q", "-u", "origin", "main"});
-        const auto options = WriteBack::publishOptions(repo);
-        QCOMPARE(options.size(), size_t(1));
-        QCOMPARE(options.front().id, QStringLiteral("git"));
-        QCOMPARE(options.front().arguments, (QStringList{"push", "origin", "HEAD:main"}));
-        QVERIFY(options.front().description.contains(QLatin1String("Nothing is forced")));
-
-        write(repo + "/index.html", page + "<!-- two -->\n");
-        QVERIFY(WriteBack::commit(repo, {repo + "/index.html"}, "Two").isEmpty());
+        const WriteBack::Plan plan = WriteBack::plan(repo, {textEdit("#cta", "Buy now", "Order now")});
+        QVERIFY(WriteBack::apply(plan.changes).isEmpty());
+        // A later edit elsewhere in the file survives the undo.
+        write(repo + "/index.html", read(repo + "/index.html").replace("<body class=\"p-4\">", "<body class=\"p-8\">"));
         QString error;
-        WriteBack::publish(repo, options.front(), &error);
+        const auto undo = WriteBack::reverse(plan.changes, &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
-        QCOMPARE(run(bare, {"log", "-1", "--format=%s", "main"}).trimmed(), QStringLiteral("Two"));
-        // A forced push is refused before it runs.
-        WriteBack::PublishOption forced = options.front();
-        forced.arguments << "--force";
-        WriteBack::publish(repo, forced, &error);
-        QVERIFY(error.contains(QLatin1String("force")));
+        QVERIFY(WriteBack::apply(undo).isEmpty());
+        QVERIFY(read(repo + "/index.html").contains("Buy now") && read(repo + "/index.html").contains("p-8"));
+        QVERIFY(!WriteBack::merge("a\nb\n", "a\nc\n", "a\nd\n").has_value());
+        QCOMPARE(*WriteBack::merge("a\nb\nc\n", "x\nb\nc\n", "a\nb\ny\n"), QByteArray("x\nb\ny\n"));
     }
 
     void theAgentWorksInAWorktree()

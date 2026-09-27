@@ -5,8 +5,6 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QProcess>
-#include <QTemporaryDir>
 
 namespace {
 QString dataHome()
@@ -60,28 +58,15 @@ std::vector<WriteBack::FileChange> AgentWork::collect(QString *error)
     for (const QString &path : changed) {
         const QString mine = QDir(project).filePath(path);
         WriteBack::FileChange change{mine, read(mine), read(QDir(worktree).filePath(path))};
-        if (dirty.contains(path) && change.before && change.after) {
-            // The user's version and the agent's, merged against the commit the agent started from.
-            QTemporaryDir scratch;
-            const QString base = scratch.filePath(QStringLiteral("base")), ours = scratch.filePath(QStringLiteral("ours")),
-                          theirs = scratch.filePath(QStringLiteral("theirs"));
-            QString failure;
-            const QByteArray original = WriteBack::git(project, {QStringLiteral("show"), QStringLiteral("HEAD:") + path}, &failure).toUtf8();
-            for (const auto &[file, bytes] : {std::pair{base, original}, std::pair{ours, *change.before}, std::pair{theirs, *change.after}}) {
-                QFile out(file);
-                if (!out.open(QIODevice::WriteOnly) || out.write(bytes) != bytes.size()) {
-                    *error = QStringLiteral("Couldn't prepare the merge of %1.").arg(path);
-                    return {};
-                }
-            }
-            QProcess merge;
-            merge.start(QStringLiteral("git"), {QStringLiteral("merge-file"), QStringLiteral("-p"), ours, base, theirs});
-            merge.waitForFinished(60'000);
-            if (merge.exitStatus() != QProcess::NormalExit || merge.exitCode() != 0) {
-                *error = QStringLiteral("The agent's changes to %1 clash with yours. Commit or stash yours, then ask again.").arg(path);
+        const std::optional<QByteArray> base = WriteBack::committed(worktree, path);
+        if (change.before != base && change.before && change.after && base) {
+            // The file as it is now (the user's edits, or Omastrator's own) and the agent's, merged against the commit it started from.
+            const auto merged = WriteBack::merge(*base, *change.before, *change.after);
+            if (!merged) {
+                *error = QStringLiteral("The agent's changes to %1 clash with your uncommitted ones. Commit or stash yours, then try again.").arg(path);
                 return {};
             }
-            change.after = merge.readAllStandardOutput();
+            change.after = merged;
         }
         changes.push_back(change);
     }
@@ -103,8 +88,8 @@ QString AgentWork::prompt(const Brief &brief) const
     QString text = QStringLiteral(
                        "This is an Omastrator Live task (request %1). You are changing a web project's source code.\n\n"
                        "Work only in this folder, a git worktree on its own branch (%2): %3\n"
-                       "Don't commit, push, deploy or start a dev server. The user reviews your changes as a diff and keeps or "
-                       "discards them.\n\n"
+                       "Don't commit, push, deploy or start a dev server. Omastrator writes your change into the project and commits "
+                       "it; the user can review or discard it later.\n\n"
                        "The page: %4\n")
                        .arg(requestId, branch, worktree, brief.url);
     if (!brief.instruction.isEmpty())
@@ -140,7 +125,8 @@ QString AgentWork::handoffPrompt(const QString &instruction, const QString &png,
                "This is an Omastrator hand-off (request %1). The user redesigned part of this app's interface in Omastrator and "
                "wants the source changed to match.\n\n"
                "Work only in this folder, a git worktree on its own branch (%2): %3\n"
-               "Don't commit, push or deploy. The user reviews your changes as a diff and keeps or discards them.\n\n"
+               "Don't commit, push or deploy. Omastrator writes your change into the project; the user can review or discard "
+               "it later.\n\n"
                "The mockup: %4 (look at it), and the same as SVG: %5\n"
                "%6\n"
                "Find where this interface is built (widgets, QML, GTK builder files, CSS, or web views), and change it to match the "

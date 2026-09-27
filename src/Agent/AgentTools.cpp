@@ -81,6 +81,7 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("show_panel"), &AgentTools::showPanel},
         {QStringLiteral("ai_start"), &AgentTools::aiStart},
         {QStringLiteral("live"), &AgentTools::live},
+        {QStringLiteral("live_deployed"), &AgentTools::liveDeployed},
         {QStringLiteral("command"), &AgentTools::command},
     };
     try {

@@ -34,7 +34,9 @@ Each folder builds as its own static library:
 - `src/Live` → `oma_live`. Live web editing (docs/OS-SUITE.md): an in-tree
   WebSocket client and the DevTools Protocol (`WebSocket`, `Cdp`), Chromium in
   Omastrator's own profile (`Browser`), dev servers and a static server,
-  `ProjectRegistry`, `TokenSet` snapping, and `LiveSession`. The page overlay
+  `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, write-back
+  (`WriteBack`, `AgentWork`), and Deploy (`Deploy`, `DeployJob`, `History`,
+  with GitHub through `gh`). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
   tests run the fixtures in `tests/Live/fixtures` and skip without Chromium.
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides` and
@@ -47,6 +49,10 @@ Each folder builds as its own static library:
 
 ## Rules
 
+- **The thesis:** read `docs/VISION.md` first. Keep Illustrator's power, reached
+  the way Figma and Paper feel, with AI in the flow. Show only the essentials
+  and put the rest one step away (disclosure, context menu, Ctrl+K). The
+  designer stays the author.
 - **Parallel builds:** keep them to `-j3` or fewer. A `-j10` build ran this
   15 GB machine out of memory.
 - **Edits:** every document edit goes through `EditorSession` so it becomes one
@@ -60,8 +66,9 @@ Each folder builds as its own static library:
 - **The user's desktop:** tests never touch the real shell, Hyprland or menu
   config. Setup tests run in a temporary `HOME`; outside programs are replaced
   through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
-  `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL` and
-  `OMASTRATOR_APP`.
+  `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
+  `OMASTRATOR_APP`, `OMASTRATOR_GH` and `OMASTRATOR_TERMINAL`. Live's deploy
+  tests push only to local bare repositories and run fake deploy commands.
 - **Commits:** public repo. Commit as the GitHub no-reply address, and never add
   personal data.
 
