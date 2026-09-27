@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QSignalSpy>
 #include <QTest>
+#include <algorithm>
 
 // The appearance stack, stroke alignment and arrowheads, colour tools and Copy/Paste Properties.
 namespace {
@@ -269,6 +270,29 @@ private slots:
         d.session.undo();
         QCOMPARE(d.read(a).fill.color, QColor(Qt::red));
         QCOMPARE(d.read(b).stroke.paint.color, QColor(Qt::red));
+    }
+
+    void selectionColorsIncludeStyledTextRuns()
+    {
+        Drawn d;
+        d.session.createDocument({200, 200});
+        const QUuid path = d.add(Shapes::rectangle({0, 0, 20, 20}));
+        d.session.setFillsOfSelection({Paint::solid(Qt::blue)}, QStringLiteral("Fill"));
+        const QUuid text = d.session.addText({20, 50}, QStringLiteral("red word"));
+        d.session.setFillsOfSelection({Paint::solid(Qt::black)}, QStringLiteral("Fill"));
+        d.object(text).text.formatCharacters(0, 3, [](CharacterFormat &format) { format.fill = QColor(Qt::red); });
+        d.session.select({path, text});
+        const std::vector<QColor> colors = d.session.selectionColors();
+        QCOMPARE(colors.size(), size_t(3));
+        QVERIFY(colors.end() != std::find(colors.begin(), colors.end(), QColor(Qt::red)));
+        // Recolouring the run's colour is one "Recolor" step across the selection.
+        d.session.replaceColor(Qt::red, QColor(255, 102, 0));
+        QCOMPARE(d.session.undoName(), QStringLiteral("Recolor"));
+        QCOMPARE(d.read(path).fill.color, QColor(Qt::blue));
+        QCOMPARE(d.read(text).fill.color, QColor(Qt::black));
+        QCOMPARE(d.read(text).text.runs.front().format.fill, std::optional<QColor>(QColor(255, 102, 0)));
+        d.session.undo();
+        QCOMPARE(d.read(text).text.runs.front().format.fill, std::optional<QColor>(QColor(Qt::red)));
     }
 
     void aGlobalSwatchUpdatesEveryUse()

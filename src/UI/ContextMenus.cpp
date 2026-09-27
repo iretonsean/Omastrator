@@ -155,7 +155,7 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
         addPathfinder(submenu(menu, QStringLiteral("contextPathfinder"), QStringLiteral("Pathfinder")), menus, session);
     if (selectionHas(session, ObjectKind::path)) {
         QMenu *path = submenu(menu, QStringLiteral("contextPath"), QStringLiteral("Path"));
-        for (const char *name : {"outlineStroke", "offsetPath", "simplify", "releaseCompoundPath"})
+        for (const char *name : {"outlineStroke", "offsetPath", "simplify", "releaseCompoundPath", "makePixelPerfect"})
             share(path, &menus, name);
     }
     QMenu *same = submenu(menu, QStringLiteral("contextSelectSame"), QStringLiteral("Select Same"));

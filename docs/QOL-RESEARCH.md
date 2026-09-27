@@ -1071,13 +1071,15 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 **P0-6. Reference point, constrain proportions, Scale Strokes & Corners**
 
-> **Done, except Scale Corners.** `src/UI/PropertiesPanel+Transform.cpp`,
+> **Done.** `src/UI/PropertiesPanel+Transform.cpp`,
 > `ReferencePointPicker` in `src/UI/PanelSection.cpp`. The reference point
 > starts at top left, as Figma's X and Y read, and is remembered. Scale Strokes
-> & Effects is in the Transform section's options and applies to handle drags,
-> the Scale tool and dialog too. Scale Corners waits for live corners (P1-9):
-> until then no corner radius survives drawing, so there's nothing for it to
-> keep. Tests: `tests/UI/PropertiesPanelTests.cpp`, `tests/Document/TypographyTests.cpp`.
+> & Effects and Scale Corners both sit in the Transform section's options and
+> apply to handle drags, the Scale tool and dialog too (`VectorDocument::transform`,
+> `LiveRectangle::transformed`). Off, a live rectangle's radii stay put, clamped to
+> half the new rect's shorter side; on, they scale with the average factor
+> (`sqrt(|det|)`). Tests: `tests/UI/PropertiesPanelTests.cpp`,
+> `tests/Document/LiveCornersTests.cpp`, `tests/Document/TypographyTests.cpp`.
 
 - **Spec:**
   - The Transform section gets a 9-point locator. X/Y show that point, and
@@ -1232,8 +1234,9 @@ has Qt Test coverage in `tests/<Folder>/`.
 > row (`ff6600`, `#FF6600` and `#f60` all work). The picker keeps the last 12
 > colours chosen anywhere in the app (QSettings `colors/recent`) as a strip under
 > it. **Selection colors** in Appearance lists every colour of a selection of two
-> or more painted objects, gradient stops included; picking a new one for a chip
-> is one "Recolor" step across the selection (`EditorSession::replaceColor`).
+> or more painted objects, gradient stops and styled text runs' own colours
+> included; picking a new one for a chip is one "Recolor" step across the
+> selection, runs and all (`EditorSession::replaceColor`).
 > **Global swatches:** right-click a swatch for **Global** and **Edit Color…**. A
 > global swatch shows Illustrator's white corner; applying it links the paint by
 > the swatch's id (`Paint::swatchId`), and editing its colour recolours every
@@ -1326,8 +1329,8 @@ has Qt Test coverage in `tests/<Folder>/`.
 > into four (TL, TR, BR, BL; uneven corners always show four) and a ⋯ menu for
 > Round, Inverted Round and Chamfer. With Direct Selection each corner has a
 > widget: drag it for every selected corner's radius, Alt-drag for that corner
-> alone, Alt-click to cycle its style. Scale Corners off isn't honoured yet:
-> radii always scale with the shape.
+> alone, Alt-click to cycle its style. Scale Corners (P0-6) honours the radii:
+> off, they stay put (clamped to the new rect); on, they scale with it.
 >
 > **Isolation (P1-10):** `EditorSession::isolation()` is the stack of groups
 > entered (outermost first), so undo, the canvas and the panels share it. The
@@ -1468,11 +1471,16 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 ### P2: bigger features, later
 
-> **P2-11 done** (snap to pixel and the pixel grid; Make Pixel Perfect is
-> not). View ▸ Snap to Pixel rounds drawn points, handle drags, moved bounds'
-> top left, corner radii and guides to whole points on whatever axis a guide
-> hasn't already taken. View ▸ Pixel Grid (on by default) draws a line per
-> point once the zoom reaches 600 %.
+> **P2-11 done.** View ▸ Snap to Pixel rounds drawn points, handle drags,
+> moved bounds' top left, corner radii and guides to whole points on whatever
+> axis a guide hasn't already taken. View ▸ Pixel Grid (on by default) draws a
+> line per point once the zoom reaches 600 %. Object ▸ Make Pixel Perfect
+> (`EditorSession::makePixelPerfect`, also in the context menu for paths) snaps
+> the selection's anchors to whole points in one step, handles moving with
+> their anchor; a straight, axis-aligned edge lands on the grid since both ends
+> round the same shared coordinate. An upright live rectangle snaps its rect's
+> edges directly and stays live; any other shape whose anchors move loses its
+> live shape, as an edited anchor does. Tests: `tests/Document/PathEditingTests.cpp`.
 
 | # | Item | One-line spec | Where | Acceptance |
 |---|---|---|---|---|
@@ -1486,7 +1494,7 @@ has Qt Test coverage in `tests/<Folder>/`.
 | P2-8 ✓ | **On-canvas gradient annotator** (done: see below) | With the Gradient tool (G), drag the start and end on the object and drag the stops. | `EditorCanvas`, `Paint` | Dragging the end point changes the gradient angle live; one undo step |
 | P2-9 | **Opacity masks** | Make Mask (top object's luminance), Clip, Invert. | `VectorObject::mask`, `VectorRenderer` | A white-to-black gradient mask fades the art; PDF and SVG export keep it |
 | P2-10 | **Export for Screens / per-object export** | Mark objects or artboards for export; scales 0.5×–3× with suffixes; PNG/JPG/SVG/PDF/WebP in one batch. | `ExportSheet`, `DocumentExporter` | Exporting two assets at 1× and 2× writes four files with `@2x` suffixes |
-| P2-11 | **Snap to pixel / Make Pixel Perfect** | Snap anchors and bounds to whole pixels while drawing and moving; pixel grid at ≥ 600 %. | `EditorSession::snapped`, `EditorCanvas+Paint.cpp` | A dragged rectangle's edges land on integers |
+| P2-11 ✓ | **Snap to pixel / Make Pixel Perfect** | Snap anchors and bounds to whole pixels while drawing and moving; pixel grid at ≥ 600 %. Object ▸ Make Pixel Perfect snaps the selection onto the grid after the fact, one undo step. | `EditorSession::snapped`, `EditorCanvas+Paint.cpp`, `EditorSession::makePixelPerfect` | A dragged rectangle's edges land on integers; Make Pixel Perfect on a path with fractional anchors rounds them to whole points |
 | P2-12 | **Toolbar flyouts and presets** | Group tools with flyouts, Alt-click to cycle, and Basic/Advanced presets. | `ContentView`, `ToolIcons` | The tool order is saved; flyouts open on long-press or right-click |
 
 > **P2-8 done.** `src/Canvas/EditorCanvas+Gradient.cpp`. The Gradient tool

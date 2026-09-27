@@ -160,6 +160,64 @@ private slots:
         QCOMPARE(f.object(a)->path.contours.front().nodes.back().anchor, QPointF(0, 0));
     }
 
+    void makePixelPerfectRoundsAnchorsKeepingStraightEdgesAligned()
+    {
+        Fixture f;
+        const QUuid a = f.add(polyline({{10.3, 10.7}, {50.6, 10.7}, {50.6, 40.2}}, true));
+        f.session.select({a});
+        QVERIFY(f.session.canMakePixelPerfect());
+        f.session.makePixelPerfect();
+        QCOMPARE(f.session.undoName(), QString("Make Pixel Perfect"));
+        const auto &nodes = f.object(a)->path.contours.front().nodes;
+        QCOMPARE(nodes[0].anchor, QPointF(10, 11));
+        QCOMPARE(nodes[1].anchor, QPointF(51, 11));
+        QCOMPARE(nodes[2].anchor, QPointF(51, 40));
+        // Both ends of a straight edge share a coordinate, which rounds the same way on both.
+        QCOMPARE(nodes[0].anchor.y(), nodes[1].anchor.y());
+        QCOMPARE(nodes[1].anchor.x(), nodes[2].anchor.x());
+        f.session.undo();
+        QCOMPARE(f.object(a)->path.contours.front().nodes.front().anchor, QPointF(10.3, 10.7));
+    }
+
+    void makePixelPerfectMovesHandlesWithTheirAnchor()
+    {
+        Fixture f;
+        PathNode start(QPointF(10.4, 20.6));
+        start.out = start.anchor + QPointF(5, 0);
+        PathNode end(QPointF(60.4, 20.6));
+        end.in = end.anchor - QPointF(5, 0);
+        Contour contour;
+        contour.nodes = {start, end};
+        VectorPath path;
+        path.contours.push_back(contour);
+        const QUuid a = f.add(path);
+        f.session.select({a});
+        f.session.makePixelPerfect();
+        const auto &nodes = f.object(a)->path.contours.front().nodes;
+        QCOMPARE(nodes[0].anchor, QPointF(10, 21));
+        QCOMPARE(nodes[0].out, QPointF(15, 21));
+        QCOMPARE(nodes[1].anchor, QPointF(60, 21));
+        QCOMPARE(nodes[1].in, QPointF(55, 21));
+    }
+
+    void makePixelPerfectSnapsALiveRectanglesRect()
+    {
+        Fixture f;
+        LiveRectangle shape;
+        shape.rect = QRectF(10.3, 10.6, 40.5, 20.2);
+        shape.radii.fill(5);
+        VectorObject rectangle;
+        rectangle.kind = ObjectKind::path;
+        rectangle.fill = Paint::solid(Qt::black);
+        EditorSession::reshape(rectangle, shape);
+        const QUuid a = f.session.addObject(rectangle, QStringLiteral("Draw Rectangle"));
+        f.session.select({a});
+        f.session.makePixelPerfect();
+        const LiveRectangle *live = f.object(a)->liveShape();
+        QVERIFY(live);
+        QCOMPARE(live->rect.normalized(), QRectF(10, 11, 41, 20));
+    }
+
     void compoundPathsTakeAFillRule()
     {
         Fixture f;

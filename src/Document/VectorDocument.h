@@ -317,11 +317,12 @@ struct VectorDocument {
     bool move(const QUuid &id, const QUuid &parent, int index);
     // Moves a layer and its contents to `index` among the layers, bottom-up.
     bool moveLayer(const QUuid &id, int index);
-    // Applies `transform` to an object and its descendants.
-    void transform(const QUuid &id, const QTransform &transform);
+    // Applies `transform` to an object and its descendants. With Scale Corners off, a live
+    // rectangle's radii stay put (clamped to the new rect); on, they scale with it.
+    void transform(const QUuid &id, const QTransform &transform, bool scaleCorners = true);
     // The same, with stroke widths scaled along (Scale Strokes & Effects) or kept. With
     // `reflowAreaText`, an upright scale resizes area type's box and leaves its glyphs alone.
-    void transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText = false);
+    void transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText, bool scaleCorners = true);
     // A copy of an object's subtree with new ids.
     std::vector<VectorObject> copySubtree(const QUuid &id) const;
     QString uniqueName(const QString &base) const;

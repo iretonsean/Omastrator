@@ -125,7 +125,7 @@ QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error)
         const QUuid copyId = copies.front().id;
         for (VectorObject &copy : copies)
             next.objects.insert(next.objects.begin() + next.indexOf(groupId) + 1 + int(next.descendants(groupId).size()), std::move(copy));
-        next.transform(copyId, QTransform::fromTranslate(at.x(), at.y()), false);
+        next.transform(copyId, QTransform::fromTranslate(at.x(), at.y()), false, false);
     }
 
     VectorObject caption;

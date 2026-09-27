@@ -462,7 +462,7 @@ void EditorSession::previewTransform(const QTransform &transform, bool reflowAre
     VectorDocument document = m_interaction->base;
     for (const QUuid &id : m_selection) {
         if (!document.isEffectivelyLocked(id))
-            document.transform(id, transform, scaleStrokes, reflowAreaText);
+            document.transform(id, transform, scaleStrokes, reflowAreaText, scaleCorners);
     }
     m_document = std::move(document);
     m_interaction->transform = transform;

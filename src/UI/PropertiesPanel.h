@@ -126,6 +126,7 @@ private:
     // While the rotation label is dragged: the point it turns about.
     std::optional<QPointF> m_rotationPivot;
     QAction *m_scaleStrokes = nullptr;
+    QAction *m_scaleCorners = nullptr;
     NumberField *m_artboardWidth = nullptr;
     NumberField *m_artboardHeight = nullptr;
     PaintSwatch *m_background = nullptr;

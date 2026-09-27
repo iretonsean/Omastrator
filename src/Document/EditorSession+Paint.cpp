@@ -20,6 +20,17 @@ void forEachPaint(VectorObject &object, const std::function<void(Paint &)> &visi
         visit(stroke.paint);
 }
 
+// A text run's own colour, where it has one: the rest of the object's runs take the object's fill.
+void forEachRunColor(VectorObject &object, const std::function<void(QColor &)> &visit)
+{
+    if (object.kind != ObjectKind::text)
+        return;
+    for (TextRun &run : object.text.runs) {
+        if (run.format.fill)
+            visit(*run.format.fill);
+    }
+}
+
 // Colours match by their eight-bit channels, as the picker and hex show them.
 bool sameColor(const QColor &a, const QColor &b)
 {
@@ -111,6 +122,7 @@ std::vector<QColor> EditorSession::selectionColors() const
                 for (const GradientStop &stop : paint.stops)
                     note(stop.color);
         });
+        forEachRunColor(object, [&](QColor &color) { note(color); });
     }
     return colors;
 }
@@ -136,6 +148,7 @@ void EditorSession::replaceColor(const QColor &from, const QColor &to)
                         paint.color = paint.stops.front().color;
                 }
             });
+            forEachRunColor(*object, [&](QColor &color) { recolor(color, from, to); });
         }
     });
 }

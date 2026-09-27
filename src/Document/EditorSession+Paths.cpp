@@ -284,6 +284,53 @@ void EditorSession::reversePaths()
     });
 }
 
+bool EditorSession::canMakePixelPerfect() const
+{
+    if (!m_document)
+        return false;
+    for (const QUuid &id : selectedLeaves()) {
+        const VectorObject *object = m_document->find(id);
+        if (object && object->kind == ObjectKind::path && !m_document->isEffectivelyLocked(id))
+            return true;
+    }
+    return false;
+}
+
+void EditorSession::makePixelPerfect()
+{
+    if (!canMakePixelPerfect())
+        return;
+    const std::vector<QUuid> leaves = selectedLeaves();
+    edit(QStringLiteral("Make Pixel Perfect"), [&](VectorDocument &document) {
+        for (const QUuid &id : leaves) {
+            VectorObject *object = document.find(id);
+            if (!object || object->kind != ObjectKind::path || document.isEffectivelyLocked(id))
+                continue;
+            // An upright live rectangle keeps its shape: snap the rect's edges themselves.
+            if (object->shape && object->shape->placement.isIdentity() && object->liveShape()) {
+                LiveRectangle shape = *object->shape;
+                const QRectF box = shape.rect.normalized();
+                QRectF snapped;
+                snapped.setCoords(std::round(box.left()), std::round(box.top()), std::round(box.right()), std::round(box.bottom()));
+                shape.rect = snapped;
+                reshape(*object, shape);
+                continue;
+            }
+            // Otherwise, every anchor rounds to the nearest whole point, handles moving with it so the
+            // curve keeps its shape. A straight, axis-aligned edge lands on the grid too: both its ends
+            // share the same coordinate, which rounds the same way on both.
+            for (Contour &contour : object->path.contours) {
+                for (PathNode &node : contour.nodes) {
+                    const QPointF rounded(std::round(node.anchor.x()), std::round(node.anchor.y()));
+                    node.translate(rounded - node.anchor);
+                }
+            }
+            // A shape whose path no longer matches it expands, as an edited anchor does.
+            object->shape.reset();
+        }
+    });
+}
+
 std::vector<QUuid> EditorSession::selectedCompoundPaths() const
 {
     std::vector<QUuid> found;

@@ -359,7 +359,7 @@ bool VectorDocument::moveUnder(const QUuid &id, const std::optional<QUuid> &pare
     return true;
 }
 
-void VectorDocument::transform(const QUuid &id, const QTransform &transform)
+void VectorDocument::transform(const QUuid &id, const QTransform &transform, bool scaleCorners)
 {
     VectorObject *object = find(id);
     if (!object)
@@ -368,7 +368,7 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform)
         // A live rectangle stays live while it stays a rectangle.
         std::optional<LiveRectangle> live;
         if (const LiveRectangle *shape = object->liveShape())
-            live = shape->transformed(transform);
+            live = shape->transformed(transform, scaleCorners);
         object->shape = live;
         if (live) {
             const Qt::FillRule rule = object->path.fillRule;
@@ -385,10 +385,10 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform)
     if (object->instance)
         object->instance->placement = object->instance->placement * transform;
     for (const QUuid &child : children(id))
-        this->transform(child, transform);
+        this->transform(child, transform, scaleCorners);
 }
 
-void VectorDocument::transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText)
+void VectorDocument::transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText, bool scaleCorners)
 {
     std::vector<QUuid> areas;
     const bool upright = transform.type() <= QTransform::TxScale && transform.m11() > 0 && transform.m22() > 0;
@@ -407,7 +407,7 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform, boo
         const VectorObject *object = find(each);
         boxes.push_back(transform.mapRect(object->transform.mapRect(QRectF(QPointF(), object->text.area->width() > 0 ? QSizeF(object->text.area->width(), std::max(object->text.area->height(), 1.0)) : QSizeF(1, 1)))));
     }
-    this->transform(id, transform);
+    this->transform(id, transform, scaleCorners);
     for (size_t index = 0; index < areas.size(); ++index) {
         VectorObject *object = find(areas[index]);
         const QRectF box = boxes[index];

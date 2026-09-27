@@ -197,7 +197,7 @@ VectorDocument selectionDocument(const VectorDocument &document, const std::vect
     }
     cropped.remove(drop);
     for (const QUuid &layer : cropped.layers())
-        cropped.transform(layer, QTransform::fromTranslate(-bounds.left(), -bounds.top()), false);
+        cropped.transform(layer, QTransform::fromTranslate(-bounds.left(), -bounds.top()), false, false);
     cropped.size = bounds.size();
     cropped.background = Qt::transparent;
     return cropped;

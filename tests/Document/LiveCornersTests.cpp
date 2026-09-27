@@ -117,6 +117,22 @@ private slots:
         QVERIFY(!f.object().shape);
     }
 
+    void scaleCornersOffKeepsRadiiClamped()
+    {
+        Fixture f(10);
+        f.session.select({f.id});
+        f.session.scaleCorners = false;
+        f.session.scaleSelection(2, 2);
+        QVERIFY(f.object().liveShape());
+        // Off: the radius stays put.
+        QCOMPARE(f.object().liveShape()->radii[0], 10.0);
+        // A shrink past twice the radius clamps it to half the shorter side.
+        f.session.scaleSelection(0.05, 0.05);
+        QVERIFY(f.object().liveShape());
+        const QRectF box = f.object().liveShape()->rect.normalized();
+        QCOMPARE(f.object().liveShape()->effectiveRadius(0), std::min(box.width(), box.height()) / 2);
+    }
+
     void editingAnAnchorExpandsTheShape()
     {
         Fixture f(10);

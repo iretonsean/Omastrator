@@ -267,6 +267,8 @@ void Menus::buildObject(QMenuBar &bar)
     add(path, QStringLiteral("average"), QStringLiteral("Average…"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_J),
         [this] { ObjectDialogs::average(session(), &m_window); });
     add(path, QStringLiteral("reversePathDirection"), QStringLiteral("Reverse Path Direction"), QKeySequence(), [this] { session().reversePaths(); });
+    object->addSeparator();
+    add(object, QStringLiteral("makePixelPerfect"), QStringLiteral("Make Pixel Perfect"), QKeySequence(), [this] { session().makePixelPerfect(); });
     QMenu *compound = object->addMenu(QStringLiteral("Compound Path"));
     compound->menuAction()->setObjectName(QStringLiteral("compoundMenu"));
     add(compound, QStringLiteral("makeCompoundPath"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_8), [this] { session().makeCompoundPath(); });

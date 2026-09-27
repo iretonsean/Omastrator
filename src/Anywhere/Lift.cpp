@@ -674,7 +674,7 @@ std::optional<Result> fromDom(const QJsonObject &answer, const Resources &resour
     }
     // Transforms nest: the innermost first, so an outer one carries the inner ones with it.
     for (auto it = transforms.rbegin(); it != transforms.rend(); ++it)
-        result.art.transform(it->first, it->second, true);
+        result.art.transform(it->first, it->second, true, false);
     // Everything outside a region lift's region is cut away by one clip over the whole.
     if (!region.isEmpty() && !result.root.isNull()) {
         const QRectF bounds = result.art.bounds(result.root, true);

@@ -20,7 +20,7 @@ VectorDocument normalized(const Lift::Result &result, QSizeF *size)
 {
     VectorDocument art = result.art;
     const QRectF bounds = art.bounds(result.root, true);
-    art.transform(result.root, QTransform::fromTranslate(-bounds.left(), -bounds.top()), false);
+    art.transform(result.root, QTransform::fromTranslate(-bounds.left(), -bounds.top()), false, false);
     art.size = bounds.size().expandedTo(QSizeF(1, 1));
     if (size)
         *size = art.size;

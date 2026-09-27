@@ -414,7 +414,7 @@ Desk::Frame DesignController::frameFor(const Target &target, bool screenshot, QS
         const QPointF offset = surface.origin() - QPointF(region.topLeft());
         if (!offset.isNull() && !art.layers().empty()) {
             for (const QUuid &root : art.children(art.layers().front()))
-                art.transform(root, QTransform::fromTranslate(offset.x(), offset.y()), false);
+                art.transform(root, QTransform::fromTranslate(offset.x(), offset.y()), false, false);
         }
         if (screenshot) {
             QImage image;

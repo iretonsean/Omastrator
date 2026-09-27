@@ -121,6 +121,7 @@ void Menus::synchronize()
     action(QStringLiteral("join"))->setEnabled(editing && s.canJoin());
     action(QStringLiteral("average"))->setEnabled(editing && s.canAverage());
     action(QStringLiteral("reversePathDirection"))->setEnabled(editing && selectionHas(s, ObjectKind::path));
+    action(QStringLiteral("makePixelPerfect"))->setEnabled(editing && s.canMakePixelPerfect());
     const std::vector<QUuid> compound = drawn ? s.selectedCompoundPaths() : std::vector<QUuid>();
     action(QStringLiteral("evenOddFillRule"))->setEnabled(editing && !compound.empty());
     action(QStringLiteral("evenOddFillRule"))->setChecked(!compound.empty() && s.document()->find(compound.front())->path.fillRule == Qt::OddEvenFill);

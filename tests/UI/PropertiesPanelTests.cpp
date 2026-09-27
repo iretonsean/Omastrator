@@ -55,6 +55,7 @@ private slots:
     void theReferencePointIsWhatXYReadAndWHKeep();
     void theLinkKeepsProportions();
     void scaleStrokesIsAnOption();
+    void scaleCornersIsAnOption();
     void relativeInputAppliesToEachObject();
     void aLabelScrubIsOneUndoStep();
     void mixedValuesReadMixed();
@@ -399,6 +400,40 @@ void PropertiesPanelTests::scaleStrokesIsAnOption()
     type(panel, "transformWField", "200");
     type(panel, "transformHField", "200");
     QVERIFY(std::abs(session.document()->find(box)->stroke.width - 8) < 1e-9);
+}
+
+void PropertiesPanelTests::scaleCornersIsAnOption()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    LiveRectangle shape;
+    shape.rect = QRectF(0, 0, 100, 60);
+    shape.radii.fill(10);
+    VectorObject rectangle;
+    rectangle.kind = ObjectKind::path;
+    rectangle.fill = Paint::solid(Qt::black);
+    EditorSession::reshape(rectangle, shape);
+    const QUuid box = session.addObject(rectangle, QStringLiteral("Draw Rectangle"));
+    PropertiesPanel panel(session);
+    auto *option = panel.findChild<QAction *>("scaleCorners");
+    QVERIFY(option && option->isCheckable() && option->isChecked());
+    // Off: a uniform scale leaves the live rectangle's radii alone.
+    option->trigger();
+    QVERIFY(!session.scaleCorners);
+    type(panel, "transformWField", "200");
+    type(panel, "transformHField", "120");
+    const LiveRectangle *scaledOff = session.document()->find(box)->liveShape();
+    QVERIFY(scaledOff);
+    QCOMPARE(scaledOff->radii[0], 10.0);
+    session.undo();
+    session.undo();
+    option->trigger();
+    QVERIFY(session.scaleCorners);
+    type(panel, "transformWField", "200");
+    type(panel, "transformHField", "120");
+    const LiveRectangle *scaledOn = session.document()->find(box)->liveShape();
+    QVERIFY(scaledOn);
+    QVERIFY(std::abs(scaledOn->radii[0] - 20.0) < 1e-6);
 }
 
 void PropertiesPanelTests::relativeInputAppliesToEachObject()

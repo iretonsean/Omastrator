@@ -271,6 +271,7 @@ void PropertiesPanel::synchronize()
     if (!m_rotationPivot)
         m_rotation->sync(0);
     m_session.scaleStrokes = m_scaleStrokes->isChecked();
+    m_session.scaleCorners = m_scaleCorners->isChecked();
 
     const QSizeF size = drawn ? m_session.document()->size : QSizeF(0, 0);
     m_artboardWidth->sync(size.width());

@@ -278,6 +278,9 @@ public:
     bool cutPath(const QUuid &id, NodeRef from, std::optional<double> t = std::nullopt);
     // Object ▸ Path ▸ Reverse Path Direction.
     void reversePaths();
+    // Object ▸ Make Pixel Perfect: snaps the selection's anchors, and live rectangles' rects, to whole points.
+    void makePixelPerfect();
+    bool canMakePixelPerfect() const;
     // Selected paths with more than one contour, whose fill rule the Properties panel shows.
     std::vector<QUuid> selectedCompoundPaths() const;
     void setFillRuleOfSelection(Qt::FillRule rule);
@@ -344,7 +347,7 @@ public:
     void setTextArea(const QUuid &id, std::optional<QSizeF> area);
     // Scale Strokes & Effects: scaling multiplies stroke widths too.
     bool scaleStrokes = false;
-    // Scale Corners: kept for live corners; paths always scale their curves.
+    // Scale Corners: off keeps a live rectangle's radii (clamped to the new rect) as it scales.
     bool scaleCorners = true;
 
     // Design system: tokens (docs/DESIGN-SYSTEMS.md) ---------------------------

@@ -12,6 +12,7 @@
 namespace {
 const QString linkKey = QStringLiteral("properties/constrainProportions");
 const QString scaleStrokesKey = QStringLiteral("properties/scaleStrokes");
+const QString scaleCornersKey = QStringLiteral("properties/scaleCorners");
 
 QTransform about(QPointF pivot, const QTransform &transform)
 {
@@ -115,6 +116,14 @@ PanelSection *PropertiesPanel::transformSection()
     connect(m_scaleStrokes, &QAction::toggled, this, [this](bool on) {
         QSettings().setValue(scaleStrokesKey, on);
         m_session.scaleStrokes = on;
+    });
+    m_scaleCorners = menu->addAction(QStringLiteral("Scale Corners"));
+    m_scaleCorners->setObjectName(QStringLiteral("scaleCorners"));
+    m_scaleCorners->setCheckable(true);
+    m_scaleCorners->setChecked(QSettings().value(scaleCornersKey, true).toBool());
+    connect(m_scaleCorners, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(scaleCornersKey, on);
+        m_session.scaleCorners = on;
     });
     options->setMenu(menu);
     options->setFixedSize(24, 22);
