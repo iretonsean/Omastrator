@@ -2,10 +2,14 @@
 
 Omastrator is a vector illustration app for Linux, built for
 [Omarchy](https://omarchy.org). It works the way Illustrator does: the same
-tools, the same shortcuts (Ctrl for ⌘) and the same menus. It also follows your
-Omarchy theme and changes with it.
+tools, the same shortcuts (Ctrl for ⌘) and the same menus. It follows your
+Omarchy theme, hands AI work to the agent you already use, and reaches past its
+own window through Omarchy's shell: an island under the bar, screen capture,
+voice commands and live editing of your websites.
 
-![Omastrator editing an imported SVG](docs/screenshots/editor.png)
+![Omastrator with a poster open, the Layers panel and the Properties panel](docs/screenshots/hero.png)
+
+More in [Screenshots](#screenshots).
 
 ## Features
 
@@ -101,6 +105,63 @@ omastrator setup            # shows each change as a diff and asks first
 omastrator setup --apply    # also loads the keys from your Hyprland config
 omastrator setup --remove   # takes out exactly what setup added
 ```
+
+## Screenshots
+
+Every picture is from demo mode: made-up documents, a sample website and an
+agent that answers with prepared results. The island and tray light are the
+shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
+
+### Drawing
+
+| | |
+|---|---|
+| ![Welcome sheet](docs/screenshots/welcome.png) | ![Smart guides](docs/screenshots/selection-smart-guides.png) |
+| The welcome sheet: a new artboard, or a recent file. | Dragging the sun: transform handles and a smart guide on the artboard's centre. |
+| ![Direct selection](docs/screenshots/direct-selection.png) | ![Pen](docs/screenshots/pen.png) |
+| Direct Selection: a path's anchors, with the picked one's handles. | The Pen tool mid-path, with the next segment following the pointer. |
+| ![Type on canvas](docs/screenshots/type-on-canvas.png) | ![Gradient fill](docs/screenshots/gradient-fill.png) |
+| Point type, edited in place on the canvas. | A linear gradient fill, its end colour open in the picker. |
+| ![Pathfinder before](docs/screenshots/pathfinder-before.png) | ![Pathfinder after](docs/screenshots/pathfinder-after.png) |
+| Pathfinder, before: four shapes selected. | After Unite: one compound path, filled with a gradient. |
+| ![Export](docs/screenshots/export.png) | ![Swatches](docs/screenshots/swatches.png) |
+| Export PNG, with a preview, resolution and the file's size. | The Swatches panel, with the Omarchy theme's colours as a group. |
+| ![Keyboard shortcuts](docs/screenshots/keyboard-shortcuts.png) | ![Connect an Agent](docs/screenshots/connect-an-agent.png) |
+| Keyboard Shortcuts: every key can be remapped. | Help ▸ Connect an Agent: the socket, the MCP line and the CLI. |
+
+### AI
+
+| | |
+|---|---|
+| ![Generate sheet](docs/screenshots/ai-generate-sheet.png) | ![Variations](docs/screenshots/ai-variations.png) |
+| Object ▸ Generate…: a brief and how many variations. | The Variations panel, with a refine field for the next round. |
+| ![Proposal bar](docs/screenshots/ai-proposal-bar.png) | ![Edit with Instruction](docs/screenshots/ai-edit-sheet.png) |
+| A picked variation is a proposal: Enter keeps it, Esc discards it. | Edit with Instruction, on the whole document. |
+| ![Edit result](docs/screenshots/ai-edit-result.png) | ![Vectorize before](docs/screenshots/ai-vectorize-before.png) |
+| The agent's recolour, waiting for Keep or Discard. | Vectorize with AI, before: a blurry placed JPEG of a logo. |
+| ![Rough trace](docs/screenshots/ai-vectorize-trace.png) | ![Vectorize after](docs/screenshots/ai-vectorize-after.png) |
+| The classic trace shows at once while the agent works. | After: the agent's redraw in 11 flat shapes. |
+| ![Roast, page 1](docs/screenshots/ai-roast-1.png) | ![Roast, page 2](docs/screenshots/ai-roast-2.png) |
+| Roast My Design at Spicy: the roast. | Page 2: three fixes, each with the value to use. |
+| ![Roast, page 3](docs/screenshots/ai-roast-3.png) | ![Roast heat](docs/screenshots/ai-roast-heat.png) |
+| Page 3: the brief, and Make variations from this feedback. | The Heat picker, from Friendly to Unhinged. |
+
+### Across Omarchy
+
+| | |
+|---|---|
+| ![Island modes](docs/screenshots/island-modes.png) | ![Island activity](docs/screenshots/island-activity.png) |
+| The island resting and expanded: Normal, Draw, Capture, AI and Live. | Activity lines: agent work, results, Live and publishing. |
+| ![Dictation](docs/screenshots/island-dictation.png) | ![Tray light](docs/screenshots/tray-light.png) |
+| Dictation: listening, then what it heard and what it will do. | The tray light: idle, working, results ready, error. |
+| ![Capture colour](docs/screenshots/capture-color-swatch.png) | ![Capture screenshot](docs/screenshots/capture-screenshot-trace.png) |
+| Pick Colour as a Swatch: picked colours land in the Swatches panel. | Screenshot Region: a part of a web page, opened and traced in colour. |
+| ![Live overlay](docs/screenshots/live-overlay.png) | ![Live spacing](docs/screenshots/live-spacing.png) |
+| Live on a sample site: the contextual bar, the colour snapped to the site's `--accent` token. | Live's spacing handles: blue for padding, amber for margin. |
+| ![Live review](docs/screenshots/live-review-window.png) | ![Setup](docs/screenshots/setup.png) |
+| Write Back: a text change written directly, a colour change by the agent, each as a diff. | `omastrator setup` shows each change and asks first. |
+| ![Menu entries](docs/screenshots/setup-menu-entries.png) | |
+| The Omastrator group setup adds to the Omarchy menu. | |
 
 ## Build
 
