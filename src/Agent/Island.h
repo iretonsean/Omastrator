@@ -9,7 +9,7 @@
 // closed; `omastrator island …` writes it and `omastrator status --follow`
 // reads it. See docs/OS-SUITE.md.
 namespace Island {
-// Normal, Draw, Capture, AI and Live, in the order the arrows step through.
+// Normal, Draw, Capture, AI, Live and Design (design mode everywhere, docs/ANYWHERE.md), in the order the arrows step through.
 const QStringList &modes();
 
 // $OMASTRATOR_RUNTIME_DIR, else $XDG_RUNTIME_DIR/omastrator, else /tmp/omastrator-<uid>.
@@ -40,6 +40,8 @@ QString setActivity(const QString &text, int seconds = 3);
 // $OMASTRATOR_APP replaces the app's command, for tests. Returns why it failed, or empty.
 QString ensureAppRunning(int timeoutMs = 15'000);
 bool appIsRunning();
+// Hands the keyboard back to the apps: leaves any Omastrator submap in Hyprland ($OMASTRATOR_HYPRCTL in tests).
+void resetKeys();
 
 // `omastrator island <verb> …`. Returns the exit code.
 int runCli(const QStringList &args, QTextStream &out, QTextStream &err);

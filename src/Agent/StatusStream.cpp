@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 
 namespace StatusStream {
@@ -13,7 +14,8 @@ QJsonObject compose(const QJsonObject &app, const Island::State &island)
     // What the island reads when the app is closed: nothing waiting, nothing ready.
     QJsonObject status{{"running", false}, {"document", false}, {"tool", "select"}, {"proposal", ""}, {"summary", ""},
                        {"waiting", ""}, {"task", ""}, {"agent", ""}, {"variations", 0}, {"variationsId", ""},
-                       {"roastId", ""}, {"offer", ""}, {"ready", false}, {"error", ""}, {"live", QJsonObject{{"state", "off"}}}};
+                       {"roastId", ""}, {"offer", ""}, {"ready", false}, {"error", ""}, {"live", QJsonObject{{"state", "off"}}},
+                       {"design", QJsonObject{{"on", false}, {"overlays", QJsonArray()}}}, {"window", false}};
     for (auto it = app.begin(); it != app.end(); ++it)
         status.insert(it.key(), it.value());
     // Dictation's state, from its own file beside the island's.

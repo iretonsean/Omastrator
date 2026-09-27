@@ -3,6 +3,7 @@
 #include "Agent/AgentLauncher.h"
 #include "Agent/AgentServer.h"
 #include "Agent/AgentTools.h"
+#include "Document/EditorSession.h"
 #include "Document/Swatches.h"
 #include "Live/AgentWork.h"
 #include "Live/DeployJob.h"
@@ -16,9 +17,11 @@
 #include <QRectF>
 #include <QTimer>
 #include <map>
+#include <memory>
 #include <optional>
 #include <vector>
 
+class DesignController;
 class ProjectWorkspace;
 
 // The app's side of docs/AI-DESIGN.md: the host the tools edit through, the
@@ -109,6 +112,19 @@ public:
     QString showPanel(const QString &panel) override;
     QString startAi(const AiRequest &request) override;
     QString live(const QString &action, const QJsonObject &params, QJsonObject &result) override;
+    QString design(const QString &action, const QJsonObject &params, QJsonObject &result) override;
+    QString showWindow(const QStringList &files) override;
+    QString quitApp() override;
+
+    // Shows the window if it's hidden (the app runs in the background), then raises it.
+    void bringForward();
+    // Design mode everywhere (docs/ANYWHERE.md): overlays, the floating bar, Ask and the Desk.
+    DesignController &designMode() { return *m_design; }
+    // Ask from the floating bar: the agent edits `overlay` as a proposal, as Edit with Instruction does the front
+    // document. Returns why it couldn't start, or empty.
+    QString askOnOverlay(EditorSession &overlay, const QString &requestId, const QString &prompt);
+    // The session an Ask on the overlay is working in, while it lasts.
+    EditorSession *designTarget() const { return m_designTarget; }
 
     // Live mode: a page or project in Omastrator's Chromium. $OMASTRATOR_LIVE_HEADLESS runs it headless, for tests.
     LiveSession &liveSession() { return m_live; }
@@ -295,4 +311,7 @@ private:
     QPointer<QWidget> m_historyContent;
     FloatingPanel m_swatchesPanel{QStringLiteral("swatchesPanel"), m_window};
     QPointer<QWidget> m_swatchesContent;
+    // Set while an Ask from the floating bar works on the overlay: the agent's methods act there.
+    QPointer<EditorSession> m_designTarget;
+    std::unique_ptr<DesignController> m_design;
 };

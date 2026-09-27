@@ -65,4 +65,13 @@ public:
     virtual QString startAi(const AiRequest &) { return QStringLiteral("This Omastrator can't start AI flows."); }
     // The `live` method's actions; `result` gets what the action returns. Returns why it failed, or empty.
     virtual QString live(const QString &action, const QJsonObject &, QJsonObject &) { return QStringLiteral("This Omastrator has no Live mode (%1).").arg(action); }
+    // The `design` method: design mode everywhere (docs/ANYWHERE.md). Returns why it failed, or empty.
+    virtual QString design(const QString &action, const QJsonObject &, QJsonObject &)
+    {
+        return QStringLiteral("This Omastrator has no design mode (%1).").arg(action);
+    }
+    // show_window: the window forward, with `files` opened in it. The app may run in the background without one shown.
+    virtual QString showWindow(const QStringList &) { return QStringLiteral("This Omastrator has no window."); }
+    // quit_app: the app asks about unsaved documents, then quits, background and all.
+    virtual QString quitApp() { return QStringLiteral("This Omastrator can't be quit from here."); }
 };

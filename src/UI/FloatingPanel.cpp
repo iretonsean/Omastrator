@@ -57,6 +57,9 @@ FloatingPanel::~FloatingPanel()
 
 void FloatingPanel::show(const QString &title, QWidget *content)
 {
+    // In the background (`omastrator --daemon`) a panel brings the window it belongs to.
+    if (!m_owner.window()->isVisible() && m_owner.window()->property("background").toBool())
+        m_owner.window()->show();
     if (!m_panel) {
         m_panel = new PanelWindow(*this, m_owner.window());
         m_panel->setObjectName(m_name);

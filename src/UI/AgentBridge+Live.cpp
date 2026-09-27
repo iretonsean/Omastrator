@@ -263,8 +263,7 @@ void AgentBridge::showLivePanel(bool changes)
 QString AgentBridge::live(const QString &action, const QJsonObject &params, QJsonObject &result)
 {
     auto forward = [this] {
-        m_window.raise();
-        m_window.activateWindow();
+        bringForward();
     };
     if (action == QLatin1String("start")) {
         const QUrl url = QUrl::fromUserInput(params["url"].toString());

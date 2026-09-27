@@ -3,6 +3,7 @@
 #include "Agent/AgentProtocol.h"
 #include "Agent/Capture.h"
 #include "Agent/Dictation.h"
+#include "Agent/Hyprland.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -61,7 +62,7 @@ namespace Island {
 const QStringList &modes()
 {
     static const QStringList all{QStringLiteral("normal"), QStringLiteral("draw"), QStringLiteral("capture"), QStringLiteral("ai"),
-                                 QStringLiteral("live")};
+                                 QStringLiteral("live"), QStringLiteral("design")};
     return all;
 }
 
@@ -148,13 +149,20 @@ bool appIsRunning()
     return up;
 }
 
+void resetKeys()
+{
+    // Harmless when no submap is held.
+    Hyprland::dispatch(QStringLiteral("hl.dispatch(hl.dsp.submap(\"reset\"))"), QStringLiteral("submap reset"));
+}
+
 QString ensureAppRunning(int timeoutMs)
 {
     if (appIsRunning())
         return {};
     const QString overridden = qEnvironmentVariable("OMASTRATOR_APP");
     const QString program = overridden.isEmpty() ? QCoreApplication::applicationFilePath() : overridden;
-    if (!QProcess::startDetached(program, {}))
+    // In the background: the window opens only when something asks for it.
+    if (!QProcess::startDetached(program, {QStringLiteral("--daemon")}))
         return QStringLiteral("Could not start Omastrator (%1).").arg(program);
     for (int waited = 0; waited < timeoutMs; waited += 100) {
         QThread::msleep(100);
@@ -170,8 +178,9 @@ QString helpText()
         "Usage: omastrator island <verb> [args]\n\n"
         "Drives the Omastrator island in omarchy-shell. The island reads\n"
         "`omastrator status --follow`; these change what it shows.\n\n"
-        "  mode <normal|draw|capture|ai|live|next|previous>\n"
-        "                     Switch mode. Draw starts Omastrator if it isn't running.\n"
+        "  mode <normal|draw|capture|ai|live|design|next|previous>\n"
+        "                     Switch mode. Draw and Design start Omastrator in the\n"
+        "                     background if it isn't running.\n"
         "  tool <name>        Choose a canvas tool (pen, rectangle, …), in Draw mode.\n"
         "  expand | rest | toggle\n"
         "                     Show the mode's tools, or just the mode glyph.\n"
@@ -242,12 +251,17 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         const QString mode = resolveMode(args.value(1), state.mode);
         if (mode.isEmpty())
             return failed(QStringLiteral("Choose a mode: %1, next or previous.").arg(modes().join(QStringLiteral(", "))));
+        const bool leftDesign = state.mode == QLatin1String("design") && mode != QLatin1String("design");
         state.mode = mode;
         // Normal rests; every other mode opens on its tools.
         state.expanded = mode != QLatin1String("normal");
         if (const int code = save(state); code != 0)
             return code;
-        if (mode == QLatin1String("draw")) {
+        // The design keys (Esc, Alt) go back to the apps however design mode was left.
+        if (leftDesign)
+            resetKeys();
+        // Design mode is kept by the background app, which starts it if it isn't running.
+        if (mode == QLatin1String("draw") || mode == QLatin1String("design")) {
             if (const QString failure = ensureAppRunning(); !failure.isEmpty())
                 return failed(failure);
         }

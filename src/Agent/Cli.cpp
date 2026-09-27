@@ -1,5 +1,6 @@
 #include "Agent/Cli.h"
 #include "Agent/AgentClient.h"
+#include "Agent/DesignCli.h"
 #include "Agent/Island.h"
 #include "Agent/Setup.h"
 #include "Agent/StatusStream.h"
@@ -9,7 +10,7 @@
 namespace Cli {
 bool handles(const char *command)
 {
-    for (const char *each : {"agent", "--mcp", "status", "island", "setup"}) {
+    for (const char *each : {"agent", "--mcp", "status", "island", "setup", "design", "desk", "daemon"}) {
         if (std::strcmp(command, each) == 0)
             return true;
     }
@@ -29,6 +30,12 @@ int run(const QStringList &args)
         return StatusStream::runCli(args.mid(1), out, err);
     if (command == QLatin1String("island"))
         return Island::runCli(args.mid(1), out, err);
+    if (command == QLatin1String("design"))
+        return DesignCli::runDesign(args.mid(1), out, err);
+    if (command == QLatin1String("desk"))
+        return DesignCli::runDesk(args.mid(1), out, err);
+    if (command == QLatin1String("daemon"))
+        return DesignCli::runDaemon(args.mid(1), out, err);
     if (command == QLatin1String("setup")) {
         QTextStream in(stdin);
         return Setup::runCli(args.mid(1), in, out, err);

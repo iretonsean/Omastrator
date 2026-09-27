@@ -1,0 +1,33 @@
+#pragma once
+#include "Agent/Hyprland.h"
+#include <QColor>
+#include <QImage>
+#include <QJsonObject>
+#include <optional>
+#include <vector>
+
+// Where design mode learns about the screen. The system one asks Hyprland,
+// AT-SPI and grim; tests give a fake one, so they never read the real desktop.
+class DesktopSource {
+public:
+    virtual ~DesktopSource() = default;
+    virtual std::optional<QPoint> cursor() = 0;
+    virtual std::vector<Hyprland::Window> windows() = 0;
+    virtual std::vector<Hyprland::Monitor> monitors() = 0;
+    // The accessible object at a point inside `window` (window coordinates), as Inspect::accessibleAt answers.
+    virtual std::optional<QJsonObject> accessible(const Hyprland::Window &window, QPoint windowPoint) = 0;
+    // The screen's colour at a point.
+    virtual std::optional<QColor> pixel(QPoint point) = 0;
+    // A screenshot of `rect`, for Capture to Desk; null with `error` set when it can't.
+    virtual QImage grab(const QRect &rect, QString *error) = 0;
+};
+
+class SystemSource final : public DesktopSource {
+public:
+    std::optional<QPoint> cursor() override;
+    std::vector<Hyprland::Window> windows() override;
+    std::vector<Hyprland::Monitor> monitors() override;
+    std::optional<QJsonObject> accessible(const Hyprland::Window &window, QPoint windowPoint) override;
+    std::optional<QColor> pixel(QPoint point) override;
+    QImage grab(const QRect &rect, QString *error) override;
+};

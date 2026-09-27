@@ -1,0 +1,229 @@
+#include "Agent/DesignCli.h"
+#include "Agent/AgentClient.h"
+#include "Agent/AgentProtocol.h"
+#include "Agent/Island.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+
+namespace {
+int failed(QTextStream &err, const QString &message)
+{
+    err << message << '\n';
+    return 1;
+}
+
+// Calls the background app, starting it first. Errors also reach the island, since the overlay's clicks have no terminal.
+int call(const QString &method, const QJsonObject &params, QTextStream &out, QTextStream &err, bool print = false)
+{
+    if (const QString failure = Island::ensureAppRunning(); !failure.isEmpty()) {
+        Island::setActivity(failure, 6);
+        return failed(err, failure);
+    }
+    try {
+        AgentClient::Connection connection;
+        const QJsonObject result = connection.call(method, params, 60'000);
+        if (print)
+            out << QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Indented));
+        return 0;
+    } catch (const AgentProtocol::Error &failure) {
+        Island::setActivity(failure.message(), 6);
+        return failed(err, failure.message());
+    }
+}
+
+// "--name VALUE" taken out of `words`; false when the value is missing.
+bool option(QStringList &words, const QString &name, QString *value)
+{
+    const qsizetype at = words.indexOf(name);
+    if (at < 0)
+        return true;
+    if (at + 1 >= words.size())
+        return false;
+    *value = words[at + 1];
+    words.remove(at, 2);
+    return true;
+}
+}
+
+namespace DesignCli {
+QString designHelp()
+{
+    return QStringLiteral(
+        "Usage: omastrator design <verb> [args]\n\n"
+        "Design mode everywhere (docs/ANYWHERE.md): inspect, measure and draw on top\n"
+        "of any window, page or the desktop. Clicks still reach the apps underneath.\n\n"
+        "  on [--monitor NAME] | off | toggle\n"
+        "                     Start or leave design mode on the focused monitor.\n"
+        "  tool <inspect|pen|rectangle|ellipse|line|arrow|text|note>\n"
+        "                     What the overlay does with the pointer. Inspect leaves\n"
+        "                     it click-through; the others draw on the surface.\n"
+        "  alt on|off         Hold to measure from what's hovered to the next thing.\n"
+        "  select ID | deselect\n"
+        "                     Pin the floating bar to a hovered thing (its id).\n"
+        "  measure ID [off]   Measure from that thing until turned off.\n"
+        "  draw TOOL X,Y [X,Y…] [--text WORDS]\n"
+        "                     Draw on the surface under the first point.\n"
+        "  action ID [--target N]\n"
+        "                     One of the floating bar's actions.\n"
+        "  ask WORDS [--target N]\n"
+        "                     The agent works on what's pointed at; the result is a\n"
+        "                     preview on the overlay to keep or discard.\n"
+        "  keep | discard     Keep or discard that preview.\n"
+        "  send <overlay|desk|document|source|agent> [--surface KEY] [--target N]\n"
+        "       [--prompt WORDS]\n"
+        "                     Where a surface's work goes; remembered per surface.\n"
+        "  undo | redo | clear KEY\n"
+        "                     The overlay's history, and taking a surface's art away.\n"
+        "  onboarding [open|close|done|skip] | onboarding QUESTION VALUE…\n"
+        "                     The few questions that tune the suggestions.\n"
+        "  status             Print design mode's state as JSON.\n\n"
+        "Also: omastrator desk [show|window|toggle|hide]\n"
+        "      omastrator daemon [start|stop|status]\n");
+}
+
+int runDesign(const QStringList &args, QTextStream &out, QTextStream &err)
+{
+    const QString verb = args.value(0);
+    if (verb.isEmpty() || verb == QLatin1String("--help") || verb == QLatin1String("-h") || verb == QLatin1String("help")) {
+        (verb.isEmpty() ? err : out) << designHelp();
+        return verb.isEmpty() ? 1 : 0;
+    }
+    QStringList rest = args.mid(1);
+    QJsonObject params{{"action", verb}};
+    auto targetOption = [&]() {
+        QString target;
+        if (!option(rest, QStringLiteral("--target"), &target))
+            return false;
+        if (!target.isEmpty())
+            params["target"] = target.toInt();
+        return true;
+    };
+    if (verb == QLatin1String("on") || verb == QLatin1String("off") || verb == QLatin1String("toggle")) {
+        QString monitor;
+        if (!option(rest, QStringLiteral("--monitor"), &monitor))
+            return failed(err, QStringLiteral("--monitor needs a name."));
+        const bool on = verb == QLatin1String("toggle") ? Island::read().mode != QLatin1String("design") : verb == QLatin1String("on");
+        // The island's mode is the switch; the background app follows it.
+        if (const int code = Island::runCli({QStringLiteral("mode"), on ? QStringLiteral("design") : QStringLiteral("normal")}, out, err); code != 0)
+            return code;
+        if (!on)
+            return 0;
+        params["action"] = QStringLiteral("on");
+        if (!monitor.isEmpty())
+            params["monitor"] = monitor;
+        return call(QStringLiteral("design"), params, out, err);
+    }
+    if (verb == QLatin1String("status"))
+        return call(QStringLiteral("design"), params, out, err, true);
+    if (verb == QLatin1String("tool")) {
+        if (rest.size() != 1)
+            return failed(err, QStringLiteral("Name one tool: inspect, pen, rectangle, ellipse, line, arrow, text or note."));
+        params["tool"] = rest[0];
+    } else if (verb == QLatin1String("alt")) {
+        params["on"] = rest.value(0) != QLatin1String("off");
+    } else if (verb == QLatin1String("select")) {
+        params["target"] = rest.value(0).toInt();
+    } else if (verb == QLatin1String("measure")) {
+        params["target"] = rest.value(0).toInt();
+        params["on"] = rest.value(1) != QLatin1String("off");
+    } else if (verb == QLatin1String("draw")) {
+        QString text;
+        if (!option(rest, QStringLiteral("--text"), &text))
+            return failed(err, QStringLiteral("--text needs words."));
+        if (rest.size() < 2)
+            return failed(err, QStringLiteral("Say the tool and at least one point: omastrator design draw rectangle 10,10 200,120"));
+        params["tool"] = rest.takeFirst();
+        QJsonArray points;
+        for (const QString &pair : rest) {
+            const QStringList xy = pair.split(QLatin1Char(','));
+            bool okX = false, okY = false;
+            const double x = xy.value(0).toDouble(&okX), y = xy.value(1).toDouble(&okY);
+            if (xy.size() != 2 || !okX || !okY)
+                return failed(err, QStringLiteral("“%1” isn't a point. Write points as X,Y.").arg(pair));
+            points.append(QJsonArray{x, y});
+        }
+        params["points"] = points;
+        if (!text.isEmpty())
+            params["text"] = text;
+    } else if (verb == QLatin1String("action")) {
+        if (!targetOption())
+            return failed(err, QStringLiteral("--target needs an id."));
+        if (rest.size() != 1)
+            return failed(err, QStringLiteral("Name one action, such as: omastrator design action capture"));
+        params["id"] = rest[0];
+    } else if (verb == QLatin1String("ask")) {
+        if (!targetOption())
+            return failed(err, QStringLiteral("--target needs an id."));
+        params["prompt"] = rest.join(QLatin1Char(' '));
+    } else if (verb == QLatin1String("send")) {
+        QString surface, prompt;
+        if (!targetOption() || !option(rest, QStringLiteral("--surface"), &surface) || !option(rest, QStringLiteral("--prompt"), &prompt))
+            return failed(err, QStringLiteral("An option is missing its value."));
+        if (rest.size() != 1)
+            return failed(err, QStringLiteral("Send to one of: overlay, desk, document, source or agent."));
+        params["destination"] = rest[0];
+        if (!surface.isEmpty())
+            params["surface"] = surface;
+        if (!prompt.isEmpty())
+            params["prompt"] = prompt;
+    } else if (verb == QLatin1String("clear") || verb == QLatin1String("selectArt")) {
+        if (rest.isEmpty())
+            return failed(err, QStringLiteral("Name the surface's key, as `omastrator design status` shows it."));
+        params["surface"] = rest[0];
+    } else if (verb == QLatin1String("onboarding")) {
+        const QString first = rest.value(0);
+        if (first.isEmpty() || first == QLatin1String("open"))
+            params["open"] = true;
+        else if (first == QLatin1String("close"))
+            params["open"] = false;
+        else if (first == QLatin1String("done") || first == QLatin1String("skip"))
+            params["finish"] = first == QLatin1String("done");
+        else {
+            params["question"] = first;
+            params["values"] = QJsonArray::fromStringList(rest.mid(1));
+        }
+    } else if (!QStringList{"keep", "discard", "undo", "redo", "deselect"}.contains(verb)) {
+        return failed(err, QStringLiteral("There is no design verb “%1”. Run `omastrator design --help`.").arg(verb));
+    }
+    return call(QStringLiteral("design"), params, out, err);
+}
+
+int runDesk(const QStringList &args, QTextStream &out, QTextStream &err)
+{
+    const QString how = args.value(0, QStringLiteral("show"));
+    if (how == QLatin1String("--help") || how == QLatin1String("-h")) {
+        out << "Usage: omastrator desk [show|window|toggle|hide]\n\n"
+               "The Desk: one canvas for everything sent from any surface. show opens it on\n"
+               "its own Hyprland workspace, window as a normal window where you are.\n";
+        return 0;
+    }
+    if (!QStringList{"show", "window", "toggle", "hide"}.contains(how))
+        return failed(err, QStringLiteral("Choose show, window, toggle or hide."));
+    return call(QStringLiteral("design"), {{"action", "desk"}, {"how", how}}, out, err);
+}
+
+int runDaemon(const QStringList &args, QTextStream &out, QTextStream &err)
+{
+    const QString verb = args.value(0, QStringLiteral("start"));
+    if (verb == QLatin1String("status")) {
+        out << (Island::appIsRunning() ? "Omastrator is running.\n" : "Omastrator isn't running.\n");
+        return 0;
+    }
+    if (verb == QLatin1String("start")) {
+        const QString failure = Island::ensureAppRunning();
+        return failure.isEmpty() ? 0 : failed(err, failure);
+    }
+    if (verb == QLatin1String("stop")) {
+        if (!Island::appIsRunning())
+            return 0;
+        try {
+            AgentClient::Connection connection;
+            connection.call(QStringLiteral("quit_app"), {});
+            return 0;
+        } catch (const AgentProtocol::Error &failure) {
+            return failed(err, failure.message());
+        }
+    }
+    return failed(err, QStringLiteral("Usage: omastrator daemon [start|stop|status]"));
+}
+}

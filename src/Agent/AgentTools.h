@@ -29,6 +29,8 @@ public:
     QString proposalTitle() const;
     // status_get's answer: never throws, and needs no document.
     QJsonObject status();
+    // The `design` method's actions (docs/ANYWHERE.md).
+    static const QStringList &designActions();
 
     // The last screenshot open_capture traced, which Vectorize with AI can take next.
     struct Capture {
@@ -94,6 +96,9 @@ private:
     QJsonObject liveDeployed(const QJsonObject &params);
     QJsonObject live(const QJsonObject &params);
     QJsonObject command(const QJsonObject &params);
+    QJsonObject design(const QJsonObject &params);
+    QJsonObject showWindow(const QJsonObject &params);
+    QJsonObject quitApp(const QJsonObject &params);
     // The session to act on for the user; refused while a drag or proposal is open.
     EditorSession &idleSession();
     // Commits `document` as one undo step named `name`.

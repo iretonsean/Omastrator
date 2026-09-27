@@ -1,6 +1,7 @@
 #include "Agent/AgentClient.h"
 #include "Agent/AgentServer.h"
 #include "Agent/AgentTools.h"
+#include "Agent/DesignCli.h"
 #include "Agent/Island.h"
 #include "Agent/StatusStream.h"
 #include "FakeAgentHost.h"
@@ -36,6 +37,7 @@ private:
     QObject *m_anchor = nullptr;
     Backend *m_backend = nullptr;
     QString m_path;
+    QString m_hyprctl;
 
     template<typename Work>
     void onBackend(Work work)
@@ -72,8 +74,16 @@ private slots:
         qputenv("OMASTRATOR_SOCKET", m_path.toUtf8());
         qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
         qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
-        // Nothing here may start a real Omastrator.
+        // Nothing here may start a real Omastrator, or reach the real Hyprland.
         qputenv("OMASTRATOR_APP", "/bin/true");
+        m_hyprctl = m_directory.filePath(QStringLiteral("hyprctl"));
+        QFile hyprctl(m_hyprctl);
+        QVERIFY(hyprctl.open(QIODevice::WriteOnly));
+        hyprctl.write("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$0.log\"\n");
+        hyprctl.close();
+        hyprctl.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        qputenv("OMASTRATOR_HYPRCTL", m_hyprctl.toUtf8());
+        qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
         m_anchor = new QObject;
         m_anchor->moveToThread(&m_thread);
         m_thread.start();
@@ -188,8 +198,12 @@ private slots:
         QCOMPARE(Island::read().mode, QStringLiteral("ai"));
         QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("next")}), 0);
         QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("next")}), 0);
+        QCOMPARE(Island::read().mode, QStringLiteral("design"));
+        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("next")}), 0);
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
         QVERIFY(!Island::read().expanded);
+        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("previous")}), 0);
+        QCOMPARE(Island::read().mode, QStringLiteral("design"));
         QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("previous")}), 0);
         QCOMPARE(Island::read().mode, QStringLiteral("live"));
         QCOMPARE(island({QStringLiteral("rest")}), 0);
@@ -232,6 +246,58 @@ private slots:
         QCOMPARE(island({QStringLiteral("tool"), QStringLiteral("blob")}, &out, &err), 1);
         QVERIFY(err.contains(QLatin1String("blob")));
         QCOMPARE(island({QStringLiteral("tool"), QStringLiteral("select")}), 0);
+    }
+
+    // Design mode everywhere (docs/ANYWHERE.md): the hotkey's `design on`, the overlay's clicks, and Esc.
+    void designModeIsTheIslandsModeAndTheAppsMethod()
+    {
+        QString output, errors;
+        QTextStream out(&output), err(&errors);
+        auto calls = [&] {
+            std::vector<std::pair<QString, QJsonObject>> seen;
+            onBackend([&] { seen = m_backend->host.designCalls; });
+            return seen;
+        };
+        onBackend([&] { m_backend->host.designCalls.clear(); });
+        QFile::remove(m_hyprctl + QStringLiteral(".log"));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("on")}, out, err), 0);
+        QCOMPARE(Island::read().mode, QStringLiteral("design"));
+        QVERIFY(Island::read().expanded);
+        QCOMPARE(calls().back().first, QStringLiteral("on"));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("tool"), QStringLiteral("rectangle")}, out, err), 0);
+        QCOMPARE(calls().back().second["tool"].toString(), QStringLiteral("rectangle"));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("draw"), QStringLiteral("arrow"), QStringLiteral("10,20"), QStringLiteral("300,40.5")}, out, err), 0);
+        QCOMPARE(calls().back().second["points"].toArray(), (QJsonArray{QJsonArray{10, 20}, QJsonArray{300, 40.5}}));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("draw"), QStringLiteral("note"), QStringLiteral("5,5"), QStringLiteral("--text"), QStringLiteral("Too tight")}, out, err), 0);
+        QCOMPARE(calls().back().second["text"].toString(), QStringLiteral("Too tight"));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("draw"), QStringLiteral("pen"), QStringLiteral("5;5")}, out, err), 1);
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("ask"), QStringLiteral("--target"), QStringLiteral("7"), QStringLiteral("tighten"), QStringLiteral("this")}, out, err), 0);
+        QCOMPARE(calls().back().second["prompt"].toString(), QStringLiteral("tighten this"));
+        QCOMPARE(calls().back().second["target"].toInt(), 7);
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("send"), QStringLiteral("desk"), QStringLiteral("--surface"), QStringLiteral("window:foot")}, out, err), 0);
+        QCOMPARE(calls().back().second["destination"].toString(), QStringLiteral("desk"));
+        QCOMPARE(calls().back().second["surface"].toString(), QStringLiteral("window:foot"));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("onboarding"), QStringLiteral("makes"), QStringLiteral("web"), QStringLiteral("rice")}, out, err), 0);
+        QCOMPARE(calls().back().second["values"].toArray(), (QJsonArray{"web", "rice"}));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("onboarding"), QStringLiteral("skip")}, out, err), 0);
+        QCOMPARE(calls().back().second["finish"].toBool(true), false);
+        QCOMPARE(DesignCli::runDesk({QStringLiteral("window")}, out, err), 0);
+        QCOMPARE(calls().back().first, QStringLiteral("desk"));
+        QCOMPARE(calls().back().second["how"].toString(), QStringLiteral("window"));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("sideways")}, out, err), 1);
+        // Esc: the island goes back to Normal and Hyprland gives the keys back.
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("off")}, out, err), 0);
+        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
+        QFile log(m_hyprctl + QStringLiteral(".log"));
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(log.readAll()).trimmed(), QStringLiteral("dispatch submap reset"));
+        // Toggle turns it on and off again.
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("toggle")}, out, err), 0);
+        QCOMPARE(Island::read().mode, QStringLiteral("design"));
+        QCOMPARE(DesignCli::runDesign({QStringLiteral("toggle")}, out, err), 0);
+        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
+        // The composed status always has a design key, so the overlay never reads undefined.
+        QVERIFY(StatusStream::compose({}, Island::read())["design"].toObject().contains("on"));
     }
 
     void islandAiStartsFlowsInTheApp()

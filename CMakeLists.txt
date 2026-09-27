@@ -57,8 +57,12 @@ file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/overlay.js OVERLAY_SOURCE)
 configure_file(cmake/OverlayScript.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/Live/OverlayScript.h @ONLY)
 target_include_directories(oma_live PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
+# Design mode everywhere (docs/ANYWHERE.md): the desktop's surfaces, inspecting them, the overlays, the Desk and the floating bar.
+oma_library(oma_anywhere src/Anywhere/*.cpp)
+target_link_libraries(oma_anywhere PUBLIC oma_live oma_io)
+
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
-target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_cloud oma_canvas oma_agent oma_live)
+target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_cloud oma_canvas oma_agent oma_live oma_anywhere)
 
 include(GNUInstallDirs)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
@@ -124,4 +128,5 @@ oma_tests(oma_cloud Cloud)
 oma_tests(oma_canvas Canvas)
 oma_tests(oma_agent Agent)
 oma_tests(oma_live Live)
+oma_tests(oma_anywhere Anywhere)
 oma_tests(oma_ui UI)
