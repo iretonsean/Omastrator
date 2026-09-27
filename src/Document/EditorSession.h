@@ -1,0 +1,254 @@
+#pragma once
+#include "Document/DocumentHistory.h"
+#include "Document/PathOperations.h"
+#include "Document/VectorDocument.h"
+#include "Rendering/CanvasViewport.h"
+#include <QObject>
+#include <QString>
+#include <QTransform>
+#include <QUuid>
+#include <array>
+#include <functional>
+#include <optional>
+#include <vector>
+
+// The toolbar, top to bottom. Keys follow Illustrator's.
+enum class Tool {
+    select,          // V
+    directSelect,    // A
+    pen,             // P
+    pencil,          // N
+    text,            // T
+    line,            // backslash
+    rectangle,       // M
+    roundedRectangle,
+    ellipse,         // L
+    polygon,
+    star,
+    rotate,          // R
+    scale,           // S
+    eyedropper,      // I
+    hand,            // H
+    zoom,            // Z
+};
+inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::line,
+                                     Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
+                                     Tool::rotate, Tool::scale, Tool::eyedropper, Tool::hand, Tool::zoom};
+QString rawValue(Tool tool);
+// The tool's name as the toolbar's tooltip shows it.
+QString title(Tool tool);
+bool isShapeTool(Tool tool);
+
+enum class ArrangeOrder { bringToFront, bringForward, sendBackward, sendToBack };
+enum class AlignEdge { left, horizontalCenter, right, top, verticalCenter, bottom };
+enum class DistributeAxis { horizontal, vertical };
+// Aligns to the selection's bounds, or the artboard's with one object.
+enum class AlignTarget { selection, artboard };
+
+// One document being edited: its objects, selection, tool, style and history.
+// Every edit goes through here and ends with `changed()`.
+class EditorSession : public QObject {
+    Q_OBJECT
+public:
+    explicit EditorSession(QObject *parent = nullptr);
+
+    // Document ---------------------------------------------------------------
+    const std::optional<VectorDocument> &document() const { return m_document; }
+    bool hasDocument() const { return m_document.has_value(); }
+    // A new blank artboard; history starts over.
+    void createDocument(QSizeF size);
+    // An opened file; history starts over and the file is clean.
+    void loadDocument(VectorDocument document);
+    void closeDocument();
+    void setArtboardSize(QSizeF size);
+    void setArtboardBackground(const QColor &color);
+
+    // Tools and default style ------------------------------------------------
+    Tool tool() const { return m_tool; }
+    void selectTool(Tool tool);
+    // New objects take these; with a selection, the Properties panel edits it instead.
+    const Paint &defaultFill() const { return m_defaultFill; }
+    const StrokeStyle &defaultStroke() const { return m_defaultStroke; }
+    void setDefaultFill(const Paint &fill);
+    void setDefaultStroke(const StrokeStyle &stroke);
+    // X: fill and stroke trade colours. D: black stroke, white fill.
+    void swapFillAndStroke();
+    void resetDefaultColors();
+    TextContent defaultText;
+    double cornerRadius = 12;
+    int polygonSides = 6;
+    int starPoints = 5;
+    // Inner over outer radius.
+    double starInnerRatio = 0.5;
+
+    // Selection --------------------------------------------------------------
+    // Objects directly under a layer, or deeper after a group is entered.
+    const std::vector<QUuid> &selection() const { return m_selection; }
+    bool isSelected(const QUuid &id) const;
+    void select(const std::vector<QUuid> &ids);
+    void toggleSelected(const QUuid &id);
+    void selectAll();
+    void deselectAll();
+    // Everything whose bounds meet `rect`, as a marquee drag selects.
+    std::vector<QUuid> objectsIn(const QRectF &rect, bool deep) const;
+    QRectF selectionBounds(bool includeStroke = false) const;
+    // Leaf paths, texts and images under the selection.
+    std::vector<QUuid> selectedLeaves() const;
+    // Direct selection: the anchors picked on each path.
+    struct PickedNode {
+        QUuid object;
+        NodeRef node;
+        friend bool operator==(const PickedNode &, const PickedNode &) = default;
+    };
+    const std::vector<PickedNode> &pickedNodes() const { return m_pickedNodes; }
+    void pickNodes(const std::vector<PickedNode> &nodes);
+    // The layer new objects go in: the selection's, else the last one picked.
+    std::optional<QUuid> activeLayer() const;
+    void setActiveLayer(const QUuid &id);
+
+    // History ----------------------------------------------------------------
+    // Edits between begin and end are one undo step, named for the Edit menu.
+    void beginEdit(const QString &name);
+    void endEdit();
+    bool canUndo() const { return m_history.canUndo(); }
+    bool canRedo() const { return m_history.canRedo(); }
+    QString undoName() const { return m_history.undoName(); }
+    QString redoName() const { return m_history.redoName(); }
+    void undo();
+    void redo();
+    bool isModified() const { return m_history.isModified(); }
+    void markSaved();
+
+    // Interactive edits: a drag previews against the objects as they were
+    // when it began, and ends in one undo step or none.
+    void beginInteraction(const QString &name);
+    bool isInteracting() const { return m_interaction.has_value(); }
+    // The selection transformed from where the interaction began.
+    void previewTransform(const QTransform &transform);
+    // Replaces one object wholesale, for path point drags.
+    void previewObject(const VectorObject &object);
+    // The object as the interaction found it.
+    const VectorObject *originalObject(const QUuid &id) const;
+    void commitInteraction();
+    void cancelInteraction();
+
+    // Objects ----------------------------------------------------------------
+    // Adds above the selection (or on top of the active layer) and selects it.
+    QUuid addObject(VectorObject object, const QString &editName);
+    // A path with the default fill and stroke.
+    QUuid addPath(const VectorPath &path, const QString &name);
+    QUuid addText(QPointF baselineOrigin, const QString &text);
+    // An image placed at its pixel size, centred on `center`.
+    QUuid placeImage(const QImage &image, const QString &name, std::optional<QPointF> center = std::nullopt);
+    // Replaces an object's fields in one undo step.
+    void updateObject(const VectorObject &object, const QString &editName);
+    void deleteSelection();
+    void duplicateSelection(QPointF offset = {10, 10});
+    void groupSelection();
+    void ungroupSelection();
+    // Object ▸ Clipping Mask ▸ Make: the topmost object clips the rest.
+    void makeClippingMask();
+    void releaseClippingMask();
+    void arrange(ArrangeOrder order);
+    void align(AlignEdge edge, AlignTarget target = AlignTarget::selection);
+    void distribute(DistributeAxis axis);
+    void moveSelection(QPointF delta);
+    void transformSelection(const QTransform &transform, const QString &editName);
+    void rotateSelection(double degrees);
+    void flipSelection(Qt::Orientation orientation);
+    void scaleSelection(double sx, double sy);
+    // Pathfinder on the selected leaves; the result takes the bottom one's style.
+    void combineSelection(BooleanOperation operation);
+    // Object ▸ Path ▸ Outline Stroke: strokes become filled paths.
+    void outlineSelectedStrokes();
+    // Object ▸ Path ▸ Offset Path: a copy grown by `distance`.
+    void offsetSelection(double distance);
+    void simplifySelection(double tolerance);
+    // Type ▸ Create Outlines.
+    void convertTextToPaths();
+    // Object ▸ Compound Path ▸ Make / Release.
+    void makeCompoundPath();
+    void releaseCompoundPath();
+    void setFillOfSelection(const Paint &fill);
+    void setStrokeOfSelection(const StrokeStyle &stroke);
+    void setOpacityOfSelection(double opacity);
+    void setBlendModeOfSelection(LayerBlendMode mode);
+    // Eyedropper: the clicked object's style onto the selection, or the defaults.
+    void pickStyle(const QUuid &from);
+    // Direct selection: deletes the picked anchors; empty paths go.
+    void deletePickedNodes();
+    // Pen tool: joins the picked end anchors of one open contour.
+    void closePath(const QUuid &id, int contour);
+
+    // Layers panel -----------------------------------------------------------
+    QUuid addLayer();
+    void deleteObjects(const std::vector<QUuid> &ids);
+    void rename(const QUuid &id, const QString &name);
+    void setVisible(const QUuid &id, bool visible);
+    void setLocked(const QUuid &id, bool locked);
+    void setExpanded(const QUuid &id, bool expanded);
+    // Moves `id` under `parent` at child `index` (bottom-up), one undo step.
+    bool moveObject(const QUuid &id, const QUuid &parent, int index);
+    void lockSelection();
+    void unlockAll();
+    void hideSelection();
+    void showAll();
+
+    // Clipboard --------------------------------------------------------------
+    void copy() const;
+    void cut();
+    // Offsets each paste when the clipboard came from this document.
+    void paste(bool inPlace = false);
+    bool canPaste() const;
+
+    // View -------------------------------------------------------------------
+    CanvasViewport viewport;
+    void zoomIn();
+    void zoomOut();
+    void zoomToFit();
+    void actualSize();
+    bool showsGrid = false;
+    bool snapsToGrid = false;
+    double gridSpacing = 10;
+    bool showsOutline = false;
+    void setShowsGrid(bool shown);
+    void setSnapsToGrid(bool snaps);
+    void setShowsOutline(bool shown);
+    QPointF snapped(QPointF point) const;
+
+    // Gates the menus read.
+    bool hasSelection() const { return !m_selection.empty(); }
+    bool canGroup() const;
+    bool canUngroup() const;
+    bool canCombine() const;
+
+signals:
+    // Anything changed: document, selection, tool, style, view.
+    void changed();
+    // The artboard or objects changed; the canvas redraws.
+    void documentChanged();
+
+private:
+    void notify(bool documentToo = true);
+    void edit(const QString &name, const std::function<void(VectorDocument &)> &change);
+    void restore(const DocumentHistory::Snapshot &snapshot);
+    void pruneSelection();
+    std::vector<QUuid> selectionInOrder() const;
+    std::optional<QUuid> insertionParent() const;
+
+    std::optional<VectorDocument> m_document;
+    DocumentHistory m_history;
+    Tool m_tool = Tool::select;
+    Paint m_defaultFill = Paint::solid(Qt::white);
+    StrokeStyle m_defaultStroke;
+    std::vector<QUuid> m_selection;
+    std::vector<PickedNode> m_pickedNodes;
+    std::optional<QUuid> m_activeLayer;
+    struct Interaction {
+        QString name;
+        VectorDocument before;
+        std::vector<QUuid> selection;
+    };
+    std::optional<Interaction> m_interaction;
+    mutable int m_pasteCount = 0;
+};
