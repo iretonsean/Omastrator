@@ -25,6 +25,8 @@ public:
         QString createRepository;
         bool deploy = true;
         Deploy::Command command;
+        // A preview deploy: recorded as one, so History doesn't call the commit deployed.
+        bool preview = false;
     };
 
     explicit DeployJob(QObject *parent = nullptr);

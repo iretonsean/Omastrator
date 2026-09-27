@@ -90,7 +90,8 @@ public:
     std::optional<CloudRemote> remote(const QString &name) const;
     // "Google Drive" for a drive remote; the remote's own name when two share a service.
     QString serviceName(const QString &remote) const;
-    void refreshRemotes();
+    // `done`, if given, runs once the listing ends, whether it worked or not.
+    void refreshRemotes(std::function<void()> done = {});
     // A remote's type as last listed, kept in settings for badges before rclone answers.
     static QString rememberedType(const QString &remote);
 
@@ -100,6 +101,12 @@ public:
     CloudJob *download(const CloudLocation &file, const QString &localPath, std::function<void(const QString &error)> done);
     CloudJob *upload(const QString &localPath, const CloudLocation &file, std::function<void(const QString &error)> done);
     CloudJob *makeFolder(const CloudLocation &folder, std::function<void(const QString &error)> done);
+    // `rclone link`: a public link to one file, where the service makes them (Share with client).
+    CloudJob *link(const CloudLocation &file, std::function<void(const QString &url, const QString &error)> done);
+    // `rclone deletefile`: one file, never a folder.
+    CloudJob *deleteFile(const CloudLocation &file, std::function<void(const QString &error)> done);
+    // Backends whose `rclone link` gives a link anyone can open.
+    static bool makesLinks(const QString &type);
     // `rclone config create`, answering with rclone's questions one at a time; `all` asks every basic one.
     CloudJob *createRemote(const QString &name, const QString &type, const QList<std::pair<QString, QString>> &options, bool all,
                            std::function<void(const CloudConfigStep &)> done);

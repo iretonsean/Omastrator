@@ -226,6 +226,41 @@ Command resolve(const QString &folder)
     return {QString(), folder, QStringLiteral("agent")};
 }
 
+std::optional<Command> resolvePreview(const QString &folder)
+{
+    const QDir dir(folder);
+    const QJsonObject config = readObject(dir.filePath(QStringLiteral("omastrator.json")))["preview"].toObject();
+    if (const QString command = config["command"].toString().trimmed(); !command.isEmpty()) {
+        const QString cwd = config["cwd"].toString().trimmed();
+        return Command{command, cwd.isEmpty() ? folder : QDir::cleanPath(dir.filePath(cwd)), QStringLiteral("omastrator.json")};
+    }
+    const QJsonObject scripts = readObject(dir.filePath(QStringLiteral("package.json")))["scripts"].toObject();
+    for (const char *script : {"deploy:preview", "preview:deploy"}) {
+        if (scripts.contains(QLatin1String(script))) {
+            QString manager = QStringLiteral("npm");
+            if (dir.exists(QStringLiteral("pnpm-lock.yaml")))
+                manager = QStringLiteral("pnpm");
+            else if (dir.exists(QStringLiteral("yarn.lock")))
+                manager = QStringLiteral("yarn");
+            else if (dir.exists(QStringLiteral("bun.lockb")) || dir.exists(QStringLiteral("bun.lock")))
+                manager = QStringLiteral("bun");
+            return Command{QStringLiteral("%1 run %2").arg(manager, QLatin1String(script)), folder, QStringLiteral("package.json")};
+        }
+    }
+    if ((dir.exists(QStringLiteral(".vercel/project.json")) || dir.exists(QStringLiteral("vercel.json"))) && installed(QStringLiteral("vercel")))
+        return Command{QStringLiteral("vercel deploy"), folder, QStringLiteral("vercel")};
+    if ((dir.exists(QStringLiteral("netlify.toml")) || dir.exists(QStringLiteral(".netlify/state.json"))) && installed(QStringLiteral("netlify")))
+        return Command{QStringLiteral("netlify deploy"), folder, QStringLiteral("netlify")};
+    for (const char *name : {"wrangler.toml", "wrangler.json", "wrangler.jsonc"}) {
+        if (dir.exists(QLatin1String(name)) && installed(QStringLiteral("wrangler"))) {
+            const bool pages = readFile(dir.filePath(QLatin1String(name))).contains("pages_build_output_dir");
+            return Command{pages ? QStringLiteral("wrangler pages deploy --branch preview") : QStringLiteral("wrangler versions upload"), folder,
+                           QStringLiteral("wrangler")};
+        }
+    }
+    return std::nullopt;
+}
+
 QString remember(const QString &folder, const QString &command, const QString &cwd)
 {
     const QString path = QDir(folder).filePath(QStringLiteral("omastrator.json"));
@@ -284,7 +319,8 @@ std::vector<Record> records(const QString &folder)
         if (!wanted.isEmpty() && each["project"].toString() != wanted)
             continue;
         found.push_back({each["project"].toString(), each["commit"].toString(), each["url"].toString(), each["command"].toString(),
-                         each["log"].toString(), QDateTime::fromString(each["time"].toString(), Qt::ISODate), each["ok"].toBool()});
+                         each["log"].toString(), QDateTime::fromString(each["time"].toString(), Qt::ISODate), each["ok"].toBool(),
+                         each["preview"].toBool()});
     }
     return found;
 }
@@ -293,8 +329,11 @@ QString addRecord(const Record &record)
 {
     const QString path = QDir(logDirectory()).filePath(QStringLiteral("index.json"));
     QJsonArray all = QJsonDocument::fromJson(readFile(path)).array();
-    all.append(QJsonObject{{"project", canonical(record.project)}, {"commit", record.commit}, {"url", record.url}, {"command", record.command},
-                           {"log", record.log}, {"time", record.time.toString(Qt::ISODate)}, {"ok", record.ok}});
+    QJsonObject entry{{"project", canonical(record.project)}, {"commit", record.commit}, {"url", record.url}, {"command", record.command},
+                      {"log", record.log}, {"time", record.time.toString(Qt::ISODate)}, {"ok", record.ok}};
+    if (record.preview)
+        entry["preview"] = true;
+    all.append(entry);
     // The index is for History, not an archive: the newest few hundred.
     while (all.size() > 500)
         all.removeFirst();
@@ -307,7 +346,16 @@ std::optional<Record> deployed(const QString &folder, const QString &commit)
         return std::nullopt;
     const std::vector<Record> all = records(folder);
     for (auto it = all.rbegin(); it != all.rend(); ++it)
-        if (it->ok && it->commit == commit)
+        if (it->ok && !it->preview && it->commit == commit)
+            return *it;
+    return std::nullopt;
+}
+
+std::optional<Record> latest(const QString &folder)
+{
+    const std::vector<Record> all = records(folder);
+    for (auto it = all.rbegin(); it != all.rend(); ++it)
+        if (it->ok && !it->url.isEmpty())
             return *it;
     return std::nullopt;
 }
@@ -363,9 +411,14 @@ QString lastLine(const QString &output)
 
 QString dryLine()
 {
+    return dryLine(dryLines);
+}
+
+QString dryLine(const QStringList &lines)
+{
     const QString path = QDir(home("XDG_STATE_HOME", ".local/state")).filePath(QStringLiteral("omastrator/lines-seen.json"));
     QJsonArray seen = QJsonDocument::fromJson(readFile(path)).array();
-    for (const QString &line : dryLines) {
+    for (const QString &line : lines) {
         if (!seen.contains(line)) {
             seen.append(line);
             writeFile(path, QJsonDocument(seen).toJson(QJsonDocument::Compact));

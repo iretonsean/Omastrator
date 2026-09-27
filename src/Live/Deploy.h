@@ -36,6 +36,10 @@ struct Command {
 // omastrator.json's "deploy", then package.json's deploy or deploy:prod script, then a host CLI whose config is
 // there and which is installed, then a Makefile deploy target or deploy.sh; otherwise the agent.
 Command resolve(const QString &folder);
+// A deploy that isn't production, for Share: omastrator.json's "preview", package.json's deploy:preview or
+// preview:deploy script, `vercel deploy`, a `netlify deploy` draft, or `wrangler pages deploy --branch preview` /
+// `wrangler versions upload`. Nullopt when the project has none.
+std::optional<Command> resolvePreview(const QString &folder);
 // Writes {"deploy": {"command", "cwd"?}} into the project's omastrator.json, keeping its other keys. Returns why it failed, or empty.
 QString remember(const QString &folder, const QString &command, const QString &cwd = QString());
 
@@ -59,14 +63,18 @@ struct Record {
     QString log;
     QDateTime time;
     bool ok = false;
+    // A preview deploy (Share): never marks a commit as deployed.
+    bool preview = false;
 };
 QString logDirectory();
 // A new log file's path for `folder`, in logDirectory().
 QString newLogPath(const QString &folder);
 std::vector<Record> records(const QString &folder = QString());
 QString addRecord(const Record &record);
-// The last successful deploy of `commit`, if any.
+// The last successful production deploy of `commit`, if any.
 std::optional<Record> deployed(const QString &folder, const QString &commit);
+// The newest successful deploy with a URL, production or preview.
+std::optional<Record> latest(const QString &folder);
 
 // Deploy with agent: the task for the default agent, run in the project's own checkout. It names the .env files
 // and their keys, never a value.
@@ -88,4 +96,6 @@ QString firstUrl(const QString &output);
 QString lastLine(const QString &output);
 // One dry line for a deploy failure, each shown once per install; empty once all are used.
 QString dryLine();
+// The same for any list of lines, sharing the record of lines seen.
+QString dryLine(const QStringList &lines);
 }

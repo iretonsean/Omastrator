@@ -214,6 +214,36 @@ private slots:
         QCOMPARE(remembered.source, QStringLiteral("omastrator.json"));
     }
 
+    void thePreviewDeployIsNeverProduction()
+    {
+        const QString folder = m_directory.filePath(QStringLiteral("preview"));
+        QDir().mkpath(folder);
+        // deploy.sh and a Makefile deploy to production: there's no preview in them.
+        write(folder + "/deploy.sh", "#!/bin/sh\n");
+        QVERIFY(!Deploy::resolvePreview(folder));
+        write(folder + "/wrangler.toml", "name = 'site'\n");
+        write(folder + "/netlify.toml", "[build]\n");
+        write(folder + "/.vercel/project.json", "{}");
+        // Its own folder of CLIs, so the ones other tests installed don't count.
+        const QString bin = m_directory.filePath(QStringLiteral("preview-bin"));
+        const QByteArray path = qgetenv("PATH");
+        qputenv("PATH", bin.toUtf8() + ':' + path);
+        write(bin + "/wrangler", "#!/bin/sh\n", true);
+        QCOMPARE(Deploy::resolvePreview(folder)->command, QStringLiteral("wrangler versions upload"));
+        write(folder + "/wrangler.toml", "name = 'site'\npages_build_output_dir = 'dist'\n");
+        QCOMPARE(Deploy::resolvePreview(folder)->command, QStringLiteral("wrangler pages deploy --branch preview"));
+        write(bin + "/netlify", "#!/bin/sh\n", true);
+        QCOMPARE(Deploy::resolvePreview(folder)->command, QStringLiteral("netlify deploy"));
+        write(bin + "/vercel", "#!/bin/sh\n", true);
+        QCOMPARE(Deploy::resolvePreview(folder)->command, QStringLiteral("vercel deploy"));
+        qputenv("PATH", path);
+        write(folder + "/package.json", R"({"scripts": {"deploy": "x", "deploy:preview": "x"}})");
+        QCOMPARE(Deploy::resolvePreview(folder)->command, QStringLiteral("npm run deploy:preview"));
+        write(folder + "/omastrator.json", R"({"preview": {"command": "./preview.sh"}})");
+        QCOMPARE(Deploy::resolvePreview(folder)->command, QStringLiteral("./preview.sh"));
+        QCOMPARE(Deploy::resolvePreview(folder)->source, QStringLiteral("omastrator.json"));
+    }
+
     void settingsAndRecordsAreKeptPerProject()
     {
         const QString folder = repository(false);
@@ -223,10 +253,17 @@ private slots:
         QVERIFY(Deploy::settingsPath().startsWith(m_directory.path()));
         const QString head = git(folder, {"rev-parse", "HEAD"}).trimmed();
         QVERIFY(!Deploy::deployed(folder, head));
-        QVERIFY(Deploy::addRecord({folder, head, "https://a.example.test", "x", "log", QDateTime::currentDateTime(), false}).isEmpty());
+        QVERIFY(Deploy::addRecord({folder, head, "https://a.example.test", "x", "log", QDateTime::currentDateTime(), false, false}).isEmpty());
         QVERIFY(!Deploy::deployed(folder, head));
-        QVERIFY(Deploy::addRecord({folder, head, "https://b.example.test", "x", "log", QDateTime::currentDateTime(), true}).isEmpty());
+        QVERIFY(Deploy::addRecord({folder, head, "https://b.example.test", "x", "log", QDateTime::currentDateTime(), true, false}).isEmpty());
         QCOMPARE(Deploy::deployed(folder, head)->url, QStringLiteral("https://b.example.test"));
+        // A preview deploy (Share) is the latest link, but doesn't mark the commit deployed.
+        Deploy::Record preview{folder, head, "https://preview.example.test", "vercel deploy", "log", QDateTime::currentDateTime(), true};
+        preview.preview = true;
+        QVERIFY(Deploy::addRecord(preview).isEmpty());
+        QCOMPARE(Deploy::deployed(folder, head)->url, QStringLiteral("https://b.example.test"));
+        QCOMPARE(Deploy::latest(folder)->url, QStringLiteral("https://preview.example.test"));
+        QVERIFY(Deploy::latest(folder)->preview);
         QVERIFY(Deploy::logDirectory().startsWith(m_directory.path()));
         QVERIFY(Deploy::newLogPath(folder).startsWith(Deploy::logDirectory()));
         QCOMPARE(Deploy::firstUrl("Building…\nPreview: http://x\nProduction: https://site.example.test/app.\nhttps://later.test\n"),
@@ -315,7 +352,7 @@ private slots:
         git(folder, {"add", "-A"});
         git(folder, {"commit", "-q", "-m", "About page"});
         const QString head = git(folder, {"rev-parse", "HEAD"}).trimmed();
-        Deploy::addRecord({folder, head, "https://site.example.test", "x", "log", QDateTime::currentDateTime(), true});
+        Deploy::addRecord({folder, head, "https://site.example.test", "x", "log", QDateTime::currentDateTime(), true, false});
         std::vector<History::Entry> entries = History::list(folder);
         QCOMPARE(entries.size(), size_t(2));
         QCOMPARE(entries[0].subject, QStringLiteral("About page"));

@@ -131,18 +131,23 @@ CloudJob *CloudStorage::run(const QStringList &arguments, std::function<void(Clo
     return job;
 }
 
-void CloudStorage::refreshRemotes()
+void CloudStorage::refreshRemotes(std::function<void()> done)
 {
     if (!isInstalled()) {
         if (!m_remotes.isEmpty()) {
             m_remotes.clear();
             emit remotesChanged();
         }
+        if (done)
+            QTimer::singleShot(0, this, done);
         return;
     }
-    if (m_listing)
+    if (m_listing) {
+        if (done)
+            connect(m_listing, &CloudJob::finished, this, done, Qt::QueuedConnection);
         return;
-    m_listing = run({QStringLiteral("listremotes"), QStringLiteral("--json")}, [this](CloudJob &job) {
+    }
+    m_listing = run({QStringLiteral("listremotes"), QStringLiteral("--json")}, [this, done](CloudJob &job) {
         // A failed listing keeps what was known: offline doesn't disconnect anyone.
         if (job.succeeded()) {
             m_remotes = parseRemotes(job.output());
@@ -152,6 +157,8 @@ void CloudStorage::refreshRemotes()
             QSettings().setValue(QStringLiteral("cloud/remoteTypes"), types);
             emit remotesChanged();
         }
+        if (done)
+            done();
     });
 }
 
@@ -195,6 +202,39 @@ CloudJob *CloudStorage::upload(const QString &localPath, const CloudLocation &fi
 CloudJob *CloudStorage::makeFolder(const CloudLocation &folder, std::function<void(const QString &)> done)
 {
     return run({QStringLiteral("mkdir"), folder.toString()}, [done](CloudJob &job) { done(job.error()); });
+}
+
+CloudJob *CloudStorage::link(const CloudLocation &file, std::function<void(const QString &, const QString &)> done)
+{
+    return run({QStringLiteral("link"), file.toString()}, [done](CloudJob &job) {
+        if (!job.succeeded())
+            return done(QString(), job.error());
+        // The link is the last line rclone prints.
+        const QStringList lines = QString::fromUtf8(job.output()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        const QString url = lines.isEmpty() ? QString() : lines.back().trimmed();
+        if (!url.startsWith(QLatin1String("https://")) && !url.startsWith(QLatin1String("http://")))
+            return done(QString(), QStringLiteral("The service didn't give a link."));
+        done(url, QString());
+    });
+}
+
+CloudJob *CloudStorage::deleteFile(const CloudLocation &file, std::function<void(const QString &)> done)
+{
+    return run({QStringLiteral("deletefile"), file.toString()}, [done](CloudJob &job) {
+        // Already gone is what was asked for.
+        if (!job.succeeded() && !job.wasCancelled() && (job.exitCode() == directoryNotFound || job.exitCode() == fileNotFound))
+            return done(QString());
+        done(job.error());
+    });
+}
+
+bool CloudStorage::makesLinks(const QString &type)
+{
+    // rclone's backends with PublicLink; S3 and B2 links are presigned and expire.
+    static const QStringList types{"drive", "dropbox", "onedrive", "box", "pcloud", "s3", "b2", "mega", "koofr", "jottacloud", "yandex",
+                                   "mailru", "opendrive", "pikpak", "premiumizeme", "putio", "seafile", "sharefile", "zoho", "filefabric",
+                                   "linkbox", "quatrix", "hidrive", "uptobox", "gofile", "pixeldrain"};
+    return types.contains(type);
 }
 
 CloudJob *CloudStorage::createRemote(const QString &name, const QString &type, const QList<std::pair<QString, QString>> &options, bool all,

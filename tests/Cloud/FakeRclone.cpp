@@ -1,7 +1,7 @@
 // A stand-in for rclone, run through OMASTRATOR_RCLONE. Each remote is a folder under
 // $FAKE_RCLONE_ROOT/remotes/<name>; the "config" is $FAKE_RCLONE_ROOT/config.json and, like
 // rclone's, holds a token for signed-in remotes.
-//   FAKE_RCLONE_FAIL      comma list: lsjson, stat, upload, download, mkdir, listremotes, config, all
+//   FAKE_RCLONE_FAIL      comma list: lsjson, stat, upload, download, mkdir, link, deletefile, listremotes, config, all
 //   FAKE_RCLONE_DELAY_MS  sleep first, to be slow
 //   FAKE_RCLONE_LEAK      print a token on stderr when failing, as a careless backend might
 #include <QCoreApplication>
@@ -268,6 +268,31 @@ int main(int argc, char **argv)
         if (!path)
             return fail(QStringLiteral("Failed to create file system: didn't find section in config file"), 1);
         QDir().mkpath(*path);
+        return 0;
+    }
+    if (command == QLatin1String("link")) {
+        if (failing(command) || failing(QStringLiteral("offline")))
+            return fail(QStringLiteral("Failed to link: can't make a public link on this remote"), 1);
+        const std::optional<QString> path = resolve(positional.value(0));
+        if (!path)
+            return fail(QStringLiteral("Failed to create file system: didn't find section in config file"), 1);
+        if (!QFileInfo(*path).isFile())
+            return fail(QStringLiteral("Failed to link: object not found"), 4);
+        // A link like a service's: the remote's name, then an opaque id from the path.
+        const QString remote = positional.value(0).section(QLatin1Char(':'), 0, 0);
+        const QByteArray id = QCryptographicHash::hash(positional.value(0).toUtf8(), QCryptographicHash::Sha1).toHex().left(12);
+        out("https://share.example.test/" + remote.toUtf8() + "/" + id + "\n");
+        return 0;
+    }
+    if (command == QLatin1String("deletefile")) {
+        if (failing(command) || failing(QStringLiteral("offline")))
+            return fail(QStringLiteral("Failed to deletefile: couldn't connect"), 1);
+        const std::optional<QString> path = resolve(positional.value(0));
+        if (!path)
+            return fail(QStringLiteral("Failed to create file system: didn't find section in config file"), 1);
+        if (!QFileInfo(*path).isFile())
+            return fail(QStringLiteral("Failed to deletefile: object not found"), 4);
+        QFile::remove(*path);
         return 0;
     }
     return fail(QStringLiteral("unknown command \"%1\"").arg(command), 1);

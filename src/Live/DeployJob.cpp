@@ -70,7 +70,7 @@ void DeployJob::start(const Plan &plan)
         fail(QStringLiteral("Couldn't write the deploy log %1.").arg(m_log));
         return;
     }
-    QString header = QStringLiteral("Omastrator %1 of %2, %3\n").arg(plan.deploy ? QStringLiteral("deploy") : QStringLiteral("save"), plan.folder,
+    QString header = QStringLiteral("Omastrator %1 of %2, %3\n").arg(plan.preview ? QStringLiteral("preview deploy") : plan.deploy ? QStringLiteral("deploy") : QStringLiteral("save"), plan.folder,
                                                                          QDateTime::currentDateTime().toString(Qt::ISODate));
     if (!plan.commit.isEmpty())
         header += QStringLiteral("Commit: %1\n").arg(plan.commit);
@@ -129,7 +129,7 @@ void DeployJob::start(const Plan &plan)
             run(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), m_plan.command.command}, m_plan.command.cwd, Deploy::environment(m_variables),
                 [this](bool ok, const QString &output) {
                     m_url = Deploy::firstUrl(output);
-                    Deploy::addRecord({m_plan.folder, m_plan.commit, m_url, m_plan.command.command, m_log, QDateTime::currentDateTime(), ok});
+                    Deploy::addRecord({m_plan.folder, m_plan.commit, m_url, m_plan.command.command, m_log, QDateTime::currentDateTime(), ok, m_plan.preview});
                     if (!ok) {
                         const QString line = Deploy::lastLine(output);
                         return fail(line.isEmpty() ? QStringLiteral("%1 failed.").arg(m_plan.command.command) : line);
@@ -146,7 +146,7 @@ void DeployJob::agentFinished(const QString &url, const QString &error)
     if (m_stage != Stage::deploying || !m_plan.command.viaAgent())
         return;
     m_url = Deploy::redact(url.trimmed(), m_variables);
-    Deploy::addRecord({m_plan.folder, m_plan.commit, m_url, QStringLiteral("agent"), m_log, QDateTime::currentDateTime(), error.isEmpty()});
+    Deploy::addRecord({m_plan.folder, m_plan.commit, m_url, QStringLiteral("agent"), m_log, QDateTime::currentDateTime(), error.isEmpty(), m_plan.preview});
     if (!error.isEmpty())
         return fail(error);
     write(QStringLiteral("The agent reports it live at %1\n").arg(m_url));

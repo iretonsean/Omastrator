@@ -58,6 +58,7 @@ private slots:
     void browsesFoldersFirst();
     void statsDownloadsUploadsAndMakesFolders();
     void aSlowJobCancels();
+    void linksAndDeletesOneFile();
     void connectingAnswersRclonesQuestions();
     void disconnectingDeletesTheRemote();
     void uploadsWhenTheRemoteIsUnchanged();
@@ -255,6 +256,40 @@ void CloudStorageTests::statsDownloadsUploadsAndMakesFolders()
     storage.upload(local, CloudLocation{"work", "x.omai"}, offline.callback());
     QVERIFY(offline.wait());
     QCOMPARE(std::get<0>(*offline.got), QString("Couldn't connect: dial tcp: lookup api.example.com: no such host."));
+}
+
+void CloudStorageTests::linksAndDeletesOneFile()
+{
+    FakeCloud cloud;
+    cloud.addRemote("work", "drive");
+    cloud.put("work", "Omastrator Shares/logo/1.png", "png");
+    CloudStorage storage;
+    Wait<QString, QString> linked;
+    storage.link(CloudLocation{"work", "Omastrator Shares/logo/1.png"}, linked.callback());
+    QVERIFY(linked.wait());
+    QVERIFY(std::get<0>(*linked.got).startsWith("https://share.example.test/work/"));
+    QVERIFY(std::get<1>(*linked.got).isEmpty());
+    Wait<QString, QString> missing;
+    storage.link(CloudLocation{"work", "none.png"}, missing.callback());
+    QVERIFY(missing.wait());
+    QVERIFY(std::get<0>(*missing.got).isEmpty());
+    QCOMPARE(std::get<1>(*missing.got), QString("Object not found."));
+
+    Wait<QString> deleted;
+    storage.deleteFile(CloudLocation{"work", "Omastrator Shares/logo/1.png"}, deleted.callback());
+    QVERIFY(deleted.wait());
+    QVERIFY(std::get<0>(*deleted.got).isEmpty());
+    QVERIFY(!QFileInfo::exists(cloud.remoteFile("work", "Omastrator Shares/logo/1.png")));
+    // Already gone is what was asked for.
+    Wait<QString> again;
+    storage.deleteFile(CloudLocation{"work", "Omastrator Shares/logo/1.png"}, again.callback());
+    QVERIFY(again.wait());
+    QVERIFY(std::get<0>(*again.got).isEmpty());
+
+    QVERIFY(CloudStorage::makesLinks("drive"));
+    QVERIFY(CloudStorage::makesLinks("s3"));
+    QVERIFY(!CloudStorage::makesLinks("sftp"));
+    QVERIFY(!CloudStorage::makesLinks("webdav"));
 }
 
 void CloudStorageTests::aSlowJobCancels()
