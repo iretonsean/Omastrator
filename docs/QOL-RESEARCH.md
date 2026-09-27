@@ -797,20 +797,22 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Alt-hover distance measuring | (smart guides) | ✓ | ✓ done | **P0** |
 | Zoom to selection | ✓ | ✓ Shift+2 | ✓ done | **P0** |
 | Configurable nudge, Alt+arrow duplicate | ✓ | ✓ | ✓ done | **P0** |
-| Rulers and guides | ✓ | ✓ | ✗ | P1 |
+| Rulers and guides | ✓ | ✓ | ✓ done | P1 |
 | Multiple fills and strokes | ✓ | ✓ | one of each | P1 |
 | Stroke align, arrowheads | ✓ | ✓ | enum declared, unused | P1 |
-| Per-corner radius / live corners | ✓ | ✓ | tool setting only | P1 |
+| Per-corner radius / live corners | ✓ | ✓ | ✓ done | P1 |
 | Styled runs (per-character styles, manual kerning) | ✓ | ✓ | ✗ | P1 |
 | OpenType features | ✓ | ✓ | ✗ | P1 |
 | Paragraph indents and spacing | ✓ | ✓ | ✗ | P1 |
 | Character/paragraph/text styles | ✓ | ✓ | ✗ | P1 |
-| Isolation mode | ✓ | (enter group) | from the context menu | P1 |
-| Join, Average, Scissors, Reverse path | ✓ | ✓ | ✗ | P1 |
+| Isolation mode | ✓ | (enter group) | ✓ done | P1 |
+| Join, Average, Scissors, Reverse path | ✓ | ✓ | ✓ done | P1 |
 | Selection colours, recent colours, hex field | ✓ | ✓ | picker only | P1 |
 | Copy/Paste properties | (eyedropper) | ✓ | eyedropper only | P1 |
 | Command palette | Discover | ✓ Ctrl+K | ✓ done | P1 |
-| History panel | ✓ | version history | ✗ | P1 |
+| History panel | ✓ | version history | ✓ done | P1 |
+| Key object, distribute spacing | ✓ | (smart selection) | ✓ done | P1 |
+| Snap to pixel, pixel grid | ✓ | ✓ | ✓ done | P2 |
 | Collapsible Properties sections, contextual task bar | ✓ | ✓ | ✓ done | P1 |
 | Multiple artboards | ✓ | frames | ✗ | P2 |
 | Shape Builder | ✓ | ✗ | ✗ | P2 |
@@ -1241,6 +1243,77 @@ has Qt Test coverage in `tests/<Folder>/`.
 > it, or hides it. View ▸ Contextual Task Bar turns it on and off, remembered.
 > Tests: `tests/Canvas/TaskBarTests.cpp`, `tests/UI/TaskBarActionsTests.cpp`.
 
+> **P1-6, P1-9, P1-10, P1-11, P1-15 and P1-16 done.**
+>
+> **Rulers and guides (P1-6):** `src/Canvas/Rulers.cpp` (the strips, drawn
+> over the canvas's top and left edges; clicks pass through) and
+> `EditorCanvas+Guides.cpp`. View ▸ Rulers (Ctrl+R) shows them, in points,
+> with the pointer marked on each. Dragging out of the top ruler makes a
+> horizontal guide, out of the left a vertical one (Shift or Snap to Pixel
+> keeps it on whole points); dragging a guide moves it, back onto its ruler
+> removes it, and a double-click types its place. Guides are
+> `VectorDocument::guides`, saved in `.omai`, every change one undo step (Add,
+> Move, Delete, Clear Guides). They snap bounds and drawn points through
+> `SmartGuides::addGuides`, whether or not smart guides are on, while they
+> show. View ▸ Guides: Hide (Ctrl+;), Lock (Ctrl+Alt+;; locked guides can't be
+> dragged and draw quieter), Make Guides (Ctrl+5: a straight line becomes its
+> guide, any other path its bounds' four edges), Release Guides (Ctrl+Alt+5:
+> each guide back into a line across the artboard) and Clear Guides. Hidden
+> and locked are view state, like the grid. Only straight guides: Illustrator's
+> path-shaped guides are out.
+>
+> **Live corners (P1-9):** `VectorObject::shape` holds a `LiveRectangle`
+> (`src/Document/LiveRectangle.cpp`: its own rect, a rigid placement, four
+> radii and four styles). The Rectangle and Rounded Rectangle tools draw them.
+> Moving, rotating, reflecting and uniform or upright scaling keep it live
+> (radii scale with it); a skew makes it a path. It's live only while the path
+> is still what it makes, so editing any anchor expands it for good
+> (`expandEditedShapes`, on every commit), and only a live shape is saved. A
+> Shape section in Properties shows one Radius field, a link that splits it
+> into four (TL, TR, BR, BL; uneven corners always show four) and a ⋯ menu for
+> Round, Inverted Round and Chamfer. With Direct Selection each corner has a
+> widget: drag it for every selected corner's radius, Alt-drag for that corner
+> alone, Alt-click to cycle its style. Scale Corners off isn't honoured yet:
+> radii always scale with the shape.
+>
+> **Isolation (P1-10):** `EditorSession::isolation()` is the stack of groups
+> entered (outermost first), so undo, the canvas and the panels share it. The
+> canvas draws everything else at 50 % and the group on top at full; clicks,
+> marquees and Select All reach only the group's children; new objects and
+> pastes go into it with any tool. `src/UI/IsolationBar.cpp` sits above the
+> canvas: a back arrow (one level) and crumbs from the layer down, each
+> stepping out to its level. Esc leaves; a double-click outside steps out a
+> level. A single click outside now only deselects, as in Illustrator.
+>
+> **Path editing (P1-11):** `EditorSession+Paths.cpp`. Object ▸ Path ▸ Join
+> (Ctrl+J): with Direct Selection two picked end anchors; otherwise one open
+> path closes, or several join nearest end to nearest end. Ends closer than
+> 0.01 pt merge into one anchor, others meet with a straight segment. Average…
+> (Ctrl+Alt+J) asks Horizontal, Vertical or Both and moves the picked anchors,
+> or every selected anchor. The Scissors tool (C, beside Shape Builder) cuts at
+> an anchor or where a segment is clicked: a closed contour opens with both
+> ends there, an open one splits into two paths. Reverse Path Direction turns
+> the selected paths (or the contours with picked anchors). The fill rule
+> shows in the Shape section for compound paths, and as Object ▸ Compound Path
+> ▸ Even-Odd Fill Rule; SVG already read and wrote `fill-rule`.
+>
+> **History (P1-15):** `src/UI/HistoryPanel.cpp`, from Window ▸ History, a
+> floating panel following the front document. Rows are "Open" then every step
+> by name; steps ahead of the current one show dimmed and italic, and a click
+> goes to just after that row (`EditorSession::stepHistory`). Preferences sets
+> History states (1–1000, default 100), read by every document at its next
+> edit.
+>
+> **Key object and spacing (P1-16):** a click (no drag) on one of several
+> selected objects makes it the key object, drawn with a 3 pt box; clicking it
+> again, or any new selection, clears it. Align To gains "To key object", which
+> Properties switches to when one is clicked; the key never moves. The Align
+> section has six distribute buttons (left, centre, right, top, middle,
+> bottom) and a spacing row: horizontal and vertical Distribute Spacing and a
+> Gap field. With a gap, the key object (else the first) holds still and the
+> rest step out from it; empty reads Auto and spaces evenly between the
+> outermost two.
+
 | # | Item | One-line spec | Where | Acceptance |
 |---|---|---|---|---|
 | P1-1 | **Styled text runs** | `TextContent` becomes `paragraphs → runs` (a style per run: family, style, size, tracking, baseline shift, case, decoration, fill). Selecting a range in `InlineTextEditor` and changing a field styles only that range. **Manual kerning** is a per-caret pair value (Alt+←/→ at a caret with no range). | `VectorDocument.h`, `InlineTextEditor`, `DocumentCodec` (with migration), `SvgExporter` (`<tspan>`), `CharacterSection` | Bold on one word of a sentence round-trips through `.omai` and SVG; kerning between two letters shifts only the letters after it; Create Outlines keeps per-run styling |
@@ -1263,6 +1336,12 @@ has Qt Test coverage in `tests/<Folder>/`.
 | P1-18 | **Properties panel structure** | Collapsible sections that remember their state; sections that depend on the selection (Character, Paragraph, Image, Group); a real splitter with Layers; and a "Mixed" state everywhere. See section 7. | `PropertiesPanel.cpp`, `ContentView+Panels.cpp` | Collapsing Stroke survives a restart; selecting an image shows the Image section (Trace, Vectorize) and no Stroke |
 
 ### P2: bigger features, later
+
+> **P2-11 done** (snap to pixel and the pixel grid; Make Pixel Perfect is
+> not). View ▸ Snap to Pixel rounds drawn points, handle drags, moved bounds'
+> top left, corner radii and guides to whole points on whatever axis a guide
+> hasn't already taken. View ▸ Pixel Grid (on by default) draws a line per
+> point once the zoom reaches 600 %.
 
 | # | Item | One-line spec | Where | Acceptance |
 |---|---|---|---|---|
