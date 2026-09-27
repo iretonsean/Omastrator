@@ -38,6 +38,7 @@ private slots:
     void theListIsIllustratorsKeys();
     void toolLettersNameTheirTools();
     void problemsNameWhatIsWrong();
+    void oldNudgeNamesStillLoad();
     void savedOverridesPersistAndBadOnesAreIgnored();
     void menusAndSheetsTakeTheirRemappedKeys();
     void theCanvasTranslatesRemappedKeys();
@@ -92,9 +93,9 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Forty menu entries, fourteen tools, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 67);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 40);
+    // Forty-seven menu entries, fourteen tools, five keys, eight nudges.
+    QCOMPARE(int(all.size()), 74);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 47);
     QSet<QString> ids;
     for (const ShortcutDefinition &definition : all)
         ids.insert(definition.id());
@@ -106,7 +107,15 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
     QVERIFY(named("Export PNG").isMenu());
     QCOMPARE(named("Line Segment tool").original, ShortcutChord("\\"));
     QCOMPARE(named("Temporary Hand tool (hold)").original, ShortcutChord(" "));
-    QCOMPARE(named("Nudge Down 10 pt").original, ShortcutChord(QString(QChar(0xf701)), 8));
+    QCOMPARE(named("Nudge Down ×10").original, ShortcutChord(QString(QChar(0xf701)), 8));
+    QCOMPARE(named("Nudge Left").original, ShortcutChord(QString(QChar(0xf702))));
+    // Ctrl+D repeats a transform, as in Illustrator; Duplicate moved off Join's Ctrl+J.
+    QCOMPARE(named("Transform Again").original, ShortcutChord("d", 1));
+    QCOMPARE(named("Duplicate").original, ShortcutChord("d", 3));
+    QCOMPARE(named("Paste in Front").original, ShortcutChord("f", 1));
+    QCOMPARE(named("Paste in Back").original, ShortcutChord("b", 1));
+    QCOMPARE(named("Zoom to Selection").original, ShortcutChord("0", 3));
+    QCOMPARE(named("Next Object Above").original, ShortcutChord("]", 3));
     QCOMPARE(named("Swap fill and stroke").group, QString("Canvas & Layers"));
     QCOMPARE(named("Undo").id(), QString("Menus:Undo"));
     // The defaults hold together.
@@ -142,6 +151,17 @@ void KeyboardShortcutsTests::problemsNameWhatIsWrong()
     QCOMPARE(ShortcutSettings::problem({{pen, ShortcutChord("v")}}).value(), QString("V is assigned to both Selection tool and Pen tool."));
     // Moving both apart is fine.
     QVERIFY(!ShortcutSettings::problem({{pen, ShortcutChord("v")}, {named("Selection tool").id(), ShortcutChord("p")}}));
+}
+
+void KeyboardShortcutsTests::oldNudgeNamesStillLoad()
+{
+    // Saved before the step became the keyboard increment preference.
+    QSettings().setValue(QLatin1String(ShortcutSettings::storageKey),
+                         QByteArray(R"({"Canvas & Layers:Nudge Right 1 pt":{"key":"j","modifiers":0},"Canvas & Layers:Nudge Up 10 pt":{"key":"k","modifiers":8}})"));
+    ShortcutSettings &settings = ShortcutSettings::shared();
+    settings.reload();
+    QCOMPARE(settings.chord(named("Nudge Right")), ShortcutChord("j"));
+    QCOMPARE(settings.chord(named("Nudge Up ×10")), ShortcutChord("k", 8));
 }
 
 void KeyboardShortcutsTests::savedOverridesPersistAndBadOnesAreIgnored()

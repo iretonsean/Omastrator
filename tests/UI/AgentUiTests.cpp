@@ -452,7 +452,7 @@ private slots:
         rectangle(workspace.current().session, {0, 0, 20, 20});
         AgentBridge &bridge = *window.agent();
         QDialog *sheet = AgentSheets::editWithInstruction(bridge, &window);
-        QCOMPARE(sheet->findChild<QLabel *>(QStringLiteral("instructionScope"))->text(), QStringLiteral("Applies to the selection."));
+        QCOMPARE(sheet->findChild<QLabel *>(QStringLiteral("instructionScope"))->text(), QStringLiteral("Applies to “Rectangle”."));
         sheet->findChild<QPlainTextEdit *>(QStringLiteral("instructionField"))->setPlainText(QStringLiteral("Make it teal"));
         sheet->findChild<QPushButton *>(QStringLiteral("dialogOK"))->click();
         QVERIFY(prompt().contains(QStringLiteral("Make it teal")));

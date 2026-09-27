@@ -269,7 +269,7 @@ void ContentViewTests::remappedKeysReachTheCanvasAsTheirOriginals()
     Editor editor;
     editor.view.canvas().setFocus();
     QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("k")},
-                                             {QStringLiteral("Canvas & Layers:Nudge Right 1 pt"), ShortcutChord("j")}}));
+                                             {QStringLiteral("Canvas & Layers:Nudge Right"), ShortcutChord("j")}}));
     editor.press(Qt::Key_K);
     QCOMPARE(editor.session.tool(), Tool::pen);
     // The old key no longer picks the tool.

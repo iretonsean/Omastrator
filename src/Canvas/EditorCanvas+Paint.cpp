@@ -170,6 +170,8 @@ void EditorCanvas::State::drawOverlay(QPainter &painter) const
         painter.drawLine(shown.p1() - normal, shown.p1() + normal);
         painter.drawLine(shown.p2() - normal, shown.p2() + normal);
     }
+    drawMeasurements(painter);
+    drawReadout(painter);
     if (text)
         text->draw(painter, toViewTransform, caretShown && canvas.hasFocus(), accent());
     painter.restore();
