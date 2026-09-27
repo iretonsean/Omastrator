@@ -54,3 +54,10 @@ Decided with the user on 2026-09-26. Nothing here is built yet.
   shows one way).
 - The MCP transport: stdio launched by the agent, or a local socket the running
   app listens on.
+
+## Roast My Design
+
+A toolbar button that sends the artboard or the selection to the agent. The
+agent roasts it first (savage, about the design only), then gives sincere,
+specific feedback, then offers one click to generate variations from that
+feedback. Full spec in docs/HUMOR.md.
