@@ -11,7 +11,7 @@ endif()
 
 option(OMASTRATOR_WERROR "Treat warnings as errors" OFF)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Test)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Network Test)
 
 # Each source folder is its own library, so a folder builds and tests alone:
 # Document and Rendering (the model and how it draws), IO (files), Canvas (the
@@ -38,8 +38,12 @@ target_link_libraries(oma_io PUBLIC oma_core)
 oma_library(oma_canvas src/Canvas/*.cpp)
 target_link_libraries(oma_canvas PUBLIC oma_core)
 
+# The bridge an agent drives the app through: socket, CLI and MCP.
+oma_library(oma_agent src/Agent/*.cpp)
+target_link_libraries(oma_agent PUBLIC oma_core oma_io Qt6::Network)
+
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
-target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas)
+target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas oma_agent)
 
 include(GNUInstallDirs)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
@@ -91,4 +95,5 @@ endfunction()
 oma_tests(oma_core Document)
 oma_tests(oma_io IO)
 oma_tests(oma_canvas Canvas)
+oma_tests(oma_agent Agent)
 oma_tests(oma_ui UI)

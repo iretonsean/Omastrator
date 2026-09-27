@@ -57,6 +57,14 @@ QStringList ProjectWorkspace::openFilters()
     return filters;
 }
 
+// What an SVG couldn't bring along, said once after it opens.
+void ProjectWorkspace::reportLeftOut(const QString &path, const QStringList &warnings)
+{
+    if (warnings.isEmpty())
+        return;
+    showError(QStringLiteral("Some of “%1” was left out").arg(QFileInfo(path).fileName()), warnings.join(QLatin1Char('\n')));
+}
+
 bool ProjectWorkspace::openFile(const QString &path)
 {
     for (const std::shared_ptr<ProjectTab> &existing : m_tabs) {
@@ -68,11 +76,12 @@ bool ProjectWorkspace::openFile(const QString &path)
     }
     const bool native = hasSuffix(path, QLatin1String(ProjectStore::extension));
     VectorDocument document;
+    QStringList warnings;
     try {
         if (native)
             document = ProjectStore::read(path);
         else if (ImageImporter::isVector(path))
-            document = SvgImporter::read(path);
+            document = SvgImporter::read(path, &warnings);
         else
             document = imageDocument(ImageImporter::read(path), QFileInfo(path).fileName());
     } catch (const FileError &error) {
@@ -87,6 +96,7 @@ bool ProjectWorkspace::openFile(const QString &path)
     adopt(opened);
     noteRecent(path);
     qCInfo(lcIO).noquote() << "opened" << path;
+    reportLeftOut(path, warnings);
     return true;
 }
 
@@ -119,7 +129,9 @@ bool ProjectWorkspace::placeFile(const QString &path)
             session.placeImage(ImageImporter::read(path), name);
             return true;
         }
-        const VectorDocument imported = SvgImporter::read(path);
+        QStringList warnings;
+        const VectorDocument imported = SvgImporter::read(path, &warnings);
+        reportLeftOut(path, warnings);
         session.beginEdit(QStringLiteral("Place"));
         VectorObject group;
         group.kind = ObjectKind::group;

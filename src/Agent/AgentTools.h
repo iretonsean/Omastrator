@@ -1,0 +1,79 @@
+#pragma once
+#include "Agent/AgentHost.h"
+#include "Document/VectorDocument.h"
+#include <QJsonObject>
+#include <QObject>
+#include <QPointer>
+#include <QString>
+#include <optional>
+#include <vector>
+
+class EditorSession;
+
+// Every method in docs/AI-DESIGN.md, run against the host's front session.
+// Edits land in one open interaction, the proposal, which only the user
+// commits (Enter) or cancels (Esc).
+class AgentTools : public QObject {
+    Q_OBJECT
+public:
+    explicit AgentTools(AgentHost &host, QObject *parent = nullptr);
+
+    // Runs one method; throws AgentProtocol::Error.
+    QJsonObject call(const QString &method, const QJsonObject &params);
+
+    // True while this bridge's proposal is the session's open interaction.
+    bool hasProposal() const;
+    // "AI: <title>", as the undo step will be named.
+    QString proposalTitle() const;
+
+signals:
+    // A proposal opened, grew or was renamed.
+    void proposalChanged();
+
+private:
+    EditorSession &session();
+    const VectorDocument &document();
+    bool ownsProposal(const EditorSession &session) const;
+    // What an edit starts from: the proposal as it stands, or the document.
+    VectorDocument draft();
+    // Shows `document` as the proposal, opening one named for `title` if needed.
+    void propose(const QString &title, const VectorDocument &document, const std::vector<QUuid> &selection);
+    // `ids`, else the selection; every one must exist and be no layer.
+    std::vector<QUuid> targets(const QJsonObject &params, bool required = false);
+    std::vector<QUuid> unlocked(const VectorDocument &document, const std::vector<QUuid> &ids) const;
+
+    // Read.
+    QJsonObject documentGet(const QJsonObject &params);
+    QJsonObject selectionGet();
+    QJsonObject render(const QJsonObject &params);
+    // Edit.
+    QJsonObject insertSvg(const QJsonObject &params);
+    QJsonObject setStyle(const QJsonObject &params);
+    QJsonObject transform(const QJsonObject &params);
+    QJsonObject arrange(const QJsonObject &params);
+    QJsonObject align(const QJsonObject &params);
+    QJsonObject distribute(const QJsonObject &params);
+    QJsonObject group(const QJsonObject &params);
+    QJsonObject ungroup(const QJsonObject &params);
+    QJsonObject pathfinder(const QJsonObject &params);
+    QJsonObject remove(const QJsonObject &params);
+    QJsonObject select(const QJsonObject &params);
+    QJsonObject updateObject(const QJsonObject &params);
+    QJsonObject replaceObjects(const QJsonObject &params);
+    QJsonObject proposalFinish(const QJsonObject &params);
+    QJsonObject traceImage(const QJsonObject &params);
+    // Files.
+    QJsonObject open(const QJsonObject &params);
+    QJsonObject save(const QJsonObject &params);
+    QJsonObject exportFile(const QJsonObject &params);
+    QJsonObject place(const QJsonObject &params);
+    // Panels.
+    QJsonObject showVariations(const QJsonObject &params);
+    QJsonObject showRoast(const QJsonObject &params);
+
+    AgentHost &m_host;
+    QPointer<EditorSession> m_session;
+    // The document as last proposed: a user's drag never matches it.
+    std::optional<VectorDocument> m_preview;
+    QString m_title;
+};

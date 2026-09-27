@@ -84,6 +84,7 @@ private:
     void finish(const std::function<void()> &done);
     void finish(const std::function<void(bool)> &done, bool value);
     void showError(const QString &title, const QString &message);
+    void reportLeftOut(const QString &path, const QStringList &warnings);
     // Save, Don't Save or Cancel for a tab with changes.
     void confirmClose(const std::shared_ptr<ProjectTab> &tab, std::function<void(bool)> then);
     void askNext(std::vector<std::shared_ptr<ProjectTab>> order, size_t index, std::function<void(bool)> done);
