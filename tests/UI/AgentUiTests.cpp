@@ -302,20 +302,33 @@ private slots:
         QVERIFY(shown<QLabel>(QStringLiteral("roastStatus")));
         const QString requestId = bridge.waiting()->requestId;
 
-        AgentRoast roast{requestId, QStringLiteral("One rectangle. Brave."),
+        AgentRoast roast{requestId, QStringLiteral("One rectangle. Brave.\nThe client will love it."),
                          {{QStringLiteral("Add hierarchy"), QStringLiteral("Everything is the same size."), {shape}}},
                          QStringLiteral("A layout with a clear focal point")};
         bridge.showRoast(roast);
         QVERIFY(!shown<QLabel>(QStringLiteral("roastStatus")));
-        QLabel *text = shown<QLabel>(QStringLiteral("roastText"));
+        // Page 1: the roast alone, a line each.
+        QWidget *text = shown(QStringLiteral("roastText"));
         QVERIFY(text);
-        QCOMPARE(text->text(), QStringLiteral("One rectangle. Brave."));
-        QVERIFY(shown(QStringLiteral("roastSeparator")));
-        // The roast comes first, then the feedback under the separator.
-        QVERIFY(text->y() < shown(QStringLiteral("roastSeparator"))->y());
-        QVERIFY(shown(QStringLiteral("roastSeparator"))->y() < shown(QStringLiteral("feedback:0"))->y());
+        const QList<QLabel *> lines = text->findChildren<QLabel *>();
+        QCOMPARE(lines.size(), 2);
+        QCOMPARE(lines.front()->text(), QStringLiteral("One rectangle. Brave."));
+        QCOMPARE(shown<QLabel>(QStringLiteral("roastPage"))->text(), QStringLiteral("1 of 3"));
+        QVERIFY(!shown(QStringLiteral("feedback:0")));
+        QVERIFY(!shown(QStringLiteral("makeVariations")));
+        QVERIFY(!shown<QPushButton>(QStringLiteral("roastBack"))->isEnabled());
+        // Page 2: the fixes.
+        shown<QPushButton>(QStringLiteral("roastNext"))->click();
+        QTRY_VERIFY(shown(QStringLiteral("feedback:0")));
+        QVERIFY(!shown(QStringLiteral("roastText")));
+        QCOMPARE(shown<QLabel>(QStringLiteral("roastPage"))->text(), QStringLiteral("2 of 3"));
         shown<QCommandLinkButton>(QStringLiteral("feedback:0"))->click();
         QCOMPARE(session.selection(), std::vector<QUuid>{shape});
+        // Page 3: what next.
+        shown<QPushButton>(QStringLiteral("roastNext"))->click();
+        QTRY_VERIFY(shown(QStringLiteral("makeVariations")));
+        QVERIFY(!shown<QPushButton>(QStringLiteral("roastNext"))->isEnabled());
+        QVERIFY(shown<QLabel>(QStringLiteral("roastBrief"))->text().contains(QStringLiteral("clear focal point")));
 
         QFile::remove(m_directory.filePath(QStringLiteral("prompt")));
         shown<QPushButton>(QStringLiteral("makeVariations"))->click();

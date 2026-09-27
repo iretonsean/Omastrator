@@ -131,8 +131,8 @@ constexpr const char *methodTable = R"json([
  "description": "Fills the Roast panel: the roast, then sincere feedback, then the prompt for \"Make variations from this feedback\". Not a document edit.",
  "inputSchema": {"type": "object", "required": ["requestId", "roast", "feedback", "suggestedPrompt"], "properties": {
    "requestId": {"type": "string"},
-   "roast": {"type": "string"},
-   "feedback": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["title", "detail"], "properties": {
+   "roast": {"type": "string", "description": "2 to 4 one-line burns separated by newlines, 60 words at most."},
+   "feedback": {"type": "array", "minItems": 1, "maxItems": 4, "description": "3 fixes, highest impact first.", "items": {"type": "object", "required": ["title", "detail"], "properties": {
      "title": {"type": "string"}, "detail": {"type": "string"},
      "objectIds": {"type": "array", "items": {"type": "string"}}}}},
    "suggestedPrompt": {"type": "string"}}}},

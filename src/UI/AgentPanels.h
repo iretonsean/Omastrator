@@ -38,6 +38,11 @@ class RoastPanel : public QWidget {
     Q_OBJECT
 public:
     explicit RoastPanel(AgentBridge &bridge, QWidget *parent = nullptr);
+    int page() const { return m_page; }
+    void showPage(int page);
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
 
 private:
     void rebuild();
@@ -45,6 +50,7 @@ private:
 
     AgentBridge &m_bridge;
     QVBoxLayout *const m_column;
+    int m_page = 0;
 };
 
 // Above the canvas while an agent works on it: waiting, then its proposal

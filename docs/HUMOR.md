@@ -67,6 +67,11 @@ someone sees it.
 - First use of Comic Sans or Papyrus: Bold choice. It's legal, technically.
 - The logo is scaled up 3 times in a row: The client will be thrilled.
 
+**Live mode errors** (the plain sentence first, as always)
+- The page returned 403 Forbidden. The site said what the client was too polite
+  to.
+- The dev server stopped. It saw the diff.
+
 **Tips**
 - Hold Shift while you drag to keep proportions. Or don't, and give the client
   the stretched look they secretly asked for.
@@ -75,16 +80,53 @@ someone sees it.
 
 ## Roast My Design
 
-The one place the humor goes loud. It's a button at the bottom of the tool rail,
+The one place the humor goes loud, updated 2026-09-26 after the first live roasts read as too polite and too long. It's a button at the bottom of the tool rail,
 and it's the only playful button label in the app.
 
-1. **The roast (savage).** Full comedy-roast energy, aimed only at the design and
-   never at the person: layout, type, colour, alignment, the fourth drop shadow.
-2. **Then sincere feedback,** immediately after and clearly separated: specific,
-   actionable fixes in order of impact, pointing at the actual objects.
-3. **Then one click to generate.** "Make variations from this feedback" goes
-   straight into the generation flow in docs/AI-ROADMAP.md: choose how many
-   variations, preview, accept.
+The panel has three pages, which the user steps through with Back and Next or
+the arrow keys:
+
+1. **The roast.** Two to four one-line burns, 60 words at most. It should hit
+   like a Comedy Central or Netflix roast (the Roast of Tom Brady, Jeff Ross,
+   Nikki Glaser, Greg Giraldo, Don Rickles), not like a critique with jokes in
+   it. It's the meanest set of the night (Hinchcliffe, Jeselnik, Giraldo, Ross
+   with the gloves off), with no warmth on this page. A polite roast is a
+   failed roast.
+   - *How it's built:* the roast mechanics are the humiliating comparison,
+     fake praise then the knife, consequences instead of flaws, a tiny fact
+     blown up, and a short setup with a hard turn.
+   - *How hard it hits:* at least as hard as "Violet-to-cyan on near-black.
+     Congratulations, you designed every crypto startup that rugged its users in
+     2022." A line that only describes the flaw fails. The agent instructions
+     carry a few benchmark lines like that one, which the agent must never reuse.
+   - *Structures from real roasts:* "The only difference between this and…",
+     "seen more trauma than…", "or, as I like to call them…", an escalating
+     chain, the fake-out, and error codes as verdicts ("This layout returns a
+     403: even the browser won't let anyone see it").
+   - *Dark humour:* morbid turns (death, funerals, obituaries, crime scenes,
+     hospice, last rites) aimed at the work and the career. Never suicide,
+     self-harm, real tragedies or the person's illness.
+   - *Disbelief:* one line may open like a friend seeing the file ("Holy shit
+     dude, are you fucking drunk? Wtf is this?"), followed at once by the worst
+     specifics.
+   - *Swearing:* welcome wherever it makes a line hit harder: fuck and its
+     variants, wtf, holy shit, shit, ass, damn, hell. Up to two fucks and four
+     swears per roast, with at least one clean line.
+   - *Target:* the design and the taste, skill, habits, career and ambitions it
+     reveals, in second person, drawing on the people who use this app:
+     AI-leaning designers, Omarchy and Linux ricers, Figma and UI/UX people,
+     the habits of each tool, and the profession. Always about what the user
+     pointed at.
+   - *Never:* slurs, sexual content, bodies or looks, race, religion, gender,
+     sexuality, disability, age, family tragedy, self-harm, or who someone is.
+2. **The fixes.** Exactly three, highest impact first, each a title of five
+   words and one sentence with the concrete value to use. Clicking one selects
+   the objects it's about.
+3. **What next.** The brief, then "Make variations from this feedback", which
+   goes straight into the generation flow in docs/AI-ROADMAP.md.
+
+The app enforces the lengths: `show_roast` sends back a roast over about 70
+words, or more than four fixes, for the agent to shorten.
 
 It works on the selection, or on the whole artboard when nothing is selected. The
 agent is sent a rendered PNG and the document JSON, as in AI-ROADMAP.md. It runs

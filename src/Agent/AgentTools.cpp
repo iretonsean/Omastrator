@@ -1,4 +1,5 @@
 #include "Agent/AgentTools.h"
+#include <QRegularExpression>
 #include "Agent/AgentEdits.h"
 #include "Agent/AgentParams.h"
 #include "Document/DocumentCodec.h"
@@ -435,11 +436,17 @@ QJsonObject AgentTools::showRoast(const QJsonObject &params)
 {
     AgentRoast roast;
     roast.requestId = requiredString(params, QStringLiteral("requestId"));
-    roast.roast = requiredString(params, QStringLiteral("roast"));
+    roast.roast = requiredString(params, QStringLiteral("roast")).trimmed();
+    // The panel pages through short parts; a speech doesn't fit one.
+    const qsizetype words = roast.roast.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts).size();
+    if (words > 70 || roast.roast.count(QLatin1Char('\n')) > 4)
+        fail(QStringLiteral("The roast is %1 words. Keep it to 2–4 one-line burns, 60 words at most, and call again.").arg(words));
     roast.suggestedPrompt = requiredString(params, QStringLiteral("suggestedPrompt"));
     const QJsonValue value = params["feedback"];
     if (!value.isArray() || value.toArray().isEmpty())
         fail(QStringLiteral("“feedback” must be a non-empty array of {title, detail, objectIds?}."));
+    if (value.toArray().size() > 4)
+        fail(QStringLiteral("%1 fixes is too many. Send the 3 with the most impact.").arg(value.toArray().size()));
     for (const QJsonValue &each : value.toArray()) {
         if (!each.isObject())
             fail(QStringLiteral("Each feedback item must be an object {title, detail, objectIds?}."));

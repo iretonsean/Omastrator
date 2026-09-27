@@ -105,7 +105,7 @@ private slots:
         QCOMPARE(read(QDir(folder).filePath(QStringLiteral("CLAUDE.md"))), agents);
         for (const AgentProtocol::Method &method : AgentProtocol::methods())
             QVERIFY2(agents.contains(QStringLiteral("`%1 {").arg(method.name)), qPrintable(method.name));
-        QVERIFY(agents.contains(QLatin1String("never at the person")));
+        QVERIFY(agents.contains(QLatin1String("holding back is the only way to fail them")));
         QVERIFY(agents.contains(QLatin1String("proposal_finish")));
         const QJsonObject mcp = QJsonDocument::fromJson(read(QDir(folder).filePath(QStringLiteral(".mcp.json"))).toUtf8()).object();
         const QJsonObject server = mcp["mcpServers"].toObject()["omastrator"].toObject();

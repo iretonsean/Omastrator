@@ -184,10 +184,15 @@ void VariationsPanel::rebuild()
 RoastPanel::RoastPanel(AgentBridge &bridge, QWidget *parent) : QWidget(parent), m_bridge(bridge), m_column(new QVBoxLayout(this))
 {
     setObjectName(QStringLiteral("roast"));
-    setFixedWidth(420);
+    setFixedWidth(400);
+    setMinimumHeight(360);
+    setFocusPolicy(Qt::StrongFocus);
     m_column->setContentsMargins(18, 16, 18, 16);
     m_column->setSpacing(10);
-    connect(&m_bridge, &AgentBridge::roastChanged, this, &RoastPanel::rebuild);
+    connect(&m_bridge, &AgentBridge::roastChanged, this, [this] {
+        m_page = 0;
+        rebuild();
+    });
     connect(&m_bridge, &AgentBridge::waitingChanged, this, &RoastPanel::rebuild);
     rebuild();
 }
@@ -228,44 +233,98 @@ void RoastPanel::buildBody(QWidget &body, QVBoxLayout &column)
             column.addWidget(wrapped(QStringLiteral("No roast yet."), &body));
         return;
     }
-    auto *text = wrapped(roast->roast, &body, QStringLiteral("roastText"));
-    QFont loud = text->font();
-    loud.setPointSizeF(loud.pointSizeF() * 1.1);
-    text->setFont(loud);
-    column.addWidget(text);
-    column.addWidget(separator(&body, QStringLiteral("roastSeparator")));
-    auto *heading = new QLabel(QStringLiteral("<b>What would actually help</b>"), &body);
-    heading->setObjectName(QStringLiteral("feedbackHeading"));
-    column.addWidget(heading);
-    for (size_t index = 0; index < roast->feedback.size(); ++index) {
-        const AgentFeedback &feedback = roast->feedback[index];
-        auto *item = new QCommandLinkButton(feedback.title, feedback.detail, &body);
-        item->setObjectName(QStringLiteral("feedback:%1").arg(index));
-        item->setEnabled(!feedback.objectIds.empty());
-        const std::vector<QUuid> ids = feedback.objectIds;
-        connect(item, &QCommandLinkButton::clicked, this, [this, ids] {
-            EditorSession *session = m_bridge.session();
-            if (!session->hasDocument())
-                return;
-            std::vector<QUuid> present;
-            for (const QUuid &id : ids) {
-                if (session->document()->find(id))
-                    present.push_back(id);
-            }
-            session->select(present);
+    // Three short pages instead of one long read: the roast, the fixes, what next.
+    static const char *titles[] = {"The roast", "The fixes", "What next"};
+    constexpr int pages = 3;
+    m_page = std::clamp(m_page, 0, pages - 1);
+    auto *pageTitle = new QLabel(QStringLiteral("<b>%1</b>").arg(QString::fromLatin1(titles[m_page])), &body);
+    pageTitle->setObjectName(QStringLiteral("roastPageTitle"));
+    column.addWidget(pageTitle);
+    if (m_page == 0) {
+        auto *text = new QWidget(&body);
+        text->setObjectName(QStringLiteral("roastText"));
+        auto *lines = new QVBoxLayout(text);
+        lines->setContentsMargins(0, 0, 0, 0);
+        lines->setSpacing(12);
+        // One burn a line, each given room to land.
+        for (const QString &line : roast->roast.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+            auto *label = wrapped(line.trimmed(), text);
+            QFont loud = label->font();
+            loud.setPointSizeF(loud.pointSizeF() * 1.25);
+            loud.setWeight(QFont::DemiBold);
+            label->setFont(loud);
+            lines->addWidget(label);
+        }
+        column.addWidget(text);
+    } else if (m_page == 1) {
+        for (size_t index = 0; index < roast->feedback.size(); ++index) {
+            const AgentFeedback &feedback = roast->feedback[index];
+            auto *item = new QCommandLinkButton(feedback.title, feedback.detail, &body);
+            item->setObjectName(QStringLiteral("feedback:%1").arg(index));
+            item->setEnabled(!feedback.objectIds.empty());
+            item->setToolTip(feedback.objectIds.empty() ? QString() : QStringLiteral("Select the objects this is about"));
+            const std::vector<QUuid> ids = feedback.objectIds;
+            connect(item, &QCommandLinkButton::clicked, this, [this, ids] {
+                EditorSession *session = m_bridge.session();
+                if (!session->hasDocument())
+                    return;
+                std::vector<QUuid> present;
+                for (const QUuid &id : ids) {
+                    if (session->document()->find(id))
+                        present.push_back(id);
+                }
+                session->select(present);
+            });
+            column.addWidget(item);
+        }
+    } else {
+        auto *brief = wrapped(QStringLiteral("“%1”").arg(roast->suggestedPrompt.toHtmlEscaped()), &body, QStringLiteral("roastBrief"));
+        column.addWidget(brief);
+        auto *make = new QPushButton(QStringLiteral("Make variations from this feedback"), &body);
+        make->setObjectName(QStringLiteral("makeVariations"));
+        make->setEnabled(!waiting);
+        connect(make, &QPushButton::clicked, this, [this, message] {
+            const QString error = m_bridge.generate(m_bridge.roastResult()->suggestedPrompt, 3, false);
+            message->setText(error);
+            message->setVisible(!error.isEmpty());
         });
-        column.addWidget(item);
+        column.addWidget(make);
     }
-    auto *make = new QPushButton(QStringLiteral("Make variations from this feedback"), &body);
-    make->setObjectName(QStringLiteral("makeVariations"));
-    make->setToolTip(roast->suggestedPrompt);
-    make->setEnabled(!waiting);
-    connect(make, &QPushButton::clicked, this, [this, message] {
-        const QString error = m_bridge.generate(m_bridge.roastResult()->suggestedPrompt, 3, false);
-        message->setText(error);
-        message->setVisible(!error.isEmpty());
-    });
-    column.addWidget(make);
+    column.addStretch(1);
+    column.addWidget(separator(&body, QStringLiteral("roastSeparator")));
+    auto *nav = new QHBoxLayout;
+    auto *back = new QPushButton(QStringLiteral("Back"), &body);
+    back->setObjectName(QStringLiteral("roastBack"));
+    back->setEnabled(m_page > 0);
+    auto *where = new QLabel(QStringLiteral("%1 of %2").arg(m_page + 1).arg(pages), &body);
+    where->setObjectName(QStringLiteral("roastPage"));
+    where->setAlignment(Qt::AlignCenter);
+    auto *next = new QPushButton(m_page + 1 < pages ? QString::fromLatin1(titles[m_page + 1]) : QStringLiteral("Next"), &body);
+    next->setObjectName(QStringLiteral("roastNext"));
+    next->setEnabled(m_page + 1 < pages);
+    next->setDefault(true);
+    connect(back, &QPushButton::clicked, this, [this] { showPage(m_page - 1); });
+    connect(next, &QPushButton::clicked, this, [this] { showPage(m_page + 1); });
+    nav->addWidget(back);
+    nav->addWidget(where, 1);
+    nav->addWidget(next);
+    column.addLayout(nav);
+}
+
+void RoastPanel::showPage(int page)
+{
+    m_page = std::clamp(page, 0, 2);
+    // Deferred: the clicked button belongs to the body being replaced.
+    QMetaObject::invokeMethod(this, &RoastPanel::rebuild, Qt::QueuedConnection);
+}
+
+void RoastPanel::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Right || event->key() == Qt::Key_Left) {
+        showPage(m_page + (event->key() == Qt::Key_Right ? 1 : -1));
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 // Proposal bar -----------------------------------------------------------------------
