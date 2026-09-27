@@ -4,6 +4,8 @@
 #include "UI/NewDocumentSheet.h"
 #include "UI/NumberField.h"
 #include "UI/ToolHeaders.h"
+#include <QCheckBox>
+#include <QComboBox>
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
@@ -46,6 +48,7 @@ private slots:
     void aRailClickPicksTheTool();
     void eachToolShowsItsBar();
     void shapeBarsEditTheSessionsNumbers();
+    void shapeBuilderFoldsItsOptions();
     void typeBarsStyleSelectedTextInOneStep();
     void theWelcomeShowsWithoutADocument();
     void theStatusBarFollowsTheSession();
@@ -148,6 +151,30 @@ void ContentViewTests::shapeBarsEditTheSessionsNumbers()
     // The stroke weight goes to the defaults without a selection.
     QTest::keyClick(find<NumberField>(rounded, "shapeStrokeWeight").field, Qt::Key_Up);
     QCOMPARE(editor.session.defaultStroke().width, 1.5);
+}
+
+void ContentViewTests::shapeBuilderFoldsItsOptions()
+{
+    Editor editor;
+    editor.press(Qt::Key_M, Qt::ShiftModifier);
+    QCOMPARE(editor.session.tool(), Tool::shapeBuilder);
+    QVERIFY(editor.status("hintStatus").contains("merge"));
+    auto &bar = find<ShapeBuilderControls>(editor.view, "toolHeader");
+    // Only the colour source shows until Options opens.
+    auto &colour = find<QComboBox>(bar, "shapeBuilderColorFrom");
+    QVERIFY(colour.isVisible());
+    auto &gaps = find<QCheckBox>(bar, "shapeBuilderGapDetection");
+    QVERIFY(!gaps.isVisible());
+    find<QToolButton>(bar, "shapeBuilderOptions").click();
+    QVERIFY(gaps.isVisible());
+    gaps.click();
+    QVERIFY(editor.session.shapeBuilder.gapDetection);
+    QVERIFY(find<NumberField>(bar, "shapeBuilderGap").isEnabled());
+    colour.setCurrentIndex(1);
+    emit colour.activated(1);
+    QVERIFY(!editor.session.shapeBuilder.colorFromArtwork);
+    find<QCheckBox>(bar, "shapeBuilderHighlightFill").click();
+    QVERIFY(!editor.session.shapeBuilder.highlightFill);
 }
 
 void ContentViewTests::typeBarsStyleSelectedTextInOneStep()

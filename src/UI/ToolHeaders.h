@@ -80,6 +80,7 @@ private:
     QComboBox *const m_selection;
     QCheckBox *const m_highlightFill;
     QCheckBox *const m_highlightStroke;
+    QToolButton *const m_more;
 };
 
 // Hand and Zoom: the zoom percentage.

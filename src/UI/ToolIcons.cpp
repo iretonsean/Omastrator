@@ -137,11 +137,15 @@ void shapeBuilder(QPainter &painter)
     QPainterPath left, right;
     left.addEllipse(QPointF(6.5, 7), 4.8, 4.8);
     right.addEllipse(QPointF(11.5, 7), 4.8, 4.8);
-    painter.fillPath(left.intersected(right), painter.pen().color());
-    painter.drawPath(left);
-    painter.drawPath(right);
-    painter.drawLine(QPointF(9, 13.2), QPointF(9, 17.2));
-    painter.drawLine(QPointF(7, 15.2), QPointF(11, 15.2));
+    QPainterPath plus;
+    plus.moveTo(9, 13.2);
+    plus.lineTo(9, 17.2);
+    plus.moveTo(7, 15.2);
+    plus.lineTo(11, 15.2);
+    QPainterPathStroker stroker(painter.pen());
+    // One fill: overlapping antialiased strokes would round the ink off its colour.
+    const QPainterPath ink = stroker.createStroke(left).united(stroker.createStroke(right)).united(stroker.createStroke(plus)).united(left.intersected(right));
+    painter.fillPath(ink, painter.pen().color());
 }
 
 void zoom(QPainter &painter)

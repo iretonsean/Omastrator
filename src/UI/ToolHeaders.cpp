@@ -134,7 +134,7 @@ ShapeBuilderControls::ShapeBuilderControls(EditorSession &session, QWidget *pare
       }, this)),
       m_strokeSplits(new QCheckBox(QStringLiteral("Click on a stroke splits it"), this)), m_colorFrom(new QComboBox(this)),
       m_selection(new QComboBox(this)), m_highlightFill(new QCheckBox(QStringLiteral("Highlight fill"), this)),
-      m_highlightStroke(new QCheckBox(QStringLiteral("Highlight stroke"), this))
+      m_highlightStroke(new QCheckBox(QStringLiteral("Highlight stroke"), this)), m_more(new QToolButton(this))
 {
     setObjectName(QStringLiteral("shapeBuilderControls"));
     m_gaps->setObjectName(QStringLiteral("shapeBuilderGapDetection"));
@@ -160,9 +160,26 @@ ShapeBuilderControls::ShapeBuilderControls(EditorSession &session, QWidget *pare
             [this](bool on) { change([on](ShapeBuilderOptions &options) { options.highlightFill = on; }); });
     connect(m_highlightStroke, &QCheckBox::toggled, this,
             [this](bool on) { change([on](ShapeBuilderOptions &options) { options.highlightStroke = on; }); });
+    // Colour source is the one choice made often; the rest folds behind Options, as Illustrator keeps them in a dialog.
+    m_more->setObjectName(QStringLiteral("shapeBuilderOptions"));
+    m_more->setText(QStringLiteral("Options"));
+    m_more->setCheckable(true);
+    m_more->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_more->setArrowType(Qt::RightArrow);
+    m_more->setToolTip(QStringLiteral("Gap detection, stroke splitting, the drag's path and the highlight"));
+    const std::vector<QWidget *> folded{m_gaps, m_gapLength, m_strokeSplits, m_selection, m_highlightFill, m_highlightStroke};
+    connect(m_more, &QToolButton::toggled, this, [this, folded](bool open) {
+        m_more->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
+        for (QWidget *widget : folded)
+            widget->setVisible(open);
+    });
     int at = 1;
-    for (QWidget *widget : std::initializer_list<QWidget *>{m_gaps, m_gapLength, m_strokeSplits, m_colorFrom, m_selection, m_highlightFill, m_highlightStroke})
+    for (QWidget *widget : std::initializer_list<QWidget *>{m_colorFrom, m_more})
         row->insertWidget(at++, widget);
+    for (QWidget *widget : folded) {
+        row->insertWidget(at++, widget);
+        widget->setVisible(false);
+    }
     synchronize();
 }
 

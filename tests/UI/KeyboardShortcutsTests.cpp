@@ -92,8 +92,8 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Forty menu entries, thirteen tools, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 66);
+    // Forty menu entries, fourteen tools, five keys, eight nudges.
+    QCOMPARE(int(all.size()), 67);
     QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 40);
     QSet<QString> ids;
     for (const ShortcutDefinition &definition : all)
@@ -122,6 +122,10 @@ void KeyboardShortcutsTests::toolLettersNameTheirTools()
     // Modifiers and unassigned letters pick nothing.
     QVERIFY(!ShortcutDefinition::tool(ShortcutChord("v", 8)));
     QVERIFY(!ShortcutDefinition::tool(ShortcutChord("q")));
+    // Shape Builder is Illustrator's Shift-M, beside the Rectangle's M.
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("m", 8)).value(), Tool::shapeBuilder);
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("m")).value(), Tool::rectangle);
+    QCOMPARE(named("Shape Builder tool").original, ShortcutChord("m", 8));
     QCOMPARE(named("Pen tool").original, ShortcutChord("p"));
     // A shifted apostrophe and digit are their own keys.
     QCOMPARE(ShortcutChord(press(Qt::Key_QuoteDbl, Qt::ControlModifier | Qt::ShiftModifier)), ShortcutChord("'", 9));
