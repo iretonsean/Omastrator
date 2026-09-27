@@ -14,7 +14,8 @@ option(OMAILLUSTRATOR_WERROR "Treat warnings as errors" OFF)
 find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Test)
 
 # Each source folder is its own library, so a folder builds and tests alone:
-# Document and Rendering (the model and how it draws), IO (files), UI (the app).
+# Document and Rendering (the model and how it draws), IO (files), Canvas (the
+# artboard view and its tools), UI (the window, panels and menus).
 function(oma_library name)
     file(GLOB sources CONFIGURE_DEPENDS ${ARGN})
     if(NOT sources)
@@ -34,8 +35,11 @@ oma_library(oma_io src/IO/*.cpp)
 target_include_directories(oma_io PRIVATE third_party)
 target_link_libraries(oma_io PUBLIC oma_core)
 
+oma_library(oma_canvas src/Canvas/*.cpp)
+target_link_libraries(oma_canvas PUBLIC oma_core)
+
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
-target_link_libraries(oma_ui PUBLIC oma_core oma_io)
+target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas)
 
 include(GNUInstallDirs)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmaIllustratorApp.cpp)
@@ -86,4 +90,5 @@ function(oma_tests library folder)
 endfunction()
 oma_tests(oma_core Document)
 oma_tests(oma_io IO)
+oma_tests(oma_canvas Canvas)
 oma_tests(oma_ui UI)
