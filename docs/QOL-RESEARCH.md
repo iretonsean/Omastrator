@@ -42,7 +42,7 @@ this commit.
 | Selection and snapping | Smart guides (edges, centres, equal spacing), grid with snap-to-grid, and Outline mode (Ctrl+Y). No rulers, no guides, no Alt-hover distances. | `Canvas/SmartGuides.*`, `EditorSession` view flags |
 | Nudge | Fixed at 1 pt, or 10 pt with Shift. | `Canvas/EditorCanvas+Keys.cpp` |
 | Artboards | One per document (`VectorDocument::size`). | `VectorDocument.h` |
-| Stroke | `StrokeAlignment {center, inside, outside}` is declared in `Paint.h`, but `StrokeStyle` has no field for it and nothing renders or exposes it. No arrowheads and no width profiles. | `Document/Paint.h` |
+| Stroke | At the time of this survey, `StrokeAlignment` was declared but unused, with no arrowheads. Now P1-8: alignment, arrowheads and dashes aligned to corners. No width profiles. | `Document/Paint.h`, `Document/StrokeGeometry.*` |
 | Edit menu | Paste and Paste in Place are there; Paste in Front and Paste in Back are not. **Duplicate is bound to Ctrl+J, which is Illustrator's Join.** No Transform Again (Ctrl+D). | `UI/Menus.cpp` |
 | Menus | File, Edit, Object, Type (Create Outlines only), View, Window, Help. **There is no Select menu**, so no Select Same, Inverse or Next Object Above. | `UI/Menus.cpp` |
 | Undo | Named undo steps. No History panel. | `DocumentHistory` |
@@ -798,8 +798,8 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Zoom to selection | ✓ | ✓ Shift+2 | ✓ done | **P0** |
 | Configurable nudge, Alt+arrow duplicate | ✓ | ✓ | ✓ done | **P0** |
 | Rulers and guides | ✓ | ✓ | ✗ | P1 |
-| Multiple fills and strokes | ✓ | ✓ | one of each | P1 |
-| Stroke align, arrowheads | ✓ | ✓ | enum declared, unused | P1 |
+| Multiple fills and strokes | ✓ | ✓ | ✓ done | P1 |
+| Stroke align, arrowheads | ✓ | ✓ | ✓ done | P1 |
 | Per-corner radius / live corners | ✓ | ✓ | tool setting only | P1 |
 | Styled runs (per-character styles, manual kerning) | ✓ | ✓ | ✗ | P1 |
 | OpenType features | ✓ | ✓ | ✗ | P1 |
@@ -807,8 +807,8 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Character/paragraph/text styles | ✓ | ✓ | ✗ | P1 |
 | Isolation mode | ✓ | (enter group) | from the context menu | P1 |
 | Join, Average, Scissors, Reverse path | ✓ | ✓ | ✗ | P1 |
-| Selection colours, recent colours, hex field | ✓ | ✓ | picker only | P1 |
-| Copy/Paste properties | (eyedropper) | ✓ | eyedropper only | P1 |
+| Selection colours, recent colours, hex field | ✓ | ✓ | ✓ done | P1 |
+| Copy/Paste properties | (eyedropper) | ✓ | ✓ done | P1 |
 | Command palette | Discover | ✓ Ctrl+K | ✓ done | P1 |
 | History panel | ✓ | version history | ✗ | P1 |
 | Collapsible Properties sections, contextual task bar | ✓ | ✓ | ✓ done | P1 |
@@ -817,7 +817,7 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Type on a path, text wrap, threads, hyphenation | ✓ | partial | ✗ | P2 |
 | Symbols/components | ✓ | ✓ | ✗ | P2 |
 | Width tool / variable strokes | ✓ | ✓ | ✗ | P2 |
-| On-canvas gradient annotator | ✓ | ✓ | panel only | P2 |
+| On-canvas gradient annotator | ✓ | ✓ | ✓ done | P2 |
 | Opacity masks | ✓ | masks | clip only | P2 |
 | Per-object export / Export for Screens | ✓ | ✓ | whole document | P2 |
 | Auto layout | ✗ | ✓ | ✗ | out of scope |
@@ -1193,7 +1193,60 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 ### P1: the detail layer
 
-> **P1-14 and P1-17 done.**
+> **P1-7, P1-8, P1-12, P1-13 and P1-14, P1-17 done.**
+>
+> **Appearance stack (P1-7):** `VectorObject` keeps `fill` and `stroke` as the
+> bottom of each stack, with `extraFills` and `extraStrokes` above them
+> (`fills()` and `strokes()` read the whole stack). Each `Paint` carries its
+> own eye, opacity and blend mode. Old files read unchanged: the stack is two
+> optional keys, `moreFills` and `moreStrokes`, and the new paint and stroke
+> fields are written only when set. In Properties, one plain fill and one plain
+> stroke stay as the familiar rows, each with a **+**; a second entry, or one
+> with its own opacity, blend or eye, turns the row into a Figma-style stack:
+> the top entry first, each row with a grip to drag, an eye, a well, its hex,
+> opacity (fills) or weight (strokes) and **−**; right-click a row for its
+> blend mode. Clicking a stroke row makes it the one the Stroke section edits.
+> Fills draw under strokes, in order. SVG writes a stacked object as one `<g>`
+> named for it, with one element per visible entry; PDF draws through the
+> renderer. Outline Stroke makes one filled path per visible stroke, and
+> Pathfinder's result takes the top object's whole stack. Every change is one
+> named step (Add Fill, Remove Stroke, Reorder Fills, Hide Fill…).
+>
+> **Stroke align and arrowheads (P1-8):** `StrokeStyle` gains `alignment`,
+> `startArrow`, `endArrow`, `arrowScale` and `alignDashes`, and
+> `Document/StrokeGeometry` works out what they cover, so the renderer, bounds,
+> SVG and Outline Stroke agree. Inside and outside draw a double-width stroke
+> clipped to one side of the path, and apply to closed paths only. Heads are
+> arrow (an open chevron), triangle, circle, square and bar, sized from the
+> weight times the scale; a triangle trims the line so it doesn't poke through
+> the tip. Align to corners stretches the dash pattern per run so a whole dash
+> sits centred on every corner and path end. In Properties the Align menu shows
+> only when the selection has a closed path, the Arrows row only when it has
+> an open one, the scale only once a head is set, and Align to corners only
+> once there are dashes. SVG writes such strokes as their filled outline. The
+> agent's `set_style` takes `align`, `startArrow`, `endArrow` and `arrowScale`.
+>
+> **Colour (P1-12):** a hex field in the fill and stroke rows and in each stack
+> row (`ff6600`, `#FF6600` and `#f60` all work). The picker keeps the last 12
+> colours chosen anywhere in the app (QSettings `colors/recent`) as a strip under
+> it. **Selection colors** in Appearance lists every colour of a selection of two
+> or more painted objects, gradient stops included; picking a new one for a chip
+> is one "Recolor" step across the selection (`EditorSession::replaceColor`).
+> **Global swatches:** right-click a swatch for **Global** and **Edit Color…**. A
+> global swatch shows Illustrator's white corner; applying it links the paint by
+> the swatch's id (`Paint::swatchId`), and editing its colour recolours every
+> linked paint in every open document, one "Edit Swatch" step each. Changing a
+> linked colour by hand unlinks it. The library stays per install, as before.
+>
+> **Copy/Paste Properties (P1-13):** Edit ▸ Copy Properties (Ctrl+Alt+C) and
+> Paste Properties (Ctrl+Alt+V), also in the right-click menu and Ctrl+K. They
+> carry the whole stack, opacity and blend; between texts, the character style
+> too (not the words, box or kerning). Text onto a path, or a path onto text,
+> is paint only. One clipboard serves every tab. The eyedropper's **Alt-click**
+> gives the selection's style (or the defaults) to the object clicked.
+>
+> Tests: `tests/Document/PaintAppearanceTests.cpp`, `tests/IO/SvgAppearanceTests.cpp`,
+> `tests/UI/PaintStackTests.cpp`, `tests/Canvas/GradientToolTests.cpp`.
 >
 > **Command palette:** `src/UI/CommandPalette*.cpp`. Ctrl+K and Ctrl+/ (the
 > first remappable as "Command Palette"), and Help ▸ Command Palette…. It is a
@@ -1249,13 +1302,13 @@ has Qt Test coverage in `tests/<Folder>/`.
 | P1-4 | **Text styles** | Character and paragraph styles stored in the document: New from selection, apply, redefine, and a "+" on the style name when overridden. Shown in a Styles list in the Character section, and as a Window ▸ Type Styles panel. | `VectorDocument` (`std::vector<TextStyle>`), `TextContent::styleId`, `DocumentCodec`, new `src/UI/TextStylesPanel` | Redefining a style updates every text that uses it in one undo step; a local override shows "+" |
 | P1-5 | **Find Font** | Type ▸ Find/Replace Font… lists the families used in the document, marks missing ones, and replaces them across the document or the selection. | `ObjectDialogs` (new dialog), `EditorSession::replaceFont` | Opening a file with a missing font lists it with a warning; Replace All changes every use in one undo step |
 | P1-6 | **Rulers and guides** | Ctrl+R shows rulers (pt/px/mm by document units) with pointer markers. Drag out a guide; guides snap, lock (Alt+Ctrl+;), hide (Ctrl+;), clear, and are made from a path (Ctrl+5). Double-click a guide to type its position. | `VectorDocument::guides`, `EditorCanvas+Paint.cpp`, new `src/Canvas/Rulers.{h,cpp}` (widgets beside the canvas), `SmartGuides` targets | Guides save in `.omai`; a moved object snaps to a guide within the tolerance; locked guides can't be dragged |
-| P1-7 | **Multiple fills and strokes (Appearance stack)** | Replace `Paint fill; StrokeStyle stroke` with ordered lists, each with visibility, opacity and blend mode. Properties shows a stack with + / − / eye / drag-to-reorder. The single-fill UI stays as the collapsed view. | `VectorDocument.h` (migrate single to list), `VectorRenderer`, `PropertiesPanel+Appearance.cpp`, SVG export (duplicated `<path>`s) | Two strokes (a thick dark one under a thin light one) render and export as one object; old files open unchanged |
-| P1-8 | **Stroke align and arrowheads** | Add `alignment` to `StrokeStyle` (inside and outside draw as a clipped double-width stroke), and start/end arrowheads (arrow, triangle, circle, square, bar) with a scale %. Add dash "align to corners". | `Paint.h`, `VectorRenderer`, `PathOperations` (outline stroke honours both), `PropertiesPanel+Appearance.cpp` | An inside 10 pt stroke on a 100 pt square stays within its bounds; Outline Stroke on an arrowed line includes the head |
+| P1-7 ✓ | **Multiple fills and strokes (Appearance stack)** | Replace `Paint fill; StrokeStyle stroke` with ordered lists, each with visibility, opacity and blend mode. Properties shows a stack with + / − / eye / drag-to-reorder. The single-fill UI stays as the collapsed view. | `VectorDocument.h` (migrate single to list), `VectorRenderer`, `PropertiesPanel+Appearance.cpp`, SVG export (duplicated `<path>`s) | Two strokes (a thick dark one under a thin light one) render and export as one object; old files open unchanged |
+| P1-8 ✓ | **Stroke align and arrowheads** | Add `alignment` to `StrokeStyle` (inside and outside draw as a clipped double-width stroke), and start/end arrowheads (arrow, triangle, circle, square, bar) with a scale %. Add dash "align to corners". | `Paint.h`, `VectorRenderer`, `PathOperations` (outline stroke honours both), `PropertiesPanel+Appearance.cpp` | An inside 10 pt stroke on a 100 pt square stays within its bounds; Outline Stroke on an arrowed line includes the head |
 | P1-9 | **Corner radius per corner / live corners** | Rectangles keep `cornerRadii[4]` while they're still live shapes. Properties shows one radius field, or four when unlinked. With Direct Selection, a corner widget drag sets the radius, and Alt-click cycles round, inverted and chamfer. | `VectorObject` (a `shape` block: kind, rect, radii), `PathOperations`, `EditorCanvas+DirectSelection.cpp` | Changing one corner leaves the other three alone; editing any anchor converts the object to a plain path (Illustrator's "expand shape") |
 | P1-10 | **Isolation mode** | Double-click a group, or use the context menu, to edit inside it. Everything else dims to 50 % and can't be selected. A breadcrumb bar appears under the tab bar; Esc or double-clicking outside leaves. | `EditorSession::isolated` (an id stack), `EditorCanvas+Selection.cpp`, `VectorRenderer` dim pass, `ProjectWorkspaceView` breadcrumb | Clicks select children of the isolated group only; new objects go into it; Esc restores the normal view |
 | P1-11 | **Join, Average, Scissors, Reverse Path, fill rule** | Ctrl+J joins two picked endpoints (with a straight segment, or merged if they coincide). Alt+Ctrl+J averages anchors H, V or both. A Scissors tool (C) splits a path at a click. Object ▸ Path ▸ Reverse Direction. A fill rule toggle (non-zero / even-odd) in Properties for compound paths. | `PathOperations`, `EditorSession`, new `Tool::scissors`, `EditorCanvas+DirectSelection.cpp` | Joining two open paths gives one path; Scissors on a closed path gives one open path whose ends are at the click; the fill rule round-trips through SVG |
-| P1-12 | **Colour QoL** | A hex field in the fill/stroke row; a **recent colours** strip (the last 12, per app) in the picker; **Selection colors** listing the distinct colours in a mixed selection, each editable (an edit recolours every use); **global swatches** (a swatch reference kept on the paint, so editing the swatch updates every use). | `ColorPickerSheet`, `PropertiesPanel+Appearance.cpp`, `Swatches` (+ `Paint::swatchId`), `EditorSession::replaceColor` | Typing `#ff6600` applies it; recolouring one colour in Selection colors changes it on all selected objects in one undo step; editing a global swatch updates every use |
-| P1-13 | **Copy/Paste properties** | Ctrl+Alt+C copies the style (fills, strokes, opacity, blend, text style); Ctrl+Alt+V applies it to the selection. The eyedropper's Alt-click applies to the clicked object. | `EditorSession` (a style clipboard; reuses `pickStyle`), `Menus`, the context menu | Pasting properties from text onto a path applies only paint; from text onto text also applies the character style |
+| P1-12 ✓ | **Colour QoL** | A hex field in the fill/stroke row; a **recent colours** strip (the last 12, per app) in the picker; **Selection colors** listing the distinct colours in a mixed selection, each editable (an edit recolours every use); **global swatches** (a swatch reference kept on the paint, so editing the swatch updates every use). | `ColorPickerSheet`, `PropertiesPanel+Appearance.cpp`, `Swatches` (+ `Paint::swatchId`), `EditorSession::replaceColor` | Typing `#ff6600` applies it; recolouring one colour in Selection colors changes it on all selected objects in one undo step; editing a global swatch updates every use |
+| P1-13 ✓ | **Copy/Paste properties** | Ctrl+Alt+C copies the style (fills, strokes, opacity, blend, text style); Ctrl+Alt+V applies it to the selection. The eyedropper's Alt-click applies to the clicked object. | `EditorSession` (a style clipboard; reuses `pickStyle`), `Menus`, the context menu | Pasting properties from text onto a path applies only paint; from text onto text also applies the character style |
 | P1-14 | **Command palette** | Ctrl+K (and Ctrl+/) opens a search sheet over every named `QAction`, showing the menu path and shortcut, enabled state, and recent commands first. Enter runs; arrows move. | New `src/UI/CommandPalette.{h,cpp}`, built from `Menus`' actions; theme from `OmarchyTheme` | Typing "outl" finds Outline Stroke, Create Outlines and Outline mode; disabled actions show dimmed and don't run |
 | P1-15 | **History panel** | Window ▸ History lists undo step names; clicking a row undoes or redoes to it. The limit is a preference. | `DocumentHistory` (exposes names), new `src/UI/HistoryPanel` | Clicking three rows up equals three Ctrl+Z; a new edit after that drops the redo rows |
 | P1-16 | **Distribute spacing and key object** | A click on an already-selected object (Selection tool) marks it as the key object (thick outline). Align To gains "Key Object". Distribute spacing takes a value in pt, and the four edge-distribute buttons are added. | `EditorSession` (`m_keyObject`), `PropertiesPanel::alignSection`, `EditorCanvas+Selection.cpp` | With the key object set, Align Left moves the others to its left edge and not the key; distribute spacing 12 puts exactly 12 pt between neighbours |
@@ -1273,11 +1326,21 @@ has Qt Test coverage in `tests/<Folder>/`.
 | P2-5 | **Hyphenation** | Optional, using hyphen patterns (TeX patterns, `hyphen` data) for area type. Honour soft hyphens (U+00AD) first. | The area-type layout | Soft hyphens break with a visible hyphen at a line end and are hidden otherwise |
 | P2-6 | **Symbols** | A symbol definition stored in the document plus instances (a transform plus an id). Editing the master updates every instance; Break Link expands one. | `VectorDocument`, `VectorRenderer`, a Symbols panel | Recolouring a master updates 10 instances in one undo step |
 | P2-7 | **Width tool / variable strokes** | Width points along a stroke, and profiles, rendered as an outline. | `StrokeStyle::widthProfile`, `PathOperations` | Uniform, tapered and bulge profiles render and export as filled outlines |
-| P2-8 | **On-canvas gradient annotator** | With the Gradient tool (G), drag the start and end on the object and drag the stops. | `EditorCanvas`, `Paint` | Dragging the end point changes the gradient angle live; one undo step |
+| P2-8 ✓ | **On-canvas gradient annotator** (done: see below) | With the Gradient tool (G), drag the start and end on the object and drag the stops. | `EditorCanvas`, `Paint` | Dragging the end point changes the gradient angle live; one undo step |
 | P2-9 | **Opacity masks** | Make Mask (top object's luminance), Clip, Invert. | `VectorObject::mask`, `VectorRenderer` | A white-to-black gradient mask fades the art; PDF and SVG export keep it |
 | P2-10 | **Export for Screens / per-object export** | Mark objects or artboards for export; scales 0.5×–3× with suffixes; PNG/JPG/SVG/PDF/WebP in one batch. | `ExportSheet`, `DocumentExporter` | Exporting two assets at 1× and 2× writes four files with `@2x` suffixes |
 | P2-11 | **Snap to pixel / Make Pixel Perfect** | Snap anchors and bounds to whole pixels while drawing and moving; pixel grid at ≥ 600 %. | `EditorSession::snapped`, `EditorCanvas+Paint.cpp` | A dragged rectangle's edges land on integers |
 | P2-12 | **Toolbar flyouts and presets** | Group tools with flyouts, Alt-click to cycle, and Basic/Advanced presets. | `ContentView`, `ToolIcons` | The tool order is saved; flyouts open on long-press or right-click |
+
+> **P2-8 done.** `src/Canvas/EditorCanvas+Gradient.cpp`. The Gradient tool
+> (G, in the toolbar by the eyedropper) edits the first selected object's fill.
+> A drag across it sets the gradient from where it started to where it ended
+> (a solid becomes a gradient from its colour to white); Shift keeps the bar to
+> 45° steps. The bar shows Illustrator's circle at the origin and square at the
+> end, with each stop as a swatch beside it: drag an end to change the angle and
+> length, or a stop to slide it along. Everything previews live and ends in one
+> "Gradient" step. A click on another object selects it. Radial gradients use
+> the same bar: centre and radius.
 
 ### Out of scope
 

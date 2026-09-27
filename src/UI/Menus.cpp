@@ -174,6 +174,11 @@ void Menus::buildEdit(QMenuBar &bar)
         [this] { session().paste(PastePosition::front); });
     add(edit, QStringLiteral("pasteInBack"), QStringLiteral("Paste in Back"), QKeySequence(Qt::CTRL | Qt::Key_B),
         [this] { session().paste(PastePosition::back); });
+    // The style alone: fills, strokes, opacity and blend, and type's character style between texts.
+    add(edit, QStringLiteral("copyProperties"), QStringLiteral("Copy Properties"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C),
+        [this] { session().copyProperties(); });
+    add(edit, QStringLiteral("pasteProperties"), QStringLiteral("Paste Properties"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_V),
+        [this] { session().pasteProperties(); });
     // Ctrl+J is Illustrator's Join; Ctrl+D is Transform Again.
     add(edit, QStringLiteral("duplicate"), QStringLiteral("Duplicate"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_D),
         [this] { session().duplicateSelection(); });

@@ -22,7 +22,7 @@ enum class BooleanOperation { unite, intersect, minusFront, exclude };
 // `minusFront` cuts every upper path from the bottom one.
 QPainterPath combine(const std::vector<QPainterPath> &bottomToTop, BooleanOperation operation);
 
-// The area a stroke covers, as a filled outline.
+// The area a stroke covers, as a filled outline: alignment, dashes and arrowheads included.
 QPainterPath outlineStroke(const QPainterPath &path, const StrokeStyle &stroke);
 
 // Grows (positive) or shrinks a closed path's outline by `distance`.

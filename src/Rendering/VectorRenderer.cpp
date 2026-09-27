@@ -1,5 +1,6 @@
 #include "Rendering/VectorRenderer.h"
 #include "Rendering/HslBlend.h"
+#include "Document/StrokeGeometry.h"
 #include <QPaintDevice>
 #include <algorithm>
 #include <cmath>
@@ -36,6 +37,43 @@ bool skipped(const VectorRenderer::Options &options, const QUuid &id)
     return std::find(options.skip.begin(), options.skip.end(), id) != options.skip.end();
 }
 
+// One entry of the stack: its opacity, and its blend where the device can.
+void composite(QPainter &painter, const Paint &paint)
+{
+    painter.setOpacity(painter.opacity() * paint.opacity);
+    if (paint.blendMode != LayerBlendMode::normal && painter.device() && painter.device()->devType() == QInternal::Image)
+        painter.setCompositionMode(compositionMode(paint.blendMode));
+}
+
+void drawPaints(QPainter &painter, const VectorObject &object, const QPainterPath &path, const QRectF &bounds, bool fillable)
+{
+    if (object.hasSimpleAppearance()) {
+        if (object.fill.isVisible() && fillable)
+            painter.fillPath(path, object.fill.brush(bounds));
+        if (object.stroke.isVisible())
+            painter.strokePath(path, object.stroke.pen(bounds));
+        return;
+    }
+    if (fillable) {
+        for (const Paint &fill : object.fills()) {
+            if (!fill.isVisible())
+                continue;
+            painter.save();
+            composite(painter, fill);
+            painter.fillPath(path, fill.brush(bounds));
+            painter.restore();
+        }
+    }
+    for (const StrokeStyle &stroke : object.strokes()) {
+        if (!stroke.isVisible())
+            continue;
+        painter.save();
+        composite(painter, stroke.paint);
+        VectorRenderer::drawStroke(painter, path, stroke, bounds);
+        painter.restore();
+    }
+}
+
 void drawLeaf(QPainter &painter, const VectorObject &object, const VectorRenderer::Options &options)
 {
     if (options.outlineMode) {
@@ -67,10 +105,7 @@ void drawLeaf(QPainter &painter, const VectorObject &object, const VectorRendere
         painter.save();
         painter.setTransform(object.transform, true);
         const QPainterPath glyphs = object.text.outline();
-        const QRectF bounds = glyphs.boundingRect();
-        painter.fillPath(glyphs, object.fill.brush(bounds));
-        if (object.stroke.isVisible())
-            painter.strokePath(glyphs, object.stroke.pen(bounds));
+        drawPaints(painter, object, glyphs, glyphs.boundingRect(), true);
         painter.restore();
         return;
     }
@@ -79,10 +114,7 @@ void drawLeaf(QPainter &painter, const VectorObject &object, const VectorRendere
         const QRectF bounds = path.boundingRect();
         const bool closed = std::any_of(object.path.contours.begin(), object.path.contours.end(),
                                         [](const Contour &c) { return c.closed || c.nodes.size() > 2; });
-        if (object.fill.isVisible() && closed)
-            painter.fillPath(path, object.fill.brush(bounds));
-        if (object.stroke.isVisible())
-            painter.strokePath(path, object.stroke.pen(bounds));
+        drawPaints(painter, object, path, bounds, closed);
         return;
     }
     default:
@@ -114,6 +146,39 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
 }
 
 namespace VectorRenderer {
+void drawStroke(QPainter &painter, const QPainterPath &path, const StrokeStyle &stroke, const QRectF &bounds)
+{
+    if (stroke.isPlain()) {
+        painter.strokePath(path, stroke.pen(bounds));
+        return;
+    }
+    // Inside and outside: a double-width stroke, clipped to one side of the path.
+    const bool aligned = stroke.alignment != StrokeAlignment::center && StrokeGeometry::isClosed(path);
+    StrokeStyle line = stroke;
+    line.width = aligned ? stroke.width * 2 : stroke.width;
+    QPainterPath along = StrokeGeometry::body(path, stroke);
+    if (stroke.alignDashes && !stroke.dashes.empty()) {
+        along = StrokeGeometry::alignedDashes(along, stroke.dashes);
+        line.dashes.clear();
+    }
+    painter.save();
+    if (aligned && stroke.alignment == StrokeAlignment::inside) {
+        painter.setClipPath(path, Qt::IntersectClip);
+    } else if (aligned) {
+        const double margin = line.width * std::max(1.0, stroke.miterLimit) + 1;
+        QPainterPath outside;
+        outside.addRect(path.boundingRect().adjusted(-margin, -margin, margin, margin));
+        outside.addPath(path);
+        outside.setFillRule(Qt::OddEvenFill);
+        painter.setClipPath(outside, Qt::IntersectClip);
+    }
+    painter.strokePath(along, line.pen(bounds));
+    painter.restore();
+    const QPainterPath heads = StrokeGeometry::heads(path, stroke);
+    if (!heads.isEmpty())
+        painter.fillPath(heads, stroke.paint.brush(bounds));
+}
+
 void drawObject(QPainter &painter, const VectorDocument &document, const QUuid &id, const Options &options)
 {
     const VectorObject *object = document.find(id);

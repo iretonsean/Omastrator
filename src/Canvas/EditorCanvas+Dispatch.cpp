@@ -66,8 +66,11 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     case Tool::scale:
         transformToolPress(view);
         break;
+    case Tool::gradient:
+        gradientPress(view, modifiers);
+        break;
     case Tool::eyedropper:
-        eyedropperPress(view);
+        eyedropperPress(view, modifiers);
         break;
     case Tool::zoom:
         beginDrag(DragKind::zoomRect, view);
@@ -137,6 +140,9 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::shapeBuilder:
         dragBuilder(view, modifiers);
         break;
+    case DragKind::gradient:
+        dragGradient(view, modifiers);
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -186,6 +192,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::convert:
         if (drag->interacting && session.isInteracting())
             session.commitInteraction();
+        break;
+    case DragKind::gradient:
+        finishGradient();
         break;
     case DragKind::textArea:
         finishTextArea();

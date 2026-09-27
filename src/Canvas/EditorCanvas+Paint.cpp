@@ -140,6 +140,7 @@ void EditorCanvas::State::drawOverlay(QPainter &painter) const
         drawSelection(painter);
     drawPen(painter);
     drawBuilder(painter);
+    drawGradient(painter);
     if (drag && drag->kind == DragKind::pencil && drag->points.size() > 1) {
         QPolygonF line;
         for (const QPointF point : drag->points)

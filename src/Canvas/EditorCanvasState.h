@@ -45,6 +45,8 @@ struct EditorCanvas::State {
         // Type tool: a drag draws an area type box.
         textArea,
         shapeBuilder,
+        // Gradient tool: an end, a stop, or a new start-to-end drag.
+        gradient,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -221,8 +223,18 @@ struct EditorCanvas::State {
     void zoomAt(double zoom, QPointF view);
     void finishZoom(QPointF view, Qt::KeyboardModifiers modifiers);
 
-    // Eyedropper --------------------------------------------------------------
-    void eyedropperPress(QPointF view);
+    // Eyedropper: a click takes a style; Alt-click gives the selection's to what it hits.
+    void eyedropperPress(QPointF view, Qt::KeyboardModifiers modifiers);
+
+    // Gradient (G) --------------------------------------------------------------
+    // The one painted leaf the annotator edits: the first selected.
+    std::optional<QUuid> gradientTarget() const;
+    // Which handle is under `view`: -1 the start, -2 the end, else a stop's index.
+    std::optional<int> gradientHandleAt(QPointF view) const;
+    void gradientPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragGradient(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishGradient();
+    void drawGradient(QPainter &painter) const;
 
     // Measuring and readouts ----------------------------------------------------
     // Alt held over something else: the gaps from the selection to it, or to the artboard.

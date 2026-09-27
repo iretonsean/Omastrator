@@ -113,6 +113,9 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
     for (const char *name : {"cut", "copy", "paste", "pasteInFront", "pasteInBack", "duplicate", "delete"})
         share(menu, &menus, name);
     menu->addSeparator();
+    for (const char *name : {"copyProperties", "pasteProperties"})
+        share(menu, &menus, name);
+    menu->addSeparator();
     // What this kind of selection is for.
     const std::vector<QUuid> &selected = session.selection();
     const VectorObject *single = selected.size() == 1 ? document.find(selected.front()) : nullptr;

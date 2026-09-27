@@ -49,8 +49,18 @@ StrokeStyle mergedStroke(const StrokeStyle &stroke, const QJsonObject &changes)
             if (!it.value().isArray())
                 fail(QStringLiteral("“stroke.dashes” must be an array of lengths."));
             merged[key] = it.value();
+        } else if (key == QLatin1String("align") || key == QLatin1String("startArrow") || key == QLatin1String("endArrow")) {
+            const QStringList allowed = key == QLatin1String("align") ? QStringList{"center", "inside", "outside"}
+                                                                      : QStringList{"none", "arrow", "triangle", "circle", "square", "bar"};
+            if (!allowed.contains(it.value().toString()))
+                fail(QStringLiteral("“stroke.%1” must be one of: %2.").arg(key, allowed.join(QStringLiteral(", "))));
+            merged[key] = it.value();
+        } else if (key == QLatin1String("arrowScale")) {
+            if (!it.value().isDouble() || it.value().toDouble() <= 0)
+                fail(QStringLiteral("“stroke.arrowScale” must be a percentage above zero."));
+            merged[key] = it.value();
         } else {
-            fail(QStringLiteral("“stroke” has no field “%1”. Use paint, color, width, cap, join, miterLimit or dashes.").arg(key));
+            fail(QStringLiteral("“stroke” has no field “%1”. Use paint, color, width, cap, join, miterLimit, dashes, align, startArrow, endArrow or arrowScale.").arg(key));
         }
     }
     return DocumentCodec::decodeStroke(merged);

@@ -7,6 +7,7 @@
 #include <array>
 #include <functional>
 #include <optional>
+#include <vector>
 
 // A picker entry commits on Return or leaving.
 class PickerField : public QLineEdit {
@@ -33,7 +34,14 @@ struct PickerHSB {
     friend bool operator==(const PickerHSB &, const PickerHSB &) = default;
 };
 
-// The colour picker: field, hue strip, preview, RGB and hex.
+// The last colours picked anywhere in the app, newest first, kept across runs.
+namespace RecentColors {
+constexpr int limit = 12;
+std::vector<QColor> list();
+void add(const QColor &color);
+}
+
+// The colour picker: field, hue strip, preview, RGB, hex and recent colours.
 class ColorPickerSheet : public QWidget {
     Q_OBJECT
 public:

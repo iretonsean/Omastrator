@@ -67,6 +67,8 @@ QString keywordsFor(const QString &name)
         {"exportJPEG", "save image jpg"},
         {"createOutlines", "text to paths convert"},
         {"duplicate", "copy clone"},
+        {"copyProperties", "style appearance format painter eyedropper"},
+        {"pasteProperties", "style appearance format painter apply"},
         {"delete", "remove"},
     };
     return words.value(name);

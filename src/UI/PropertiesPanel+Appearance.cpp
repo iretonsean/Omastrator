@@ -2,6 +2,7 @@
 #include "UI/ColorPickerSheet.h"
 #include "UI/LayerAppearanceControls.h"
 #include "UI/NumberField.h"
+#include "UI/PaintStack.h"
 #include "UI/PropertiesPanel.h"
 #include "UI/ToolHeaderStyle.h"
 #include <QGridLayout>
@@ -31,7 +32,8 @@ PaintRow::PaintRow(EditorSession &session, bool stroke, FloatingPanel &picker, Q
       m_end(new PaintSwatch([this] {
           const Paint paint = shown();
           return Paint::solid(paint.stops.empty() ? paint.color : paint.stops.back().color);
-      }, false, this))
+      }, false, this)),
+      m_hex(new QLineEdit(this))
 {
     const QString prefix = stroke ? QStringLiteral("stroke") : QStringLiteral("fill");
     setObjectName(prefix + QStringLiteral("Row"));
@@ -50,7 +52,31 @@ PaintRow::PaintRow(EditorSession &session, bool stroke, FloatingPanel &picker, Q
     row->addWidget(caption(stroke ? QStringLiteral("Stroke") : QStringLiteral("Fill"), this));
     row->addWidget(m_well);
     row->addWidget(m_end);
+    m_hex->setObjectName(prefix + QStringLiteral("Hex"));
+    m_hex->setAccessibleName(stroke ? QStringLiteral("Stroke hex color") : QStringLiteral("Fill hex color"));
+    m_hex->setToolTip(QStringLiteral("Hex color, such as ff6600"));
+    m_hex->setFixedWidth(66);
+    row->addWidget(m_hex);
     row->addWidget(m_kind, 1);
+    connect(m_hex, &QLineEdit::editingFinished, this, [this] {
+        if (!m_hex->isModified())
+            return;
+        m_hex->setModified(false);
+        const std::optional<QColor> color = HexColor::parse(m_hex->text());
+        if (!color) {
+            synchronize();
+            return;
+        }
+        Paint next = shown();
+        next.swatchId.clear();
+        if (next.stops.size() >= 2) {
+            next.stops.front().color = *color;
+            next.color = *color;
+        } else {
+            next = Paint::solid(*color).withCompositeOf(next);
+        }
+        apply(next);
+    });
     connect(m_kind, &QComboBox::activated, this, [this](int index) { apply(converted(shown(), kinds.at(size_t(index)))); });
     connect(m_well, &QAbstractButton::clicked, this, [this] { pickStop(false); });
     connect(m_end, &QAbstractButton::clicked, this, [this] { pickStop(true); });
@@ -114,6 +140,11 @@ void PaintRow::synchronize()
     m_kind->setCurrentIndex(mixed ? -1 : int(std::find(kinds.begin(), kinds.end(), paint.kind) - kinds.begin()));
     m_well->setToolTip((m_stroke ? QStringLiteral("Stroke color") : QStringLiteral("Fill color")) + (mixed ? QStringLiteral(": mixed") : QString()));
     m_end->setVisible(!mixed && paint.stops.size() >= 2);
+    if (!m_hex->hasFocus()) {
+        m_hex->setPlaceholderText(mixed ? QStringLiteral("Mixed") : QStringLiteral("None"));
+        m_hex->setText(mixed || paint.kind == PaintKind::none ? QString() : HexColor::format(paint.swatch()));
+        m_hex->setModified(false);
+    }
     m_well->update();
     m_end->update();
 }
@@ -144,9 +175,36 @@ PanelSection *PropertiesPanel::appearanceSection()
     block->trailing->addWidget(reset);
     m_fill = new PaintRow(m_session, false, m_picker, block);
     m_strokePaint = new PaintRow(m_session, true, m_picker, block);
-    body->addWidget(m_fill);
-    body->addWidget(m_strokePaint);
+    m_fillStack = new PaintStack(m_session, false, m_picker, block);
+    m_strokeStack = new PaintStack(m_session, true, m_picker, block);
+    connect(m_strokeStack, &PaintStack::activeChanged, this, &PropertiesPanel::synchronize);
+    // One fill and one stroke show as a row each; + starts a stack.
+    const auto line = [block](PaintRow *row, PaintStack *stack, bool strokes) {
+        auto *holder = new QWidget(block);
+        auto *layout = new QHBoxLayout(holder);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(2);
+        layout->addWidget(row, 1);
+        auto *add = new QToolButton(holder);
+        add->setObjectName(strokes ? QStringLiteral("strokeAdd") : QStringLiteral("fillAdd"));
+        add->setText(QStringLiteral("+"));
+        add->setAutoRaise(true);
+        add->setFixedSize(22, 22);
+        add->setToolTip(strokes ? QStringLiteral("Add stroke") : QStringLiteral("Add fill"));
+        add->setAccessibleName(add->toolTip());
+        QObject::connect(add, &QToolButton::clicked, stack, &PaintStack::addEntry);
+        layout->addWidget(add);
+        return holder;
+    };
+    m_fillLine = line(m_fill, m_fillStack, false);
+    m_strokeLine = line(m_strokePaint, m_strokeStack, true);
+    m_selectionColors = new SelectionColors(m_session, m_picker, block);
+    body->addWidget(m_fillLine);
+    body->addWidget(m_fillStack);
+    body->addWidget(m_strokeLine);
+    body->addWidget(m_strokeStack);
     body->addWidget(new LayerAppearanceControls(m_session, block));
+    body->addWidget(m_selectionColors);
     return block;
 }
 
@@ -188,6 +246,48 @@ PanelSection *PropertiesPanel::strokeSection()
     m_dashes->setObjectName(QStringLiteral("strokeDashes"));
     m_dashes->setPlaceholderText(QStringLiteral("Solid"));
     m_dashes->setToolTip(QStringLiteral("Dash and gap lengths in points, such as 12 6"));
+    m_strokeAlign = new QComboBox(block);
+    m_strokeAlign->setObjectName(QStringLiteral("strokeAlign"));
+    m_strokeAlign->addItems({QStringLiteral("Center"), QStringLiteral("Inside"), QStringLiteral("Outside")});
+    m_strokeAlign->setToolTip(QStringLiteral("Where a closed path's stroke sits on its edge"));
+    m_strokeAlignCaption = caption(QStringLiteral("Align"), block);
+    m_alignDashes = new QCheckBox(QStringLiteral("Align to corners"), block);
+    m_alignDashes->setObjectName(QStringLiteral("strokeAlignDashes"));
+    m_alignDashes->setFont(ToolHeaderStyle::controlFont());
+    m_alignDashes->setToolTip(QStringLiteral("Stretch the dashes so one sits centred on every corner and path end"));
+    // Arrowheads: only for open paths, where they can go.
+    m_arrows = new QWidget(block);
+    m_arrows->setObjectName(QStringLiteral("strokeArrows"));
+    const QStringList heads{QStringLiteral("None"), QStringLiteral("Arrow"), QStringLiteral("Triangle"), QStringLiteral("Circle"),
+                            QStringLiteral("Square"), QStringLiteral("Bar")};
+    m_startArrow = new QComboBox(m_arrows);
+    m_startArrow->setObjectName(QStringLiteral("strokeStartArrow"));
+    m_startArrow->addItems(heads);
+    m_startArrow->setToolTip(QStringLiteral("Arrowhead at the start"));
+    m_endArrow = new QComboBox(m_arrows);
+    m_endArrow->setObjectName(QStringLiteral("strokeEndArrow"));
+    m_endArrow->addItems(heads);
+    m_endArrow->setToolTip(QStringLiteral("Arrowhead at the end"));
+    m_arrowScale = new NumberField(QString(), QStringLiteral("%"), [this](double percent) {
+        StrokeStyle stroke = shownStroke();
+        stroke.arrowScale = std::clamp(percent, 1.0, 1000.0);
+        applyStroke(stroke);
+    }, m_arrows);
+    m_arrowScale->field->setObjectName(QStringLiteral("strokeArrowScale"));
+    m_arrowScale->minimum = 1;
+    m_arrowScale->maximum = 1000;
+    m_arrowScale->step = 10;
+    m_arrowScale->setToolTip(QStringLiteral("Arrowhead size"));
+    m_arrowScale->setFixedWidth(64);
+    auto *arrows = new QGridLayout(m_arrows);
+    arrows->setContentsMargins(0, 0, 0, 0);
+    arrows->setHorizontalSpacing(6);
+    arrows->addWidget(caption(QStringLiteral("Arrows"), m_arrows), 0, 0);
+    arrows->addWidget(m_startArrow, 0, 1);
+    arrows->addWidget(m_endArrow, 0, 2);
+    arrows->addWidget(m_arrowScale, 0, 3);
+    arrows->setColumnStretch(1, 1);
+    arrows->setColumnStretch(2, 1);
     auto *grid = new QGridLayout;
     grid->setHorizontalSpacing(6);
     grid->setVerticalSpacing(6);
@@ -199,27 +299,48 @@ PanelSection *PropertiesPanel::strokeSection()
     grid->addWidget(m_join, 2, 1);
     grid->addWidget(caption(QStringLiteral("Dashes"), block), 3, 0);
     grid->addWidget(m_dashes, 3, 1);
+    grid->addWidget(m_alignDashes, 4, 1);
+    grid->addWidget(m_strokeAlignCaption, 5, 0);
+    grid->addWidget(m_strokeAlign, 5, 1);
     grid->setColumnStretch(1, 1);
     body->addLayout(grid);
+    body->addWidget(m_arrows);
     connect(m_cap, &QComboBox::activated, this, [this](int index) {
-        StrokeStyle stroke = ShownStyle::stroke(m_session);
+        StrokeStyle stroke = shownStroke();
         stroke.cap = std::array{Qt::FlatCap, Qt::RoundCap, Qt::SquareCap}.at(size_t(index));
-        m_session.setStrokeOfSelection(stroke);
+        applyStroke(stroke);
     });
     connect(m_join, &QComboBox::activated, this, [this](int index) {
-        StrokeStyle stroke = ShownStyle::stroke(m_session);
+        StrokeStyle stroke = shownStroke();
         stroke.join = std::array{Qt::MiterJoin, Qt::RoundJoin, Qt::BevelJoin}.at(size_t(index));
-        m_session.setStrokeOfSelection(stroke);
+        applyStroke(stroke);
     });
+    connect(m_strokeAlign, &QComboBox::activated, this, [this](int index) {
+        StrokeStyle stroke = shownStroke();
+        stroke.alignment = std::array{StrokeAlignment::center, StrokeAlignment::inside, StrokeAlignment::outside}.at(size_t(index));
+        applyStroke(stroke);
+    });
+    connect(m_alignDashes, &QCheckBox::clicked, this, [this](bool on) {
+        StrokeStyle stroke = shownStroke();
+        stroke.alignDashes = on;
+        applyStroke(stroke);
+    });
+    for (QComboBox *combo : {m_startArrow, m_endArrow}) {
+        connect(combo, &QComboBox::activated, this, [this, combo](int index) {
+            StrokeStyle stroke = shownStroke();
+            (combo == m_startArrow ? stroke.startArrow : stroke.endArrow) = Arrowhead(index);
+            applyStroke(stroke);
+        });
+    }
     connect(m_dashes, &QLineEdit::editingFinished, this, &PropertiesPanel::applyDashes);
     return block;
 }
 
 void PropertiesPanel::setStrokeWidth(double width)
 {
-    StrokeStyle stroke = ShownStyle::stroke(m_session);
+    StrokeStyle stroke = shownStroke();
     stroke.width = std::max(0.0, width);
-    m_session.setStrokeOfSelection(stroke);
+    applyStroke(stroke);
 }
 
 // Numbers apart by spaces or commas; anything else is refused.
@@ -235,9 +356,9 @@ void PropertiesPanel::applyDashes()
         }
         dashes.push_back(length);
     }
-    StrokeStyle stroke = ShownStyle::stroke(m_session);
+    StrokeStyle stroke = shownStroke();
     if (stroke.dashes == dashes)
         return;
     stroke.dashes = dashes;
-    m_session.setStrokeOfSelection(stroke);
+    applyStroke(stroke);
 }

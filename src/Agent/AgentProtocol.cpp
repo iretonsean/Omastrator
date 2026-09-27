@@ -35,7 +35,7 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "properties": {
    "ids": {"type": "array", "items": {"type": "string"}, "description": "Object ids. Default: the selection."},
    "fill": {"description": "\"none\", a colour such as \"#ff6600\", or DocumentCodec paint JSON {kind: none|solid|linearGradient|radialGradient, color, stops: [{offset, color}], start, end}.", "type": ["string", "object"]},
-   "stroke": {"type": "object", "description": "Stroke fields to change: paint (as fill), color (shorthand for a solid paint), width, cap (butt|square|round), join (miter|bevel|round), miterLimit, dashes."},
+   "stroke": {"type": "object", "description": "Stroke fields to change: paint (as fill), color (shorthand for a solid paint), width, cap (butt|square|round), join (miter|bevel|round), miterLimit, dashes, align (center|inside|outside), startArrow and endArrow (none|arrow|triangle|circle|square|bar), arrowScale (percent)."},
    "opacity": {"type": "number", "minimum": 0, "maximum": 1},
    "blendMode": {"type": "string", "description": "normal, multiply, screen, overlay, softLight, darken, lighten, difference, colorDodge, colorBurn, hue, saturation, color or luminosity (document_get's names, such as \"Soft Light\", work too)."}}}},
 {"name": "transform", "group": "edit",

@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegularExpressionValidator>
+#include <QSettings>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
@@ -119,11 +120,63 @@ private:
     const QColor m_original;
 };
 
+// One recent colour in the strip under the picker.
+class RecentChip : public QAbstractButton {
+public:
+    RecentChip(const QColor &color, QWidget *parent) : QAbstractButton(parent), m_color(color)
+    {
+        setObjectName(QStringLiteral("recentColor"));
+        setFixedSize(18, 18);
+        setCursor(Qt::PointingHandCursor);
+        setToolTip(color.name().toUpper());
+        setAccessibleName(QStringLiteral("Recent color %1").arg(color.name().toUpper()));
+    }
+    QColor color() const { return m_color; }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor(0, 0, 0, 153), 1));
+        painter.setBrush(m_color);
+        painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
+    }
+
+private:
+    const QColor m_color;
+};
+
 QLabel *label(const QString &text, QWidget *parent)
 {
     auto *label = new QLabel(text, parent);
     label->setFixedWidth(14);
     return label;
+}
+}
+
+namespace RecentColors {
+std::vector<QColor> list()
+{
+    std::vector<QColor> colors;
+    for (const QString &name : QSettings().value(QStringLiteral("colors/recent")).toStringList()) {
+        const QColor color = QColor::fromString(name);
+        if (color.isValid() && int(colors.size()) < limit)
+            colors.push_back(color);
+    }
+    return colors;
+}
+
+void add(const QColor &color)
+{
+    if (!color.isValid())
+        return;
+    QStringList names{color.name()};
+    for (const QColor &each : list()) {
+        if (each.rgb() != color.rgb() && names.size() < limit)
+            names << each.name();
+    }
+    QSettings().setValue(QStringLiteral("colors/recent"), names);
 }
 }
 
@@ -200,7 +253,10 @@ ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std
     m_cancel->setObjectName(QStringLiteral("pickerCancel"));
     m_cancel->setAutoDefault(false);
     m_cancel->setFixedWidth(90);
-    connect(m_ok, &QPushButton::clicked, this, [this, finish] { finish(color()); });
+    connect(m_ok, &QPushButton::clicked, this, [this, finish] {
+        RecentColors::add(color());
+        finish(color());
+    });
     connect(m_cancel, &QPushButton::clicked, this, [finish] { finish(std::nullopt); });
     auto *buttons = new QVBoxLayout;
     buttons->setSpacing(8);
@@ -235,12 +291,28 @@ ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std
     auto *side = new QWidget(this);
     side->setFixedSize(180, int(fieldSize));
     side->setLayout(column);
-    auto *row = new QHBoxLayout(this);
-    row->setContentsMargins(20, 20, 20, 20);
+    auto *sheet = new QVBoxLayout(this);
+    sheet->setContentsMargins(20, 20, 20, 20);
+    sheet->setSpacing(12);
+    auto *row = new QHBoxLayout;
     row->setSpacing(14);
     row->addWidget(m_field, 0, Qt::AlignTop);
     row->addWidget(m_hue, 0, Qt::AlignTop);
     row->addWidget(side, 0, Qt::AlignTop);
+    sheet->addLayout(row);
+    // Recent colours: one click puts a colour back.
+    const std::vector<QColor> recent = RecentColors::list();
+    if (!recent.empty()) {
+        auto *strip = new QHBoxLayout;
+        strip->setSpacing(4);
+        for (const QColor &each : recent) {
+            auto *chip = new RecentChip(each, this);
+            connect(chip, &QAbstractButton::clicked, this, [this, each] { setHSB(PickerHSB::from(each)); });
+            strip->addWidget(chip);
+        }
+        strip->addStretch(1);
+        sheet->addLayout(strip);
+    }
     synchronize();
 }
 

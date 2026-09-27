@@ -96,10 +96,10 @@ struct ToolKey {
     const char *key;
     int modifiers = 0;
 };
-const std::array<ToolKey, 14> toolKeys{{
+const std::array<ToolKey, 15> toolKeys{{
     {Tool::select, "v"}, {Tool::directSelect, "a"}, {Tool::pen, "p"}, {Tool::pencil, "n"}, {Tool::text, "t"}, {Tool::line, "\\"},
     {Tool::rectangle, "m"}, {Tool::ellipse, "l"}, {Tool::rotate, "r"}, {Tool::scale, "s"}, {Tool::eyedropper, "i"}, {Tool::hand, "h"},
-    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8},
+    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8}, {Tool::gradient, "g"},
 }};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)
@@ -147,6 +147,7 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Undo", "z", 1, true), entry("Redo", "z", 9, true), entry("Cut", "x", 1, true), entry("Copy", "c", 1, true),
             entry("Paste", "v", 1, true), entry("Paste in Place", "v", 9, true), entry("Duplicate", "d", 3, true),
             entry("Paste in Front", "f", 1, true), entry("Paste in Back", "b", 1, true), entry("Transform Again", "d", 1, true),
+            entry("Copy Properties", "c", 3, true), entry("Paste Properties", "v", 3, true),
             entry("Reselect", "6", 1, true), entry("Next Object Above", "]", 3, true), entry("Next Object Below", "[", 3, true),
             entry("Zoom to Selection", "0", 3, true),
             entry("Select All", "a", 1, true), entry("Deselect", "a", 9, true), entry("Move", "m", 9, true),

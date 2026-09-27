@@ -19,6 +19,8 @@ struct Options {
 
 void draw(QPainter &painter, const VectorDocument &document, const Options &options);
 void drawObject(QPainter &painter, const VectorDocument &document, const QUuid &id, const Options &options);
+// One stroke: plain through QPen, else with its alignment, aligned dashes and heads.
+void drawStroke(QPainter &painter, const QPainterPath &path, const StrokeStyle &stroke, const QRectF &bounds);
 // The artboard as an image `scale` device pixels per point.
 QImage render(const VectorDocument &document, double scale, bool transparent);
 }

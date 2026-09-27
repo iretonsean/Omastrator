@@ -87,6 +87,11 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
         if (!m_swatchesPanel.isVisible())
             showSwatchesPanel();
     });
+    // A global swatch's new colour reaches every open document.
+    connect(&m_swatches, &Swatches::globalSwatchRecolored, this, [this](const QString &id, const QColor &color) {
+        for (const std::shared_ptr<ProjectTab> &tab : m_workspace.tabs())
+            tab->session.recolorSwatch(id, color);
+    });
     m_roastPanel.onClose = [this] {
         m_roastPanel.close();
         m_resultsUnseen = false;

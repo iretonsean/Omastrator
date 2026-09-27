@@ -2,6 +2,8 @@
 #include "Document/EditorSession.h"
 #include "Document/Swatches.h"
 #include "UI/ColorPaletteControls.h"
+#include "UI/ColorPickerSheet.h"
+#include <QPainterPath>
 #include <QAbstractButton>
 #include <QGridLayout>
 #include <QLabel>
@@ -16,11 +18,12 @@ constexpr int perRow = 10;
 
 class SwatchChip : public QAbstractButton {
 public:
-    SwatchChip(const Swatch &swatch, QWidget *parent) : QAbstractButton(parent), m_color(swatch.color)
+    SwatchChip(const Swatch &swatch, QWidget *parent) : QAbstractButton(parent), m_color(swatch.color), m_global(swatch.global)
     {
         setFixedSize(chip, chip);
         setCursor(Qt::PointingHandCursor);
-        setToolTip(QStringLiteral("%1 (%2)\nClick for fill, Shift-click for stroke").arg(swatch.name, swatch.color.name()));
+        setToolTip(QStringLiteral("%1 (%2)%3\nClick for fill, Shift-click for stroke")
+                       .arg(swatch.name, swatch.color.name(), swatch.global ? QStringLiteral(", global") : QString()));
         setAccessibleName(swatch.name);
     }
     Qt::KeyboardModifiers modifiers;
@@ -38,6 +41,17 @@ protected:
         painter.setPen(QPen(palette().color(QPalette::Mid), 1));
         painter.setBrush(m_color);
         painter.drawRoundedRect(QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5), 4, 4);
+        // Illustrator marks a global swatch with a white corner.
+        if (m_global) {
+            const QRectF box = QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5);
+            QPainterPath corner(box.bottomRight() - QPointF(0, 8));
+            corner.lineTo(box.bottomRight());
+            corner.lineTo(box.bottomRight() - QPointF(8, 0));
+            corner.closeSubpath();
+            painter.setPen(QPen(palette().color(QPalette::Mid), 0.75));
+            painter.setBrush(Qt::white);
+            painter.drawPath(corner);
+        }
         if (underMouse()) {
             painter.setPen(QPen(palette().color(QPalette::Highlight), 2));
             painter.setBrush(Qt::NoBrush);
@@ -47,6 +61,7 @@ protected:
 
 private:
     QColor m_color;
+    bool m_global = false;
 };
 }
 
@@ -101,21 +116,36 @@ void SwatchesPanel::rebuild()
             auto *button = new SwatchChip(swatch, grid);
             button->setObjectName(QStringLiteral("swatch"));
             button->setContextMenuPolicy(Qt::CustomContextMenu);
-            connect(button, &QAbstractButton::clicked, this, [this, button, color = swatch.color] {
+            connect(button, &QAbstractButton::clicked, this, [this, button, swatch] {
                 EditorSession &session = m_session();
                 if (session.isInteracting())
                     return;
+                Paint paint = Paint::solid(swatch.color);
+                if (swatch.global)
+                    paint.swatchId = swatch.id;
                 if (button->modifiers & Qt::ShiftModifier) {
                     StrokeStyle stroke = ShownStyle::stroke(session);
-                    stroke.paint = Paint::solid(color);
+                    stroke.paint = paint.withCompositeOf(stroke.paint);
+                    stroke.paint.isHidden = false;
                     stroke.width = std::max(stroke.width, 1.0);
                     session.setStrokeOfSelection(stroke);
                 } else {
-                    session.setFillOfSelection(Paint::solid(color));
+                    session.setFillOfSelection(paint);
                 }
             });
-            connect(button, &QWidget::customContextMenuRequested, this, [this, button, name = group.name, index](const QPoint &at) {
+            connect(button, &QWidget::customContextMenuRequested, this, [this, button, swatch, name = group.name, index](const QPoint &at) {
                 QMenu menu;
+                menu.addAction(QStringLiteral("Edit Color…"), this, [this, swatch, name, index] {
+                    ColorPickerSheet::showIn(m_picker, swatch.name, swatch.color,
+                                             [this, name, index](const QColor &color) { m_library.setColor(name, index, color); });
+                });
+                QAction *global = menu.addAction(QStringLiteral("Global"));
+                global->setObjectName(QStringLiteral("swatchGlobal"));
+                global->setCheckable(true);
+                global->setChecked(swatch.global);
+                global->setToolTip(QStringLiteral("Objects painted with a global swatch change when it does"));
+                connect(global, &QAction::toggled, this, [this, name, index](bool on) { m_library.setGlobal(name, index, on); });
+                menu.addSeparator();
                 menu.addAction(QStringLiteral("Delete Swatch"), this, [this, name, index] { m_library.remove(name, index); });
                 menu.exec(button->mapToGlobal(at));
             });

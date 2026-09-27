@@ -236,8 +236,8 @@ std::optional<QUuid> combine(VectorDocument &document, const std::vector<QUuid> 
     result.name = QStringLiteral("Compound Path");
     // Illustrator's Pathfinder keeps the top object's style, except Minus Front.
     if (operation != BooleanOperation::minusFront) {
-        result.fill = topmost.fill;
-        result.stroke = topmost.stroke;
+        result.setFills(topmost.fills());
+        result.setStrokes(topmost.strokes());
     }
     result.path = VectorPath::fromPainterPath(::combine(shapes, operation));
     const QUuid parent = *topmost.parentID;
