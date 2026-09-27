@@ -15,6 +15,9 @@ Item {
 
   readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
 
+  // A binary named in shell.json after a failed start is tried at once.
+  onBinaryChanged: if (root.binaryKnown && !stream.running) { restart.stop(); restart.interval = 3000; stream.running = true }
+
   // prev is {} for the first line.
   signal changed(var prev, var next)
 
@@ -33,6 +36,7 @@ Item {
     var prev = root.status
     root.status = next
     root.connected = true
+    restart.interval = 3000
     root.changed(prev, next)
   }
 
@@ -56,13 +60,17 @@ Item {
     command: [root.binary, "status", "--follow"]
     running: root.binaryKnown
     stdout: SplitParser { onRead: function (data) { root.apply(data) } }
-    onExited: {
+    // A binary that can't start never sends exited, so this watches running instead.
+    onRunningChanged: {
+      if (running) return
       root.connected = false
       restart.start()
+      // Backs off to a minute, so a missing binary doesn't fill the shell's log.
+      restart.interval = Math.min(restart.interval * 2, 60000)
     }
   }
 
-  // The stream only ends if the binary went away or was replaced.
+  // The stream only ends if the binary went away or was replaced; it retries until it's back.
   Timer {
     id: restart
     interval: 3000

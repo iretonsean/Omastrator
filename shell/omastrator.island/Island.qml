@@ -229,6 +229,24 @@ Item {
   property Item hoveredButton: null
   readonly property string hoverTip: hoveredButton && hoveredButton.visible ? hoveredButton.tip : ""
 
+  // Leaving waits a moment, so crossing the gap between two buttons doesn't blink the tip.
+  Timer {
+    id: hoverLeave
+    interval: 150
+    property Item leaving: null
+    onTriggered: if (root.hoveredButton === leaving) root.hoveredButton = null
+  }
+
+  function hoverChanged(button, inside) {
+    if (inside) {
+      hoverLeave.stop()
+      hoveredButton = button
+    } else if (hoveredButton === button) {
+      hoverLeave.leaving = button
+      hoverLeave.restart()
+    }
+  }
+
   readonly property string focusedName: Hyprland.focusedMonitor ? String(Hyprland.focusedMonitor.name || "") : ""
 
   component IslandButton: Item {
@@ -268,10 +286,7 @@ Item {
       onClicked: function (mouse) { button.clicked(mouse) }
       onPressed: button.held(true)
       onReleased: button.held(false)
-      onContainsMouseChanged: {
-        if (containsMouse) root.hoveredButton = button
-        else if (root.hoveredButton === button) root.hoveredButton = null
-      }
+      onContainsMouseChanged: root.hoverChanged(button, containsMouse)
     }
   }
 
@@ -285,19 +300,23 @@ Item {
       // Follows the focused monitor; before Hyprland answers, the first screen.
       visible: root.focusedName === "" ? modelData === Quickshell.screens[0] : modelData.name === root.focusedName
 
+      // A strip as wide as the screen and a fixed height: the surface never
+      // resizes on hover. Sizing it to the tooltip moved the pill away from
+      // the pointer, which hid the tooltip, which moved it back, many times a second.
       anchors.top: true
+      anchors.left: true
+      anchors.right: true
       // Sits under the bar's reserved space without reserving any itself.
       exclusionMode: ExclusionMode.Normal
       exclusiveZone: 0
       margins.top: Style.gapsOut
-      implicitWidth: Math.max(pill.width, tipCard.width) + Style.space(24)
-      implicitHeight: pill.height + Style.space(40)
+      implicitHeight: root.pillHeight + Style.space(40)
       color: "transparent"
       WlrLayershell.layer: WlrLayer.Top
       WlrLayershell.namespace: "omastrator-island"
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
-      // Only the pill takes the pointer; the tooltip room lets clicks through.
+      // Only the pill takes the pointer; the rest of the strip lets clicks through.
       mask: Region { item: pill }
 
       Rectangle {
@@ -308,8 +327,12 @@ Item {
         width: row.implicitWidth + root.pad * 2
         radius: height / 2
         color: root.surface
-        border.color: Util.alpha(root.edge, 0.6)
+        // Themes whose popups have no border still get an edge on a dark desktop.
+        border.color: root.edge.a > 0.05 && !Qt.colorEqual(Qt.rgba(root.edge.r, root.edge.g, root.edge.b, 1), Qt.rgba(root.surface.r, root.surface.g, root.surface.b, 1))
+                      ? Util.alpha(root.edge, 0.6) : Util.alpha(root.ink, 0.16)
         border.width: 1
+        // The row takes its new width at once while the pill animates to it.
+        clip: true
 
         Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
