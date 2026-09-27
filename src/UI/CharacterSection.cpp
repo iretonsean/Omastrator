@@ -1,5 +1,7 @@
 #include "UI/CharacterSection.h"
+#include "Document/FontFeatures.h"
 #include "UI/NumberField.h"
+#include "UI/OpenTypePopover.h"
 #include "UI/PanelIcons.h"
 #include "UI/ToolHeaderStyle.h"
 #include <QEvent>
@@ -74,6 +76,10 @@ QString TypeAlignment::name(TextAlignment alignment)
         return QStringLiteral("Align right");
     case TextAlignment::justify:
         return QStringLiteral("Justify with last line aligned left");
+    case TextAlignment::justifyCenter:
+        return QStringLiteral("Justify with last line aligned center");
+    case TextAlignment::justifyRight:
+        return QStringLiteral("Justify with last line aligned right");
     case TextAlignment::justifyAll:
         return QStringLiteral("Justify all lines");
     default:
@@ -223,6 +229,12 @@ CharacterSection::CharacterSection(EditorSession &session, QWidget *parent)
     decoration->addWidget(m_case, 1);
     decoration->addWidget(m_underline);
     decoration->addWidget(m_strikethrough);
+    if (FontFeatures::applicable()) {
+        m_openType = toggleButton(QStringLiteral("characterOpenType"), QStringLiteral("…"), QStringLiteral("OpenType features"));
+        m_openType->setCheckable(false);
+        connect(m_openType, &QToolButton::clicked, this, [this] { OpenTypePopover::show(m_session, m_openType); });
+        decoration->addWidget(m_openType);
+    }
     extra->addWidget(caption(QStringLiteral("Kerning"), m_extra), 0, 0);
     extra->addWidget(m_kerning, 0, 1);
     extra->addWidget(m_baseline, 0, 2);
@@ -239,6 +251,7 @@ CharacterSection::CharacterSection(EditorSession &session, QWidget *parent)
     for (QComboBox *combo : {static_cast<QComboBox *>(m_family), m_style, m_kerning, m_case, m_kind})
         combo->setFont(ToolHeaderStyle::controlFont());
     setShowsMore(QSettings().value(showMoreKey, false).toBool());
+    buildStyles();
     applyGlyphs();
 }
 
@@ -294,8 +307,8 @@ void CharacterSection::setShowsMore(bool shown)
     QSettings().setValue(showMoreKey, shown);
     m_extra->setVisible(shown);
     m_more->setText(shown ? QStringLiteral("Show less") : QStringLiteral("Show more"));
-    m_more->setToolTip(shown ? QStringLiteral("Hide kerning, baseline shift, scale, case and decoration")
-                             : QStringLiteral("Show kerning, baseline shift, scale, case and decoration"));
+    m_more->setToolTip(shown ? QStringLiteral("Hide kerning, baseline shift, scale, case, decoration and OpenType")
+                             : QStringLiteral("Show kerning, baseline shift, scale, case, decoration and OpenType"));
 }
 
 void CharacterSection::applyGlyphs()
@@ -317,11 +330,8 @@ void CharacterSection::changeEvent(QEvent *event)
 
 void CharacterSection::synchronize()
 {
-    std::vector<TextContent> texts;
-    for (const QUuid &id : m_session.selectedTexts())
-        texts.push_back(m_session.document()->find(id)->text);
-    if (texts.empty())
-        texts.push_back(m_session.defaultText);
+    // Every stretch the edits would reach: runs that differ read as Mixed.
+    const std::vector<TextContent> texts = m_session.shownTexts();
     const TextContent &first = texts.front();
     const std::optional<QString> family = common<QString>(texts, [](const TextContent &text) { return text.family; });
     {
@@ -362,7 +372,10 @@ void CharacterSection::synchronize()
     const std::optional<double> leading = common<double>(texts, [](const TextContent &text) { return text.effectiveLeading(); });
     if (automatic.value_or(false))
         m_leading->syncUnset(first.effectiveLeading(), leading ? QStringLiteral("Auto (%1)").arg(NumberField::formatted(*leading)) : QStringLiteral("Auto"));
-    const std::optional<TextAlignment> alignment = common<TextAlignment>(texts, [](const TextContent &text) { return text.alignment; });
+    // Justify's last-line variants all check Justify; Paragraph tells them apart.
+    const std::optional<TextAlignment> alignment = common<TextAlignment>(texts, [](const TextContent &text) {
+        return text.alignment == TextAlignment::justifyCenter || text.alignment == TextAlignment::justifyRight ? TextAlignment::justify : text.alignment;
+    });
     for (size_t index = 0; index < TypeAlignment::all.size(); ++index)
         m_alignments.at(index)->setChecked(alignment == TypeAlignment::all.at(index));
     const auto index = [](QComboBox *combo, std::optional<int> at) {
@@ -376,4 +389,5 @@ void CharacterSection::synchronize()
     m_kind->setEnabled(!m_session.selectedTexts().empty());
     m_underline->setChecked(common<bool>(texts, [](const TextContent &text) { return text.underline; }).value_or(false));
     m_strikethrough->setChecked(common<bool>(texts, [](const TextContent &text) { return text.strikethrough; }).value_or(false));
+    synchronizeStyles();
 }

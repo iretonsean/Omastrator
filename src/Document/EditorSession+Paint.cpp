@@ -47,6 +47,12 @@ void EditorSession::applyCharacterStyle(TextContent &to, const TextContent &from
     to.text = words;
     to.area = area;
     to.kerns = kerns;
+    // The look of the source's first character over every character: its runs and paragraphs belong to its own words.
+    to.character() = from.formatAt(0);
+    to.paragraph() = from.paragraphAt(0);
+    to.fill.reset();
+    to.runs.clear();
+    to.paragraphFormats.clear();
 }
 
 void EditorSession::setFillsOfSelection(const std::vector<Paint> &fills, const QString &editName)

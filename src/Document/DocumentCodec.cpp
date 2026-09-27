@@ -2,6 +2,7 @@
 #include <QBuffer>
 #include <QByteArray>
 #include <QJsonValue>
+#include <algorithm>
 #include <cmath>
 #include <set>
 
@@ -60,6 +61,134 @@ QImage readPng(const QJsonValue &value)
     QImage image;
     image.loadFromData(QByteArray::fromBase64(value.toString().toLatin1()), "PNG");
     return image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+}
+
+QJsonValue id(const QUuid &value)
+{
+    return value.isNull() ? QJsonValue(QJsonValue::Null) : QJsonValue(value.toString(QUuid::WithoutBraces));
+}
+
+// A format's keys where it differs from `against`: a run against its object, the object against the defaults.
+void writeCharacter(QJsonObject &json, const CharacterFormat &format, const CharacterFormat &against)
+{
+    if (format.family != against.family)
+        json["family"] = format.family;
+    if (format.style != against.style)
+        json["style"] = format.style;
+    if (format.size != against.size)
+        json["size"] = format.size;
+    if (format.tracking != against.tracking)
+        json["trackingEm"] = format.tracking;
+    if (format.baselineShift != against.baselineShift)
+        json["baselineShift"] = format.baselineShift;
+    if (format.textCase != against.textCase)
+        json["case"] = rawValue(format.textCase);
+    if (format.underline != against.underline)
+        json["underline"] = format.underline;
+    if (format.strikethrough != against.strikethrough)
+        json["strikethrough"] = format.strikethrough;
+    if (format.features != against.features) {
+        QJsonObject features;
+        for (const auto &[tag, value] : format.features)
+            features[tag] = value;
+        json["features"] = features;
+    }
+    if (format.fill != against.fill)
+        json["fill"] = format.fill ? QJsonValue(color(*format.fill)) : QJsonValue(QJsonValue::Null);
+    if (format.characterStyle != against.characterStyle)
+        json["characterStyle"] = id(format.characterStyle);
+}
+
+// Keys left out keep what `format` already says.
+CharacterFormat readCharacter(const QJsonObject &json, CharacterFormat format)
+{
+    format.family = json["family"].toString(format.family);
+    format.style = json["style"].toString(format.style);
+    if (json.contains("size"))
+        format.size = std::max(0.1, json["size"].toDouble(format.size));
+    format.tracking = json["trackingEm"].toDouble(format.tracking);
+    format.baselineShift = json["baselineShift"].toDouble(format.baselineShift);
+    if (json.contains("case"))
+        format.textCase = textCase(json["case"].toString()).value_or(format.textCase);
+    format.underline = json["underline"].toBool(format.underline);
+    format.strikethrough = json["strikethrough"].toBool(format.strikethrough);
+    if (json.contains("features")) {
+        format.features.clear();
+        const QJsonObject features = json["features"].toObject();
+        for (auto feature = features.begin(); feature != features.end(); ++feature) {
+            if (feature.key().size() == 4 && feature.value().isDouble())
+                format.features[feature.key()] = feature.value().toInt();
+        }
+    }
+    if (json.contains("fill")) {
+        const QColor fill = readColor(json["fill"], QColor());
+        format.fill = fill.isValid() ? std::optional<QColor>(fill) : std::nullopt;
+    }
+    if (json.contains("characterStyle"))
+        format.characterStyle = QUuid::fromString(json["characterStyle"].toString());
+    return format;
+}
+
+void writeParagraph(QJsonObject &json, const ParagraphFormat &format, const ParagraphFormat &against)
+{
+    if (format.alignment != against.alignment)
+        json["alignment"] = rawValue(format.alignment);
+    if (format.leading != against.leading)
+        json["leadingPt"] = format.leading ? QJsonValue(*format.leading) : QJsonValue(QJsonValue::Null);
+    const auto number = [&json](const char *key, double value, double otherwise) {
+        if (value != otherwise)
+            json[QLatin1String(key)] = value;
+    };
+    number("leftIndent", format.leftIndent, against.leftIndent);
+    number("rightIndent", format.rightIndent, against.rightIndent);
+    number("firstLineIndent", format.firstLineIndent, against.firstLineIndent);
+    number("spaceBefore", format.spaceBefore, against.spaceBefore);
+    number("spaceAfter", format.spaceAfter, against.spaceAfter);
+    if (format.paragraphStyle != against.paragraphStyle)
+        json["paragraphStyle"] = id(format.paragraphStyle);
+}
+
+ParagraphFormat readParagraph(const QJsonObject &json, ParagraphFormat format)
+{
+    if (json.contains("alignment"))
+        format.alignment = textAlignment(json["alignment"].toString()).value_or(format.alignment);
+    if (json.contains("leadingPt"))
+        format.leading = json["leadingPt"].isDouble() ? std::optional<double>(std::max(0.0, json["leadingPt"].toDouble())) : std::nullopt;
+    format.leftIndent = json["leftIndent"].toDouble(format.leftIndent);
+    format.rightIndent = json["rightIndent"].toDouble(format.rightIndent);
+    format.firstLineIndent = json["firstLineIndent"].toDouble(format.firstLineIndent);
+    format.spaceBefore = json["spaceBefore"].toDouble(format.spaceBefore);
+    format.spaceAfter = json["spaceAfter"].toDouble(format.spaceAfter);
+    if (json.contains("paragraphStyle"))
+        format.paragraphStyle = QUuid::fromString(json["paragraphStyle"].toString());
+    return format;
+}
+
+QJsonObject encodeStyle(const TextStyle &style)
+{
+    QJsonObject character{{"family", style.character.family}, {"style", style.character.style}, {"size", style.character.size}};
+    writeCharacter(character, style.character, CharacterFormat{});
+    QJsonObject json{{"id", style.id.toString(QUuid::WithoutBraces)}, {"name", style.name},
+                     {"kind", style.kind == TextStyleKind::paragraph ? "paragraph" : "character"}, {"character", character}};
+    if (style.kind == TextStyleKind::paragraph) {
+        QJsonObject paragraph;
+        writeParagraph(paragraph, style.paragraph, ParagraphFormat{});
+        json["paragraph"] = paragraph;
+    }
+    return json;
+}
+
+TextStyle decodeStyle(const QJsonObject &json)
+{
+    TextStyle style;
+    style.id = QUuid::fromString(json["id"].toString());
+    if (style.id.isNull())
+        throw CodecError("a text style has no id");
+    style.name = json["name"].toString();
+    style.kind = json["kind"].toString() == QLatin1String("paragraph") ? TextStyleKind::paragraph : TextStyleKind::character;
+    style.character = readCharacter(json["character"].toObject(), CharacterFormat{});
+    style.paragraph = readParagraph(json["paragraph"].toObject(), ParagraphFormat{});
+    return style;
 }
 }
 
@@ -191,8 +320,8 @@ QJsonObject encode(const TextContent &text)
 {
     QJsonObject json{{"string", text.text}, {"family", text.family}, {"style", text.style}, {"size", text.size},
                      {"alignment", rawValue(text.alignment)}, {"trackingEm", text.tracking}};
-    if (text.leading)
-        json["leadingPt"] = *text.leading;
+    writeCharacter(json, text.character(), CharacterFormat{});
+    writeParagraph(json, text.paragraph(), ParagraphFormat{});
     if (text.kerning != TextKerning::metrics)
         json["kerning"] = rawValue(text.kerning);
     if (!text.kerns.empty()) {
@@ -201,26 +330,30 @@ QJsonObject encode(const TextContent &text)
             kerns[QString::number(at)] = kern;
         json["kerns"] = kerns;
     }
-    const auto optional = [&json](const char *key, double value, double otherwise) {
-        if (value != otherwise)
-            json[QLatin1String(key)] = value;
-    };
-    optional("horizontalScale", text.horizontalScale, 100);
-    optional("verticalScale", text.verticalScale, 100);
-    optional("baselineShift", text.baselineShift, 0);
-    optional("leftIndent", text.leftIndent, 0);
-    optional("rightIndent", text.rightIndent, 0);
-    optional("firstLineIndent", text.firstLineIndent, 0);
-    optional("spaceBefore", text.spaceBefore, 0);
-    optional("spaceAfter", text.spaceAfter, 0);
-    if (text.textCase != TextCase::normal)
-        json["case"] = rawValue(text.textCase);
-    if (text.underline)
-        json["underline"] = true;
-    if (text.strikethrough)
-        json["strikethrough"] = true;
+    if (text.horizontalScale != 100)
+        json["horizontalScale"] = text.horizontalScale;
+    if (text.verticalScale != 100)
+        json["verticalScale"] = text.verticalScale;
     if (text.area)
         json["area"] = QJsonArray{text.area->width(), text.area->height()};
+    if (!text.runs.empty()) {
+        QJsonArray runs;
+        for (const TextRun &run : text.runs) {
+            QJsonObject entry{{"start", run.start}, {"length", run.length}};
+            writeCharacter(entry, run.format, text.character());
+            runs.append(entry);
+        }
+        json["runs"] = runs;
+    }
+    if (!text.paragraphFormats.empty()) {
+        QJsonArray paragraphs;
+        for (const auto &[index, format] : text.paragraphFormats) {
+            QJsonObject entry{{"index", index}};
+            writeParagraph(entry, format, text.paragraph());
+            paragraphs.append(entry);
+        }
+        json["paragraphs"] = paragraphs;
+    }
     return json;
 }
 
@@ -269,6 +402,24 @@ TextContent decodeText(const QJsonObject &json)
     const QJsonArray area = json["area"].toArray();
     if (area.size() == 2 && area[0].toDouble() > 0)
         text.area = QSizeF(area[0].toDouble(), std::max(0.0, area[1].toDouble()));
+    // Version 3: features, styles, runs and paragraphs.
+    CharacterFormat own = readCharacter(json, text.character());
+    own.fill.reset();
+    text.character() = own;
+    text.paragraphStyle = QUuid::fromString(json["paragraphStyle"].toString());
+    for (const QJsonValue &value : json["runs"].toArray()) {
+        const QJsonObject entry = value.toObject();
+        const int start = entry["start"].toInt(-1), length = entry["length"].toInt();
+        if (start < 0 || length <= 0 || start + length > text.text.size())
+            continue;
+        text.runs.push_back({start, length, readCharacter(entry, text.character())});
+    }
+    std::sort(text.runs.begin(), text.runs.end(), [](const TextRun &a, const TextRun &b) { return a.start < b.start; });
+    for (const QJsonValue &value : json["paragraphs"].toArray()) {
+        const QJsonObject entry = value.toObject();
+        text.paragraphFormats[entry["index"].toInt(-1)] = readParagraph(entry, text.paragraph());
+    }
+    text.normalize();
     return text;
 }
 
@@ -447,9 +598,17 @@ std::vector<VectorObject> decodeObjects(const QJsonArray &json)
 
 QJsonObject encode(const VectorDocument &document)
 {
-    return {{"format", "omastrator"}, {"version", version},
-            {"width", document.size.width()}, {"height", document.size.height()},
-            {"background", color(document.background)}, {"objects", encode(document.objects)}, {"guides", encode(document.guides)}};
+    QJsonObject json{{"format", "omastrator"}, {"version", version},
+                     {"width", document.size.width()}, {"height", document.size.height()},
+                     {"background", color(document.background)}, {"objects", encode(document.objects)},
+                     {"guides", encode(document.guides)}};
+    if (!document.textStyles.empty()) {
+        QJsonArray styles;
+        for (const TextStyle &style : document.textStyles)
+            styles.append(encodeStyle(style));
+        json["textStyles"] = styles;
+    }
+    return json;
 }
 
 VectorDocument decode(const QJsonObject &json)
@@ -465,6 +624,8 @@ VectorDocument decode(const QJsonObject &json)
     document.background = readColor(json["background"], Qt::white);
     document.objects = decodeObjects(json["objects"].toArray());
     document.guides = decodeGuides(json["guides"].toArray());
+    for (const QJsonValue &style : json["textStyles"].toArray())
+        document.textStyles.push_back(decodeStyle(style.toObject()));
     // Every parent must exist, come first, and be a container; ids are unique.
     std::set<QUuid> seen;
     for (const VectorObject &object : document.objects) {

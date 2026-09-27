@@ -1,3 +1,4 @@
+#include "Document/FontFeatures.h"
 #include "Document/TextLayout.h"
 #include "Document/VectorDocument.h"
 #include <QFontDatabase>
@@ -9,9 +10,10 @@
 #include <utility>
 
 namespace {
-const std::array<std::pair<TextAlignment, const char *>, 5> alignmentNames{{
+const std::array<std::pair<TextAlignment, const char *>, 7> alignmentNames{{
     {TextAlignment::left, "left"}, {TextAlignment::center, "center"}, {TextAlignment::right, "right"},
     {TextAlignment::justify, "justify"}, {TextAlignment::justifyAll, "justifyAll"},
+    {TextAlignment::justifyCenter, "justifyCenter"}, {TextAlignment::justifyRight, "justifyRight"},
 }};
 const std::array<std::pair<TextKerning, const char *>, 2> kerningNames{{{TextKerning::metrics, "metrics"}, {TextKerning::none, "none"}}};
 const std::array<std::pair<TextCase, const char *>, 3> caseNames{{
@@ -77,6 +79,7 @@ QString weightName(int weight)
 struct Laid {
     TextContent text;
     QPainterPath outline;
+    std::vector<std::pair<std::optional<QColor>, QPainterPath>> fills;
     QRectF frame;
     bool overflows = false;
 };
@@ -90,7 +93,7 @@ const Laid &laidOut(const TextContent &text)
             return laid;
     }
     const TextLayout layout(text);
-    recent.push_front({text, layout.outline(), layout.frame(), layout.overflows()});
+    recent.push_front({text, layout.outline(), layout.fills(), layout.frame(), layout.overflows()});
     if (recent.size() > 48)
         recent.pop_back();
     return recent.front();
@@ -105,6 +108,12 @@ QString rawValue(TextAlignment alignment)
 std::optional<TextAlignment> textAlignment(const QString &raw)
 {
     return valueOf(alignmentNames, raw);
+}
+
+bool isJustified(TextAlignment alignment)
+{
+    return alignment == TextAlignment::justify || alignment == TextAlignment::justifyAll || alignment == TextAlignment::justifyCenter
+        || alignment == TextAlignment::justifyRight;
 }
 
 QString rawValue(TextKerning kerning)
@@ -127,13 +136,13 @@ std::optional<TextCase> textCase(const QString &raw)
     return valueOf(caseNames, raw);
 }
 
-bool TextContent::isBold() const
+bool CharacterFormat::isBold() const
 {
     const int weight = QFontDatabase::styles(family).contains(style) ? QFontDatabase::weight(family, style) : weightFromName(style);
     return weight >= 600;
 }
 
-bool TextContent::isItalic() const
+bool CharacterFormat::isItalic() const
 {
     return QFontDatabase::styles(family).contains(style) ? QFontDatabase::italic(family, style) : italicFromName(style);
 }
@@ -163,7 +172,7 @@ QString TextContent::styleFor(const QString &family, int weight, bool italic)
     return name == QLatin1String("Regular") ? QStringLiteral("Italic") : name + QStringLiteral(" Italic");
 }
 
-QFont TextContent::font() const
+QFont CharacterFormat::font(double pixelsPerPoint, TextKerning kerning) const
 {
     QFont font(family);
     if (QFontDatabase::styles(family).contains(style)) {
@@ -179,16 +188,27 @@ QFont TextContent::font() const
     font.setKerning(kerning == TextKerning::metrics);
     font.setCapitalization(textCase == TextCase::allCaps ? QFont::AllUppercase : textCase == TextCase::smallCaps ? QFont::SmallCaps : QFont::MixedCase);
     // Outlines at the design size: point sizes would follow the screen's DPI.
-    const int pixels = std::max(1, int(std::lround(size)));
+    const int pixels = std::max(1, int(std::lround(size * pixelsPerPoint)));
     font.setPixelSize(pixels);
     font.setLetterSpacing(QFont::AbsoluteSpacing, tracking / 1000 * pixels);
     font.setHintingPreference(QFont::PreferNoHinting);
+    FontFeatures::apply(font, features);
     return font;
+}
+
+QFont TextContent::font() const
+{
+    return character().font(std::max(1.0, double(std::lround(size))) / size, kerning);
 }
 
 QPainterPath TextContent::outline() const
 {
     return laidOut(*this).outline;
+}
+
+std::vector<std::pair<std::optional<QColor>, QPainterPath>> TextContent::fills() const
+{
+    return laidOut(*this).fills;
 }
 
 bool TextContent::overflows() const

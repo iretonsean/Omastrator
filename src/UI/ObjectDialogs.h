@@ -12,6 +12,8 @@ QDialog *offsetPath(EditorSession &session, QWidget *window);
 QDialog *artboardSize(EditorSession &session, QWidget *window);
 // Object ▸ Path ▸ Average: horizontal, vertical or both.
 QDialog *average(EditorSession &session, QWidget *window);
+// Type ▸ Find/Replace Font…: the families used, missing ones marked, one swapped for another.
+QDialog *findFont(EditorSession &session, QWidget *window);
 // Edit ▸ Preferences: the keyboard increment and how many history states to keep.
 QDialog *preferences(QWidget *window);
 }

@@ -9,6 +9,7 @@
 
 struct TextLayout::Paragraph {
     int start = 0;
+    ParagraphFormat format;
     QTextLayout layout;
     std::vector<QTextLine> lines;
 };
@@ -23,6 +24,8 @@ Qt::Alignment qtAlignment(TextAlignment alignment)
         return Qt::AlignRight;
     case TextAlignment::justify:
     case TextAlignment::justifyAll:
+    case TextAlignment::justifyCenter:
+    case TextAlignment::justifyRight:
         return Qt::AlignJustify;
     default:
         return Qt::AlignLeft;
@@ -37,62 +40,76 @@ bool isSpace(QChar character)
 
 TextLayout::TextLayout(const TextContent &text) : m_text(text)
 {
-    const QFont font = text.font();
-    const double pixels = std::max(1.0, double(font.pixelSize()));
-    m_scale = text.size / pixels;
+    m_formats.push_back(text.character());
+    m_formatOf.assign(size_t(text.text.size()), 0);
+    for (const TextRun &run : text.runs) {
+        auto found = std::find(m_formats.begin(), m_formats.end(), run.format);
+        if (found == m_formats.end())
+            found = m_formats.insert(m_formats.end(), run.format);
+        const int index = int(found - m_formats.begin());
+        for (int at = std::max(0, run.start); at < std::min(run.start + run.length, int(m_formatOf.size())); ++at)
+            m_formatOf[size_t(at)] = index;
+    }
+    // Laid out in whole pixels; sizes that miss the object's pixel grid get a finer one.
+    m_scale = text.size / std::max(1.0, double(std::lround(text.size)));
+    for (const CharacterFormat &format : m_formats) {
+        const double pixels = format.size / m_scale;
+        if (std::abs(pixels - std::round(pixels)) > 1e-6) {
+            m_scale = text.size / std::max(1.0, double(std::lround(text.size * 16)));
+            break;
+        }
+    }
+    const double perPoint = 1 / m_scale;
+    for (const CharacterFormat &format : m_formats) {
+        const QFontMetricsF metrics(format.font(perPoint, text.kerning));
+        m_formatAscents.push_back(metrics.ascent() * m_scale);
+    }
+    const QFont font = text.character().font(perPoint, text.kerning);
     m_horizontal = m_scale * std::max(1.0, text.horizontalScale) / 100;
     const QFontMetricsF metrics(font);
     m_ascent = metrics.ascent() * m_scale;
     m_descent = metrics.descent() * m_scale;
     const bool area = text.area.has_value();
     const double areaWidth = area ? std::max(1.0, text.area->width()) : 0;
-    const double leading = text.effectiveLeading();
     const QStringList paragraphs = text.text.split(QLatin1Char('\n'));
-    // Area type's first baseline sits an ascent below the top.
-    double baseline = area ? m_ascent : 0;
+    double baseline = 0;
     int start = 0;
     for (int index = 0; index < paragraphs.size(); ++index) {
         auto paragraph = std::make_unique<Paragraph>();
         paragraph->start = start;
+        paragraph->format = text.paragraphAt(index);
+        const ParagraphFormat &format = paragraph->format;
         QTextLayout &layout = paragraph->layout;
         layout.setText(paragraphs[index]);
         layout.setFont(font);
         QTextOption option;
         option.setUseDesignMetrics(true);
         option.setWrapMode(area ? QTextOption::WrapAtWordBoundaryOrAnywhere : QTextOption::NoWrap);
-        option.setAlignment(area ? qtAlignment(text.alignment) : Qt::AlignLeft);
+        option.setAlignment(area ? qtAlignment(format.alignment) : Qt::AlignLeft);
         layout.setTextOption(option);
-        // A manual kern widens the gap after the character before it.
-        QList<QTextLayout::FormatRange> formats;
-        for (const auto &[at, kern] : text.kerns) {
-            const int local = at - start - 1;
-            if (local < 0 || local >= paragraphs[index].size() || kern == 0)
-                continue;
-            QTextCharFormat format;
-            format.setFontLetterSpacingType(QFont::AbsoluteSpacing);
-            format.setFontLetterSpacing((text.tracking + kern) / 1000 * pixels);
-            formats.append({int(local), 1, format});
-        }
-        layout.setFormats(formats);
+        layout.setFormats(characterFormats(start, int(paragraphs[index].size())));
         if (index > 0)
-            baseline += text.spaceAfter + text.spaceBefore;
+            baseline += m_paragraphs.back()->format.spaceAfter + format.spaceBefore;
         layout.beginLayout();
         for (;;) {
             QTextLine line = layout.createLine();
             if (!line.isValid())
                 break;
             const bool firstLine = paragraph->lines.empty();
-            const double indent = text.leftIndent + (firstLine ? text.firstLineIndent : 0);
+            const double indent = format.leftIndent + (firstLine ? format.firstLineIndent : 0);
             if (area)
-                line.setLineWidth(std::max(1.0, (areaWidth - indent - text.rightIndent) / m_horizontal));
+                line.setLineWidth(std::max(1.0, (areaWidth - indent - format.rightIndent) / m_horizontal));
             else
                 line.setLineWidth(1e7);
             line.setPosition(QPointF(indent / m_horizontal, 0));
-            if (!m_lines.empty())
-                baseline += leading;
             Line placed;
             placed.start = start + line.textStart();
             placed.length = line.textLength();
+            // Area type's first baseline sits its line's ascent below the top; later ones a leading apart.
+            if (!m_lines.empty())
+                baseline += leadingOf(format, placed.start, placed.length);
+            else if (area)
+                baseline += ascentOf(placed.start, placed.length);
             placed.paragraph = index;
             placed.index = int(paragraph->lines.size());
             placed.baseline = baseline;
@@ -110,15 +127,21 @@ TextLayout::TextLayout(const TextContent &text) : m_text(text)
     }
     for (Line &line : m_lines) {
         const Paragraph &paragraph = *m_paragraphs[size_t(line.paragraph)];
+        const TextAlignment alignment = paragraph.format.alignment;
         const QString &content = paragraph.layout.text();
-        // Point type hangs from the origin as its alignment says.
-        if (!area && (text.alignment == TextAlignment::center || text.alignment == TextAlignment::right)) {
-            const double width = rawX(line, line.start + line.length) - rawX(line, line.start);
-            line.offset = text.alignment == TextAlignment::center ? -width / 2 : -width;
-        }
         int end = line.start + line.length - paragraph.start;
         while (end > line.start - paragraph.start && isSpace(content[end - 1]))
             --end;
+        const double width = rawX(line, end + paragraph.start) - rawX(line, line.start);
+        // Point type hangs from the origin as its alignment says.
+        if (!area && (alignment == TextAlignment::center || alignment == TextAlignment::right))
+            line.offset = alignment == TextAlignment::center ? -rawWidth(line) / 2 : -rawWidth(line);
+        // A justified paragraph's last line can sit centred or flush right.
+        if (area && line.lastInParagraph && (alignment == TextAlignment::justifyCenter || alignment == TextAlignment::justifyRight)) {
+            const double available = text.area->width() - paragraph.format.leftIndent - paragraph.format.rightIndent
+                - (line.index == 0 ? paragraph.format.firstLineIndent : 0);
+            line.offset = std::max(0.0, available - width) * (alignment == TextAlignment::justifyCenter ? 0.5 : 1);
+        }
         line.left = rawX(line, line.start);
         line.right = std::max(line.left, rawX(line, end + paragraph.start));
         line.right += shift(line, line.right);
@@ -131,6 +154,68 @@ TextLayout::TextLayout(const TextContent &text) : m_text(text)
 
 TextLayout::~TextLayout() = default;
 
+// Runs and manual kerns as QTextLayout formats, for one paragraph's characters.
+QList<QTextLayout::FormatRange> TextLayout::characterFormats(int start, int length) const
+{
+    QList<QTextLayout::FormatRange> ranges;
+    const double perPoint = 1 / m_scale;
+    // A manual kern widens the gap after the character before the one it moves.
+    const auto kernAfter = [&](int at) {
+        const auto found = m_text.kerns.find(at + 1);
+        return found == m_text.kerns.end() ? 0.0 : found->second;
+    };
+    for (int local = 0; local < length;) {
+        const int format = m_formatOf[size_t(start + local)];
+        const double kern = kernAfter(start + local);
+        int end = local + 1;
+        while (end < length && m_formatOf[size_t(start + end)] == format && kernAfter(start + end) == kern)
+            ++end;
+        if (format != 0 || kern != 0) {
+            const CharacterFormat &character = m_formats[size_t(format)];
+            const QFont font = character.font(perPoint, m_text.kerning);
+            QTextCharFormat made;
+            made.setFont(font, QTextCharFormat::FontPropertiesAll);
+            made.setFontLetterSpacingType(QFont::AbsoluteSpacing);
+            made.setFontLetterSpacing((character.tracking + kern) / 1000 * font.pixelSize());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+            QMap<QFont::Tag, quint32> features;
+            for (const QFont::Tag &tag : font.featureTags())
+                features.insert(tag, font.featureValue(tag));
+            made.setFontFeatures(features);
+#endif
+            ranges.append({local, end - local, made});
+        }
+        local = end;
+    }
+    return ranges;
+}
+
+// Auto leading is 120 % of the line's largest size.
+double TextLayout::leadingOf(const ParagraphFormat &format, int start, int length) const
+{
+    if (format.leading)
+        return *format.leading;
+    double size = 0;
+    for (int at = start; at < start + length && at < int(m_formatOf.size()); ++at)
+        size = std::max(size, m_formats[size_t(m_formatOf[size_t(at)])].size);
+    if (size <= 0)
+        size = m_formatOf.empty() ? m_text.size : m_formats[size_t(m_formatOf[size_t(std::clamp(start, 0, int(m_formatOf.size()) - 1))])].size;
+    return size * 1.2;
+}
+
+double TextLayout::ascentOf(int start, int length) const
+{
+    double ascent = 0;
+    for (int at = start; at < start + length && at < int(m_formatOf.size()); ++at)
+        ascent = std::max(ascent, m_formatAscents[size_t(m_formatOf[size_t(at)])]);
+    return ascent > 0 ? ascent : m_ascent;
+}
+
+double TextLayout::rawWidth(const Line &line) const
+{
+    return rawX(line, line.start + line.length) - rawX(line, line.start);
+}
+
 // A position's x before justify-all stretches the last line.
 double TextLayout::rawX(const Line &line, int position) const
 {
@@ -142,10 +227,11 @@ double TextLayout::rawX(const Line &line, int position) const
 // line over its spaces, or its letters, and every justified line gets what Qt left over.
 double TextLayout::shift(const Line &line, double x) const
 {
-    const bool justified = m_text.alignment == TextAlignment::justifyAll || (m_text.alignment == TextAlignment::justify && !line.lastInParagraph);
+    const Paragraph &paragraph = *m_paragraphs[size_t(line.paragraph)];
+    const ParagraphFormat &format = paragraph.format;
+    const bool justified = format.alignment == TextAlignment::justifyAll || (isJustified(format.alignment) && !line.lastInParagraph);
     if (!m_text.area || !justified || line.length < 2)
         return 0;
-    const Paragraph &paragraph = *m_paragraphs[size_t(line.paragraph)];
     const QString &content = paragraph.layout.text();
     const int from = line.start - paragraph.start;
     int to = from + line.length;
@@ -153,7 +239,7 @@ double TextLayout::shift(const Line &line, double x) const
         --to;
     if (to - from < 2)
         return 0;
-    const double available = m_text.area->width() - m_text.leftIndent - m_text.rightIndent - (line.index == 0 ? m_text.firstLineIndent : 0);
+    const double available = m_text.area->width() - format.leftIndent - format.rightIndent - (line.index == 0 ? format.firstLineIndent : 0);
     const double extra = available - (rawX(line, to + paragraph.start) - rawX(line, line.start));
     if (extra <= 0)
         return 0;
@@ -235,46 +321,101 @@ int TextLayout::positionAt(QPointF local) const
     return best;
 }
 
+std::vector<std::pair<std::optional<QColor>, QPainterPath>> TextLayout::fills() const
+{
+    std::vector<std::pair<std::optional<QColor>, QPainterPath>> pieces;
+    std::vector<QPainterPath> rules;
+    const auto piece = [&](const std::optional<QColor> &fill) -> size_t {
+        for (size_t index = 0; index < pieces.size(); ++index) {
+            if (pieces[index].first == fill)
+                return index;
+        }
+        QPainterPath path;
+        path.setFillRule(Qt::WindingFill);
+        pieces.push_back({fill, path});
+        rules.emplace_back();
+        return pieces.size() - 1;
+    };
+    // The object's own colour comes first, even when no glyph takes it.
+    piece(std::nullopt);
+    const double vertical = m_scale * std::max(1.0, m_text.verticalScale) / 100;
+    for (size_t lineIndex = 0; lineIndex < m_lines.size(); ++lineIndex) {
+        const Line &line = m_lines[lineIndex];
+        if (line.hidden || line.length == 0)
+            continue;
+        const Paragraph &paragraph = *m_paragraphs[size_t(line.paragraph)];
+        const QTextLine &qline = paragraph.lines[size_t(line.index)];
+        // One stretch of one format at a time: each has its own shift, colour and rules.
+        for (int from = line.start; from < line.start + line.length;) {
+            const int format = m_formatOf[size_t(from)];
+            int to = from + 1;
+            while (to < line.start + line.length && m_formatOf[size_t(to)] == format)
+                ++to;
+            const CharacterFormat &character = m_formats[size_t(format)];
+            const size_t into = piece(character.fill);
+            const double baseline = line.baseline - character.baselineShift;
+            for (const QGlyphRun &run : qline.glyphRuns(from - paragraph.start, to - from)) {
+                const QRawFont font = run.rawFont();
+                const QList<quint32> glyphs = run.glyphIndexes();
+                const QList<QPointF> positions = run.positions();
+                for (qsizetype glyph = 0; glyph < glyphs.size(); ++glyph) {
+                    const QPointF at = positions[glyph];
+                    const double x = at.x() * m_horizontal + line.offset;
+                    const QTransform place(m_horizontal, 0, 0, vertical, x + shift(line, x), baseline + (at.y() - qline.ascent()) * vertical);
+                    pieces[into].second.addPath(place.map(font.pathForGlyph(glyphs[glyph])));
+                }
+            }
+            if (character.underline || character.strikethrough) {
+                const double left = xAt(from, int(lineIndex));
+                const double right = std::min(line.right, xAt(to, int(lineIndex)));
+                if (right > left) {
+                    const QFontMetricsF metrics(character.font(1 / m_scale, m_text.kerning));
+                    const double thickness = std::max(0.5, metrics.lineWidth() * m_scale);
+                    if (character.underline)
+                        rules[into].addRect(QRectF(left, baseline + metrics.underlinePos() * m_scale, right - left, thickness));
+                    if (character.strikethrough)
+                        rules[into].addRect(QRectF(left, baseline - metrics.strikeOutPos() * m_scale - thickness / 2, right - left, thickness));
+                }
+            }
+            from = to;
+        }
+    }
+    for (size_t index = 0; index < pieces.size(); ++index) {
+        if (rules[index].isEmpty())
+            continue;
+        // United, so a rule across a descender leaves no hole.
+        QPainterPath united = pieces[index].second.united(rules[index]);
+        united.setFillRule(Qt::WindingFill);
+        pieces[index].second = united;
+    }
+    if (pieces.size() > 1 && pieces.front().second.isEmpty())
+        pieces.erase(pieces.begin());
+    return pieces;
+}
+
 QPainterPath TextLayout::outline() const
 {
+    const auto pieces = fills();
+    if (pieces.size() == 1)
+        return pieces.front().second;
     QPainterPath path;
     path.setFillRule(Qt::WindingFill);
-    const double vertical = m_scale * std::max(1.0, m_text.verticalScale) / 100;
+    for (const auto &[fill, piece] : pieces)
+        path.addPath(piece);
+    return path;
+}
+
+int TextLayout::glyphCount() const
+{
+    int count = 0;
     for (const Line &line : m_lines) {
         if (line.hidden || line.length == 0)
             continue;
         const QTextLine &qline = m_paragraphs[size_t(line.paragraph)]->lines[size_t(line.index)];
-        const double baseline = line.baseline - m_text.baselineShift;
-        for (const QGlyphRun &run : qline.glyphRuns()) {
-            const QRawFont font = run.rawFont();
-            const QList<quint32> glyphs = run.glyphIndexes();
-            const QList<QPointF> positions = run.positions();
-            for (qsizetype glyph = 0; glyph < glyphs.size(); ++glyph) {
-                const QPointF at = positions[glyph];
-                const double x = at.x() * m_horizontal + line.offset;
-                const QTransform place(m_horizontal, 0, 0, vertical, x + shift(line, x), baseline + (at.y() - qline.ascent()) * vertical);
-                path.addPath(place.map(font.pathForGlyph(glyphs[glyph])));
-            }
-        }
+        for (const QGlyphRun &run : qline.glyphRuns())
+            count += int(run.glyphIndexes().size());
     }
-    if (!m_text.underline && !m_text.strikethrough)
-        return path;
-    const QFontMetricsF metrics(m_text.font());
-    const double thickness = std::max(0.5, metrics.lineWidth() * m_scale);
-    QPainterPath rules;
-    for (const Line &line : m_lines) {
-        if (line.hidden || line.right <= line.left)
-            continue;
-        const double baseline = line.baseline - m_text.baselineShift;
-        if (m_text.underline)
-            rules.addRect(QRectF(line.left, baseline + metrics.underlinePos() * m_scale, line.right - line.left, thickness));
-        if (m_text.strikethrough)
-            rules.addRect(QRectF(line.left, baseline - metrics.strikeOutPos() * m_scale - thickness / 2, line.right - line.left, thickness));
-    }
-    // United, so a rule across a descender leaves no hole.
-    QPainterPath united = path.united(rules);
-    united.setFillRule(Qt::WindingFill);
-    return united;
+    return count;
 }
 
 QRectF TextLayout::frame() const

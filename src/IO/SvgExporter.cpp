@@ -1,6 +1,7 @@
 #include "IO/SvgExporter.h"
 #include "Document/StrokeGeometry.h"
 #include "Logging.h"
+#include "Document/FontFeatures.h"
 #include "Document/TextLayout.h"
 #include <QFontDatabase>
 #include <QBuffer>
@@ -413,6 +414,57 @@ private:
         writePaint(object, paints);
     }
 
+    static int weightOf(const CharacterFormat &format)
+    {
+        return QFontDatabase::styles(format.family).contains(format.style) ? QFontDatabase::weight(format.family, format.style)
+                                                                           : (format.isBold() ? 700 : 400);
+    }
+
+    // Font attributes: the text element's against CSS's defaults, a run's where it differs from its text.
+    void writeFont(const CharacterFormat &format, const CharacterFormat *against)
+    {
+        const auto differs = [&](auto member) { return against && !(format.*member == against->*member); };
+        if (!against || differs(&CharacterFormat::family))
+            xml.writeAttribute(QStringLiteral("font-family"), format.family);
+        if (!against || differs(&CharacterFormat::size))
+            xml.writeAttribute(QStringLiteral("font-size"), number(format.size));
+        const int weight = weightOf(format);
+        if (against ? weight != weightOf(*against) : weight != 400)
+            xml.writeAttribute(QStringLiteral("font-weight"), QString::number(weight));
+        if (against ? format.isItalic() != against->isItalic() : format.isItalic())
+            xml.writeAttribute(QStringLiteral("font-style"), format.isItalic() ? QStringLiteral("italic") : QStringLiteral("normal"));
+        if (against ? differs(&CharacterFormat::tracking) : format.tracking != 0)
+            xml.writeAttribute(QStringLiteral("letter-spacing"), number(format.tracking / 1000) + QStringLiteral("em"));
+        QStringList css;
+        if (!against || differs(&CharacterFormat::textCase)) {
+            if (format.textCase == TextCase::smallCaps)
+                xml.writeAttribute(QStringLiteral("font-variant"), QStringLiteral("small-caps"));
+            else if (against && against->textCase == TextCase::smallCaps)
+                xml.writeAttribute(QStringLiteral("font-variant"), QStringLiteral("normal"));
+            if (format.textCase == TextCase::allCaps)
+                css << QStringLiteral("text-transform:uppercase");
+            else if (against && against->textCase == TextCase::allCaps)
+                css << QStringLiteral("text-transform:none");
+        }
+        if (!against || differs(&CharacterFormat::underline) || differs(&CharacterFormat::strikethrough)) {
+            QStringList decorations;
+            if (format.underline)
+                decorations << QStringLiteral("underline");
+            if (format.strikethrough)
+                decorations << QStringLiteral("line-through");
+            if (!decorations.isEmpty())
+                xml.writeAttribute(QStringLiteral("text-decoration"), decorations.join(QLatin1Char(' ')));
+            else if (against)
+                xml.writeAttribute(QStringLiteral("text-decoration"), QStringLiteral("none"));
+        }
+        if (against ? differs(&CharacterFormat::features) : !format.features.empty())
+            css << QStringLiteral("font-feature-settings:") + (format.features.empty() ? QStringLiteral("normal") : FontFeatures::css(format.features));
+        if (against && format.fill && format.fill != against->fill)
+            writeColor(QStringLiteral("fill"), *format.fill);
+        if (!css.isEmpty())
+            xml.writeAttribute(QStringLiteral("style"), css.join(QLatin1Char(';')));
+    }
+
     void writeText(const VectorObject &object)
     {
         const TextContent &text = object.text;
@@ -422,66 +474,72 @@ private:
         // Paint follows the glyphs in the text's own coordinates, as on the canvas.
         const Paints paints = writeDefinitions(object, glyphs.boundingRect());
         if (options.textAsOutlines) {
-            xml.writeEmptyElement(QStringLiteral("path"));
-            writeCommon(object);
-            xml.writeAttribute(QStringLiteral("transform"), matrix(object.transform));
-            xml.writeAttribute(QStringLiteral("d"), pathData(glyphs));
-            if (glyphs.fillRule() == Qt::OddEvenFill)
-                xml.writeAttribute(QStringLiteral("fill-rule"), QStringLiteral("evenodd"));
-            writePaint(object, paints);
+            const auto pieces = text.fills();
+            // Runs with colours of their own: a path per colour, in one group.
+            if (pieces.size() > 1) {
+                xml.writeStartElement(QStringLiteral("g"));
+                writeCommon(object);
+                xml.writeAttribute(QStringLiteral("transform"), matrix(object.transform));
+                writePaint(object, paints);
+            }
+            for (const auto &[color, piece] : pieces) {
+                xml.writeEmptyElement(QStringLiteral("path"));
+                if (pieces.size() == 1) {
+                    writeCommon(object);
+                    xml.writeAttribute(QStringLiteral("transform"), matrix(object.transform));
+                }
+                xml.writeAttribute(QStringLiteral("d"), pathData(piece));
+                if (piece.fillRule() == Qt::OddEvenFill)
+                    xml.writeAttribute(QStringLiteral("fill-rule"), QStringLiteral("evenodd"));
+                if (pieces.size() == 1)
+                    writePaint(object, paints);
+                else if (color)
+                    writeColor(QStringLiteral("fill"), *color);
+            }
+            if (pieces.size() > 1)
+                xml.writeEndElement();
             return;
         }
         xml.writeStartElement(QStringLiteral("text"));
         writeCommon(object);
         xml.writeAttribute(QStringLiteral("xml:space"), QStringLiteral("preserve"));
+        // Indenting a run's span would put spaces in text that keeps them.
+        const bool indented = xml.autoFormatting();
         // Horizontal and vertical scale stretch the glyphs; lines keep their places.
         const double h = text.horizontalScale / 100, v = text.verticalScale / 100;
         xml.writeAttribute(QStringLiteral("transform"), matrix(QTransform::fromScale(h, v) * object.transform));
-        xml.writeAttribute(QStringLiteral("font-family"), text.family);
-        xml.writeAttribute(QStringLiteral("font-size"), number(text.size));
-        const int weight = QFontDatabase::styles(text.family).contains(text.style) ? QFontDatabase::weight(text.family, text.style)
-                                                                                  : (text.isBold() ? 700 : 400);
-        if (weight != 400)
-            xml.writeAttribute(QStringLiteral("font-weight"), QString::number(weight));
-        if (text.isItalic())
-            xml.writeAttribute(QStringLiteral("font-style"), QStringLiteral("italic"));
-        if (text.tracking != 0)
-            xml.writeAttribute(QStringLiteral("letter-spacing"), number(text.tracking / 1000) + QStringLiteral("em"));
+        writeFont(text.character(), nullptr);
         if (text.kerning == TextKerning::none)
             xml.writeAttribute(QStringLiteral("font-kerning"), QStringLiteral("none"));
-        if (text.textCase == TextCase::smallCaps)
-            xml.writeAttribute(QStringLiteral("font-variant"), QStringLiteral("small-caps"));
-        else if (text.textCase == TextCase::allCaps)
-            xml.writeAttribute(QStringLiteral("style"), QStringLiteral("text-transform:uppercase"));
-        QStringList decorations;
-        if (text.underline)
-            decorations << QStringLiteral("underline");
-        if (text.strikethrough)
-            decorations << QStringLiteral("line-through");
-        if (!decorations.isEmpty())
-            xml.writeAttribute(QStringLiteral("text-decoration"), decorations.join(QLatin1Char(' ')));
         const bool area = text.area.has_value();
         if (!area && text.alignment == TextAlignment::center)
             xml.writeAttribute(QStringLiteral("text-anchor"), QStringLiteral("middle"));
         else if (!area && text.alignment == TextAlignment::right)
             xml.writeAttribute(QStringLiteral("text-anchor"), QStringLiteral("end"));
         writePaint(object, paints);
-        // One span per laid-out line, so area type wraps as it does on the canvas.
+        const auto anchor = [](TextAlignment alignment) {
+            return alignment == TextAlignment::center ? QStringLiteral("middle") : alignment == TextAlignment::right ? QStringLiteral("end") : QStringLiteral("start");
+        };
+        // One span per laid-out line, so area type wraps as it does on the canvas; runs are spans within it.
         const TextLayout layout(text);
         for (const TextLayout::Line &line : layout.lines()) {
             if (line.hidden)
                 break;
+            const TextAlignment alignment = text.paragraphAt(line.paragraph).alignment;
             QString words = text.text.mid(line.start, line.length);
             // A wrapped line's trailing space would push centred and right-aligned lines.
             while (area && !line.lastInParagraph && words.endsWith(QLatin1Char(' ')))
                 words.chop(1);
             xml.writeStartElement(QStringLiteral("tspan"));
             double x = 0;
-            const bool justified = area && (text.alignment == TextAlignment::justifyAll || (text.alignment == TextAlignment::justify && !line.lastInParagraph));
+            const bool justified = area && (alignment == TextAlignment::justifyAll || (isJustified(alignment) && !line.lastInParagraph));
             if (area) {
-                x = text.alignment == TextAlignment::center ? (line.left + line.right) / 2 : text.alignment == TextAlignment::right ? line.right : line.left;
-                if (text.alignment == TextAlignment::center || text.alignment == TextAlignment::right)
-                    xml.writeAttribute(QStringLiteral("text-anchor"), text.alignment == TextAlignment::center ? QStringLiteral("middle") : QStringLiteral("end"));
+                x = alignment == TextAlignment::center ? (line.left + line.right) / 2 : alignment == TextAlignment::right ? line.right : line.left;
+                if (alignment == TextAlignment::center || alignment == TextAlignment::right)
+                    xml.writeAttribute(QStringLiteral("text-anchor"), anchor(alignment));
+            } else if (alignment != text.alignment) {
+                // A paragraph aligned apart from the rest.
+                xml.writeAttribute(QStringLiteral("text-anchor"), anchor(alignment));
             }
             xml.writeAttribute(QStringLiteral("x"), number(x / h));
             xml.writeAttribute(QStringLiteral("y"), number(line.baseline / v));
@@ -495,14 +553,33 @@ private:
             bool kerned = false;
             for (int index = 0; index < words.size(); ++index) {
                 const auto kern = text.kerns.find(line.start + index);
-                const double shift = kern == text.kerns.end() || index == 0 ? 0 : kern->second / 1000 * text.size / h;
+                const double shift = kern == text.kerns.end() || index == 0 ? 0 : kern->second / 1000 * text.formatAt(line.start + index - 1).size / h;
                 kerned = kerned || shift != 0;
                 shifts << number(shift);
             }
             if (kerned)
                 xml.writeAttribute(QStringLiteral("dx"), shifts.join(QLatin1Char(' ')));
-            xml.writeCharacters(words);
+            for (int from = 0; from < words.size();) {
+                xml.setAutoFormatting(false);
+                const CharacterFormat format = text.formatAt(line.start + from);
+                int to = from + 1;
+                while (to < words.size() && text.formatAt(line.start + to) == format)
+                    ++to;
+                if (format == text.character()) {
+                    xml.writeCharacters(words.mid(from, to - from));
+                } else {
+                    xml.writeStartElement(QStringLiteral("tspan"));
+                    writeFont(format, &text.character());
+                    // Shifts add up: a run's is relative to its line's.
+                    if (format.baselineShift != text.baselineShift)
+                        xml.writeAttribute(QStringLiteral("baseline-shift"), number((format.baselineShift - text.baselineShift) / v));
+                    xml.writeCharacters(words.mid(from, to - from));
+                    xml.writeEndElement();
+                }
+                from = to;
+            }
             xml.writeEndElement();
+            xml.setAutoFormatting(indented);
         }
         xml.writeEndElement();
     }

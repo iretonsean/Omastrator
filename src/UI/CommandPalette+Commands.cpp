@@ -66,6 +66,8 @@ QString keywordsFor(const QString &name)
         {"exportPDF", "save print"},
         {"exportJPEG", "save image jpg"},
         {"createOutlines", "text to paths convert"},
+        {"findFont", "missing fonts replace font typeface"},
+        {"showTypeStyles", "character paragraph text styles panel"},
         {"duplicate", "copy clone"},
         {"copyProperties", "style appearance format painter eyedropper"},
         {"pasteProperties", "style appearance format painter apply"},

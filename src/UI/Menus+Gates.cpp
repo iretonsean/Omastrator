@@ -74,6 +74,8 @@ void Menus::synchronize()
     }
     action(QStringLiteral("convertToAreaType"))->setEnabled(editing && hasPoint);
     action(QStringLiteral("convertToPointType"))->setEnabled(editing && hasArea);
+    action(QStringLiteral("findFont"))->setEnabled(editing && drawn);
+    action(QStringLiteral("showTypeStyles"))->setEnabled(drawn);
     // The type keys work on selected type, or while typing; otherwise Alt+arrows fall through to duplicate and nudge.
     const std::vector<QUuid> leaves = s.selectedLeaves();
     const bool allText = drawn && !leaves.empty() && s.selectedTexts().size() == leaves.size();

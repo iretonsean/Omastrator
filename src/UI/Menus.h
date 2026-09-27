@@ -10,6 +10,7 @@
 class AgentBridge;
 class CommandPalette;
 class ShareController;
+class TextStylesPanel;
 
 // The menu bar: Illustrator's commands whose session functions exist.
 class Menus : public QObject {
@@ -61,6 +62,9 @@ private:
     FloatingPanel m_historyPanel{QStringLiteral("historyPanel"), m_window};
     // Window ▸ History, following the front document.
     void showHistory();
+    // Window ▸ Type Styles, following the front tab.
+    FloatingPanel m_typeStylesPanel{QStringLiteral("typeStylesPanel"), m_window};
+    QPointer<TextStylesPanel> m_typeStyles;
     QMetaObject::Connection m_sessionWatch;
     QMetaObject::Connection m_canvasWatch;
     QMetaObject::Connection m_menuWatch;

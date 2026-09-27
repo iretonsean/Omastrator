@@ -67,6 +67,11 @@ void EditorCanvas::State::beginTextEditing(const VectorObject &object, bool inDo
 
 void EditorCanvas::State::restartCaret()
 {
+    // Type edits and fills follow the characters selected here.
+    if (text && text->inDocument)
+        session.setTextRange(EditorSession::TextRange{text->object.id, text->anchor, text->caret});
+    else
+        session.setTextRange(std::nullopt);
     caretShown = true;
     if (text)
         caretBlink.start();
@@ -91,8 +96,11 @@ void EditorCanvas::State::applyText()
         // Type named after itself keeps following what it says, as Illustrator's does.
         if (textCreated || current->name == autoName(current->text.text) || current->name == autoName(textAtStart))
             object.name = autoName(text->text());
+        // What typing changes: the characters and what rides on them.
         object.text.text = text->text();
         object.text.kerns = text->object.text.kerns;
+        object.text.runs = text->object.text.runs;
+        object.text.paragraphFormats = text->object.text.paragraphFormats;
         session.previewObject(object);
     }
     applyingText = false;
@@ -104,6 +112,7 @@ void EditorCanvas::State::finishText()
     if (!text)
         return;
     const std::unique_ptr<InlineTextEditor> editor = std::move(text);
+    session.setTextRange(std::nullopt);
     caretBlink.stop();
     canvas.setAttribute(Qt::WA_InputMethodEnabled, false);
     // Qt keeps a preedit around; it goes with the editor.

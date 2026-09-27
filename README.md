@@ -77,8 +77,18 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   tracking and alignment, with kerning, baseline shift, scale, case, underline
   and strikethrough under Show more. Illustrator's keys work too: Alt+←/→
   tracking (with Ctrl, five times as much; at a caret, kerning), Alt+↑/↓
-  leading, Alt+Shift+↑/↓ baseline shift and Ctrl+Shift+. / , size. Create
-  Outlines turns it into paths.
+  leading, Alt+Shift+↑/↓ baseline shift and Ctrl+Shift+. / , size. Select
+  characters while typing and every type field, a fill colour or a style
+  changes just them, so one word can be bold, larger or red. OpenType features
+  (ligatures, small caps, fractions, figure styles, stylistic sets) sit behind
+  a button in Show more, with the ones the font lacks dimmed. Area type gets a
+  Paragraph section for indents, a hanging first line, space before and after
+  and where a justified last line sits. Character and paragraph styles live in
+  the document: make one from the selection, apply it from the style button in
+  Character's heading or Window ▸ Type Styles, and redefine it everywhere at
+  once; a "+" shows local changes. Type ▸ Find/Replace Font… lists the fonts
+  used, flags missing ones (also noted when the file opens) and replaces them
+  in one step. Create Outlines turns type into paths, a path per run colour.
 - A Properties panel in Figma's order, whose sections fold away and show only
   when they apply. Number fields take arithmetic and units (`2*(3+1)`,
   `25mm`, `50%`), `+10` or `*2` applied to each object, arrow steps, and a

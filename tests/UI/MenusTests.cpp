@@ -333,10 +333,11 @@ void MenusTests::typeKeysKernAtACaretWhileTyping()
     QCOMPARE(w.session().document()->find(id)->text.tracking, 0.0);
     QCOMPARE(w.session().undoName(), QString("Kerning"));
     QVERIFY(w.canvas().isEditingText());
-    // With a range selected, it's tracking.
+    // With a range selected, it's tracking, on the range alone.
     w.press(Qt::Key_Right, Qt::ShiftModifier);
     w.press(Qt::Key_Right, Qt::AltModifier);
-    QCOMPARE(w.session().document()->find(id)->text.tracking, 20.0);
+    QCOMPARE(w.session().document()->find(id)->text.formatAt(1).tracking, 20.0);
+    QCOMPARE(w.session().document()->find(id)->text.tracking, 0.0);
     // Typing carries on with the kern in place.
     w.press(Qt::Key_End);
     QTest::keyClicks(&w.canvas(), QStringLiteral("!"));

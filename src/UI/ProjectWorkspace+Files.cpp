@@ -105,6 +105,11 @@ bool ProjectWorkspace::openFile(const QString &path)
     noteRecent(path);
     qCInfo(lcIO).noquote() << "opened" << path;
     reportLeftOut(path, warnings);
+    // Flagged in passing, not in an alert: the text shows in a stand-in until replaced.
+    if (const QStringList missing = opened->session.missingFonts(); !missing.isEmpty())
+        setNotice(QStringLiteral("Missing %1: %2. Type ▸ Find/Replace Font… replaces %3.")
+                      .arg(missing.size() == 1 ? QStringLiteral("font") : QStringLiteral("fonts"), missing.join(QStringLiteral(", ")),
+                           missing.size() == 1 ? QStringLiteral("it") : QStringLiteral("them")));
     return true;
 }
 

@@ -74,7 +74,7 @@ void EditorCanvas::State::paint(QPainter &painter)
     if (text && text->inDocument && !text->preedit.isEmpty() && document->find(text->object.id)) {
         // The input method's preedit shows in the type itself, pushing the rest along.
         shown = *document;
-        shown->find(text->object.id)->text.text = text->displayText();
+        shown->find(text->object.id)->text = text->displayObject().text;
     }
     const VectorDocument &drawn = shown ? *shown : *document;
     if (const std::optional<QUuid> group = session.isolatedGroup(); group && drawn.find(*group))

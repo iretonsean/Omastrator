@@ -45,12 +45,13 @@ void composite(QPainter &painter, const Paint &paint)
         painter.setCompositionMode(compositionMode(paint.blendMode));
 }
 
-void drawPaints(QPainter &painter, const VectorObject &object, const QPainterPath &path, const QRectF &bounds, bool fillable)
+void drawPaints(QPainter &painter, const VectorObject &object, const QPainterPath &path, const QRectF &bounds, bool fillable,
+                bool strokable = true)
 {
     if (object.hasSimpleAppearance()) {
         if (object.fill.isVisible() && fillable)
             painter.fillPath(path, object.fill.brush(bounds));
-        if (object.stroke.isVisible())
+        if (object.stroke.isVisible() && strokable)
             painter.strokePath(path, object.stroke.pen(bounds));
         return;
     }
@@ -64,7 +65,7 @@ void drawPaints(QPainter &painter, const VectorObject &object, const QPainterPat
             painter.restore();
         }
     }
-    for (const StrokeStyle &stroke : object.strokes()) {
+    for (const StrokeStyle &stroke : strokable ? object.strokes() : std::vector<StrokeStyle>{}) {
         if (!stroke.isVisible())
             continue;
         painter.save();
@@ -105,7 +106,20 @@ void drawLeaf(QPainter &painter, const VectorObject &object, const VectorRendere
         painter.save();
         painter.setTransform(object.transform, true);
         const QPainterPath glyphs = object.text.outline();
-        drawPaints(painter, object, glyphs, glyphs.boundingRect(), true);
+        const QRectF bounds = glyphs.boundingRect();
+        const auto pieces = object.text.runs.empty() ? decltype(object.text.fills()){} : object.text.fills();
+        if (std::none_of(pieces.begin(), pieces.end(), [](const auto &piece) { return piece.first.has_value(); })) {
+            drawPaints(painter, object, glyphs, bounds, true);
+        } else {
+            // Runs with a colour of their own; the rest take the object's fills, and the strokes cover every glyph.
+            for (const auto &[color, piece] : pieces) {
+                if (color)
+                    painter.fillPath(piece, QBrush(*color));
+                else
+                    drawPaints(painter, object, piece, bounds, true, false);
+            }
+            drawPaints(painter, object, glyphs, bounds, false);
+        }
         painter.restore();
         return;
     }

@@ -1,3 +1,4 @@
+#include "Document/FontFeatures.h"
 #include "Document/PathOperations.h"
 #include "IO/ImageImporter.h"
 #include "IO/SvgImporterParts.h"
@@ -7,6 +8,7 @@
 #include <QUrl>
 #include <cmath>
 #include <functional>
+#include <map>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
@@ -21,23 +23,33 @@ std::optional<double> first(const QString &list)
     return values.isEmpty() ? std::nullopt : std::optional<double>(values.front());
 }
 
+// A line's characters, each with the element it was written in.
+struct Owned {
+    QString text;
+    std::vector<int> owners;
+};
+
 // Newlines and tabs are spaces; outside xml:space="preserve" runs collapse and ends trim.
-QString spaced(QString line, bool preserve)
+Owned spaced(Owned line, bool preserve)
 {
-    for (QChar &c : line) {
+    for (QChar &c : line.text) {
         if (c == QLatin1Char('\n') || c == QLatin1Char('\r') || c == QLatin1Char('\t'))
             c = QLatin1Char(' ');
     }
     if (preserve)
         return line;
-    QString result;
-    for (const QChar c : line) {
-        if (c == QLatin1Char(' ') && (result.isEmpty() || result.back() == QLatin1Char(' ')))
+    Owned result;
+    for (qsizetype index = 0; index < line.text.size(); ++index) {
+        const QChar c = line.text[index];
+        if (c == QLatin1Char(' ') && (result.text.isEmpty() || result.text.back() == QLatin1Char(' ')))
             continue;
-        result += c;
+        result.text += c;
+        result.owners.push_back(line.owners[size_t(index)]);
     }
-    if (result.endsWith(QLatin1Char(' ')))
-        result.chop(1);
+    if (result.text.endsWith(QLatin1Char(' '))) {
+        result.text.chop(1);
+        result.owners.pop_back();
+    }
     return result;
 }
 
@@ -59,6 +71,48 @@ QString family(const QString &list)
 double averageScale(const QTransform &t)
 {
     return (std::hypot(t.m11(), t.m21()) + std::hypot(t.m12(), t.m22())) / 2;
+}
+
+// A span's look, as its ancestors up to the text element say.
+CharacterFormat characterFormat(const SvgSource &source, int element, int textElement)
+{
+    CharacterFormat format;
+    const QString fontFamily = family(source.inherited(element, QStringLiteral("font-family")));
+    if (!fontFamily.isEmpty())
+        format.family = fontFamily;
+    format.size = SvgSyntax::length(source.inherited(element, QStringLiteral("font-size")), 16, 16, 16);
+    if (!(format.size > 0))
+        format.size = 16;
+    const QString weight = source.inherited(element, QStringLiteral("font-weight"));
+    const int weightValue = weight == QLatin1String("bold") || weight == QLatin1String("bolder") ? 700
+        : weight == QLatin1String("lighter")                                                    ? 300
+        : weight.toInt() > 0                                                                    ? weight.toInt()
+                                                                                                : 400;
+    const QString fontStyle = source.inherited(element, QStringLiteral("font-style"));
+    const bool slanted = fontStyle == QLatin1String("italic") || fontStyle == QLatin1String("oblique");
+    // Plain text keeps the default face name, which renders as the family's regular.
+    if (weightValue != 400 || slanted)
+        format.style = TextContent::styleFor(format.family, weightValue, slanted);
+    // Letter spacing reads in pt; tracking is in 1/1000 em.
+    format.tracking = std::round(SvgSyntax::length(source.inherited(element, QStringLiteral("letter-spacing")), 0, format.size) / format.size * 1e6) / 1000;
+    if (source.inherited(element, QStringLiteral("font-variant")) == QLatin1String("small-caps"))
+        format.textCase = TextCase::smallCaps;
+    else if (source.inherited(element, QStringLiteral("text-transform")) == QLatin1String("uppercase"))
+        format.textCase = TextCase::allCaps;
+    const QString decoration = source.inherited(element, QStringLiteral("text-decoration"));
+    format.underline = decoration.contains(QLatin1String("underline"));
+    format.strikethrough = decoration.contains(QLatin1String("line-through"));
+    format.features = FontFeatures::fromCss(source.inherited(element, QStringLiteral("font-feature-settings")));
+    // Shifts add up from the text element down.
+    for (int at = element; at >= 0; at = source.at(at).parent) {
+        format.baselineShift += SvgSyntax::length(source.property(at, QStringLiteral("baseline-shift")), 0, format.size);
+        if (at == textElement)
+            break;
+    }
+    const QColor fill = QColor::fromString(source.inherited(element, QStringLiteral("fill")));
+    if (fill.isValid())
+        format.fill = fill;
+    return format;
 }
 
 QImage decoded(const QByteArray &bytes)
@@ -119,8 +173,8 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
         hasSpans = hasSpans || source.at(child).tag != QLatin1String("#text");
     std::optional<double> originX = first(source.attribute(element, QStringLiteral("x")));
     double baseline = first(source.attribute(element, QStringLiteral("y"))).value_or(0);
-    QStringList lines;
-    QString line;
+    std::vector<Owned> lines;
+    Owned line;
     std::vector<double> baselines;
     int style = -1;
     bool started = false;
@@ -136,7 +190,8 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
                     started = true;
                     baselines.push_back(baseline);
                 }
-                line += node.text;
+                line.text += node.text;
+                line.owners.insert(line.owners.end(), size_t(node.text.size()), parent);
                 if (style < 0 && !node.text.trimmed().isEmpty())
                     style = parent;
             } else if (node.tag == QLatin1String("tspan")) {
@@ -150,8 +205,8 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
                         originX = first(source.attribute(child, QStringLiteral("x")));
                     baselines.push_back(at);
                 } else if (moves) {
-                    lines << line;
-                    line.clear();
+                    lines.push_back(line);
+                    line = {};
                     baselines.push_back(at);
                 }
                 baseline = at;
@@ -162,46 +217,64 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
         }
     };
     collect(element);
-    lines << line;
+    lines.push_back(line);
     QString text;
-    for (qsizetype index = 0; index < lines.size(); ++index)
-        text += (index ? QStringLiteral("\n") : QString()) + spaced(lines[index], preserve);
+    std::vector<int> owners;
+    for (size_t index = 0; index < lines.size(); ++index) {
+        const Owned spacedLine = spaced(lines[index], preserve);
+        if (index) {
+            text += QLatin1Char('\n');
+            owners.push_back(owners.empty() ? element : owners.back());
+        }
+        text += spacedLine.text;
+        owners.insert(owners.end(), spacedLine.owners.begin(), spacedLine.owners.end());
+    }
     if (text.trimmed().isEmpty())
         return std::nullopt;
 
+    // Each span's look; the one most characters share is the text's own, the rest are runs.
+    std::map<int, CharacterFormat> formats;
+    std::vector<std::pair<CharacterFormat, int>> counts;
+    for (const int owner : owners) {
+        auto found = formats.find(owner);
+        if (found == formats.end())
+            found = formats.emplace(owner, characterFormat(source, owner, element)).first;
+        auto counted = std::find_if(counts.begin(), counts.end(), [&](const auto &entry) { return entry.first == found->second; });
+        if (counted == counts.end())
+            counts.push_back({found->second, 1});
+        else
+            ++counted->second;
+    }
+    const auto most = std::max_element(counts.begin(), counts.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
+    const CharacterFormat own = most == counts.end() ? characterFormat(source, style < 0 ? element : style, element) : most->first;
+
     TextRun run;
     run.style = style < 0 ? element : style;
+    for (size_t index = 0; index < owners.size(); ++index) {
+        if (formats[owners[index]] == own && !text[qsizetype(index)].isSpace()) {
+            run.style = owners[index];
+            break;
+        }
+    }
     TextContent &content = run.content;
     content.text = text;
-    const QString fontFamily = family(source.inherited(run.style, QStringLiteral("font-family")));
-    if (!fontFamily.isEmpty())
-        content.family = fontFamily;
-    content.size = SvgSyntax::length(source.inherited(run.style, QStringLiteral("font-size")), 16, 16, 16);
-    if (!(content.size > 0))
-        content.size = 16;
-    const QString weight = source.inherited(run.style, QStringLiteral("font-weight"));
-    const int weightValue = weight == QLatin1String("bold") || weight == QLatin1String("bolder") ? 700
-        : weight == QLatin1String("lighter")                                                    ? 300
-        : weight.toInt() > 0                                                                    ? weight.toInt()
-                                                                                                : 400;
-    const QString fontStyle = source.inherited(run.style, QStringLiteral("font-style"));
-    const bool slanted = fontStyle == QLatin1String("italic") || fontStyle == QLatin1String("oblique");
-    // Plain text keeps the default face name, which renders as the family's regular.
-    if (weightValue != 400 || slanted)
-        content.style = TextContent::styleFor(content.family, weightValue, slanted);
-    // Letter spacing reads in pt; tracking is in 1/1000 em.
-    content.tracking = std::round(SvgSyntax::length(source.inherited(run.style, QStringLiteral("letter-spacing")), 0, content.size) / content.size * 1e6) / 1000;
+    content.character() = own;
+    content.fill.reset();
+    for (size_t index = 0; index < owners.size(); ++index) {
+        CharacterFormat format = formats[owners[index]];
+        if (format.fill == own.fill)
+            format.fill.reset();
+        if (format == content.character())
+            continue;
+        ::TextRun *last = content.runs.empty() ? nullptr : &content.runs.back();
+        if (last && last->start + last->length == int(index) && last->format == format)
+            ++last->length;
+        else
+            content.runs.push_back({int(index), 1, format});
+    }
     const QString kerning = source.inherited(run.style, QStringLiteral("font-kerning"));
     if (kerning == QLatin1String("none") || source.inherited(run.style, QStringLiteral("kerning")) == QLatin1String("0"))
         content.kerning = TextKerning::none;
-    if (source.inherited(run.style, QStringLiteral("font-variant")) == QLatin1String("small-caps"))
-        content.textCase = TextCase::smallCaps;
-    else if (source.inherited(run.style, QStringLiteral("text-transform")) == QLatin1String("uppercase"))
-        content.textCase = TextCase::allCaps;
-    const QString decoration = source.inherited(run.style, QStringLiteral("text-decoration"));
-    content.underline = decoration.contains(QLatin1String("underline"));
-    content.strikethrough = decoration.contains(QLatin1String("line-through"));
-    content.baselineShift = SvgSyntax::length(source.property(run.style, QStringLiteral("baseline-shift")), 0, content.size);
     const QString anchor = source.inherited(run.style, QStringLiteral("text-anchor"));
     content.alignment = anchor == QLatin1String("middle") ? TextAlignment::center
                         : anchor == QLatin1String("end")  ? TextAlignment::right

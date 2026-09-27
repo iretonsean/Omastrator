@@ -350,6 +350,33 @@ private slots:
         QCOMPARE(second.document()->find(second.selection().front())->fill, Paint::solid(Qt::red));
     }
 
+    void pastePropertiesOntoStyledTextSpreadsTheSourcesFirstLook()
+    {
+        Drawn d;
+        d.session.createDocument({300, 300});
+        const QUuid source = d.session.addText({20, 50}, QStringLiteral("Hello"));
+        d.object(source).text.formatCharacters(0, 2, [](CharacterFormat &format) {
+            format.size = 60;
+            format.fill = QColor(Qt::green);
+        });
+        QVERIFY(d.session.copyProperties());
+
+        const QUuid target = d.session.addText({20, 200}, QStringLiteral("World wide"));
+        d.object(target).text.formatCharacters(1, 3, [](CharacterFormat &format) { format.size = 10; });
+        d.object(target).text.kerns[2] = 40;
+        QVERIFY(!d.read(target).text.runs.empty());
+        d.session.pasteProperties();
+        const TextContent &pasted = d.read(target).text;
+        QCOMPARE(pasted.text, QStringLiteral("World wide"));
+        QVERIFY(pasted.runs.empty());
+        QVERIFY(pasted.paragraphFormats.empty());
+        QCOMPARE(pasted.size, 60.0);
+        QCOMPARE(pasted.formatAt(4).size, 60.0);
+        // A run's own colour stays with the source's characters; the paint comes from the fill stack.
+        QVERIFY(!pasted.fill);
+        QCOMPARE(pasted.kerns.at(2), 40.0);
+    }
+
     void eyedropperAltClickGivesTheSelectionsStyle()
     {
         Drawn d;
