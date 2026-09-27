@@ -129,6 +129,9 @@ public:
     void previewObject(const VectorObject &object);
     // The object as the interaction found it.
     const VectorObject *originalObject(const QUuid &id) const;
+    // Adds or removes an object within the interaction, as drawing tools preview.
+    QUuid previewAddObject(VectorObject object);
+    void previewRemoveObject(const QUuid &id);
     void commitInteraction();
     void cancelInteraction();
 
@@ -138,6 +141,9 @@ public:
     // A path with the default fill and stroke.
     QUuid addPath(const VectorPath &path, const QString &name);
     QUuid addText(QPointF baselineOrigin, const QString &text);
+    // What addPath and addText would add, for tools that preview first.
+    VectorObject pathObject(const VectorPath &path, const QString &name) const;
+    VectorObject textObject(QPointF baselineOrigin, const QString &text) const;
     // An image placed at its pixel size, centred on `center`.
     QUuid placeImage(const QImage &image, const QString &name, std::optional<QPointF> center = std::nullopt);
     // Replaces an object's fields in one undo step.
@@ -207,6 +213,12 @@ public:
     void zoomOut();
     void zoomToFit();
     void actualSize();
+    // The canvas's own zoom, pan and size changes.
+    void setZoom(double zoom, QPointF anchoredAt);
+    void panView(QSizeF by);
+    void resizeView(QSizeF size, double backingScale);
+    // Smart guides: moves and drawn points snap to objects and the artboard.
+    bool usesSmartGuides = true;
     bool showsGrid = false;
     bool snapsToGrid = false;
     double gridSpacing = 10;
@@ -231,6 +243,7 @@ signals:
 private:
     void notify(bool documentToo = true);
     void edit(const QString &name, const std::function<void(VectorDocument &)> &change);
+    void insertNew(VectorDocument &document, VectorObject object);
     void restore(const DocumentHistory::Snapshot &snapshot);
     void pruneSelection();
     std::vector<QUuid> selectionInOrder() const;

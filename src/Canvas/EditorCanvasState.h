@@ -1,0 +1,192 @@
+#pragma once
+#include "Canvas/EditorCanvas.h"
+#include "Canvas/InlineTextEditor.h"
+#include "Canvas/SmartGuides.h"
+#include <QCursor>
+#include <QLineF>
+#include <QTimer>
+#include <memory>
+
+// The canvas's tools and gestures; each EditorCanvas+Part.cpp holds one group.
+struct EditorCanvas::State {
+    State(EditorCanvas &canvas, EditorSession &session);
+
+    EditorCanvas &canvas;
+    EditorSession &session;
+
+    // Geometry --------------------------------------------------------------
+    QSizeF documentSize() const;
+    // View points per document unit.
+    double scale() const;
+    QPointF toDocument(QPointF view) const;
+    QPointF toView(QPointF document) const;
+    QTransform documentToView() const;
+    // A distance in view points, in document units.
+    double reach(double points) const { return points / std::max(scale(), 1e-9); }
+    void syncViewport();
+
+    // Drags ------------------------------------------------------------------
+    enum class DragKind {
+        pan,
+        zoomRect,
+        marquee,
+        move,
+        scale,
+        rotate,
+        scaleTool,
+        nodes,
+        handle,
+        shape,
+        pencil,
+        pen,
+        textSelect,
+    };
+    struct Drag {
+        DragKind kind = DragKind::pan;
+        QPointF pressView;
+        QPointF pressDocument;
+        QPointF lastView;
+        // Past the drag distance: a click that never got there changes nothing.
+        bool started = false;
+        bool additive = false;
+        bool duplicate = false;
+        QRectF startBounds;
+        int handle = -1;
+        QPointF center;
+        QUuid object;
+        NodeRef node;
+        NodePart part = NodePart::anchor;
+        QPointF grabbed;
+        std::vector<QPointF> points;
+        SmartGuides guides;
+        std::vector<QUuid> selectionBefore;
+        std::vector<EditorSession::PickedNode> pickedBefore;
+        // Shapes and the pen: the interaction this drag opened.
+        bool interacting = false;
+    };
+    std::optional<Drag> drag;
+    // A fresh drag of `kind` pressed at `view`.
+    Drag &beginDrag(DragKind kind, QPointF view);
+    std::vector<QLineF> guideLines;
+    std::vector<QLineF> guideGaps;
+
+    void press(QPointF view, Qt::KeyboardModifiers modifiers);
+    void move(QPointF view, Qt::KeyboardModifiers modifiers, bool held);
+    void release(QPointF view, Qt::KeyboardModifiers modifiers);
+    void doubleClick(QPointF view, Qt::KeyboardModifiers modifiers);
+    // Escape or lost focus: a drag's changes go back.
+    void cancelDrag();
+    bool pastDragDistance(QPointF view) const;
+    void toolChanged();
+    void documentChanged();
+
+    // Snapping ---------------------------------------------------------------
+    SmartGuides guidesExcluding(const std::vector<QUuid> &excluded) const;
+    // Smart guides, then the grid on axes they left alone; shows the guides.
+    QPointF snapPoint(const SmartGuides &guides, QPointF point, std::optional<QPointF> anchor = std::nullopt, bool constrained = false);
+    QPointF snapMovement(const SmartGuides &guides, const QRectF &bounds, QPointF delta, bool constrained);
+    void clearGuides();
+
+    // Selection (V), Rotate (R), Scale (S) -----------------------------------
+    std::optional<QUuid> enteredGroup;
+    std::optional<QUuid> hovered;
+    // What a click on `leaf` selects: a layer's child, or one inside the entered group.
+    std::optional<QUuid> selectableTarget(const QUuid &leaf) const;
+    std::optional<QUuid> hitLeaf(QPointF document) const;
+    // The select tool's box in document coordinates, while it shows.
+    std::optional<QRectF> selectionBox() const;
+    QPointF handlePoint(const QRectF &box, int index) const;
+    // A flat box's side handles would sit on its corners.
+    bool handleShown(const QRectF &box, int index) const;
+    std::optional<int> handleAt(QPointF view) const;
+    bool inRotateZone(QPointF view) const;
+    void selectPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void transformToolPress(QPointF view);
+    void dragMove(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragScale(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragRotate(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragScaleTool(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragMarquee(QPointF view);
+    void finishMarquee();
+    void updateHover(QPointF view);
+
+    // Direct selection (A) ----------------------------------------------------
+    // Paths whose anchors show: the selected leaves.
+    std::vector<QUuid> editablePaths() const;
+    bool isPicked(const QUuid &object, NodeRef node) const;
+    struct NodeHit {
+        QUuid object;
+        NodeRef node;
+        NodePart part;
+    };
+    std::optional<NodeHit> nodeAt(QPointF view) const;
+    void directPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragNodes(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragHandle(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishDirectMarquee();
+
+    // Pen (P) and Pencil (N) --------------------------------------------------
+    struct Pen {
+        QUuid object;
+        // Clicked on the first anchor: the path closes on release.
+        bool closing = false;
+    };
+    std::optional<Pen> pen;
+    const Contour *penContour() const;
+    bool nearPenStart(QPointF view) const;
+    void penPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragPenHandle(QPointF view, Qt::KeyboardModifiers modifiers);
+    void penRelease();
+    void finishPen();
+    void pencilPress(QPointF view);
+    void dragPencil(QPointF view);
+    void finishPencil();
+
+    // Shapes ------------------------------------------------------------------
+    void shapePress(QPointF view);
+    void dragShape(QPointF view, Qt::KeyboardModifiers modifiers);
+    VectorPath shapePath(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers) const;
+
+    // Type (T) ----------------------------------------------------------------
+    std::unique_ptr<InlineTextEditor> text;
+    // The text as editing began, to keep a hand-given name.
+    QString textAtStart;
+    bool textCreated = false;
+    bool applyingText = false;
+    QTimer caretBlink;
+    bool caretShown = true;
+    void textPress(QPointF view);
+    void beginTextEditing(const VectorObject &object, bool inDocument, std::optional<QPointF> caretAt);
+    void applyText();
+    void finishText();
+    // The edited text's box in document coordinates, for clicks inside it.
+    QRectF textBox() const;
+    void restartCaret();
+
+    // Navigation --------------------------------------------------------------
+    bool spaceHeld = false;
+    void zoomAt(double zoom, QPointF view);
+    void finishZoom(QPointF view, Qt::KeyboardModifiers modifiers);
+
+    // Eyedropper --------------------------------------------------------------
+    void eyedropperPress(QPointF view);
+
+    // Painting ----------------------------------------------------------------
+    void paint(QPainter &painter);
+    void drawGrid(QPainter &painter, const QRectF &artboard) const;
+    void drawOverlay(QPainter &painter) const;
+    void drawSelection(QPainter &painter) const;
+    void drawDirectSelection(QPainter &painter) const;
+    void drawPen(QPainter &painter) const;
+    QColor layerColor(const QUuid &id) const;
+    QColor accent() const;
+
+    // Cursors and keys --------------------------------------------------------
+    std::optional<QPointF> hover;
+    Qt::KeyboardModifiers modifiers;
+    Tool shownTool = Tool::select;
+    int cursorKey = -1;
+    void updateCursor();
+    bool keyPress(QKeyEvent *event);
+    bool keyRelease(QKeyEvent *event);
+};

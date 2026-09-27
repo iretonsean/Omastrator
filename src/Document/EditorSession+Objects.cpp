@@ -37,6 +37,28 @@ std::optional<QUuid> EditorSession::insertionParent() const
     return activeLayer();
 }
 
+void EditorSession::insertNew(VectorDocument &document, VectorObject object)
+{
+    const QUuid id = object.id;
+    std::optional<QUuid> parent = insertionParent();
+    if (!parent) {
+        document = VectorDocument::blank(document.size);
+        parent = document.layers().back();
+    }
+    // Locked or hidden layers take no new objects; the topmost open one does.
+    if (document.isEffectivelyLocked(*parent) || !document.isEffectivelyVisible(*parent)) {
+        for (const QUuid &layer : document.layers()) {
+            if (!document.isEffectivelyLocked(layer) && document.isEffectivelyVisible(layer))
+                parent = layer;
+        }
+    }
+    std::optional<QUuid> above;
+    if (!m_selection.empty() && document.find(m_selection.back()) && document.find(m_selection.back())->parentID == parent)
+        above = m_selection.back();
+    document.insert(std::move(object), *parent, above);
+    m_selection = {id};
+}
+
 QUuid EditorSession::addObject(VectorObject object, const QString &editName)
 {
     if (!m_document)
@@ -44,29 +66,32 @@ QUuid EditorSession::addObject(VectorObject object, const QString &editName)
     if (object.name.isEmpty())
         object.name = nameFor(object);
     const QUuid id = object.id;
-    edit(editName, [&](VectorDocument &document) {
-        std::optional<QUuid> parent = insertionParent();
-        if (!parent) {
-            document = VectorDocument::blank(document.size);
-            parent = document.layers().back();
-        }
-        // Locked or hidden layers take no new objects; the topmost open one does.
-        if (document.isEffectivelyLocked(*parent) || !document.isEffectivelyVisible(*parent)) {
-            for (const QUuid &layer : document.layers()) {
-                if (!document.isEffectivelyLocked(layer) && document.isEffectivelyVisible(layer))
-                    parent = layer;
-            }
-        }
-        std::optional<QUuid> above;
-        if (!m_selection.empty() && document.find(m_selection.back()) && document.find(m_selection.back())->parentID == parent)
-            above = m_selection.back();
-        document.insert(std::move(object), *parent, above);
-        m_selection = {id};
-    });
+    edit(editName, [&](VectorDocument &document) { insertNew(document, std::move(object)); });
     return id;
 }
 
-QUuid EditorSession::addPath(const VectorPath &path, const QString &name)
+QUuid EditorSession::previewAddObject(VectorObject object)
+{
+    if (!m_document || !m_interaction)
+        return {};
+    if (object.name.isEmpty())
+        object.name = nameFor(object);
+    const QUuid id = object.id;
+    insertNew(*m_document, std::move(object));
+    notify();
+    return id;
+}
+
+void EditorSession::previewRemoveObject(const QUuid &id)
+{
+    if (!m_document || !m_interaction || !m_document->find(id))
+        return;
+    m_document->remove({id});
+    pruneSelection();
+    notify();
+}
+
+VectorObject EditorSession::pathObject(const VectorPath &path, const QString &name) const
 {
     VectorObject object;
     object.kind = ObjectKind::path;
@@ -78,10 +103,15 @@ QUuid EditorSession::addPath(const VectorPath &path, const QString &name)
     if (open && !object.stroke.isVisible())
         object.stroke.paint = m_defaultFill.isVisible() ? m_defaultFill : Paint::solid(Qt::black);
     object.name = name;
-    return addObject(object, QStringLiteral("Draw %1").arg(name));
+    return object;
 }
 
-QUuid EditorSession::addText(QPointF baselineOrigin, const QString &text)
+QUuid EditorSession::addPath(const VectorPath &path, const QString &name)
+{
+    return addObject(pathObject(path, name), QStringLiteral("Draw %1").arg(name));
+}
+
+VectorObject EditorSession::textObject(QPointF baselineOrigin, const QString &text) const
 {
     VectorObject object;
     object.kind = ObjectKind::text;
@@ -93,7 +123,12 @@ QUuid EditorSession::addText(QPointF baselineOrigin, const QString &text)
     if (object.fill == Paint::solid(Qt::white))
         object.fill = Paint::solid(Qt::black);
     object.stroke.paint = Paint::none();
-    return addObject(object, QStringLiteral("Type"));
+    return object;
+}
+
+QUuid EditorSession::addText(QPointF baselineOrigin, const QString &text)
+{
+    return addObject(textObject(baselineOrigin, text), QStringLiteral("Type"));
 }
 
 QUuid EditorSession::placeImage(const QImage &image, const QString &name, std::optional<QPointF> center)

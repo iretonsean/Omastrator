@@ -481,6 +481,30 @@ void EditorSession::actualSize()
     notify(false);
 }
 
+void EditorSession::setZoom(double zoom, QPointF anchoredAt)
+{
+    if (!m_document)
+        return;
+    viewport.setZoom(zoom, anchoredAt, m_document->size);
+    notify(false);
+}
+
+void EditorSession::panView(QSizeF by)
+{
+    if (by.isNull())
+        return;
+    viewport.translate(by);
+    notify(false);
+}
+
+void EditorSession::resizeView(QSizeF size, double backingScale)
+{
+    if (viewport.viewSize == size && viewport.backingScale == backingScale)
+        return;
+    viewport.resize(size, backingScale, m_document ? std::optional(m_document->size) : std::nullopt);
+    notify(false);
+}
+
 void EditorSession::setShowsGrid(bool shown)
 {
     showsGrid = shown;
