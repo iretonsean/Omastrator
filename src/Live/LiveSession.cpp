@@ -361,7 +361,9 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
     m_edits.push_back(edit);
     emit editApplied(edit);
     emit changed();
-    describeSite();
+    // Later: a record can arrive inside another DevTools call, which mustn't be nested.
+    if (isMockup())
+        QTimer::singleShot(0, this, &LiveSession::describeSite);
 }
 
 void LiveSession::clearEdits()
