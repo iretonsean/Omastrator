@@ -12,7 +12,9 @@
 
 class CharacterSection;
 class NumberField;
+class PaintStack;
 class PaintSwatch;
+class SelectionColors;
 
 // A fill or stroke: kind, colour, gradient end. Several different paints read Mixed.
 class PaintRow : public QWidget {
@@ -34,6 +36,8 @@ private:
     QComboBox *const m_kind;
     PaintSwatch *const m_well;
     PaintSwatch *const m_end;
+    // The solid's colour, or a gradient's first stop, as six hex digits.
+    QLineEdit *const m_hex;
 };
 
 // The right-hand inspector, in Figma's order: the document with nothing
@@ -64,6 +68,12 @@ private:
     void resizeEach(bool vertical, const std::function<double(double)> &change);
     void setStrokeWidth(double width);
     void applyDashes();
+    // The stroke the Stroke section edits: the stack's active entry, else the one stroke.
+    StrokeStyle shownStroke() const;
+    void applyStroke(const StrokeStyle &stroke);
+    // Fills and strokes: one row each, or their stacks; selection colours; the stroke's
+    // contextual rows (alignment for closed paths, arrowheads for open ones).
+    void synchronizePaint();
     void synchronize();
     void applyIcons();
     // One height and one font for the section's fields and menus.
@@ -103,6 +113,18 @@ private:
     NumberField *m_increment = nullptr;
     PaintRow *m_fill = nullptr;
     PaintRow *m_strokePaint = nullptr;
+    QWidget *m_fillLine = nullptr;
+    QWidget *m_strokeLine = nullptr;
+    PaintStack *m_fillStack = nullptr;
+    PaintStack *m_strokeStack = nullptr;
+    SelectionColors *m_selectionColors = nullptr;
+    QComboBox *m_strokeAlign = nullptr;
+    QLabel *m_strokeAlignCaption = nullptr;
+    QWidget *m_arrows = nullptr;
+    QComboBox *m_startArrow = nullptr;
+    QComboBox *m_endArrow = nullptr;
+    NumberField *m_arrowScale = nullptr;
+    QCheckBox *m_alignDashes = nullptr;
     NumberField *m_strokeWidth = nullptr;
     QComboBox *m_cap = nullptr;
     QComboBox *m_join = nullptr;

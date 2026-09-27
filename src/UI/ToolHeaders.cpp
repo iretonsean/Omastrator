@@ -52,7 +52,8 @@ ToolHeaderBar *ToolHeaders::make(EditorSession &session, Tool tool, QWidget *par
     case Tool::shapeBuilder: return new ShapeBuilderControls(session, parent);
     case Tool::rotate:
     case Tool::scale: return new TransformToolHeader(session, tool, parent);
-    case Tool::eyedropper: return plainBar(tool, QStringLiteral("Click an object to take its fill and stroke"), parent);
+    case Tool::eyedropper: return plainBar(tool, QStringLiteral("Click an object to take its fill and stroke. Alt-click gives it the selection's"), parent);
+    case Tool::gradient: return plainBar(tool, QStringLiteral("Drag across the selection to set its gradient; drag the ends or the stops to adjust"), parent);
     case Tool::hand:
     case Tool::zoom: return new NavigationToolHeader(session, parent);
     }

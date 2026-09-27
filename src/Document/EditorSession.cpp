@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 17> toolInfo{{
+const std::array<ToolInfo, 18> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -25,6 +25,7 @@ const std::array<ToolInfo, 17> toolInfo{{
     {Tool::shapeBuilder, "shapeBuilder", "Shape Builder"},
     {Tool::rotate, "rotate", "Rotate"},
     {Tool::scale, "scale", "Scale"},
+    {Tool::gradient, "gradient", "Gradient"},
     {Tool::eyedropper, "eyedropper", "Eyedropper"},
     {Tool::hand, "hand", "Hand"},
     {Tool::zoom, "zoom", "Zoom"},
@@ -181,8 +182,8 @@ void EditorSession::resetDefaultColors()
             for (const QUuid &id : selectedLeaves()) {
                 VectorObject *object = document.find(id);
                 if (object && object->hasPaint()) {
-                    object->fill = m_defaultFill;
-                    object->stroke = m_defaultStroke;
+                    object->setFills({m_defaultFill});
+                    object->setStrokes({m_defaultStroke});
                 }
             }
         });

@@ -65,7 +65,18 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   drag on the label to scrub. Transform has a 9-point reference point, a
   proportions link and Scale Strokes & Effects. Different values read Mixed.
 - Fills and strokes: solid colours and linear or radial gradients, stroke
-  weight, caps, corners and dashes, opacity and blend modes.
+  weight, caps, corners and dashes, opacity and blend modes. **+** stacks
+  several fills or strokes on one object, Figma-style, each with its own eye,
+  opacity and blend, and a grip to reorder. Strokes align inside, centre or
+  outside, take arrowheads (arrow, triangle, circle, square, bar) and can
+  stretch their dashes to sit on the corners. The Gradient tool (G) drags a
+  gradient's ends and stops right on the object.
+- Colour: hex fields beside every well, the last twelve colours under the
+  picker, Selection colors to recolour every use of a colour in a mixed
+  selection at once, and global swatches that update everything painted with
+  them. Copy Properties and Paste Properties (Ctrl+Alt+C, Ctrl+Alt+V) move a
+  whole appearance between objects; the eyedropper's Alt-click gives the
+  selection's style to what you click.
 - Layers and groups with visibility, locking and drag-to-reorder, clipping masks
   and compound paths.
 - Pathfinder (Unite, Minus Front, Intersect, Exclude), plus Outline Stroke,

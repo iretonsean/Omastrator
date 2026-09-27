@@ -77,6 +77,14 @@ QJsonObject encode(const Paint &paint)
         json["start"] = point(paint.start);
         json["end"] = point(paint.end);
     }
+    if (paint.isHidden)
+        json["hidden"] = true;
+    if (paint.opacity != 1)
+        json["opacity"] = paint.opacity;
+    if (paint.blendMode != LayerBlendMode::normal)
+        json["blendMode"] = rawValue(paint.blendMode);
+    if (!paint.swatchId.isEmpty())
+        json["swatch"] = paint.swatchId;
     return json;
 }
 
@@ -96,6 +104,10 @@ Paint decodePaint(const QJsonObject &json)
         paint.color = paint.stops.front().color;
     paint.start = readPoint(json["start"], paint.start);
     paint.end = readPoint(json["end"], paint.end);
+    paint.isHidden = json["hidden"].toBool();
+    paint.opacity = std::clamp(json["opacity"].toDouble(1), 0.0, 1.0);
+    paint.blendMode = layerBlendMode(json["blendMode"].toString()).value_or(LayerBlendMode::normal);
+    paint.swatchId = json["swatch"].toString();
     return paint;
 }
 
@@ -104,8 +116,19 @@ QJsonObject encode(const StrokeStyle &stroke)
     QJsonArray dashes;
     for (double dash : stroke.dashes)
         dashes.append(dash);
-    return {{"paint", encode(stroke.paint)}, {"width", stroke.width}, {"cap", rawValue(stroke.cap)},
-            {"join", rawValue(stroke.join)}, {"miterLimit", stroke.miterLimit}, {"dashes", dashes}};
+    QJsonObject json{{"paint", encode(stroke.paint)}, {"width", stroke.width}, {"cap", rawValue(stroke.cap)},
+                     {"join", rawValue(stroke.join)}, {"miterLimit", stroke.miterLimit}, {"dashes", dashes}};
+    if (stroke.alignment != StrokeAlignment::center)
+        json["align"] = rawValue(stroke.alignment);
+    if (stroke.startArrow != Arrowhead::none)
+        json["startArrow"] = rawValue(stroke.startArrow);
+    if (stroke.endArrow != Arrowhead::none)
+        json["endArrow"] = rawValue(stroke.endArrow);
+    if (stroke.arrowScale != 100)
+        json["arrowScale"] = stroke.arrowScale;
+    if (stroke.alignDashes)
+        json["alignDashes"] = true;
+    return json;
 }
 
 StrokeStyle decodeStroke(const QJsonObject &json)
@@ -119,6 +142,11 @@ StrokeStyle decodeStroke(const QJsonObject &json)
     stroke.miterLimit = std::max(1.0, json["miterLimit"].toDouble(10));
     for (const QJsonValue &dash : json["dashes"].toArray())
         stroke.dashes.push_back(std::max(0.0, dash.toDouble()));
+    stroke.alignment = strokeAlignment(json["align"].toString());
+    stroke.startArrow = arrowhead(json["startArrow"].toString());
+    stroke.endArrow = arrowhead(json["endArrow"].toString());
+    stroke.arrowScale = std::clamp(json["arrowScale"].toDouble(100), 1.0, 1000.0);
+    stroke.alignDashes = json["alignDashes"].toBool();
     return stroke;
 }
 
@@ -281,6 +309,16 @@ QJsonObject encode(const VectorObject &object)
     if (object.hasPaint()) {
         json["fill"] = encode(object.fill);
         json["stroke"] = encode(object.stroke);
+        // The stack past one of each; files without these keys read as they always did.
+        QJsonArray fills, strokes;
+        for (const Paint &fill : object.extraFills)
+            fills.append(encode(fill));
+        for (const StrokeStyle &stroke : object.extraStrokes)
+            strokes.append(encode(stroke));
+        if (!fills.isEmpty())
+            json["moreFills"] = fills;
+        if (!strokes.isEmpty())
+            json["moreStrokes"] = strokes;
     }
     return json;
 }
@@ -325,6 +363,10 @@ VectorObject decodeObject(const QJsonObject &json)
         object.fill = decodePaint(json["fill"].toObject());
     if (json.contains("stroke"))
         object.stroke = decodeStroke(json["stroke"].toObject());
+    for (const QJsonValue &fill : json["moreFills"].toArray())
+        object.extraFills.push_back(decodePaint(fill.toObject()));
+    for (const QJsonValue &stroke : json["moreStrokes"].toArray())
+        object.extraStrokes.push_back(decodeStroke(stroke.toObject()));
     return object;
 }
 

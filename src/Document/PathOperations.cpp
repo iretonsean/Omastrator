@@ -1,4 +1,5 @@
 #include "Document/PathOperations.h"
+#include "Document/StrokeGeometry.h"
 #include <QLineF>
 #include <QPainterPathStroker>
 #include <algorithm>
@@ -193,23 +194,8 @@ QPainterPath combine(const std::vector<QPainterPath> &bottomToTop, BooleanOperat
 
 QPainterPath outlineStroke(const QPainterPath &path, const StrokeStyle &stroke)
 {
-    QPainterPathStroker stroker;
-    stroker.setWidth(stroke.width);
-    stroker.setCapStyle(stroke.cap);
-    stroker.setJoinStyle(stroke.join);
-    stroker.setMiterLimit(stroke.miterLimit);
-    if (!stroke.dashes.empty() && stroke.width > 0) {
-        QList<qreal> pattern;
-        for (double length : stroke.dashes)
-            pattern << std::max(0.01, length / stroke.width);
-        if (pattern.size() % 2)
-            pattern << pattern;
-        stroker.setDashPattern(pattern);
-    }
     // The stroker's outline overlaps itself; a union makes it one clean shape.
-    QPainterPath outline = stroker.createStroke(path);
-    outline.setFillRule(Qt::WindingFill);
-    return outline.simplified();
+    return StrokeGeometry::area(path, stroke).simplified();
 }
 
 QPainterPath offsetPath(const QPainterPath &path, double distance, Qt::PenJoinStyle join)

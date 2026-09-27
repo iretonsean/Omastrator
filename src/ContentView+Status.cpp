@@ -68,7 +68,8 @@ QString ContentView::hint(Tool tool)
     case Tool::shapeBuilder: return QStringLiteral("Drag across regions to merge · Click separates · Alt deletes · Shift-drag merges a marquee");
     case Tool::rotate: return QStringLiteral("Drag to rotate the selection · Shift 45° steps");
     case Tool::scale: return QStringLiteral("Drag to scale the selection · Shift keeps proportions");
-    case Tool::eyedropper: return QStringLiteral("Click an object to take its fill and stroke");
+    case Tool::eyedropper: return QStringLiteral("Click an object to take its fill and stroke. Alt-click gives it the selection's");
+    case Tool::gradient: return QStringLiteral("Drag across the selection to set its gradient; drag the ends or the stops to adjust");
     case Tool::hand: return QStringLiteral("Drag to pan · Space pans from any tool");
     case Tool::zoom: return QStringLiteral("Click to zoom in · Alt-click to zoom out");
     }

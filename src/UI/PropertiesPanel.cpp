@@ -4,6 +4,7 @@
 #include "UI/ColorPaletteControls.h"
 #include "UI/ColorPickerSheet.h"
 #include "UI/NumberField.h"
+#include "UI/PaintStack.h"
 #include "UI/ToolHeaderStyle.h"
 #include <QAction>
 #include <QEvent>
@@ -266,10 +267,9 @@ void PropertiesPanel::synchronize()
     }
     m_increment->sync(EditorCanvas::keyboardIncrement());
 
-    m_fill->synchronize();
-    m_strokePaint->synchronize();
-    const StrokeStyle stroke = ShownStyle::stroke(m_session);
-    if (ShownStyle::strokeWidthMixed(m_session))
+    synchronizePaint();
+    const StrokeStyle stroke = shownStroke();
+    if (ShownStyle::strokeWidthMixed(m_session) && m_strokeStack->isHidden())
         m_strokeWidth->syncMixed();
     else
         m_strokeWidth->sync(stroke.width);

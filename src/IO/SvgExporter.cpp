@@ -1,4 +1,5 @@
 #include "IO/SvgExporter.h"
+#include "Document/StrokeGeometry.h"
 #include "Logging.h"
 #include "Document/TextLayout.h"
 #include <QFontDatabase>
@@ -278,11 +279,75 @@ private:
             xml.writeAttribute(QStringLiteral("style"), QStringLiteral("mix-blend-mode:%1").arg(blend));
     }
 
+    // A stack past one fill and one plain stroke: a group named for the object,
+    // holding one element per visible entry, bottom to top. Aligned, dashed-to-corner
+    // and arrowed strokes go out as their filled outline, which SVG draws the same.
+    void writeStack(const VectorObject &object)
+    {
+        xml.writeStartElement(QStringLiteral("g"));
+        writeCommon(object);
+        VectorObject base = object;
+        base.name.clear();
+        base.opacity = 1;
+        base.blendMode = LayerBlendMode::normal;
+        base.extraFills.clear();
+        base.extraStrokes.clear();
+        const auto entry = [&](const Paint &paint) {
+            VectorObject one = base;
+            one.opacity = paint.opacity;
+            one.blendMode = paint.blendMode;
+            one.fill = Paint::none();
+            one.stroke.paint = Paint::none();
+            return one;
+        };
+        const bool fillable = object.kind == ObjectKind::text
+            || std::any_of(object.path.contours.begin(), object.path.contours.end(), [](const Contour &c) { return c.closed || c.nodes.size() > 2; });
+        for (const Paint &fill : object.fills()) {
+            if (!fill.isVisible() || !fillable)
+                continue;
+            VectorObject one = entry(fill);
+            one.fill = fill.withCompositeOf(Paint());
+            writeObjectBody(one);
+        }
+        for (const StrokeStyle &stroke : object.strokes()) {
+            if (!stroke.isVisible())
+                continue;
+            VectorObject one = entry(stroke.paint);
+            if (stroke.isPlain()) {
+                one.stroke = stroke;
+                one.stroke.paint = stroke.paint.withCompositeOf(Paint());
+                writeObjectBody(one);
+                continue;
+            }
+            // The outline in document coordinates; the gradient spans the shape it strokes.
+            QPainterPath shape = object.kind == ObjectKind::text ? object.transform.map(object.text.outline()) : object.path.painterPath();
+            one.kind = ObjectKind::path;
+            one.transform = {};
+            one.path = VectorPath::fromPainterPath(StrokeGeometry::area(shape, stroke));
+            one.path.fillRule = Qt::WindingFill;
+            one.fill = stroke.paint.withCompositeOf(Paint());
+            writeObjectBody(one);
+        }
+        xml.writeEndElement();
+    }
+
+    void writeObjectBody(const VectorObject &object)
+    {
+        if (object.kind == ObjectKind::text)
+            writeText(object);
+        else
+            writePath(object);
+    }
+
     void writeObject(const QUuid &id)
     {
         const VectorObject *object = document.find(id);
         if (!object || !object->isVisible)
             return;
+        if (object->hasPaint() && !object->hasSimpleAppearance()) {
+            writeStack(*object);
+            return;
+        }
         switch (object->kind) {
         case ObjectKind::layer:
         case ObjectKind::group:

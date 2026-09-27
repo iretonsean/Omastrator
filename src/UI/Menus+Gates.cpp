@@ -98,6 +98,8 @@ void Menus::synchronize()
     for (const char *name : {"pasteInFront", "pasteInBack"})
         action(QString::fromLatin1(name))->setEnabled(!field && !typing && !proposal && drawn && s.canPaste());
     action(QStringLiteral("transformAgain"))->setEnabled(editing && s.canTransformAgain());
+    action(QStringLiteral("copyProperties"))->setEnabled(!field && !typing && s.canCopyProperties());
+    action(QStringLiteral("pasteProperties"))->setEnabled(editing && s.canPasteProperties());
     for (const char *name : {"flipHorizontal", "flipVertical", "nextObjectAbove", "nextObjectBelow", "selectSameFillAndStroke", "selectSameFillColor",
                              "selectSameOpacity", "selectSameStrokeColor", "selectSameStrokeWeight", "selectSameBlendMode", "selectSameLayers"})
         action(QString::fromLatin1(name))->setEnabled(editing && selected);

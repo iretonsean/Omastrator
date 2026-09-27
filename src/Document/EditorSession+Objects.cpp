@@ -521,8 +521,8 @@ void EditorSession::combineSelection(BooleanOperation operation)
         result.name = QStringLiteral("Compound Path");
         // Illustrator's Pathfinder keeps the top object's style, except Minus Front.
         if (operation != BooleanOperation::minusFront) {
-            result.fill = topmost.fill;
-            result.stroke = topmost.stroke;
+            result.setFills(topmost.fills());
+            result.setStrokes(topmost.strokes());
         }
         result.path = VectorPath::fromPainterPath(combine(shapes, operation));
         const QUuid parent = *document.find(used.back())->parentID;
@@ -542,28 +542,39 @@ void EditorSession::outlineSelectedStrokes()
         std::vector<QUuid> results;
         for (const QUuid &id : selectedLeaves()) {
             VectorObject *object = document.find(id);
-            if (!object || !object->hasPaint() || !object->stroke.isVisible()) {
+            if (!object || !object->hasPaint() || !object->hasVisibleStroke()) {
                 results.push_back(id);
                 continue;
             }
-            VectorObject outline = *object;
-            outline.id = QUuid::createUuid();
-            outline.kind = ObjectKind::path;
-            outline.transform = {};
-            outline.fill = object->stroke.paint;
-            outline.stroke.paint = Paint::none();
-            outline.path = VectorPath::fromPainterPath(outlineStroke(object->outline(), object->stroke));
-            outline.name = QStringLiteral("Outlined Stroke");
-            const QUuid parent = *object->parentID;
-            if (object->fill.isVisible()) {
-                object->stroke.paint = Paint::none();
-                document.insert(outline, parent, id);
-                results.push_back(id);
-            } else {
-                document.insert(outline, parent, id);
-                document.remove({id});
+            // Each visible stroke becomes a filled path, stacked as they drew.
+            std::vector<VectorObject> outlines;
+            for (const StrokeStyle &stroke : object->strokes()) {
+                if (!stroke.isVisible())
+                    continue;
+                VectorObject outline = *object;
+                outline.id = QUuid::createUuid();
+                outline.kind = ObjectKind::path;
+                outline.transform = {};
+                outline.setFills({stroke.paint});
+                outline.setStrokes({});
+                outline.path = VectorPath::fromPainterPath(outlineStroke(object->outline(), stroke));
+                outline.name = QStringLiteral("Outlined Stroke");
+                outlines.push_back(outline);
             }
-            results.push_back(outline.id);
+            const QUuid parent = *object->parentID;
+            const bool keep = object->hasVisibleFill();
+            if (keep) {
+                object->setStrokes({});
+                results.push_back(id);
+            }
+            QUuid below = id;
+            for (const VectorObject &outline : outlines) {
+                document.insert(outline, parent, below);
+                below = outline.id;
+                results.push_back(outline.id);
+            }
+            if (!keep)
+                document.remove({id});
         }
         m_selection = results;
     });
@@ -705,8 +716,13 @@ void EditorSession::setFillOfSelection(const Paint &fill)
     edit(QStringLiteral("Fill"), [&](VectorDocument &document) {
         for (const QUuid &id : selectedLeaves()) {
             VectorObject *object = document.find(id);
-            if (object && object->hasPaint() && !document.isEffectivelyLocked(id))
-                object->fill = fill;
+            // The fill's place in the stack keeps its opacity and blend.
+            if (object && object->hasPaint() && !document.isEffectivelyLocked(id)) {
+                Paint next = fill;
+                next.opacity = object->fill.opacity;
+                next.blendMode = object->fill.blendMode;
+                object->fill = next;
+            }
         }
     });
 }
@@ -758,6 +774,9 @@ void EditorSession::pickStyle(const QUuid &from)
     const VectorObject style = *source;
     m_defaultFill = style.fill;
     m_defaultStroke = style.stroke;
+    // A copied appearance keeps the eye on: the defaults paint new objects.
+    m_defaultFill.isHidden = false;
+    m_defaultStroke.paint.isHidden = false;
     if (m_selection.empty()) {
         notify(false);
         return;
@@ -766,14 +785,11 @@ void EditorSession::pickStyle(const QUuid &from)
         for (const QUuid &id : selectedLeaves()) {
             VectorObject *object = document.find(id);
             if (object && object->hasPaint() && id != from) {
-                object->fill = style.fill;
-                object->stroke = style.stroke;
+                object->setFills(style.fills());
+                object->setStrokes(style.strokes());
                 object->opacity = style.opacity;
-                if (object->kind == ObjectKind::text && style.kind == ObjectKind::text) {
-                    const QString text = object->text.text;
-                    object->text = style.text;
-                    object->text.text = text;
-                }
+                if (object->kind == ObjectKind::text && style.kind == ObjectKind::text)
+                    applyCharacterStyle(object->text, style.text);
             }
         }
     });

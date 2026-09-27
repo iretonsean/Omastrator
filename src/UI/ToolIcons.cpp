@@ -115,6 +115,16 @@ void eyedropper(QPainter &painter)
     painter.restore();
 }
 
+// A square shaded towards its right edge: clear, a tint, then solid.
+void gradient(QPainter &painter)
+{
+    QColor tint = painter.pen().color();
+    painter.drawRect(QRectF(2.5, 2.5, 13, 13));
+    tint.setAlphaF(0.45);
+    painter.fillRect(QRectF(7.5, 2.5, 4, 13), tint);
+    painter.fillRect(QRectF(11.5, 2.5, 4, 13), painter.pen().color());
+}
+
 void hand(QPainter &painter)
 {
     // Four fingers over a palm, a thumb at the side.
@@ -180,6 +190,7 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::shapeBuilder: shapeBuilder(painter); break;
     case Tool::rotate: rotate(painter); break;
     case Tool::scale: scale(painter); break;
+    case Tool::gradient: gradient(painter); break;
     case Tool::eyedropper: eyedropper(painter); break;
     case Tool::hand: hand(painter); break;
     case Tool::zoom: zoom(painter); break;

@@ -29,13 +29,14 @@ enum class Tool {
     shapeBuilder,    // Shift-M
     rotate,          // R
     scale,           // S
+    gradient,        // G
     eyedropper,      // I
     hand,            // H
     zoom,            // Z
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
-                                     Tool::shapeBuilder, Tool::rotate, Tool::scale, Tool::eyedropper, Tool::hand, Tool::zoom};
+                                     Tool::shapeBuilder, Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper, Tool::hand, Tool::zoom};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -217,6 +218,25 @@ public:
     void setBlendModeOfSelection(LayerBlendMode mode);
     // Eyedropper: the clicked object's style onto the selection, or the defaults.
     void pickStyle(const QUuid &from);
+
+    // Paint and appearance ---------------------------------------------------
+    // The appearance stack: every selected leaf takes these, bottom to top.
+    void setFillsOfSelection(const std::vector<Paint> &fills, const QString &editName);
+    void setStrokesOfSelection(const std::vector<StrokeStyle> &strokes, const QString &editName);
+    // Distinct colours in the selected leaves' fills, strokes and gradient stops.
+    std::vector<QColor> selectionColors() const;
+    // Every use of `from` in the selected leaves becomes `to`, in one undo step.
+    void replaceColor(const QColor &from, const QColor &to);
+    // A global swatch changed: every paint linked to it takes `color`, in one undo step.
+    void recolorSwatch(const QString &swatchId, const QColor &color);
+    // Edit ▸ Copy Properties / Paste Properties: fills, strokes, opacity, blend,
+    // and the character style between texts. One clipboard for every tab.
+    bool copyProperties();
+    void pasteProperties();
+    bool canCopyProperties() const;
+    bool canPasteProperties() const;
+    // Eyedropper Alt-click: the selection's style, else the defaults, onto `target`.
+    void applyStyleTo(const QUuid &target);
     // Direct selection: deletes the picked anchors; empty paths go.
     void deletePickedNodes();
     // Pen tool: joins the picked end anchors of one open contour.
@@ -324,6 +344,8 @@ private:
     std::vector<QUuid> duplicateInto(VectorDocument &document, QPointF offset) const;
     void commitTextEdit(VectorDocument next, const QString &name, bool coalesce);
     void runSelect(const std::function<void()> &command);
+    // Type's look without its words, box or kerning.
+    static void applyCharacterStyle(TextContent &to, const TextContent &from);
 
     std::optional<VectorDocument> m_document;
     DocumentHistory m_history;

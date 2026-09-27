@@ -1,6 +1,6 @@
 #include "Document/VectorDocument.h"
+#include "Document/StrokeGeometry.h"
 #include <QFontMetricsF>
-#include <QPainterPathStroker>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -15,15 +15,73 @@ const std::array<std::pair<ObjectKind, const char *>, 5> kindNames{{
 QRectF strokeBounds(const VectorObject &object)
 {
     const QPainterPath outline = object.outline();
-    if (!object.hasPaint() || !object.stroke.isVisible())
-        return outline.boundingRect();
-    QPainterPathStroker stroker;
-    stroker.setWidth(object.stroke.width);
-    stroker.setCapStyle(object.stroke.cap);
-    stroker.setJoinStyle(object.stroke.join);
-    stroker.setMiterLimit(object.stroke.miterLimit);
-    return outline.boundingRect().united(stroker.createStroke(outline).boundingRect());
+    QRectF bounds = outline.boundingRect();
+    if (!object.hasPaint())
+        return bounds;
+    for (const StrokeStyle &stroke : object.strokes()) {
+        if (stroke.isVisible())
+            bounds = bounds.united(StrokeGeometry::extent(outline, stroke));
+    }
+    return bounds;
 }
+}
+
+std::vector<Paint> VectorObject::fills() const
+{
+    std::vector<Paint> all{fill};
+    all.insert(all.end(), extraFills.begin(), extraFills.end());
+    return all;
+}
+
+std::vector<StrokeStyle> VectorObject::strokes() const
+{
+    std::vector<StrokeStyle> all{stroke};
+    all.insert(all.end(), extraStrokes.begin(), extraStrokes.end());
+    return all;
+}
+
+void VectorObject::setFills(std::vector<Paint> fills)
+{
+    fill = fills.empty() ? Paint::none() : fills.front();
+    extraFills.assign(fills.size() > 1 ? fills.begin() + 1 : fills.end(), fills.end());
+}
+
+void VectorObject::setStrokes(std::vector<StrokeStyle> strokes)
+{
+    if (strokes.empty()) {
+        // The weight and dashes stay for when a colour comes back.
+        stroke.paint = Paint::none();
+        extraStrokes.clear();
+        return;
+    }
+    stroke = strokes.front();
+    extraStrokes.assign(strokes.begin() + 1, strokes.end());
+}
+
+bool VectorObject::hasVisibleFill() const
+{
+    return fill.isVisible() || std::any_of(extraFills.begin(), extraFills.end(), [](const Paint &paint) { return paint.isVisible(); });
+}
+
+bool VectorObject::hasVisibleStroke() const
+{
+    return stroke.isVisible() || std::any_of(extraStrokes.begin(), extraStrokes.end(), [](const StrokeStyle &each) { return each.isVisible(); });
+}
+
+bool VectorObject::hasSimpleAppearance() const
+{
+    return extraFills.empty() && extraStrokes.empty() && fill.hasPlainComposite() && stroke.paint.hasPlainComposite()
+        && (!stroke.isVisible() || stroke.isPlain());
+}
+
+void VectorObject::copyAppearance(const VectorObject &other)
+{
+    fill = other.fill;
+    stroke = other.stroke;
+    extraFills = other.extraFills;
+    extraStrokes = other.extraStrokes;
+    opacity = other.opacity;
+    blendMode = other.blendMode;
 }
 
 QString rawValue(ObjectKind kind)
@@ -349,10 +407,14 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform, boo
     for (const QUuid &leaf : leaves) {
         VectorObject *object = find(leaf);
         // Paths hold document coordinates; text strokes scale with its transform unless undone.
-        if (object->kind == ObjectKind::path && scaleStrokes)
-            object->stroke.width *= factor;
-        else if (object->kind == ObjectKind::text && !scaleStrokes)
-            object->stroke.width /= factor;
+        const bool path = object->kind == ObjectKind::path && scaleStrokes;
+        const bool text = object->kind == ObjectKind::text && !scaleStrokes;
+        if (!path && !text)
+            continue;
+        std::vector<StrokeStyle> strokes = object->strokes();
+        for (StrokeStyle &stroke : strokes)
+            stroke.width = path ? stroke.width * factor : stroke.width / factor;
+        object->setStrokes(strokes);
     }
 }
 

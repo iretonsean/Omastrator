@@ -107,6 +107,10 @@ struct VectorObject {
     VectorPath path;
     Paint fill = Paint::none();
     StrokeStyle stroke;
+    // The appearance stack past one fill and one stroke, bottom to top: extra fills
+    // draw over `fill`, extra strokes over `stroke`, and every fill under every stroke.
+    std::vector<Paint> extraFills;
+    std::vector<StrokeStyle> extraStrokes;
     TextContent text;
     QImage image;
     QTransform transform;
@@ -115,6 +119,17 @@ struct VectorObject {
 
     bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group; }
     bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text; }
+    // The whole stack, bottom to top; setting an empty list leaves one none.
+    std::vector<Paint> fills() const;
+    std::vector<StrokeStyle> strokes() const;
+    void setFills(std::vector<Paint> fills);
+    void setStrokes(std::vector<StrokeStyle> strokes);
+    bool hasVisibleFill() const;
+    bool hasVisibleStroke() const;
+    // One fill and one plain stroke, each shown at full strength: what a single QPainterPath draw covers.
+    bool hasSimpleAppearance() const;
+    // Fills, strokes, opacity and blend from `other`.
+    void copyAppearance(const VectorObject &other);
     // The object's own shape in document coordinates (containers: empty).
     QPainterPath outline() const;
     friend bool operator==(const VectorObject &, const VectorObject &) = default;

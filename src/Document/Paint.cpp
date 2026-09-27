@@ -60,6 +60,8 @@ Paint Paint::radial(const QColor &from, const QColor &to)
 
 bool Paint::isVisible() const
 {
+    if (isHidden)
+        return false;
     switch (kind) {
     case PaintKind::none:
         return false;
@@ -101,6 +103,63 @@ QColor Paint::swatch() const
     if (kind == PaintKind::solid || stops.empty())
         return color;
     return stops.front().color;
+}
+
+Paint Paint::withCompositeOf(const Paint &other) const
+{
+    Paint paint = *this;
+    paint.isHidden = other.isHidden;
+    paint.opacity = other.opacity;
+    paint.blendMode = other.blendMode;
+    return paint;
+}
+
+bool StrokeStyle::isPlain() const
+{
+    return alignment == StrokeAlignment::center && startArrow == Arrowhead::none && endArrow == Arrowhead::none
+        && !(alignDashes && !dashes.empty());
+}
+
+QString rawValue(StrokeAlignment alignment)
+{
+    switch (alignment) {
+    case StrokeAlignment::inside:
+        return QStringLiteral("inside");
+    case StrokeAlignment::outside:
+        return QStringLiteral("outside");
+    default:
+        return QStringLiteral("center");
+    }
+}
+
+StrokeAlignment strokeAlignment(const QString &rawValue)
+{
+    if (rawValue == QLatin1String("inside"))
+        return StrokeAlignment::inside;
+    if (rawValue == QLatin1String("outside"))
+        return StrokeAlignment::outside;
+    return StrokeAlignment::center;
+}
+
+namespace {
+const std::array<std::pair<Arrowhead, const char *>, 6> headNames{{
+    {Arrowhead::none, "none"}, {Arrowhead::arrow, "arrow"}, {Arrowhead::triangle, "triangle"},
+    {Arrowhead::circle, "circle"}, {Arrowhead::square, "square"}, {Arrowhead::bar, "bar"},
+}};
+}
+
+QString rawValue(Arrowhead head)
+{
+    return QString::fromLatin1(headNames.at(size_t(head)).second);
+}
+
+Arrowhead arrowhead(const QString &rawValue)
+{
+    for (const auto &[head, name] : headNames) {
+        if (rawValue == QLatin1String(name))
+            return head;
+    }
+    return Arrowhead::none;
 }
 
 QPen StrokeStyle::pen(const QRectF &bounds) const

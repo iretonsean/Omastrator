@@ -379,8 +379,13 @@ void EditorCanvas::State::finishMarquee()
 
 // Eyedropper -------------------------------------------------------------------
 
-void EditorCanvas::State::eyedropperPress(QPointF view)
+void EditorCanvas::State::eyedropperPress(QPointF view, Qt::KeyboardModifiers modifiers)
 {
-    if (const std::optional<QUuid> leaf = hitLeaf(toDocument(view)))
+    const std::optional<QUuid> leaf = hitLeaf(toDocument(view));
+    if (!leaf)
+        return;
+    if (modifiers.testFlag(Qt::AltModifier))
+        session.applyStyleTo(*leaf);
+    else
         session.pickStyle(*leaf);
 }
