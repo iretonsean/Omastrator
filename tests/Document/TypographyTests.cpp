@@ -192,7 +192,7 @@ private slots:
         QJsonObject automatic = old;
         automatic["leading"] = 1.2;
         QVERIFY(!DocumentCodec::decodeText(automatic).leading);
-        QCOMPARE(DocumentCodec::version, 3);
+        QCOMPARE(DocumentCodec::version, 4);
     }
 
     void everyCharacterFieldRoundTrips()
@@ -220,7 +220,7 @@ private slots:
         object.text = content;
         document.insert(object, document.layers().front());
         const QJsonObject json = DocumentCodec::encode(document);
-        QCOMPARE(json["version"].toInt(), 3);
+        QCOMPARE(json["version"].toInt(), 4);
         QCOMPARE(DocumentCodec::decode(json).find(object.id)->text, content);
     }
 

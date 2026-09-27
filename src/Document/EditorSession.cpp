@@ -74,6 +74,9 @@ EditorSession::EditorSession(QObject *parent) : QObject(parent)
 
 void EditorSession::notify(bool documentToo)
 {
+    // A drag previews its instances too.
+    if (documentToo && m_interaction)
+        settle();
     if (documentToo)
         emit documentChanged();
     emit changed();
@@ -90,6 +93,7 @@ void EditorSession::loadDocument(VectorDocument document)
 {
     m_interaction.reset();
     m_document = std::move(document);
+    Components::sync(*m_document);
     m_history.reset();
     m_selection.clear();
     m_pickedNodes.clear();
@@ -388,6 +392,7 @@ void EditorSession::beginEdit(const QString &name)
 
 void EditorSession::endEdit()
 {
+    settle();
     m_history.end(m_document, m_selection);
     notify();
 }
@@ -498,6 +503,7 @@ void EditorSession::commitInteraction()
     m_history.setEntryLimit(historyLimit());
     m_history.begin(interaction.name, m_document, interaction.selection);
     m_document = std::move(after);
+    settle();
     pruneSelection();
     m_history.end(m_document, m_selection);
     notify();

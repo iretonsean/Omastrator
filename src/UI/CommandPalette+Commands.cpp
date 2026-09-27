@@ -57,6 +57,9 @@ QString keywordsFor(const QString &name)
         {"showLayers", "panel"},
         {"showProperties", "panel inspector"},
         {"showSwatches", "panel colors palette"},
+        {"showDesignSystem", "tokens components variants library tailwind theme panel"},
+        {"makeComponent", "symbol component create"},
+        {"detachInstance", "break link symbol component"},
         {"contextualTaskBar", "task bar toolbar floating"},
         {"shareWithClient", "share client link send upload publish copy link"},
         {"shareOptions", "share client link format destination"},
@@ -200,6 +203,45 @@ void CommandPalette::gatherRest()
                               ObjectDialogs::preferences(window);
                               return QString();
                           }});
+    // The design system: tokens onto the selection, components to place, the selected instance's variants.
+    if (drawn) {
+        const VectorDocument &document = *session.document();
+        const bool selected = session.hasSelection() && !proposal;
+        for (const DesignToken &token : document.tokens) {
+            const QString id = token.id;
+            m_commands.push_back({QStringLiteral("token:") + id, QStringLiteral("Apply Token: ") + token.name,
+                                  QStringLiteral("Design System · %1").arg(token.displayValue(document.tokenMode)), QString(),
+                                  QStringLiteral("token design system ") + title(token.kind).toLower(), selected, false,
+                                  [front, id] { return front().applyToken(id); }});
+        }
+        QStringList sets;
+        for (const QUuid &master : Components::masters(document)) {
+            const QString set = document.find(master)->component->set;
+            if (sets.contains(set))
+                continue;
+            sets.append(set);
+            m_commands.push_back({QStringLiteral("component:") + master.toString(QUuid::WithoutBraces), QStringLiteral("Place Component: ") + set,
+                                  QStringLiteral("Design System"), QString(), QStringLiteral("component instance symbol insert"), !proposal, false,
+                                  [front, master] {
+                                      return front().placeInstance(master).isNull() ? QStringLiteral("That component is gone.") : QString();
+                                  }});
+        }
+        const auto instances = session.selectedInstances();
+        const VectorObject *master = instances.empty() ? nullptr : document.find(document.find(instances.front())->instance->master);
+        if (master && master->component) {
+            for (const auto &[property, values] : Components::properties(document, master->component->set)) {
+                for (const QString &value : values) {
+                    const QString name = property;
+                    const auto current = master->component->variant.find(property);
+                    const bool on = current != master->component->variant.end() && current->second == value;
+                    m_commands.push_back({QStringLiteral("variant:") + property + QLatin1Char('=') + value,
+                                          QStringLiteral("Swap Variant: %1 = %2").arg(property, value), QStringLiteral("Design System"), QString(),
+                                          QStringLiteral("variant swap component"), !on && !proposal, on,
+                                          [front, name, value] { return front().swapVariant(name, value); }});
+                }
+            }
+        }
+    }
     if (!agent)
         return;
     m_commands.push_back({QStringLiteral("ai:roast"), QStringLiteral("Roast My Design"),

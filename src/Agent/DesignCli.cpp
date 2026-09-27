@@ -69,6 +69,10 @@ QString designHelp()
         "                     The agent works on what's pointed at; the result is a\n"
         "                     preview on the overlay to keep or discard.\n"
         "  keep | discard     Keep or discard that preview.\n"
+        "  lift [--target N] [--region X,Y,W,H] [--to overlay|desk|document] | lift cancel\n"
+        "                     Turn what's pointed at (or a region of the screen) into\n"
+        "                     editable shapes and text, in place: pages from the DOM,\n"
+        "                     apps from the accessibility tree, else traced.\n"
         "  send <overlay|desk|document|source|agent> [--surface KEY] [--target N]\n"
         "       [--prompt WORDS]\n"
         "                     Where a surface's work goes; remembered per surface.\n"
@@ -151,6 +155,27 @@ int runDesign(const QStringList &args, QTextStream &out, QTextStream &err)
         if (rest.size() != 1)
             return failed(err, QStringLiteral("Name one action, such as: omastrator design action capture"));
         params["id"] = rest[0];
+    } else if (verb == QLatin1String("lift")) {
+        QString region, to;
+        if (!targetOption() || !option(rest, QStringLiteral("--region"), &region) || !option(rest, QStringLiteral("--to"), &to))
+            return failed(err, QStringLiteral("An option is missing its value."));
+        if (rest.value(0) == QLatin1String("cancel"))
+            params["cancel"] = true;
+        if (!region.isEmpty()) {
+            const QStringList parts = region.split(QLatin1Char(','));
+            QJsonArray box;
+            for (const QString &part : parts) {
+                bool ok = false;
+                box.append(part.trimmed().toInt(&ok));
+                if (!ok)
+                    return failed(err, QStringLiteral("Write the region as X,Y,W,H on screen."));
+            }
+            if (box.size() != 4)
+                return failed(err, QStringLiteral("Write the region as X,Y,W,H on screen."));
+            params["region"] = box;
+        }
+        if (!to.isEmpty())
+            params["to"] = to;
     } else if (verb == QLatin1String("ask")) {
         if (!targetOption())
             return failed(err, QStringLiteral("--target needs an id."));

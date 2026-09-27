@@ -49,7 +49,7 @@ PropertiesPanel::PropertiesPanel(EditorSession &session, QWidget *parent) : QScr
     m_character = new CharacterSection(m_session, content);
     m_paragraph = new ParagraphSection(m_session, content);
     bool first = true;
-    for (PanelSection *block : {documentSection(), transformSection(), shapeSection(), static_cast<PanelSection *>(m_character),
+    for (PanelSection *block : {documentSection(), componentSection(), transformSection(), shapeSection(), static_cast<PanelSection *>(m_character),
                                 static_cast<PanelSection *>(m_paragraph), appearanceSection(), strokeSection(), alignSection(), pathfinderSection()}) {
         if (!first) {
             // A section's rule hides with it.
@@ -253,6 +253,9 @@ void PropertiesPanel::synchronize()
         m_paragraph->synchronize();
     show(m_align, selected);
     show(m_pathfinder, m_session.canCombine());
+    show(m_component, drawn && selected && (!m_session.selectedInstances().empty() || m_session.selectedMaster().has_value()));
+    if (!m_component->isHidden())
+        synchronizeComponent();
     show(m_shape, drawn && selected && (!m_session.selectedShapes().empty() || !m_session.selectedCompoundPaths().empty()));
     if (!m_shape->isHidden())
         synchronizeShape();

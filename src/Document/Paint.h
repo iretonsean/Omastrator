@@ -32,6 +32,8 @@ struct Paint {
     LayerBlendMode blendMode = LayerBlendMode::normal;
     // A global swatch's id: editing that swatch recolours this paint.
     QString swatchId;
+    // A colour token's id (docs/DESIGN-SYSTEMS.md): changing the token recolours this paint.
+    QString token;
 
     static Paint none() { return {}; }
     static Paint solid(const QColor &color);

@@ -159,6 +159,11 @@ TextStyle styleFrom(const TextContent &shown, TextStyle style)
 }
 }
 
+void restyleText(TextContent &text, const TextStyle &old, const TextStyle &fresh)
+{
+    redefine(text, old, fresh);
+}
+
 const TextStyle *EditorSession::textStyle(const QUuid &id) const
 {
     if (!m_document || id.isNull())
