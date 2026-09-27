@@ -11,6 +11,9 @@ voice commands and live editing of your websites.
 
 More in [Screenshots](#screenshots).
 
+
+Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Figma and Paper, and puts AI at the core, so a designer spends their time on the customer, not the menus. More in [docs/VISION.md](docs/VISION.md).
+
 ## Features
 
 - Selection and direct selection, with scale and rotate handles, marquee

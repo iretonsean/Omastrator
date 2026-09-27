@@ -47,6 +47,10 @@ Each folder builds as its own static library:
 
 ## Rules
 
+- **The thesis:** read `docs/VISION.md` first. Keep Illustrator's power, reached
+  the way Figma and Paper feel, with AI in the flow. Show only the essentials
+  and put the rest one step away (disclosure, context menu, Ctrl+K). The
+  designer stays the author.
 - **Parallel builds:** keep them to `-j3` or fewer. A `-j10` build ran this
   15 GB machine out of memory.
 - **Edits:** every document edit goes through `EditorSession` so it becomes one
