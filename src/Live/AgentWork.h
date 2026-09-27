@@ -6,7 +6,7 @@
 
 // Live's agent path (docs/OS-SUITE.md): the agent works in a git worktree
 // on a branch of its own, never in the user's checkout. When it is done its
-// changes are copied into the project as one write-back to review.
+// changes are copied into the project as one write-back, recorded for review.
 struct AgentWork {
     QString project;
     QString worktree;
@@ -18,7 +18,7 @@ struct AgentWork {
     // Makes the worktree under $XDG_DATA_HOME/omastrator/worktrees. Returns why it couldn't, or empty.
     QString prepare();
     // The agent's changes as write-back changes to the project, not yet written. Files
-    // the user changed since HEAD are merged three-way, and only when `confirmedDirty`.
+    // changed since the agent's commit are merged three-way; the user's uncommitted ones only when `confirmedDirty`.
     std::vector<WriteBack::FileChange> collect(QString *error);
     // Removes the worktree and its branch.
     void cleanup();

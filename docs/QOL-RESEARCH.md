@@ -775,18 +775,18 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 | Capability | Illustrator | Figma | Omastrator | Priority |
 |---|---|---|---|---|
-| Canvas and Layers right-click menus | ✓ | ✓ | ✗ | **P0** |
+| Canvas and Layers right-click menus | ✓ | ✓ | ✓ done | **P0** |
 | Tracking, leading and kerning UI + shortcuts | ✓ | ✓ | model only (tracking, leading) | **P0** |
 | Font style/weight picker | ✓ | ✓ | bold flag only | **P0** |
 | Case, underline and strikethrough, baseline shift, scale | ✓ | ✓ | ✗ | **P0** (per object) |
 | Area type (fixed width, wrapping, justify) | ✓ | ✓ | ✗ | **P0** |
 | Math and units in number fields, scrubbing | ✓ | ✓ | ✗ | **P0** |
 | Reference point and constrain proportions | ✓ | ✓ (link) | ✗ | **P0** |
-| Paste in Front/Back, Transform Again (Ctrl+D) | ✓ | (Ctrl+D smart duplicate) | ✗ | **P0** |
-| Select menu: Same ▸, Inverse, Next Above/Below | ✓ | select matching | ✗ | **P0** |
-| Alt-hover distance measuring | (smart guides) | ✓ | ✗ | **P0** |
-| Zoom to selection | ✓ | ✓ Shift+2 | ✗ | **P0** |
-| Configurable nudge, Alt+arrow duplicate | ✓ | ✓ | fixed 1/10 | **P0** |
+| Paste in Front/Back, Transform Again (Ctrl+D) | ✓ | (Ctrl+D smart duplicate) | ✓ done | **P0** |
+| Select menu: Same ▸, Inverse, Next Above/Below | ✓ | select matching | ✓ done | **P0** |
+| Alt-hover distance measuring | (smart guides) | ✓ | ✓ done | **P0** |
+| Zoom to selection | ✓ | ✓ Shift+2 | ✓ done | **P0** |
+| Configurable nudge, Alt+arrow duplicate | ✓ | ✓ | ✓ done | **P0** |
 | Rulers and guides | ✓ | ✓ | ✗ | P1 |
 | Multiple fills and strokes | ✓ | ✓ | one of each | P1 |
 | Stroke align, arrowheads | ✓ | ✓ | enum declared, unused | P1 |
@@ -795,7 +795,7 @@ has Qt Test coverage in `tests/<Folder>/`.
 | OpenType features | ✓ | ✓ | ✗ | P1 |
 | Paragraph indents and spacing | ✓ | ✓ | ✗ | P1 |
 | Character/paragraph/text styles | ✓ | ✓ | ✗ | P1 |
-| Isolation mode | ✓ | (enter group) | ✗ | P1 |
+| Isolation mode | ✓ | (enter group) | from the context menu | P1 |
 | Join, Average, Scissors, Reverse path | ✓ | ✓ | ✗ | P1 |
 | Selection colours, recent colours, hex field | ✓ | ✓ | picker only | P1 |
 | Copy/Paste properties | (eyedropper) | ✓ | eyedropper only | P1 |
@@ -815,6 +815,14 @@ has Qt Test coverage in `tests/<Folder>/`.
 ### P0: must-have quality of life
 
 **P0-1. Right-click context menus (canvas, Layers panel)**
+
+> **Done.** `src/UI/ContextMenus.cpp`, `EditorCanvas+Menu.cpp`. Kept short, per
+> VISION.md: **Ask AI…** first (Edit with Instruction, scoped to what was
+> clicked), then a **Select ▸** picker when objects are stacked, the clipboard,
+> what the selection's kind is for, and Arrange, Transform, Align, Pathfinder,
+> Path and Select Same as submenus. Entries that can't apply are left out, not
+> greyed. Undo and Redo, Copy/Paste Properties, New Sublayer, Show All, Unlock
+> All and Merge Selected aren't in the menus. Tests: `tests/UI/ContextMenusTests.cpp`.
 
 - **Spec:**
   - A right-click on the canvas hit-tests first. An unselected object under
@@ -1034,6 +1042,10 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 **P0-7. Clipboard and repeat: Paste in Front/Back, Transform Again, Duplicate keys**
 
+> **Done.** Duplicate is Ctrl+Alt+D. Moves, dialogs, drags and Alt-drag or
+> Alt+arrow copies are all repeatable, and a scale or rotate repeats about the
+> new selection's centre. Tests: `tests/Document/SelectAndRepeatTests.cpp`.
+
 - **Spec:**
   - Ctrl+F pastes in front of the selection and Ctrl+B in back of it, both in
     place.
@@ -1060,6 +1072,9 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 **P0-8. A Select menu**
 
+> **Done**, plus Reselect (Ctrl+6), Open Paths and All on Same Layers.
+> Tests: `tests/Document/SelectAndRepeatTests.cpp`, `tests/UI/ContextMenusTests.cpp`.
+
 - **Spec:**
   - A new **Select** menu between Object and Type (Illustrator order):
     - All (Ctrl+A), Deselect (Ctrl+Shift+A), **Inverse**.
@@ -1080,6 +1095,9 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 **P0-9. Measuring and zoom**
 
+> **Done.** Lines and labels use the theme's accent, and rotate drags read the
+> angle. Tests: `tests/Canvas/CanvasQuickKeysTests.cpp`.
+
 - **Spec:**
   - **Hold Alt** with a selection and hover another object (or the artboard).
     Red distance lines and pt labels appear between the nearest edges, H and V,
@@ -1099,6 +1117,10 @@ has Qt Test coverage in `tests/<Folder>/`.
   - The labels read in the theme's colours in light and dark themes.
 
 **P0-10. Nudge preferences and keyboard opacity**
+
+> **Done.** Edit ▸ Preferences… holds the keyboard increment; Shift is always
+> ten times it, so there's no separate big-step field. Tests:
+> `tests/Canvas/CanvasQuickKeysTests.cpp`.
 
 - **Spec:**
   - Preferences hold a Keyboard Increment (default 1 pt) and a big step

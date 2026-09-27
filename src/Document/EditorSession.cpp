@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 16> toolInfo{{
+const std::array<ToolInfo, 17> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -22,6 +22,7 @@ const std::array<ToolInfo, 16> toolInfo{{
     {Tool::ellipse, "ellipse", "Ellipse"},
     {Tool::polygon, "polygon", "Polygon"},
     {Tool::star, "star", "Star"},
+    {Tool::shapeBuilder, "shapeBuilder", "Shape Builder"},
     {Tool::rotate, "rotate", "Rotate"},
     {Tool::scale, "scale", "Scale"},
     {Tool::eyedropper, "eyedropper", "Eyedropper"},
@@ -409,7 +410,7 @@ void EditorSession::beginInteraction(const QString &name)
         return;
     if (m_interaction)
         commitInteraction();
-    m_interaction = Interaction{name, *m_document, m_selection, *m_document};
+    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false};
 }
 
 void EditorSession::previewTransform(const QTransform &transform)
@@ -422,6 +423,7 @@ void EditorSession::previewTransform(const QTransform &transform)
             document.transform(id, transform, scaleStrokes);
     }
     m_document = std::move(document);
+    m_interaction->transform = transform;
     notify();
 }
 
@@ -450,6 +452,9 @@ void EditorSession::commitInteraction()
         notify();
         return;
     }
+    // A drag's move, scale or rotate is what Transform Again repeats.
+    if (interaction.transform && !interaction.transform->isIdentity())
+        m_lastTransform = RepeatTransform{*interaction.transform, interaction.duplicated, std::nullopt};
     // Record the step as though it happened all at once.
     VectorDocument after = std::move(*m_document);
     m_document = std::move(interaction.before);
@@ -588,6 +593,35 @@ void EditorSession::previewDocument(const VectorDocument &document, const std::v
     m_selection = selection;
     pruneSelection();
     notify();
+}
+
+bool EditorSession::previewShapeBuild(const ShapeBuilder::Arrangement &arrangement, const ShapeBuilder::Gesture &gesture)
+{
+    if (!m_document || !m_interaction)
+        return false;
+    VectorDocument document = m_interaction->base;
+    std::vector<QUuid> created;
+    if (!ShapeBuilder::build(document, arrangement, gesture, shapeBuilder, m_defaultFill, m_defaultStroke, &created)) {
+        previewDocument(m_interaction->base, m_interaction->selection);
+        return false;
+    }
+    // Illustrator keeps the built shapes selected, so the next drag works on them too.
+    std::vector<QUuid> selection;
+    std::vector<std::optional<QUuid>> parents;
+    for (const QUuid &id : m_interaction->selection) {
+        if (const VectorObject *object = m_interaction->base.find(id))
+            parents.push_back(object->parentID);
+        if (document.find(id))
+            selection.push_back(id);
+    }
+    for (const QUuid &id : created) {
+        const VectorObject *object = document.find(id);
+        const VectorObject *parent = object && object->parentID ? document.find(*object->parentID) : nullptr;
+        if (parent && (parent->kind == ObjectKind::layer || std::find(parents.begin(), parents.end(), object->parentID) != parents.end()))
+            selection.push_back(id);
+    }
+    previewDocument(document, selection);
+    return true;
 }
 
 std::optional<QUuid> EditorSession::selectedImage() const

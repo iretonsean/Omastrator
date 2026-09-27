@@ -72,6 +72,20 @@ void Menus::synchronize()
     action(QStringLiteral("outline"))->setChecked(s.showsOutline);
     action(QStringLiteral("showGrid"))->setChecked(s.showsGrid);
     action(QStringLiteral("snapToGrid"))->setChecked(s.snapsToGrid);
+    for (const char *name : {"pasteInFront", "pasteInBack"})
+        action(QString::fromLatin1(name))->setEnabled(!field && !typing && !proposal && drawn && s.canPaste());
+    action(QStringLiteral("transformAgain"))->setEnabled(editing && s.canTransformAgain());
+    for (const char *name : {"flipHorizontal", "flipVertical", "nextObjectAbove", "nextObjectBelow", "selectSameFillAndStroke", "selectSameFillColor",
+                             "selectSameOpacity", "selectSameStrokeColor", "selectSameStrokeWeight", "selectSameBlendMode", "selectSameLayers"})
+        action(QString::fromLatin1(name))->setEnabled(editing && selected);
+    for (const char *name : {"selectSameFontFamily", "selectSameFontFamilyStyleSize"})
+        action(QString::fromLatin1(name))->setEnabled(editing && selectionHas(s, ObjectKind::text));
+    for (const char *name : {"selectInverse", "selectClippingMasks", "selectStrayPoints", "selectTextObjects", "selectImages", "selectOpenPaths"})
+        action(QString::fromLatin1(name))->setEnabled(editing && drawn);
+    for (const char *name : {"selectSameMenu", "selectObjectMenu"})
+        action(QString::fromLatin1(name))->setEnabled(drawn);
+    action(QStringLiteral("reselect"))->setEnabled(editing && drawn && s.canReselect());
+    action(QStringLiteral("zoomToSelection"))->setEnabled(drawn && selected && !typing);
     action(QStringLiteral("showLayers"))->setChecked(ContentView::showsPanel(ContentView::layersKey));
     action(QStringLiteral("showProperties"))->setChecked(ContentView::showsPanel(ContentView::propertiesKey));
 }

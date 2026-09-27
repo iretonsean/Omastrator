@@ -11,6 +11,7 @@
 #include <QTransform>
 #include <QUuid>
 #include <map>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -83,6 +84,11 @@ struct TextContent {
     friend bool operator==(const TextContent &, const TextContent &) = default;
 };
 
+// Select ▸ Same: what an object must share with the one picked.
+enum class SameAttribute { fillColor, strokeColor, fillAndStroke, strokeWeight, opacity, blendMode, fontFamily, fontFamilyStyleSize };
+// Select ▸ Object: kinds of object picked across the document.
+enum class ObjectFilter { textObjects, images, clippingMasks, openPaths, strayPoints };
+
 struct VectorObject {
     QUuid id = QUuid::createUuid();
     ObjectKind kind = ObjectKind::path;
@@ -147,6 +153,11 @@ struct VectorDocument {
     QPainterPath outline(const QUuid &id) const;
     // The topmost selectable object under `point` within `tolerance`.
     std::optional<QUuid> hitTest(QPointF point, double tolerance) const;
+    // Every selectable leaf under `point`, topmost first, up to `limit`.
+    std::vector<QUuid> hitTestAll(QPointF point, double tolerance, size_t limit = SIZE_MAX) const;
+    // Visible, unlocked leaves that share `attribute` with `like`, `like` included.
+    std::vector<QUuid> matching(const QUuid &like, SameAttribute attribute) const;
+    std::vector<QUuid> matching(ObjectFilter filter) const;
     // Inserts above `below` within `parent`, or on top of it.
     void insert(VectorObject object, const QUuid &parent, std::optional<QUuid> above = std::nullopt);
     // Removes objects and all their descendants.

@@ -1,4 +1,5 @@
 #include "UI/ObjectDialogs.h"
+#include "Canvas/EditorCanvas.h"
 #include "UI/KeyboardShortcuts.h"
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -120,5 +121,16 @@ QDialog *ObjectDialogs::artboardSize(EditorSession &session, QWidget *window)
     form->addRow(QStringLiteral("Width:"), width);
     form->addRow(QStringLiteral("Height:"), height);
     finish(dialog, form, [&session, width, height] { session.setArtboardSize(QSizeF(width->value(), height->value())); });
+    return dialog;
+}
+
+QDialog *ObjectDialogs::preferences(QWidget *window)
+{
+    QFormLayout *form = nullptr;
+    QDialog *dialog = sheet(window, QStringLiteral("preferencesDialog"), QStringLiteral("Preferences"), form);
+    QDoubleSpinBox *increment = number(dialog, QStringLiteral("keyboardIncrement"), EditorCanvas::keyboardIncrement(), 0.01, 1000, QStringLiteral(" pt"));
+    increment->setToolTip(QStringLiteral("How far an arrow key moves the selection. Shift moves ten times as far."));
+    form->addRow(QStringLiteral("Keyboard increment:"), increment);
+    finish(dialog, form, [increment] { EditorCanvas::setKeyboardIncrement(increment->value()); });
     return dialog;
 }

@@ -23,7 +23,7 @@
 const std::vector<std::vector<Tool>> ContentView::railGroups{
     {Tool::select, Tool::directSelect},
     {Tool::pen, Tool::pencil, Tool::text, Tool::line},
-    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star},
+    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::shapeBuilder},
     {Tool::rotate, Tool::scale, Tool::eyedropper},
     {Tool::hand, Tool::zoom},
 };

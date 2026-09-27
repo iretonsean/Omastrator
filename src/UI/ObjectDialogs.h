@@ -10,4 +10,6 @@ QDialog *scale(EditorSession &session, QWidget *window);
 QDialog *move(EditorSession &session, QWidget *window);
 QDialog *offsetPath(EditorSession &session, QWidget *window);
 QDialog *artboardSize(EditorSession &session, QWidget *window);
+// Edit ▸ Preferences: the keyboard increment.
+QDialog *preferences(QWidget *window);
 }

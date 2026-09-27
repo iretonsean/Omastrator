@@ -1,5 +1,8 @@
 #include "Agent/AgentLauncher.h"
 #include "Agent/AgentProtocol.h"
+#include "Agent/Setup.h"
+#include "FakeAgents.h"
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -8,6 +11,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
+#include <csignal>
 
 namespace {
 // Stands in for `omarchy`: names $FAKE_AGENT as the default and records a prompt launch.
@@ -31,6 +35,14 @@ QString read(const QString &path)
 }
 }
 
+struct LaunchSetup {
+    QString prompt = QStringLiteral("Omastrator task: Roast My Design (request req-7).\nRoast it.");
+    AgentAccess access = AgentAccess::omastrator;
+    QString task = QStringLiteral("roast");
+    int timeoutSeconds = 0;
+    bool cancelAfterStart = false;
+};
+
 class AgentLauncherTests : public QObject {
     Q_OBJECT
 
@@ -38,6 +50,41 @@ private:
     QTemporaryDir m_directory;
 
     QString out(const QString &name) const { return m_directory.filePath(QStringLiteral("out/") + name); }
+    QString outFolder() const { return m_directory.filePath(QStringLiteral("out")); }
+    QStringList logs() const
+    {
+        return QDir(AgentLauncher::logFolder()).entryList({QStringLiteral("*.log")}, QDir::Files, QDir::Name);
+    }
+
+    // Launches the default agent headless and waits for it to end.
+    AgentRun::End runToEnd(const LaunchSetup &setup, QString *lastLine = nullptr, QString *logPath = nullptr)
+    {
+        AgentLauncher::LaunchOptions options;
+        options.access = setup.access;
+        options.task = setup.task;
+        options.timeoutSeconds = setup.timeoutSeconds;
+        bool finished = false;
+        AgentRun::End end = AgentRun::End::running;
+        options.finished = [&](AgentRun &run) {
+            finished = true;
+            end = run.end();
+            if (lastLine)
+                *lastLine = run.lastLine();
+            if (logPath)
+                *logPath = run.logPath();
+        };
+        QPointer<AgentRun> run;
+        const QString error = AgentLauncher::launch(setup.prompt, QString(), options, &run);
+        if (!error.isEmpty() || !run)
+            return AgentRun::End::crashed;
+        if (setup.cancelAfterStart) {
+            QTest::qWait(300);
+            run->cancel();
+        }
+        if (!QTest::qWaitFor([&] { return finished; }, 15000))
+            return AgentRun::End::running;
+        return end;
+    }
 
 private slots:
     void initTestCase()
@@ -56,12 +103,21 @@ private slots:
         qputenv("OMASTRATOR_SOCKET", "/run/user/test/omastrator.sock");
         // Settings land in the temporary folder, never the user's config.
         qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
+        // Run logs too, never the user's.
+        qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
+        const QString bin = FakeAgents::install(m_directory.path());
+        QVERIFY(!bin.isEmpty());
+        qputenv("PATH", (bin + QLatin1Char(':') + qEnvironmentVariable("PATH")).toUtf8());
     }
 
     void init()
     {
         qunsetenv("FAKE_FAIL");
         qputenv("FAKE_AGENT", "sh");
+        qputenv("FAKE_MODE", "quiet");
+        QDir(outFolder()).removeRecursively();
+        QDir().mkpath(outFolder());
+        AgentLauncher::setShowTerminal(false);
     }
 
     void roastHeatsGetHotterAndKeepTheHardLines()
@@ -121,11 +177,13 @@ private slots:
         qputenv("OMASTRATOR_OMARCHY", m_directory.filePath(QStringLiteral("omarchy")).toUtf8());
     }
 
-    void launchPassesThePromptWithoutAShell()
+    void anUnknownAgentOpensInATerminalWithoutAShell()
     {
         QCOMPARE(AgentLauncher::defaultAgent(), QStringLiteral("sh"));
         const QString prompt = QStringLiteral("Make it \"pop\"; $(rm -rf ~) `true` 'quoted'\nSecond line");
-        QCOMPARE(AgentLauncher::launch(prompt), QString());
+        QPointer<AgentRun> run;
+        QCOMPARE(AgentLauncher::launch(prompt, QString(), AgentLauncher::LaunchOptions{}, &run), QString());
+        QVERIFY(!run);
         QCOMPARE(read(out(QStringLiteral("prompt"))), prompt);
         QCOMPARE(read(out(QStringLiteral("count"))), QStringLiteral("3"));
         const QString folder = AgentLauncher::folder();
@@ -140,10 +198,195 @@ private slots:
             QVERIFY2(agents.contains(QStringLiteral("`%1 {").arg(method.name)), qPrintable(method.name));
         QVERIFY(agents.contains(QLatin1String("Each roast task names a **heat**")));
         QVERIFY(agents.contains(QLatin1String("proposal_finish")));
-        const QJsonObject mcp = QJsonDocument::fromJson(read(QDir(folder).filePath(QStringLiteral(".mcp.json"))).toUtf8()).object();
-        const QJsonObject server = mcp["mcpServers"].toObject()["omastrator"].toObject();
-        QCOMPARE(server["args"].toArray(), QJsonArray{"--mcp"});
-        QCOMPARE(server["env"].toObject()["OMASTRATOR_SOCKET"].toString(), QStringLiteral("/run/user/test/omastrator.sock"));
+        // The CLI by its absolute path, which is what headless runs allow.
+        QVERIFY(agents.contains(Setup::shellQuote(QCoreApplication::applicationFilePath()) + QStringLiteral(" agent document_get")));
+        // No MCP server in the folder: it made Claude Code ask for approval on every run.
+        QVERIFY(!QFile::exists(QDir(folder).filePath(QStringLiteral(".mcp.json"))));
+    }
+
+    void anOldMcpConfigIsRemoved()
+    {
+        const QString stale = QDir(AgentLauncher::folder()).filePath(QStringLiteral(".mcp.json"));
+        QDir().mkpath(AgentLauncher::folder());
+        QFile file(stale);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("{\"mcpServers\": {}}");
+        file.close();
+        QCOMPARE(AgentLauncher::writeInstructions(AgentLauncher::folder(), QStringLiteral("/usr/bin/omastrator"), QString()), QString());
+        QVERIFY(!QFile::exists(stale));
+    }
+
+    void claudeRunsHeadlessWithOnlyOmastratorsCli()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        const LaunchSetup setup;
+        QString logPath;
+        QCOMPARE(runToEnd(setup, nullptr, &logPath), AgentRun::End::exited);
+        // No terminal: omarchy was only asked which agent, never to prompt it.
+        QVERIFY(!QFile::exists(out(QStringLiteral("prompt"))));
+        const QString cli = Setup::shellQuote(QCoreApplication::applicationFilePath()) + QStringLiteral(" agent");
+        const QStringList expected{"-p", setup.prompt, "--output-format", "text", "--no-session-persistence", "--strict-mcp-config",
+                                   "--mcp-config", R"({"mcpServers":{}})", "--permission-mode", "acceptEdits", "--tools", "Bash,Read",
+                                   "--allowedTools", QStringLiteral("Bash(%1 *)").arg(cli), "Read"};
+        QCOMPARE(FakeAgents::arguments(outFolder(), QStringLiteral("claude")), expected);
+        QVERIFY(!FakeAgents::arguments(outFolder(), QStringLiteral("claude")).contains(QStringLiteral("--dangerously-skip-permissions")));
+        QCOMPARE(read(out(QStringLiteral("claude.cwd"))).trimmed(), AgentLauncher::folder());
+        QCOMPARE(read(out(QStringLiteral("claude.socket"))), QStringLiteral("/run/user/test/omastrator.sock"));
+        QVERIFY(!QFile::exists(QDir(AgentLauncher::folder()).filePath(QStringLiteral(".mcp.json"))));
+
+        // The log: what ran and what it said, without the task or the environment.
+        QVERIFY(logPath.startsWith(AgentLauncher::logFolder()));
+        QVERIFY(logPath.endsWith(QLatin1String("-roast.log")));
+        const QString log = read(logPath);
+        QVERIFY(log.contains(QLatin1String("agent: claude")));
+        QVERIFY(log.contains(QLatin1String("I looked at it and decided not to.")));
+        QVERIFY(log.contains(QLatin1String("exited with code 0")));
+        QVERIFY(log.contains(QStringLiteral("<the task, %1 characters>").arg(setup.prompt.size())));
+        QVERIFY(!log.contains(QLatin1String("Roast it.")));
+        QVERIFY(!log.contains(QLatin1String("OMASTRATOR_SOCKET")));
+    }
+
+    void projectAccessAllowsEditingItsFolder()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        QTemporaryDir project;
+        LaunchSetup setup;
+        setup.access = AgentAccess::project;
+        setup.task = QStringLiteral("live");
+        AgentLauncher::LaunchOptions options;
+        options.access = AgentAccess::project;
+        options.workingDirectory = project.path();
+        bool finished = false;
+        options.finished = [&](AgentRun &) { finished = true; };
+        QCOMPARE(AgentLauncher::launch(setup.prompt, QString(), options), QString());
+        QTRY_VERIFY(finished);
+        const QStringList arguments = FakeAgents::arguments(outFolder(), QStringLiteral("claude"));
+        QCOMPARE(arguments.mid(arguments.indexOf(QStringLiteral("--tools"))),
+                 (QStringList{"--tools", "Bash,Read,Edit,Write,Glob,Grep", "--allowedTools", "Bash", "Read", "Edit", "Write", "Glob", "Grep"}));
+        QVERIFY(arguments.contains(QStringLiteral("acceptEdits")));
+        QCOMPARE(read(out(QStringLiteral("claude.cwd"))).trimmed(), project.path());
+        // Nothing is written into the project.
+        QVERIFY(QDir(project.path()).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty());
+        // launchIn is the same, for the Live tasks.
+        finished = false;
+        QFile::remove(out(QStringLiteral("claude.cwd")));
+        QCOMPARE(AgentLauncher::launchIn(project.path(), setup.prompt), QString());
+        QTRY_VERIFY(QFile::exists(out(QStringLiteral("claude.cwd"))));
+        QTRY_VERIFY(read(out(QStringLiteral("claude.cwd"))).trimmed() == project.path());
+        QVERIFY(FakeAgents::arguments(outFolder(), QStringLiteral("claude")).contains(QStringLiteral("Bash,Read,Edit,Write,Glob,Grep")));
+    }
+
+    void codexOpencodeAndGeminiRunHeadless()
+    {
+        const QString cli = Setup::shellQuote(QCoreApplication::applicationFilePath()) + QStringLiteral(" agent");
+        const LaunchSetup setup;
+        qputenv("FAKE_AGENT", "codex");
+        QCOMPARE(runToEnd(setup), AgentRun::End::exited);
+        QCOMPARE(FakeAgents::arguments(outFolder(), QStringLiteral("codex")),
+                 (QStringList{"exec", "--skip-git-repo-check", "--ephemeral", "--color", "never", "-c", "approval_policy=\"never\"",
+                              "--sandbox", "workspace-write", "-c", "sandbox_workspace_write.network_access=true", "--", setup.prompt}));
+
+        qputenv("FAKE_AGENT", "opencode");
+        QCOMPARE(runToEnd(setup), AgentRun::End::exited);
+        QCOMPARE(FakeAgents::arguments(outFolder(), QStringLiteral("opencode")), (QStringList{"run", setup.prompt}));
+        const QJsonObject permission =
+            QJsonDocument::fromJson(read(out(QStringLiteral("opencode.config"))).toUtf8()).object()["permission"].toObject();
+        QCOMPARE(permission["edit"].toString(), QStringLiteral("deny"));
+        QCOMPARE(permission["bash"].toObject()["*"].toString(), QStringLiteral("deny"));
+        QCOMPARE(permission["bash"].toObject()[cli + QStringLiteral(" *")].toString(), QStringLiteral("allow"));
+
+        qputenv("FAKE_AGENT", "gemini");
+        QCOMPARE(runToEnd(setup), AgentRun::End::exited);
+        QCOMPARE(FakeAgents::arguments(outFolder(), QStringLiteral("gemini")),
+                 (QStringList{"-p", setup.prompt, "--output-format", "text", "--skip-trust", "--approval-mode", "default", "--allowed-tools",
+                              "read_file", QStringLiteral("run_shell_command(%1)").arg(cli)}));
+        QVERIFY(!QFile::exists(out(QStringLiteral("prompt"))));
+
+        // Project access: Codex's sandbox is the same, the others allow more.
+        QVERIFY(AgentLauncher::headlessCommand(QStringLiteral("codex"), AgentAccess::project, QStringLiteral("x"), QStringLiteral("/b"))
+                    ->arguments.contains(QStringLiteral("workspace-write")));
+        const auto opencode = AgentLauncher::headlessCommand(QStringLiteral("opencode"), AgentAccess::project, QStringLiteral("x"), QStringLiteral("/b"));
+        QVERIFY(opencode->environment.value(0).contains(QLatin1String("\"edit\":\"allow\"")));
+        QVERIFY(AgentLauncher::headlessCommand(QStringLiteral("gemini"), AgentAccess::project, QStringLiteral("x"), QStringLiteral("/b"))
+                    ->arguments.contains(QStringLiteral("auto_edit")));
+        // Anyone else goes to a terminal.
+        QVERIFY(!AgentLauncher::headlessCommand(QStringLiteral("pi"), AgentAccess::omastrator, QStringLiteral("x"), QStringLiteral("/b")));
+    }
+
+    void aFailedRunSaysWhyInItsLastLine()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "fail");
+        QString line;
+        QString logPath;
+        QCOMPARE(runToEnd(LaunchSetup{}, &line, &logPath), AgentRun::End::exited);
+        QCOMPARE(line, QStringLiteral("Error: not logged in. Run /login"));
+        QVERIFY(read(logPath).contains(QLatin1String("exited with code 1")));
+        // A clean exit's stdout is the agent signing off, not a reason.
+        qputenv("FAKE_MODE", "quiet");
+        QCOMPARE(runToEnd(LaunchSetup{}, &line), AgentRun::End::exited);
+        QCOMPARE(line, QString());
+    }
+
+    void cancelStopsTheRunAndWhatItStarted()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "hang");
+        LaunchSetup setup;
+        setup.cancelAfterStart = true;
+        QString logPath;
+        QCOMPARE(runToEnd(setup, nullptr, &logPath), AgentRun::End::cancelled);
+        QTRY_VERIFY(QFile::exists(out(QStringLiteral("claude.child"))));
+        const pid_t child = pid_t(read(out(QStringLiteral("claude.child"))).trimmed().toInt());
+        QVERIFY(child > 0);
+        QTRY_VERIFY(::kill(child, 0) != 0);
+        QVERIFY(read(logPath).contains(QLatin1String("cancelled")));
+    }
+
+    void aRunThatTakesTooLongIsStopped()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "hang");
+        LaunchSetup setup;
+        setup.timeoutSeconds = 1;
+        QString logPath;
+        QCOMPARE(runToEnd(setup, nullptr, &logPath), AgentRun::End::timedOut);
+        QVERIFY(read(logPath).contains(QLatin1String("timed out after 1 s")));
+        const pid_t child = pid_t(read(out(QStringLiteral("claude.child"))).trimmed().toInt());
+        QTRY_VERIFY(child > 0 && ::kill(child, 0) != 0);
+        // The default is five minutes, and the setting changes it.
+        QCOMPARE(AgentLauncher::timeoutSeconds(AgentAccess::omastrator), 300);
+        QSettings().setValue(QStringLiteral("agent/timeoutSeconds"), 42);
+        QCOMPARE(AgentLauncher::timeoutSeconds(AgentAccess::omastrator), 42);
+        QSettings().remove(QStringLiteral("agent/timeoutSeconds"));
+    }
+
+    void onlyTheLastThirtyLogsAreKept()
+    {
+        QDir().mkpath(AgentLauncher::logFolder());
+        for (int index = 0; index < 35; ++index) {
+            QFile file(QDir(AgentLauncher::logFolder()).filePath(QStringLiteral("20000101-000000-%1-old.log").arg(index, 3, 10, QLatin1Char('0'))));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+        }
+        qputenv("FAKE_AGENT", "claude");
+        QString logPath;
+        QCOMPARE(runToEnd(LaunchSetup{}, nullptr, &logPath), AgentRun::End::exited);
+        const QStringList kept = logs();
+        QCOMPARE(kept.size(), 30);
+        QCOMPARE(kept.last(), QFileInfo(logPath).fileName());
+        QVERIFY(!kept.contains(QStringLiteral("20000101-000000-000-old.log")));
+    }
+
+    void showTerminalUsesOmarchyForAnyAgent()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        AgentLauncher::setShowTerminal(true);
+        QPointer<AgentRun> run;
+        QCOMPARE(AgentLauncher::launch(QStringLiteral("In a terminal"), QString(), AgentLauncher::LaunchOptions{}, &run), QString());
+        QVERIFY(!run);
+        QCOMPARE(read(out(QStringLiteral("prompt"))), QStringLiteral("In a terminal"));
+        QVERIFY(!QFile::exists(out(QStringLiteral("claude.argv"))));
+        AgentLauncher::setShowTerminal(false);
     }
 
     void aLongTaskTravelsAsAFile()

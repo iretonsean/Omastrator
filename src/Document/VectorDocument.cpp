@@ -223,27 +223,8 @@ QPainterPath VectorDocument::outline(const QUuid &id) const
 
 std::optional<QUuid> VectorDocument::hitTest(QPointF point, double tolerance) const
 {
-    for (auto it = objects.rbegin(); it != objects.rend(); ++it) {
-        const VectorObject &object = *it;
-        if (object.isContainer() || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id))
-            continue;
-        bool hit = false;
-        if (object.kind == ObjectKind::path) {
-            const double reach = tolerance + (object.stroke.isVisible() ? object.stroke.width / 2 : 0);
-            hit = object.path.distanceToOutline(point) <= reach;
-            if (!hit && object.fill.isVisible())
-                hit = object.path.painterPath().contains(point);
-        } else if (object.kind == ObjectKind::text) {
-            // Glyph gaps would be hard to click; the text's box counts.
-            const QRectF box = object.text.area ? object.transform.mapRect(object.text.frame()) : object.outline().boundingRect();
-            hit = box.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(point);
-        } else {
-            hit = object.outline().contains(point);
-        }
-        if (hit)
-            return object.id;
-    }
-    return std::nullopt;
+    const std::vector<QUuid> hits = hitTestAll(point, tolerance, 1);
+    return hits.empty() ? std::nullopt : std::optional(hits.front());
 }
 
 int VectorDocument::subtreeEnd(int index) const

@@ -1,8 +1,12 @@
 #pragma once
 #include "Document/EditorSession.h"
+#include <QLineF>
+#include <QList>
 #include <QWidget>
 #include <memory>
 #include <optional>
+
+class QMenu;
 
 // The artboard view: draws the document through VectorRenderer, pans and zooms
 // through the session's CanvasViewport, and runs every tool in `Tool`.
@@ -19,11 +23,26 @@ public:
     // Paused, clicks and keys start nothing: an agent's proposal waits for Enter or Esc.
     void setPaused(bool paused);
     bool isPaused() const { return m_paused; }
+    // Isolation: clicks pick inside this group until Esc or a click outside it.
+    std::optional<QUuid> isolatedGroup() const;
+    void isolateGroup(const QUuid &group);
+    void exitIsolation();
+    // Alt-hover distances from the selection to what's under the pointer, in document coordinates.
+    std::vector<QLineF> measurements() const;
+    // The Δx/Δy, W × H or angle label beside a drag; empty when none shows.
+    QString dragReadout() const;
+    // In-place type's right-click menu: clipboard, case and special characters.
+    QMenu *textEditingMenu(QWidget *parent);
+    // Arrow keys move this many points, ten times as far with Shift.
+    static double keyboardIncrement();
+    static void setKeyboardIncrement(double points);
 
 signals:
     // The pointer's document position, for the status bar; nullopt off the artboard.
     void pointerMoved(std::optional<QPointF> documentPoint);
     void textEditingChanged(bool editing);
+    // A right-click, once it picked its target: the leaves under the pointer, topmost first.
+    void contextMenuRequested(QPoint globalPosition, const QList<QUuid> &underPointer);
 
 protected:
     bool event(QEvent *event) override;
@@ -38,6 +57,7 @@ protected:
     void keyReleaseEvent(QKeyEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
     void leaveEvent(QEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
     void inputMethodEvent(QInputMethodEvent *event) override;
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 

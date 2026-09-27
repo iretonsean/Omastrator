@@ -7,6 +7,8 @@
 #include <array>
 
 class NumberField;
+class QCheckBox;
+class QComboBox;
 class PaintSwatch;
 
 namespace ToolHeaders {
@@ -58,6 +60,27 @@ private:
     NumberField *const m_size;
     QComboBox *const m_style;
     std::array<QToolButton *, 4> m_alignments;
+};
+
+// Shape Builder: Illustrator's tool options, in the bar instead of a dialog.
+class ShapeBuilderControls : public ToolHeaderBar {
+    Q_OBJECT
+public:
+    explicit ShapeBuilderControls(EditorSession &session, QWidget *parent = nullptr);
+
+private:
+    void change(const std::function<void(ShapeBuilderOptions &)> &edit);
+    void synchronize();
+
+    EditorSession &m_session;
+    QCheckBox *const m_gaps;
+    NumberField *const m_gapLength;
+    QCheckBox *const m_strokeSplits;
+    QComboBox *const m_colorFrom;
+    QComboBox *const m_selection;
+    QCheckBox *const m_highlightFill;
+    QCheckBox *const m_highlightStroke;
+    QToolButton *const m_more;
 };
 
 // Hand and Zoom: the zoom percentage.

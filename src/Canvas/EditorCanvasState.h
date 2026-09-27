@@ -44,6 +44,7 @@ struct EditorCanvas::State {
         textSelect,
         // Type tool: a drag draws an area type box.
         textArea,
+        shapeBuilder,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -173,6 +174,27 @@ struct EditorCanvas::State {
     void dragShape(QPointF view, Qt::KeyboardModifiers modifiers);
     VectorPath shapePath(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers) const;
 
+    // Shape Builder (Shift-M) -------------------------------------------------
+    // The selection's regions, kept until the document, selection or options change.
+    struct Built {
+        std::vector<QUuid> leaves;
+        ShapeBuilderOptions options;
+        ShapeBuilder::Arrangement arrangement;
+    };
+    mutable std::optional<Built> built;
+    const ShapeBuilder::Arrangement &arrangement() const;
+    // What the pointer is over, and what the drag has touched so far.
+    std::optional<int> builderRegion;
+    std::optional<int> builderEdge;
+    ShapeBuilder::Gesture building;
+    void builderPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragBuilder(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishBuilder(Qt::KeyboardModifiers modifiers);
+    void updateBuilderHover(std::optional<QPointF> view);
+    // Merging with Shift draws a marquee; the regions it touches, so far.
+    ShapeBuilder::Gesture builderTouched() const;
+    void drawBuilder(QPainter &painter) const;
+
     // Type (T) ----------------------------------------------------------------
     std::unique_ptr<InlineTextEditor> text;
     // The text as editing began, to keep a hand-given name.
@@ -201,6 +223,25 @@ struct EditorCanvas::State {
 
     // Eyedropper --------------------------------------------------------------
     void eyedropperPress(QPointF view);
+
+    // Measuring and readouts ----------------------------------------------------
+    // Alt held over something else: the gaps from the selection to it, or to the artboard.
+    std::optional<QRectF> measureTarget() const;
+    std::vector<QLineF> measureLines() const;
+    QString readout() const;
+    void drawMeasurements(QPainter &painter) const;
+    void drawReadout(QPainter &painter) const;
+    void drawLabel(QPainter &painter, QPointF center, const QString &label) const;
+
+    // Keyboard ------------------------------------------------------------------
+    // Digits set opacity; a second digit soon after makes a two-digit value.
+    int opacityDigit = -1;
+    QElapsedTimer sinceDigit;
+    QTimer opacityCommit;
+    void typeOpacity(int digit);
+    void finishOpacity();
+    // Arrows move by the keyboard increment; Alt moves a copy.
+    bool nudge(QKeyEvent *event);
 
     // Painting ----------------------------------------------------------------
     void paint(QPainter &painter);

@@ -1,6 +1,7 @@
 #pragma once
 #include "Document/DocumentHistory.h"
 #include "Document/PathOperations.h"
+#include "Document/ShapeBuilder.h"
 #include "Document/VectorDocument.h"
 #include "Rendering/CanvasViewport.h"
 #include <QObject>
@@ -25,6 +26,7 @@ enum class Tool {
     ellipse,         // L
     polygon,
     star,
+    shapeBuilder,    // Shift-M
     rotate,          // R
     scale,           // S
     eyedropper,      // I
@@ -33,7 +35,7 @@ enum class Tool {
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
-                                     Tool::rotate, Tool::scale, Tool::eyedropper, Tool::hand, Tool::zoom};
+                                     Tool::shapeBuilder, Tool::rotate, Tool::scale, Tool::eyedropper, Tool::hand, Tool::zoom};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -46,6 +48,8 @@ enum class AlignEdge { left, horizontalCenter, right, top, verticalCenter, botto
 enum class DistributeAxis { horizontal, vertical };
 // Aligns to the selection's bounds, or the artboard's with one object.
 enum class AlignTarget { selection, artboard };
+// Paste: offset from the last paste, where it was copied, or above or below the selection.
+enum class PastePosition { offset, inPlace, front, back };
 
 // One document being edited: its objects, selection, tool, style and history.
 // Every edit goes through here and ends with `changed()`.
@@ -82,6 +86,8 @@ public:
     int starPoints = 5;
     // Inner over outer radius.
     double starInnerRatio = 0.5;
+    // Shape Builder's tool options.
+    ShapeBuilderOptions shapeBuilder;
 
     // Selection --------------------------------------------------------------
     // Objects directly under a layer, or deeper after a group is entered.
@@ -94,6 +100,15 @@ public:
     // Everything whose bounds meet `rect`, as a marquee drag selects.
     std::vector<QUuid> objectsIn(const QRectF &rect, bool deep) const;
     QRectF selectionBounds(bool includeStroke = false) const;
+    // Select menu: every other object, the next sibling up or down, and matches of the first selected leaf.
+    void selectInverse();
+    void selectAdjacent(bool above);
+    void selectSame(SameAttribute attribute);
+    void selectObjects(ObjectFilter filter);
+    void selectAllOnSameLayers();
+    // Runs the last Select menu command again.
+    void reselect();
+    bool canReselect() const { return bool(m_lastSelect); }
     // Leaf paths, texts and images under the selection.
     std::vector<QUuid> selectedLeaves() const;
     // Direct selection: the anchors picked on each path.
@@ -142,6 +157,8 @@ public:
     void previewDocument(const VectorDocument &document, const std::vector<QUuid> &selection);
     void commitInteraction();
     void cancelInteraction();
+    // Shape Builder: a gesture on the selection's arrangement, from where the interaction began; results stay selected.
+    bool previewShapeBuild(const ShapeBuilder::Arrangement &arrangement, const ShapeBuilder::Gesture &gesture);
 
     // Objects ----------------------------------------------------------------
     // Adds above the selection (or on top of the active layer) and selects it.
@@ -158,6 +175,9 @@ public:
     void updateObject(const VectorObject &object, const QString &editName);
     void deleteSelection();
     void duplicateSelection(QPointF offset = {10, 10});
+    // Object ▸ Transform ▸ Transform Again: the last move, scale, rotate or reflect, copies too.
+    void transformAgain();
+    bool canTransformAgain() const { return m_lastTransform.has_value() && hasSelection(); }
     void groupSelection();
     void ungroupSelection();
     // Object ▸ Clipping Mask ▸ Make: the topmost object clips the rest.
@@ -234,12 +254,22 @@ public:
     void unlockAll();
     void hideSelection();
     void showAll();
+    // Every sibling of `id` hidden or shown, locked or unlocked, as one step; `id` itself stays open.
+    void setOthersVisible(const QUuid &id, bool visible);
+    void setOthersLocked(const QUuid &id, bool locked);
+    // True when some sibling of `id` is visible, or unlocked.
+    bool anyOtherVisible(const QUuid &id) const;
+    bool anyOtherUnlocked(const QUuid &id) const;
+    void setLayerColor(const QUuid &id, const QColor &color);
+    // A copy of the layer and its contents, above it.
+    void duplicateLayer(const QUuid &id);
 
     // Clipboard --------------------------------------------------------------
     void copy() const;
     void cut();
     // Offsets each paste when the clipboard came from this document.
     void paste(bool inPlace = false);
+    void paste(PastePosition position);
     bool canPaste() const;
 
     // View -------------------------------------------------------------------
@@ -248,6 +278,9 @@ public:
     void zoomOut();
     void zoomToFit();
     void actualSize();
+    // View ▸ Zoom to Selection: the selection's bounds fill the view, with a margin.
+    void zoomToSelection();
+    void zoomToRect(const QRectF &rect);
     // The canvas's own zoom, pan and size changes.
     void setZoom(double zoom, QPointF anchoredAt);
     void panView(QSizeF by);
@@ -285,6 +318,7 @@ private:
     std::optional<QUuid> insertionParent() const;
     std::vector<QUuid> duplicateInto(VectorDocument &document, QPointF offset) const;
     void commitTextEdit(VectorDocument next, const QString &name, bool coalesce);
+    void runSelect(const std::function<void()> &command);
 
     std::optional<VectorDocument> m_document;
     DocumentHistory m_history;
@@ -300,9 +334,20 @@ private:
         std::vector<QUuid> selection;
         // What previews start from: `before`, plus any copies made within the interaction.
         VectorDocument base;
+        // The last previewTransform, and whether the selection was copied first.
+        std::optional<QTransform> transform;
+        bool duplicated = false;
     };
     std::optional<Interaction> m_interaction;
     mutable int m_pasteCount = 0;
     // When the last coalescing text step ran.
     qint64 m_lastTextStep = 0;
+    // What Transform Again repeats. With a centre, it pivots on the selection's centre as it did there.
+    struct RepeatTransform {
+        QTransform transform;
+        bool duplicate = false;
+        std::optional<QPointF> center;
+    };
+    std::optional<RepeatTransform> m_lastTransform;
+    std::function<void()> m_lastSelect;
 };

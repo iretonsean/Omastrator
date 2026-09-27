@@ -1,11 +1,14 @@
 #include "Agent/AgentLauncher.h"
 #include "Agent/AgentProtocol.h"
+#include "Agent/Cli.h"
 #include "Document/PathOperations.h"
 #include "Live/Browser.h"
 #include "UI/AgentPanels.h"
 #include "UI/AgentSheets.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "../Agent/FakeAgents.h"
 #include <QAbstractButton>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCommandLinkButton>
 #include <QJsonArray>
@@ -20,6 +23,7 @@
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QtTest>
+#include <csignal>
 
 // The UI half of the agent bridge: accept bar, paused tools, panels, sheets.
 namespace {
@@ -31,7 +35,7 @@ const QString circle = QStringLiteral(
 // Stands in for `omarchy`: names $FAKE_AGENT as the default and records the prompt.
 constexpr const char *fakeOmarchy = "#!/bin/sh\n"
                                     "if [ \"$1\" = default ]; then printf '%s\\n' \"$FAKE_AGENT\"; exit 0; fi\n"
-                                    "if [ \"$1\" = agent ] && [ \"$2\" = prompt ]; then printf '%s' \"$3\" > \"$FAKE_OUT\"; exit 0; fi\n"
+                                    "if [ \"$1\" = agent ] && [ \"$2\" = prompt ]; then printf '%s' \"$3\" > \"$FAKE_OUT/prompt\"; exit 0; fi\n"
                                     "exit 2\n";
 
 template<typename T = QWidget>
@@ -75,16 +79,35 @@ private slots:
         file.close();
         file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         qputenv("OMASTRATOR_OMARCHY", script.toUtf8());
-        qputenv("FAKE_OUT", m_directory.filePath(QStringLiteral("prompt")).toUtf8());
+        qputenv("FAKE_OUT", m_directory.path().toUtf8());
         qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("omastrator.sock")).toUtf8());
         qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
+        qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
+        // The agents run headless from here; this test binary is their Omastrator CLI.
+        const QString bin = FakeAgents::install(m_directory.path());
+        QVERIFY(!bin.isEmpty());
+        qputenv("PATH", (bin + QLatin1Char(':') + qEnvironmentVariable("PATH")).toUtf8());
+        // Show log opens the file with this instead of xdg-open.
+        const QString opener = m_directory.filePath(QStringLiteral("open-log"));
+        QFile open(opener);
+        QVERIFY(open.open(QIODevice::WriteOnly));
+        open.write("#!/bin/sh\nprintf '%s' \"$1\" > \"$FAKE_OUT/opened\"\n");
+        open.close();
+        open.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        qputenv("OMASTRATOR_XDG_OPEN", opener.toUtf8());
     }
 
     void init()
     {
         qputenv("FAKE_AGENT", "sh");
-        QFile::remove(m_directory.filePath(QStringLiteral("prompt")));
+        qputenv("FAKE_MODE", "quiet");
+        for (const char *name : {"prompt", "opened", "claude.argv", "claude.child"})
+            QFile::remove(m_directory.filePath(QString::fromLatin1(name)));
+        AgentLauncher::setShowTerminal(false);
+        QSettings().remove(QStringLiteral("agent/timeoutSeconds"));
     }
+
+    QString read(const QString &name) const { return FakeAgents::read(m_directory.filePath(name)); }
 
     void keepingIsOneUndoStepWithTheBarGone()
     {
@@ -218,10 +241,10 @@ private slots:
         const QString requestId = bridge.rounds().front().requestId;
         QVERIFY(prompt().contains(requestId));
         QVERIFY(prompt().contains(QStringLiteral("Make 2 distinct variations")));
-        QCOMPARE(bridge.waitingText(), QStringLiteral("Waiting for sh…"));
+        QCOMPARE(bridge.waitingText(), QStringLiteral("sh is generating…"));
         QLabel *status = shown<QLabel>(QStringLiteral("variationsStatus"));
         QVERIFY(status);
-        QCOMPARE(status->text(), QStringLiteral("Waiting for sh…"));
+        QCOMPARE(status->text(), QStringLiteral("sh is generating…"));
 
         bridge.showVariations(requestId, {{"Fox", square, QString()}, {"Round fox", circle, QString()}});
         QVERIFY(!bridge.waiting());
@@ -242,6 +265,164 @@ private slots:
         shown<QPushButton>(QStringLiteral("variationsCancel"))->click();
         QVERIFY(!bridge.waiting());
         QVERIFY(shown<QToolButton>(QStringLiteral("variation:0:0")));
+    }
+
+    void roastRunsInTheBackgroundAndItsAnswerArrives()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "roast");
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        QCOMPARE(bridge.startServer(m_directory.filePath(QStringLiteral("headless.sock"))), QString());
+        workspace.createDocument(QSizeF(200, 200));
+        rectangle(workspace.current().session, {10, 10, 40, 40});
+        QCOMPARE(bridge.roast(), QString());
+        QVERIFY(bridge.run());
+        QCOMPARE(shown<QLabel>(QStringLiteral("roastStatus"))->text(), QStringLiteral("Claude is roasting…"));
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.roastResult().has_value(), 15000);
+        QCOMPARE(bridge.roastResult()->roast, QStringLiteral("Headless, and it still hurts."));
+        QVERIFY(!bridge.waiting());
+        // No terminal and no MCP: omarchy never got a prompt, and Claude got an empty MCP config.
+        QVERIFY(prompt().isEmpty());
+        const QStringList arguments = FakeAgents::arguments(m_directory.path(), QStringLiteral("claude"));
+        QVERIFY(arguments.contains(QStringLiteral("--strict-mcp-config")));
+        QCOMPARE(read(QStringLiteral("claude.socket")), bridge.serverPath());
+        // The run ends after answering, and nothing is said about it.
+        QTRY_VERIFY(!bridge.run());
+        QCOMPARE(bridge.panelMessage(), QString());
+        QVERIFY(!shown(QStringLiteral("roastShowLog")));
+    }
+
+    void aRunWithoutAnAnswerSaysSoWithItsLog()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "fail");
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        workspace.createDocument(QSizeF(200, 200));
+        rectangle(workspace.current().session, {10, 10, 40, 40});
+        QCOMPARE(bridge.roast(), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.panelMessage().isEmpty(), 15000);
+        QVERIFY(!bridge.waiting());
+        QCOMPARE(bridge.panelMessage(), QStringLiteral("Claude stopped without an answer: Error: not logged in. Run /login"));
+        QTRY_VERIFY(shown<QLabel>(QStringLiteral("roastMessage")));
+        QCOMPARE(shown<QLabel>(QStringLiteral("roastMessage"))->text(), bridge.panelMessage());
+        QVERIFY(bridge.logPath().startsWith(AgentLauncher::logFolder()));
+        QVERIFY(bridge.tools().status()["error"].toString().startsWith(QLatin1String("Claude stopped")));
+        shown<QPushButton>(QStringLiteral("roastShowLog"))->click();
+        QTRY_COMPARE(read(QStringLiteral("opened")), bridge.logPath());
+
+        // Generate that exits quietly: the plain line, in the Variations panel.
+        qputenv("FAKE_MODE", "quiet");
+        QCOMPARE(bridge.generate(QStringLiteral("A fox"), 2, false), QString());
+        QVERIFY(bridge.panelMessage().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.panelMessage().isEmpty(), 15000);
+        QCOMPARE(bridge.panelMessage(), QStringLiteral("Claude stopped without an answer."));
+        QTRY_VERIFY(shown<QLabel>(QStringLiteral("variationsMessage")));
+        QCOMPARE(shown<QLabel>(QStringLiteral("variationsMessage"))->text(), QStringLiteral("Claude stopped without an answer."));
+        QVERIFY(shown<QPushButton>(QStringLiteral("variationsShowLog")));
+
+        // An edit: the proposal bar says it, with Show log and Dismiss.
+        QCOMPARE(bridge.editWithInstruction(QStringLiteral("Make it teal")), QString());
+        auto *bar = window.findChild<ProposalBar *>(QStringLiteral("proposalBar"));
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.barMessage().isEmpty(), 15000);
+        QVERIFY(bar->isVisible());
+        QCOMPARE(bar->findChild<QLabel *>(QStringLiteral("proposalText"))->text(), QStringLiteral("Claude stopped without an answer."));
+        QVERIFY(bar->findChild<QPushButton *>(QStringLiteral("proposalShowLog"))->isVisible());
+        bar->findChild<QPushButton *>(QStringLiteral("proposalDismiss"))->click();
+        QVERIFY(!bar->isVisible());
+    }
+
+    void variationsArriveFromABackgroundRun()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "variations");
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        QCOMPARE(bridge.startServer(m_directory.filePath(QStringLiteral("headless.sock"))), QString());
+        workspace.createDocument(QSizeF(200, 200));
+        QCOMPARE(bridge.generate(QStringLiteral("A box"), 1, false), QString());
+        QCOMPARE(shown<QLabel>(QStringLiteral("variationsStatus"))->text(), QStringLiteral("Claude is generating…"));
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.rounds().back().variations.empty(), 15000);
+        QCOMPARE(bridge.rounds().back().variations.front().name, QStringLiteral("Box"));
+        QTRY_VERIFY(!bridge.run());
+        QCOMPARE(bridge.panelMessage(), QString());
+    }
+
+    void cancelStopsTheAgent()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "hang");
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        workspace.createDocument(QSizeF(200, 200));
+        rectangle(workspace.current().session, {10, 10, 40, 40});
+        QCOMPARE(bridge.roast(), QString());
+        QTRY_VERIFY(QFile::exists(m_directory.filePath(QStringLiteral("claude.child"))));
+        const pid_t child = pid_t(read(QStringLiteral("claude.child")).trimmed().toInt());
+        QVERIFY(child > 0 && ::kill(child, 0) == 0);
+        // The elapsed time counts up while it works.
+        QTRY_VERIFY_WITH_TIMEOUT(shown<QLabel>(QStringLiteral("roastStatus"))->text() == QStringLiteral("Claude is roasting… 1 s"), 5000);
+        shown<QPushButton>(QStringLiteral("roastCancel"))->click();
+        QVERIFY(!bridge.waiting());
+        QTRY_VERIFY(::kill(child, 0) != 0);
+        QTest::qWait(100);
+        QCOMPARE(bridge.panelMessage(), QString());
+    }
+
+    void aRunThatTakesTooLongIsStoppedAndSaysSo()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "hang");
+        QSettings().setValue(QStringLiteral("agent/timeoutSeconds"), 1);
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        workspace.createDocument(QSizeF(200, 200));
+        rectangle(workspace.current().session, {10, 10, 40, 40});
+        QCOMPARE(bridge.roast(), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.panelMessage().isEmpty(), 10000);
+        QCOMPARE(bridge.panelMessage(), QStringLiteral("Claude ran out of time after 1 second and was stopped."));
+        QVERIFY(!bridge.waiting());
+        QTRY_VERIFY(shown<QPushButton>(QStringLiteral("roastShowLog")));
+        const pid_t child = pid_t(read(QStringLiteral("claude.child")).trimmed().toInt());
+        QTRY_VERIFY(child > 0 && ::kill(child, 0) != 0);
+    }
+
+    void theTerminalSettingOpensTheAgentInOne()
+    {
+        qputenv("FAKE_AGENT", "claude");
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        QDialog *sheet = AgentSheets::connectAgent(bridge, &window);
+        auto *terminal = sheet->findChild<QCheckBox *>(QStringLiteral("showTerminal"));
+        QVERIFY(terminal);
+        QCOMPARE(terminal->text(), QStringLiteral("Open the agent in a terminal while it works"));
+        QVERIFY(!terminal->isChecked());
+        QVERIFY(sheet->findChild<QPlainTextEdit *>(QStringLiteral("connectText"))->toPlainText().contains(QLatin1String("in the background")));
+        terminal->click();
+        QVERIFY(AgentLauncher::showTerminal());
+        QVERIFY(sheet->findChild<QPlainTextEdit *>(QStringLiteral("connectText"))->toPlainText().contains(QLatin1String("in a terminal")));
+        sheet->close();
+        workspace.createDocument(QSizeF(200, 200));
+        rectangle(workspace.current().session, {10, 10, 40, 40});
+        QCOMPARE(bridge.roast(), QString());
+        QVERIFY(!bridge.run());
+        QVERIFY(prompt().contains(QStringLiteral("Roast My Design")));
+        QVERIFY(!QFile::exists(m_directory.filePath(QStringLiteral("claude.argv"))));
+        bridge.stopWaiting();
+        AgentLauncher::setShowTerminal(false);
     }
 
     void aMissingAgentShowsInTheSheet()
@@ -271,14 +452,14 @@ private slots:
         rectangle(workspace.current().session, {0, 0, 20, 20});
         AgentBridge &bridge = *window.agent();
         QDialog *sheet = AgentSheets::editWithInstruction(bridge, &window);
-        QCOMPARE(sheet->findChild<QLabel *>(QStringLiteral("instructionScope"))->text(), QStringLiteral("Applies to the selection."));
+        QCOMPARE(sheet->findChild<QLabel *>(QStringLiteral("instructionScope"))->text(), QStringLiteral("Applies to “Rectangle”."));
         sheet->findChild<QPlainTextEdit *>(QStringLiteral("instructionField"))->setPlainText(QStringLiteral("Make it teal"));
         sheet->findChild<QPushButton *>(QStringLiteral("dialogOK"))->click();
         QVERIFY(prompt().contains(QStringLiteral("Make it teal")));
         QVERIFY(prompt().contains(QStringLiteral("selection_get")));
         auto *bar = window.findChild<ProposalBar *>(QStringLiteral("proposalBar"));
         QVERIFY(bar->isVisible());
-        QCOMPARE(bar->findChild<QLabel *>(QStringLiteral("proposalText"))->text(), QStringLiteral("Waiting for sh…"));
+        QCOMPARE(bar->findChild<QLabel *>(QStringLiteral("proposalText"))->text(), QStringLiteral("sh is editing…"));
         bridge.tools().call(QStringLiteral("set_style"), {{"fill", "#008080"}});
         bridge.tools().call(QStringLiteral("proposal_finish"), {{"title", "Teal"}});
         QVERIFY(!bridge.waiting());
@@ -546,7 +727,7 @@ private slots:
         // With a prompt, Generate launches at once and the status says so.
         QVERIFY(start({{"flow", "generate"}, {"prompt", "a paper plane"}, {"count", 2}}).isEmpty());
         QVERIFY(prompt().contains(QStringLiteral("a paper plane")));
-        QCOMPARE(bridge.tools().status()["waiting"].toString(), QStringLiteral("Waiting for sh…"));
+        QCOMPARE(bridge.tools().status()["waiting"].toString(), QStringLiteral("sh is generating…"));
         QCOMPARE(bridge.tools().status()["task"].toString(), QStringLiteral("generate"));
         QVERIFY(start({{"flow", "cancel"}}).isEmpty());
         QVERIFY(bridge.tools().status()["waiting"].toString().isEmpty());
@@ -621,5 +802,16 @@ private slots:
     }
 };
 
-QTEST_MAIN(AgentUiTests)
+// Run as `AgentUiTests agent …`, this binary is the Omastrator CLI the fake agents call.
+int main(int argc, char **argv)
+{
+    if (argc > 1 && Cli::handles(argv[1])) {
+        QCoreApplication app(argc, argv);
+        return Cli::run(QCoreApplication::arguments().mid(1));
+    }
+    QApplication app(argc, argv);
+    AgentUiTests tests;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&tests, argc, argv);
+}
 #include "AgentUiTests.moc"
