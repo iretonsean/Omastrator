@@ -93,6 +93,9 @@ QJsonObject AgentTools::insertSvg(const QJsonObject &params)
     } else if (at) {
         const QPointF shift = *at - edited.bounds(id).topLeft();
         edited.transform(id, QTransform::fromTranslate(shift.x(), shift.y()));
+    } else if (boolean(params, QStringLiteral("center"), false)) {
+        const QPointF shift = QPointF(edited.size.width() / 2, edited.size.height() / 2) - edited.bounds(id).center();
+        edited.transform(id, QTransform::fromTranslate(shift.x(), shift.y()));
     }
     propose(QStringLiteral("Insert SVG"), edited, {id});
     return {{"id", idString(id)}, {"bounds", rect(edited.bounds(id))}, {"children", int(edited.descendants(id).size())}};

@@ -78,6 +78,8 @@ private slots:
         QCOMPARE(host.editor.document()->bounds(fitted), QRectF(10, 22.5, 50, 25));
         const QUuid moved = id(tools.call(QStringLiteral("insert_svg"), {{"svg", square}, {"at", QJsonArray{30, 40}}})["id"]);
         QCOMPARE(host.editor.document()->bounds(moved), QRectF(30, 40, 100, 50));
+        const QUuid centred = id(tools.call(QStringLiteral("insert_svg"), {{"svg", square}, {"center", true}})["id"]);
+        QCOMPARE(host.editor.document()->bounds(centred), QRectF(50, 75, 100, 50));
         // Both went into the one proposal.
         QVERIFY(host.editor.document()->find(fitted));
         host.editor.commitInteraction();

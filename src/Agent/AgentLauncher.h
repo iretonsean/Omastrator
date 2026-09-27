@@ -17,7 +17,7 @@ QString writeInstructions(const QString &directory, const QString &binary, const
 // The instructions AGENTS.md and CLAUDE.md hold.
 QString instructions(const QString &binary);
 // Writes the folder, then launches the agent there. Returns why it failed, or empty.
-QString launch(const QString &taskPrompt);
+QString launch(const QString &taskPrompt, const QString &socket = QString());
 
 // One round of Generate: what was asked, and the SVG the user picked from it.
 struct Round {

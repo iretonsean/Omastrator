@@ -32,12 +32,34 @@ Omarchy theme and changes with it.
 - Tabs for several documents at once, and every keyboard shortcut can be
   remapped.
 
-Planned next: AI features in [docs/AI-ROADMAP.md](docs/AI-ROADMAP.md) and a bit
-of personality in [docs/HUMOR.md](docs/HUMOR.md), including Roast My Design.
+## AI, with the agent you already use
+
+Omastrator bundles no model. It hands work to your Omarchy default agent, such
+as Claude Code, Codex or opencode. Anything the agent changes shows as a
+preview: Enter keeps it as one undo step, and Esc throws it away.
+
+- **Object ▸ Generate…**: describe what you want and choose how many
+  variations. Pick one from the Variations panel, then refine it ("rounder",
+  "fewer colours").
+- **Object ▸ Edit with Instruction…**: for example "recolor to a sunset
+  palette" or "make these icons consistent".
+- **Object ▸ Image Trace ▸ Vectorize with AI…**: a classic trace first, then
+  the agent cleans it up. There are two modes, *Logo & icon* and *Sketch & line
+  art*.
+- **Roast My Design** (the flame at the bottom of the tool rail): a savage
+  roast of the design, then sincere, specific fixes, then one click to make
+  variations from that feedback.
+- **Help ▸ Connect an Agent…**: drive Omastrator from any agent. Use
+  `omastrator agent <method>` from a shell, or register the MCP server with
+  `claude mcp add omastrator -- omastrator --mcp`.
+
+Choose your agent in Omarchy → Setup → Default → Agent. How it works:
+[docs/AI-DESIGN.md](docs/AI-DESIGN.md). The rest of the app's personality is
+described in [docs/HUMOR.md](docs/HUMOR.md).
 
 ## Build
 
-You need C++20, Qt 6.4 or later (Widgets and Concurrent), and CMake.
+You need C++20, Qt 6.4 or later (Widgets, Concurrent and Network), and CMake.
 
 ```sh
 cmake -S . -B build

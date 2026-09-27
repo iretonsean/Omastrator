@@ -90,7 +90,7 @@ QString AgentBridge::launch(const QString &requestId, Task task, const QString &
     const QString agent = AgentLauncher::defaultAgent(&error);
     if (agent.isEmpty())
         return error;
-    error = AgentLauncher::launch(prompt);
+    error = AgentLauncher::launch(prompt, m_server.isListening() ? m_server.path() : QString());
     if (!error.isEmpty())
         return error;
     m_waiting = Waiting{requestId, task, agent};
@@ -221,6 +221,9 @@ QString AgentBridge::insertVariation(int roundIndex, int index)
     if (round.fitTo) {
         params["at"] = QJsonArray{round.fitTo->x(), round.fitTo->y()};
         params["fit"] = QJsonArray{round.fitTo->width(), round.fitTo->height()};
+    } else {
+        // Where the eye already is, not the SVG's own corner.
+        params["center"] = true;
     }
     try {
         m_tools.call(QStringLiteral("insert_svg"), params);

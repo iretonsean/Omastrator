@@ -28,7 +28,8 @@ constexpr const char *methodTable = R"json([
    "svg": {"type": "string", "description": "A complete <svg> document with a viewBox, or width and height."},
    "name": {"type": "string", "description": "The group's name in the Layers panel."},
    "at": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Top-left corner [x, y] of the placed art, or of the fit box. Default: the SVG's own coordinates, or the artboard's centre with fit."},
-   "fit": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Scale to fit [width, height], keeping proportions, centred in the box."}}}},
+   "fit": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Scale to fit [width, height], keeping proportions, centred in the box."},
+   "center": {"type": "boolean", "description": "Centre the art on the artboard at its own size (ignored with at or fit)."}}}},
 {"name": "set_style", "group": "edit",
  "description": "Sets fill, stroke, opacity or blend mode. Fill and stroke reach every path and text inside a group.",
  "inputSchema": {"type": "object", "properties": {

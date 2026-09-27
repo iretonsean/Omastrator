@@ -73,7 +73,7 @@ QString writeInstructions(const QString &directory, const QString &binary, const
     return {};
 }
 
-QString launch(const QString &taskPrompt)
+QString launch(const QString &taskPrompt, const QString &listening)
 {
     if (taskPrompt.trimmed().isEmpty())
         return QStringLiteral("There is nothing to ask the agent.");
@@ -83,7 +83,8 @@ QString launch(const QString &taskPrompt)
         return error;
     const QString directory = folder();
     const QString binary = QCoreApplication::applicationFilePath();
-    const QString socket = AgentProtocol::socketPath();
+    // Where this app listens, which a test or second instance may have moved.
+    const QString socket = listening.isEmpty() ? AgentProtocol::socketPath() : listening;
     if (const QString failure = writeInstructions(directory, binary, socket); !failure.isEmpty())
         return failure;
     QString prompt = taskPrompt;
