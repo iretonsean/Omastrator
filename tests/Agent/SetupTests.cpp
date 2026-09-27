@@ -13,7 +13,7 @@
 
 // Phase 3 of docs/OS-SUITE.md: `omastrator setup` and `--remove` in a temporary HOME.
 namespace {
-const QByteArray userShellJson = "{\n  \"version\": 1,\n  \"bar\": {\n    \"layout\": {\n      \"right\": [\n        {\n          \"id\": \"omarchy.audio\"\n        }\n      ]\n    }\n  },\n  \"plugins\": [\n    {\n      \"id\": \"someone.else\"\n    }\n  ]\n}\n";
+const QByteArray userShellJson = "{\n  \"version\": 1,\n  \"bar\": {\n    \"layout\": {\n      \"right\": [\n        {\n          \"id\": \"omarchy.audio\",\n          \"format\": \"HH\\n\\u2014\\nmm\"\n        }\n      ]\n    }\n  },\n  \"plugins\": [\n    {\n      \"id\": \"someone.else\"\n    }\n  ]\n}\n";
 const QByteArray userMenu = "{\n  // My own entries.\n  \"personal\": {\"icon\": \"x\", \"label\": \"Personal\"},\n  \"personal.notes\": {\"label\": \"Notes\", \"action\": \"true\"}\n}\n";
 const QByteArray userHypr = "-- My Hyprland.\nrequire(\"hypr.bindings\")\n";
 
@@ -115,6 +115,17 @@ private slots:
         const QJsonObject entries = QJsonDocument::fromJson(json).object();
         QCOMPARE(entries["omastrator.capture.fill"].toObject()["action"].toString(), QStringLiteral("omastrator island capture color fill"));
         QVERIFY(entries.contains("omastrator.mode.draw") && entries.contains("omastrator.connect"));
+    }
+
+    void escapesSurviveJq()
+    {
+        // The shell may have written an em dash as an escape; jq would write it raw.
+        const auto edited = Setup::jq(userShellJson, QStringLiteral("."), nullptr);
+        QVERIFY(edited);
+        QCOMPARE(*edited, userShellJson);
+        QCOMPARE(Setup::keepEscapes("\"a\\u2014\"\n", "\"a—\"\n"), QByteArray("\"a\\u2014\"\n"));
+        // An escaped backslash is not an escape.
+        QCOMPARE(Setup::keepEscapes("\"a\\\\u2014\"\n", "\"b\"\n"), QByteArray("\"b\"\n"));
     }
 
     void diffsReadLikeDiff()

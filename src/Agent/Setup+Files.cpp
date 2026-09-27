@@ -318,9 +318,47 @@ QByteArray withoutMenuBlock(const QByteArray &current, bool removeComma)
     return result;
 }
 
+// jq writes "\u2014" as "—"; a line that only differs from the file's own by such escapes keeps the file's bytes.
+QByteArray keepEscapes(const QByteArray &original, const QByteArray &edited)
+{
+    auto decoded = [](const QByteArray &line) {
+        static const QRegularExpression escape(QStringLiteral("\\\\u([0-9a-fA-F]{4})"));
+        QString text = QString::fromUtf8(line);
+        QString out;
+        qsizetype last = 0;
+        for (auto match = escape.globalMatch(text); match.hasNext();) {
+            const auto found = match.next();
+            // An escaped backslash before it means it isn't an escape.
+            qsizetype slashes = 0;
+            for (qsizetype at = found.capturedStart() - 1; at >= 0 && text[at] == QLatin1Char('\\'); --at)
+                ++slashes;
+            if (slashes % 2)
+                continue;
+            out += text.mid(last, found.capturedStart() - last) + QChar(char16_t(found.captured(1).toUShort(nullptr, 16)));
+            last = found.capturedEnd();
+        }
+        return out + text.mid(last);
+    };
+    QHash<QString, QByteArray> originals;
+    for (const QByteArray &line : original.split('\n'))
+        if (line.contains("\\u"))
+            originals.insert(decoded(line), line);
+    if (originals.isEmpty())
+        return edited;
+    QList<QByteArray> lines = edited.split('\n');
+    for (QByteArray &line : lines) {
+        if (const auto found = originals.constFind(QString::fromUtf8(line)); found != originals.constEnd())
+            line = found.value();
+    }
+    return lines.join('\n');
+}
+
 std::optional<QByteArray> jq(const QByteArray &input, const QString &filter, QString *error)
 {
     const QString program = QStandardPaths::findExecutable(QStringLiteral("jq"));
+    QString ignored;
+    if (!error)
+        error = &ignored;
     if (program.isEmpty()) {
         *error = QStringLiteral("jq isn't installed, and setup edits shell.json with it. Install it with: sudo pacman -S jq");
         return std::nullopt;
@@ -333,7 +371,7 @@ std::optional<QByteArray> jq(const QByteArray &input, const QString &filter, QSt
         *error = QStringLiteral("jq could not edit shell.json: %1").arg(QString::fromUtf8(process.readAllStandardError()).trimmed());
         return std::nullopt;
     }
-    return process.readAllStandardOutput();
+    return keepEscapes(input, process.readAllStandardOutput());
 }
 
 QString unifiedDiff(const QString &path, const std::optional<QByteArray> &before, const std::optional<QByteArray> &after)

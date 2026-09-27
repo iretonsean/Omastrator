@@ -60,7 +60,9 @@ QByteArray menuBlock(const QString &command);
 QByteArray withMenuBlock(const QByteArray &current, const QByteArray &block, bool *addedComma);
 QByteArray withoutMenuBlock(const QByteArray &current, bool removeComma);
 
-// Runs jq's `filter` on `input`: jq keeps the key order and layout the shell writes.
+// Lines of `edited` that jq only re-encoded (a "\u2014" written as "—") take `original`'s bytes back.
+QByteArray keepEscapes(const QByteArray &original, const QByteArray &edited);
+// Runs jq's `filter` on `input`: jq keeps the key order and layout the shell writes, and keepEscapes the escapes.
 std::optional<QByteArray> jq(const QByteArray &input, const QString &filter, QString *error);
 // `diff -u` style, computed here.
 QString unifiedDiff(const QString &path, const std::optional<QByteArray> &before, const std::optional<QByteArray> &after);

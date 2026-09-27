@@ -351,7 +351,10 @@ Choices the spec left open, made while building it, in build order.
 - **shell.json is edited with jq** (an Omarchy dependency), which keeps the
   key order and layout the shell itself writes, so the diff shows only
   Omastrator's lines. The island is added to `plugins[]`; the tray light, if
-  accepted, goes first in `bar.layout.right`. JSON edits are recomputed from
+  accepted, goes first in `bar.layout.right`. jq writes escaped characters
+  raw (`\u2014` becomes "—"), so any line jq only re-encoded takes the
+  file's own bytes back; found when a real `shell.json` held an escaped em
+  dash. JSON edits are recomputed from
   the file as it is when applied, so declining one doesn't undo another.
   After a change, setup runs `omarchy-shell shell rescanPlugins` and
   `reloadConfig`.
