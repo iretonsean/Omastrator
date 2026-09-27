@@ -7,13 +7,6 @@ QJsonObject action(const char *id, const char *label, const char *tip)
     return {{"id", QLatin1String(id)}, {"label", QString::fromUtf8(label)}, {"tip", QString::fromUtf8(tip)}};
 }
 
-QJsonObject later(const char *id, const char *label, const char *reason)
-{
-    QJsonObject made = action(id, label, reason);
-    made["enabled"] = false;
-    return made;
-}
-
 struct Chip {
     const char *id;
     const char *label;
@@ -37,11 +30,12 @@ QJsonArray actions(const QString &kind)
 {
     if (kind == QLatin1String("web"))
         return {action("inspect", "Inspect", "Every style of this element, with Copy CSS"),
-                later("lift", "Lift", "Lift into vectors comes in the next build."),
+                action("lift", "Lift", "Turn this element into editable shapes and text, in place"),
                 action("mockup", "Mock Up", "Draw over this element with the rectangle tool"),
                 action("measure", "Measure", "Distances from this element to the next one you point at")};
     if (kind == QLatin1String("window") || kind == QLatin1String("browser")) {
         QJsonArray list{action("capture", "Capture to Desk", "A screenshot of this window as a frame on the Desk"),
+                        action("lift", "Lift", "Turn what's pointed at into editable shapes and text, in place"),
                         action("measure", "Measure", "Distances from this to the next thing you point at")};
         if (kind == QLatin1String("browser"))
             list.append(action("openInBrowser", "Open in Omastrator's Browser",

@@ -45,6 +45,8 @@ public:
     std::vector<Hyprland::Monitor> screens;
     // By pid: what the accessibility helper answers, in window coordinates.
     QHash<qint64, QJsonObject> accessibility;
+    // By pid: the whole tree, as Lift reads it.
+    QHash<qint64, QJsonObject> trees;
     QColor screenColor = QColor(0x20, 0x40, 0x60);
     int accessibleCalls = 0;
     int pixelCalls = 0;
@@ -60,6 +62,14 @@ public:
         if (!accessibility.contains(window.pid))
             return std::nullopt;
         return accessibility.value(window.pid);
+    }
+    std::optional<QJsonObject> accessibleTree(const Hyprland::Window &window, int, QString *error) override
+    {
+        if (trees.contains(window.pid))
+            return trees.value(window.pid);
+        if (error)
+            *error = QStringLiteral("This app has no accessibility tree.");
+        return std::nullopt;
     }
     std::optional<QColor> pixel(QPoint) override
     {

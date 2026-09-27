@@ -47,6 +47,9 @@ public:
     bool selectArt(const QString &key, const std::vector<QUuid> &ids = {});
     // The surface whose art is selected, if any.
     QString selectedSurface() const;
+    // Lifted art (in the surface's own coordinates) on the surface's layer, as one undo step named `step`;
+    // returns the placed copy of `root`, selected, or null with `error` set.
+    QUuid place(const Surface &surface, const VectorDocument &art, const QUuid &root, const QString &step, QString *error);
     // Takes a surface's art away in one undo step.
     void clear(const QString &key);
 
