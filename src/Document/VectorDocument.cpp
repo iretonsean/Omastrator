@@ -11,9 +11,6 @@ const std::array<std::pair<ObjectKind, const char *>, 5> kindNames{{
     {ObjectKind::layer, "layer"}, {ObjectKind::group, "group"}, {ObjectKind::path, "path"},
     {ObjectKind::text, "text"}, {ObjectKind::image, "image"},
 }};
-const std::array<std::pair<TextAlignment, const char *>, 3> alignmentNames{{
-    {TextAlignment::left, "left"}, {TextAlignment::center, "center"}, {TextAlignment::right, "right"},
-}};
 
 QRectF strokeBounds(const VectorObject &object)
 {
@@ -43,58 +40,12 @@ std::optional<ObjectKind> objectKind(const QString &rawValue)
     return std::nullopt;
 }
 
-QString rawValue(TextAlignment alignment)
-{
-    return QString::fromLatin1(alignmentNames.at(size_t(alignment)).second);
-}
-
-std::optional<TextAlignment> textAlignment(const QString &rawValue)
-{
-    for (const auto &[alignment, name] : alignmentNames) {
-        if (rawValue == QLatin1String(name))
-            return alignment;
-    }
-    return std::nullopt;
-}
-
 QColor nextLayerColor(int index)
 {
     // Illustrator's first layer colours: blue, red, green, blue-violet, orange.
     static const std::array<QColor, 6> colors{QColor(0x4f, 0x80, 0xff), QColor(0xff, 0x4f, 0x4f), QColor(0x4f, 0xc8, 0x4f),
                                               QColor(0x9a, 0x4f, 0xff), QColor(0xff, 0xa0, 0x28), QColor(0x28, 0xc8, 0xc8)};
     return colors[size_t(std::abs(index)) % colors.size()];
-}
-
-QFont TextContent::font() const
-{
-    QFont font(family);
-    font.setBold(bold);
-    font.setItalic(italic);
-    font.setLetterSpacing(QFont::AbsoluteSpacing, tracking);
-    // Outlines at the design size: point sizes would follow the screen's DPI.
-    font.setPixelSize(std::max(1, int(std::lround(size))));
-    font.setHintingPreference(QFont::PreferNoHinting);
-    return font;
-}
-
-QPainterPath TextContent::outline() const
-{
-    QPainterPath path;
-    const QFont face = font();
-    // Pixel sizes are whole; scale the outlines to fractional sizes.
-    const double scale = size / std::max(1.0, double(face.pixelSize()));
-    const QFontMetricsF metrics(face);
-    const QStringList lines = text.split(QLatin1Char('\n'));
-    for (int line = 0; line < lines.size(); ++line) {
-        const double width = metrics.horizontalAdvance(lines[line]);
-        double x = 0;
-        if (alignment == TextAlignment::center)
-            x = -width / 2;
-        else if (alignment == TextAlignment::right)
-            x = -width;
-        path.addText(QPointF(x, line * size * leading / scale), face, lines[line]);
-    }
-    return scale == 1 ? path : QTransform::fromScale(scale, scale).map(path);
 }
 
 QPainterPath VectorObject::outline() const
@@ -237,6 +188,11 @@ QRectF VectorDocument::bounds(const QUuid &id, bool includeStroke) const
         }
         return bounds(children(id), includeStroke);
     }
+    // Area type's box is its bounds, however little text it holds.
+    if (object->kind == ObjectKind::text && object->text.area) {
+        const QRectF box = object->transform.mapRect(object->text.frame());
+        return includeStroke ? box.united(strokeBounds(*object)) : box;
+    }
     return includeStroke ? strokeBounds(*object) : object->outline().boundingRect();
 }
 
@@ -279,7 +235,8 @@ std::optional<QUuid> VectorDocument::hitTest(QPointF point, double tolerance) co
                 hit = object.path.painterPath().contains(point);
         } else if (object.kind == ObjectKind::text) {
             // Glyph gaps would be hard to click; the text's box counts.
-            hit = object.outline().boundingRect().adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(point);
+            const QRectF box = object.text.area ? object.transform.mapRect(object.text.frame()) : object.outline().boundingRect();
+            hit = box.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(point);
         } else {
             hit = object.outline().contains(point);
         }
@@ -374,6 +331,24 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform)
         object->transform = object->transform * transform;
     for (const QUuid &child : children(id))
         this->transform(child, transform);
+}
+
+void VectorDocument::transform(const QUuid &id, const QTransform &transform, bool scaleStrokes)
+{
+    this->transform(id, transform);
+    const double factor = std::sqrt(std::abs(transform.determinant()));
+    if (std::abs(factor - 1) < 1e-9 || factor < 1e-9)
+        return;
+    std::vector<QUuid> leaves = descendants(id);
+    leaves.push_back(id);
+    for (const QUuid &leaf : leaves) {
+        VectorObject *object = find(leaf);
+        // Paths hold document coordinates; text strokes scale with its transform unless undone.
+        if (object->kind == ObjectKind::path && scaleStrokes)
+            object->stroke.width *= factor;
+        else if (object->kind == ObjectKind::text && !scaleStrokes)
+            object->stroke.width /= factor;
+    }
 }
 
 std::vector<VectorObject> VectorDocument::copySubtree(const QUuid &id) const

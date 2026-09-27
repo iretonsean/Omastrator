@@ -13,91 +13,50 @@ InlineTextEditor::InlineTextEditor(VectorObject object) : object(std::move(objec
     caret = anchor = int(this->object.text.text.size());
 }
 
-double InlineTextEditor::scale() const
+const TextLayout &InlineTextEditor::layout() const
 {
-    // TextContent::outline draws at a whole pixel size and scales to the real one.
-    const QFont face = object.text.font();
-    return object.text.size / std::max(1.0, double(face.pixelSize()));
+    if (!m_layout || !(m_laidOut == object.text)) {
+        m_layout = std::make_shared<TextLayout>(object.text);
+        m_laidOut = object.text;
+    }
+    return *m_layout;
 }
 
-std::vector<InlineTextEditor::Line> InlineTextEditor::lines() const
+std::pair<int, int> InlineTextEditor::range() const
 {
-    std::vector<Line> result;
-    int start = 0;
-    const QString &content = text();
-    for (int index = 0; index <= content.size(); ++index) {
-        if (index == content.size() || content[index] == QLatin1Char('\n')) {
-            result.push_back({start, index - start});
-            start = index + 1;
-        }
-    }
-    return result;
+    if (!hasSelection())
+        return {0, int(text().size())};
+    return {std::min(caret, anchor), std::max(caret, anchor)};
 }
 
 int InlineTextEditor::lineOf(int position) const
 {
-    const auto all = lines();
-    for (size_t line = 0; line < all.size(); ++line) {
-        if (position <= all[line].start + all[line].length)
-            return int(line);
-    }
-    return int(all.size()) - 1;
-}
-
-double InlineTextEditor::lineX(int line) const
-{
-    const auto all = lines();
-    const QFontMetricsF metrics(object.text.font());
-    const double width = metrics.horizontalAdvance(text().mid(all[size_t(line)].start, all[size_t(line)].length));
-    switch (object.text.alignment) {
-    case TextAlignment::center:
-        return -width / 2 * scale();
-    case TextAlignment::right:
-        return -width * scale();
-    default:
-        return 0;
-    }
+    return std::max(0, layout().lineOf(position));
 }
 
 double InlineTextEditor::xAt(int position) const
 {
-    const int line = lineOf(position);
-    const Line span = lines()[size_t(line)];
-    const QFontMetricsF metrics(object.text.font());
-    return lineX(line) + metrics.horizontalAdvance(text().mid(span.start, position - span.start)) * scale();
+    return layout().xAt(position);
 }
 
 double InlineTextEditor::baseline(int line) const
 {
-    return line * object.text.size * object.text.leading;
+    const auto &all = layout().lines();
+    if (all.empty())
+        return object.text.area ? layout().ascent() : 0;
+    return all[size_t(std::clamp(line, 0, int(all.size()) - 1))].baseline - object.text.baselineShift;
 }
 
 QRectF InlineTextEditor::caretRect() const
 {
-    const QFontMetricsF metrics(object.text.font());
-    const double ascent = metrics.ascent() * scale(), descent = metrics.descent() * scale();
+    const double ascent = layout().ascent() * object.text.verticalScale / 100, descent = layout().descent();
     const double y = baseline(lineOf(caret));
     return QRectF(xAt(caret), y - ascent, 0, ascent + descent);
 }
 
 int InlineTextEditor::positionAt(QPointF documentPoint) const
 {
-    const QPointF local = object.transform.inverted().map(documentPoint);
-    const auto all = lines();
-    const double pitch = object.text.size * object.text.leading;
-    // Baselines sit at the bottom of each line's band.
-    const int line = std::clamp(int(std::floor((local.y() + object.text.size * 0.8) / std::max(pitch, 1e-6))), 0, int(all.size()) - 1);
-    const Line span = all[size_t(line)];
-    int best = span.start;
-    double bestDistance = std::numeric_limits<double>::infinity();
-    for (int position = span.start; position <= span.start + span.length; ++position) {
-        const double distance = std::abs(xAt(position) - local.x());
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            best = position;
-        }
-    }
-    return best;
+    return layout().positionAt(object.transform.inverted().map(documentPoint));
 }
 
 void InlineTextEditor::selectAll()
@@ -167,7 +126,10 @@ void InlineTextEditor::selectWord(int position)
 
 void InlineTextEditor::selectLine(int position)
 {
-    const Line span = lines()[size_t(lineOf(std::clamp(position, 0, int(text().size()))))];
+    const auto &all = layout().lines();
+    if (all.empty())
+        return;
+    const TextLayout::Line &span = all[size_t(lineOf(std::clamp(position, 0, int(text().size()))))];
     anchor = span.start;
     caret = span.start + span.length;
 }
@@ -199,6 +161,7 @@ void InlineTextEditor::insert(const QString &typed)
 {
     QString &content = object.text.text;
     const int from = std::min(caret, anchor), to = std::max(caret, anchor);
+    object.text.replaceKerns(from, to, int(typed.size()));
     content.replace(from, to - from, typed);
     caret = anchor = from + int(typed.size());
 }
@@ -213,9 +176,11 @@ void InlineTextEditor::erase(bool forward)
     if (forward && caret < content.size()) {
         // Whole surrogate pairs, never half a character.
         const int length = content[caret].isHighSurrogate() && caret + 1 < content.size() ? 2 : 1;
+        object.text.replaceKerns(caret, caret + length, 0);
         content.remove(caret, length);
     } else if (!forward && caret > 0) {
         const int length = content[caret - 1].isLowSurrogate() && caret >= 2 ? 2 : 1;
+        object.text.replaceKerns(caret - length, caret, 0);
         content.remove(caret - length, length);
         caret -= length;
     }
@@ -237,6 +202,8 @@ bool InlineTextEditor::claims(const QKeyEvent &event)
     case Qt::Key_Right:
     case Qt::Key_Up:
     case Qt::Key_Down:
+        // Alt and the arrows are the type keys: tracking, kerning, leading.
+        return !modifiers.testFlag(Qt::AltModifier);
     case Qt::Key_Home:
     case Qt::Key_End:
     case Qt::Key_Backspace:
@@ -280,29 +247,27 @@ InlineTextEditor::Result InlineTextEditor::keyPress(const QKeyEvent &event)
     case Qt::Key_Up:
     case Qt::Key_Down: {
         const int line = lineOf(caret) + (event.key() == Qt::Key_Up ? -1 : 1);
-        const auto all = lines();
-        if (line < 0) {
+        const auto &all = layout().lines();
+        if (line < 0)
             moveTo(0, extend);
-        } else if (line >= int(all.size())) {
+        else if (line >= int(all.size()))
             moveTo(int(content.size()), extend);
-        } else {
-            // The nearest position below or above the caret's x.
-            const double x = xAt(caret);
-            int best = all[size_t(line)].start;
-            for (int position = best; position <= all[size_t(line)].start + all[size_t(line)].length; ++position) {
-                if (std::abs(xAt(position) - x) < std::abs(xAt(best) - x))
-                    best = position;
-            }
-            moveTo(best, extend);
-        }
+        else
+            // The nearest position above or below the caret's x.
+            moveTo(layout().positionAt(QPointF(xAt(caret), all[size_t(line)].baseline)), extend);
         break;
     }
     case Qt::Key_Home:
-        moveTo(control ? 0 : lines()[size_t(lineOf(caret))].start, extend);
-        break;
     case Qt::Key_End: {
-        const Line span = lines()[size_t(lineOf(caret))];
-        moveTo(control ? int(content.size()) : span.start + span.length, extend);
+        const auto &all = layout().lines();
+        if (control || all.empty()) {
+            moveTo(event.key() == Qt::Key_Home ? 0 : int(content.size()), extend);
+            break;
+        }
+        const TextLayout::Line &span = all[size_t(lineOf(caret))];
+        // A wrapped line's end is the next line's start: stop before its break.
+        const int end = span.lastInParagraph ? span.start + span.length : std::max(span.start, span.start + span.length - 1);
+        moveTo(event.key() == Qt::Key_Home ? span.start : end, extend);
         break;
     }
     case Qt::Key_Backspace:
@@ -393,20 +358,22 @@ void InlineTextEditor::draw(QPainter &painter, const QTransform &documentToView,
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
     const QTransform toView = object.transform * documentToView;
-    const QFontMetricsF metrics(object.text.font());
-    const double ascent = metrics.ascent() * scale(), descent = metrics.descent() * scale();
+    const double ascent = layout().ascent(), descent = layout().descent();
     if (hasSelection()) {
         QColor tint = accent;
         tint.setAlphaF(0.3);
         const int from = std::min(caret, anchor), to = std::max(caret, anchor);
-        const auto all = lines();
+        const auto &all = layout().lines();
         for (size_t line = 0; line < all.size(); ++line) {
-            const int start = std::max(from, all[line].start), end = std::min(to, all[line].start + all[line].length);
-            if (start > end || (start == end && to <= all[line].start + all[line].length))
+            const int lineEnd = all[line].start + all[line].length;
+            const int start = std::max(from, all[line].start), end = std::min(to, lineEnd);
+            if (all[line].hidden || start > end || (start == end && to <= lineEnd))
                 continue;
             const double y = baseline(int(line));
+            // A selected line break shows as a sliver past the line's end.
+            const double past = end < to && all[line].lastInParagraph ? object.text.size / 4 : 0;
             QPainterPath band;
-            band.addRect(QRectF(QPointF(xAt(start), y - ascent), QPointF(xAt(end) + (end < to ? metrics.averageCharWidth() * scale() / 2 : 0), y + descent)));
+            band.addRect(QRectF(QPointF(layout().xAt(start, int(line)), y - ascent), QPointF(layout().xAt(end, int(line)) + past, y + descent)));
             painter.fillPath(toView.map(band), tint);
         }
     }
@@ -419,10 +386,7 @@ void InlineTextEditor::draw(QPainter &painter, const QTransform &documentToView,
         const double end = shown.xAt(shown.caret);
         if (!inDocument) {
             // Nothing is in the document to draw it yet.
-            QPainterPath glyphs;
-            glyphs.addText(QPointF(caretBox.left() / scale(), baseline(lineOf(caret)) / scale()), object.text.font(), preedit);
-            glyphs = QTransform::fromScale(scale(), scale()).map(glyphs);
-            painter.fillPath(toView.map(glyphs), accent);
+            painter.fillPath(toView.map(shown.object.text.outline()), accent);
         }
         painter.setPen(QPen(accent, 1));
         painter.drawLine(toView.map(QPointF(caretBox.left(), underline)), toView.map(QPointF(end, underline)));

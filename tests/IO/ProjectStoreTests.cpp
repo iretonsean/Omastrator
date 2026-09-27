@@ -34,7 +34,7 @@ private:
         text.kind = ObjectKind::text;
         text.name = QStringLiteral("Title");
         text.text.text = QStringLiteral("Hello\nWorld");
-        text.text.bold = true;
+        text.text.style = QStringLiteral("Bold");
         text.fill = Paint::solid(QColor(10, 20, 30));
         text.transform = QTransform::fromTranslate(50, 80).rotate(15);
         document.insert(text, layer);

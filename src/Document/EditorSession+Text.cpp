@@ -1,0 +1,180 @@
+#include "Document/EditorSession.h"
+#include "Document/TextLayout.h"
+#include <QDateTime>
+#include <algorithm>
+#include <cmath>
+
+namespace {
+// Held keys repeat faster than this; slower presses are steps of their own.
+constexpr qint64 coalesceWindow = 700;
+
+void keepInRange(TextContent &text)
+{
+    text.size = std::clamp(text.size, 0.1, 1296.0);
+    if (text.leading)
+        text.leading = std::clamp(*text.leading, 0.0, 5000.0);
+    text.horizontalScale = std::clamp(text.horizontalScale, 1.0, 10000.0);
+    text.verticalScale = std::clamp(text.verticalScale, 1.0, 10000.0);
+    text.tracking = std::clamp(text.tracking, -1000.0, 10000.0);
+    std::erase_if(text.kerns, [](const auto &kern) { return kern.second == 0; });
+    if (text.area)
+        text.area = QSizeF(std::max(1.0, text.area->width()), std::max(0.0, text.area->height()));
+}
+}
+
+std::vector<QUuid> EditorSession::selectedTexts() const
+{
+    std::vector<QUuid> texts;
+    if (!m_document)
+        return texts;
+    for (const QUuid &id : selectedLeaves()) {
+        const VectorObject *object = m_document->find(id);
+        if (object && object->kind == ObjectKind::text)
+            texts.push_back(id);
+    }
+    return texts;
+}
+
+TextContent EditorSession::shownText() const
+{
+    const std::vector<QUuid> texts = selectedTexts();
+    return texts.empty() ? defaultText : m_document->find(texts.front())->text;
+}
+
+void EditorSession::commitTextEdit(VectorDocument next, const QString &name, bool coalesce)
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (coalesce && now - m_lastTextStep < coalesceWindow) {
+        VectorDocument before = std::move(*m_document);
+        m_document = std::move(next);
+        if (m_history.amend(name, m_document, m_selection)) {
+            m_lastTextStep = now;
+            notify();
+            return;
+        }
+        next = std::move(*m_document);
+        m_document = std::move(before);
+    }
+    edit(name, [&](VectorDocument &document) { document = std::move(next); });
+    m_lastTextStep = coalesce ? now : 0;
+}
+
+void EditorSession::updateText(const std::function<void(TextContent &)> &change, const QString &name, bool coalesce)
+{
+    change(defaultText);
+    keepInRange(defaultText);
+    if (m_interaction)
+        commitInteraction();
+    const std::vector<QUuid> texts = selectedTexts();
+    if (texts.empty()) {
+        notify(false);
+        return;
+    }
+    VectorDocument next = *m_document;
+    bool changed = false;
+    for (const QUuid &id : texts) {
+        if (next.isEffectivelyLocked(id))
+            continue;
+        TextContent &text = next.find(id)->text;
+        const TextContent before = text;
+        change(text);
+        keepInRange(text);
+        changed = changed || !(before == text);
+    }
+    if (!changed) {
+        notify(false);
+        return;
+    }
+    commitTextEdit(std::move(next), name, coalesce);
+}
+
+void EditorSession::stepText(TextStep step, double amount)
+{
+    static const char *names[] = {"Tracking", "Leading", "Baseline Shift", "Font Size"};
+    updateText([step, amount](TextContent &text) {
+        switch (step) {
+        case TextStep::tracking:
+            text.tracking = std::round((text.tracking + amount) * 1000) / 1000;
+            break;
+        case TextStep::leading:
+            text.leading = std::max(0.0, text.effectiveLeading() + amount);
+            break;
+        case TextStep::baselineShift:
+            text.baselineShift += amount;
+            break;
+        case TextStep::size:
+            text.size = std::max(0.1, text.size + amount);
+            break;
+        }
+    }, QString::fromLatin1(names[int(step)]), true);
+}
+
+void EditorSession::kernText(const QUuid &id, int index, double amount)
+{
+    if (!m_document || !m_document->find(id) || m_document->find(id)->kind != ObjectKind::text || m_document->isEffectivelyLocked(id))
+        return;
+    if (m_interaction)
+        commitInteraction();
+    VectorDocument next = *m_document;
+    TextContent &text = next.find(id)->text;
+    if (index <= 0 || index > text.text.size())
+        return;
+    text.kerns[index] += amount;
+    keepInRange(text);
+    commitTextEdit(std::move(next), QStringLiteral("Kerning"), true);
+}
+
+void EditorSession::convertTextType(bool toArea)
+{
+    const std::vector<QUuid> texts = selectedTexts();
+    if (texts.empty())
+        return;
+    VectorDocument next = *m_document;
+    bool changed = false;
+    for (const QUuid &id : texts) {
+        VectorObject &object = *next.find(id);
+        if (next.isEffectivelyLocked(id) || object.text.area.has_value() == toArea)
+            continue;
+        TextContent &text = object.text;
+        const TextLayout layout(text);
+        const double ascent = layout.ascent();
+        if (toArea) {
+            // Wide enough that no line wraps; placed so no glyph moves.
+            double width = 1;
+            for (const TextLayout::Line &line : layout.lines())
+                width = std::max(width, layout.xAt(line.start + line.length, int(&line - layout.lines().data())) - layout.xAt(line.start, int(&line - layout.lines().data())));
+            width = std::ceil(width + text.leftIndent + text.rightIndent + std::max(0.0, text.firstLineIndent) + 1);
+            const double x = text.alignment == TextAlignment::center ? -width / 2 : text.alignment == TextAlignment::right ? -width : 0;
+            text.area = QSizeF(width, 0);
+            object.transform = QTransform::fromTranslate(x, -ascent) * object.transform;
+        } else {
+            // Soft wraps become line breaks, from the end so earlier indices hold.
+            const auto &lines = layout.lines();
+            for (auto line = lines.rbegin(); line != lines.rend(); ++line) {
+                if (line->lastInParagraph)
+                    continue;
+                const int at = line->start + line->length;
+                text.replaceKerns(at, at, 1);
+                text.text.insert(at, QLatin1Char('\n'));
+            }
+            const double width = text.area->width();
+            const double x = text.alignment == TextAlignment::center ? width / 2 : text.alignment == TextAlignment::right ? width : 0;
+            text.area.reset();
+            object.transform = QTransform::fromTranslate(x, ascent) * object.transform;
+        }
+        changed = true;
+    }
+    if (changed)
+        edit(toArea ? QStringLiteral("Convert to Area Type") : QStringLiteral("Convert to Point Type"),
+             [&](VectorDocument &document) { document = std::move(next); });
+}
+
+void EditorSession::setTextArea(const QUuid &id, std::optional<QSizeF> area)
+{
+    if (!m_document || !m_document->find(id) || m_document->find(id)->kind != ObjectKind::text)
+        return;
+    VectorObject object = *m_document->find(id);
+    object.text.area = area;
+    keepInRange(object.text);
+    updateObject(object, QStringLiteral("Area Type"));
+}

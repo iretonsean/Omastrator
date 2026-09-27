@@ -429,7 +429,7 @@ void EditorSession::transformSelection(const QTransform &transform, const QStrin
     edit(editName, [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {
             if (!document.isEffectivelyLocked(id))
-                document.transform(id, transform);
+                document.transform(id, transform, scaleStrokes);
         }
     });
 }

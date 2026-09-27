@@ -53,6 +53,16 @@ void DocumentHistory::end(const std::optional<VectorDocument> &document, const s
     trim(document);
 }
 
+bool DocumentHistory::amend(const QString &name, const std::optional<VectorDocument> &document, const std::vector<QUuid> &selection)
+{
+    if (m_depth != 0 || m_past.empty() || !m_future.empty() || m_past.back().name != name || m_revision != m_past.back().after.revision)
+        return false;
+    m_revision = QUuid::createUuid();
+    m_past.back().after = Snapshot{document, selection, m_revision};
+    trim(document);
+    return true;
+}
+
 std::optional<DocumentHistory::Snapshot> DocumentHistory::undo()
 {
     if (!canUndo())

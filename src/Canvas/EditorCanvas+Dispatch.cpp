@@ -127,6 +127,9 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::convert:
         dragConvert(view, modifiers);
         break;
+    case DragKind::textArea:
+        drag->grabbed = snapPoint(guidesExcluding({}), toDocument(view));
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -173,6 +176,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::convert:
         if (drag->interacting && session.isInteracting())
             session.commitInteraction();
+        break;
+    case DragKind::textArea:
+        finishTextArea();
         break;
     case DragKind::pan:
     case DragKind::textSelect:

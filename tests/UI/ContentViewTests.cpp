@@ -165,14 +165,17 @@ void ContentViewTests::typeBarsStyleSelectedTextInOneStep()
     const VectorDocument &document = editor.session.document().value();
     QCOMPARE(document.find(first)->text.size, 34.0);
     QCOMPARE(document.find(second)->text.size, 34.0);
-    QCOMPARE(editor.session.undoName(), QString("Character"));
-    // Bold and alignment follow; the next text takes them too.
-    find<QToolButton>(bar, "typeBold").click();
+    QCOMPARE(editor.session.undoName(), QString("Font Size"));
+    // Style and alignment follow; the next text takes them too.
+    auto &style = find<QComboBox>(bar, "typeStyle");
+    QVERIFY(style.count() >= 1);
+    QCOMPARE(style.currentText(), editor.session.shownText().style);
     find<QToolButton>(bar, "typeAlignCenter").click();
-    QVERIFY(editor.session.document().value().find(second)->text.bold);
+    QCOMPARE(editor.session.document().value().find(second)->text.alignment, TextAlignment::center);
     QCOMPARE(editor.session.document().value().find(first)->text.alignment, TextAlignment::center);
-    QVERIFY(editor.session.defaultText.bold);
+    QCOMPARE(editor.session.defaultText.alignment, TextAlignment::center);
     QVERIFY(find<QToolButton>(bar, "typeAlignCenter").isChecked());
+    find<QToolButton>(bar, "typeAlignJustify").click();
     // One undo takes the size back from both.
     editor.session.undo();
     editor.session.undo();

@@ -419,7 +419,7 @@ void EditorSession::previewTransform(const QTransform &transform)
     VectorDocument document = m_interaction->base;
     for (const QUuid &id : m_selection) {
         if (!document.isEffectivelyLocked(id))
-            document.transform(id, transform);
+            document.transform(id, transform, scaleStrokes);
     }
     m_document = std::move(document);
     notify();

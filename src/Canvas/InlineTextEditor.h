@@ -1,13 +1,16 @@
 #pragma once
+#include "Document/TextLayout.h"
 #include "Document/VectorDocument.h"
 #include <QInputMethodEvent>
 #include <QPainter>
 #include <QTransform>
 #include <QVariant>
+#include <memory>
+#include <utility>
 
 class QKeyEvent;
 
-// Point type edited in place: the caret, selection and input method's preedit.
+// Point and area type edited in place: the caret, selection and input method's preedit.
 // The canvas applies `object` to the document as it changes.
 class InlineTextEditor {
 public:
@@ -42,22 +45,20 @@ public:
     // The caret in the text's own coordinates.
     QRectF caretRect() const;
     void draw(QPainter &painter, const QTransform &documentToView, bool caretShown, const QColor &accent) const;
+    // The selected range, or the whole text when nothing is selected.
+    std::pair<int, int> range() const;
+    bool hasSelection() const { return caret != anchor; }
+    // The text as laid out now.
+    const TextLayout &layout() const;
 
 private:
-    struct Line {
-        int start;
-        int length;
-    };
-    std::vector<Line> lines() const;
     int lineOf(int position) const;
-    // Line's left edge and a position's x, in the text's own coordinates.
-    double lineX(int line) const;
     double xAt(int position) const;
     double baseline(int line) const;
-    double scale() const;
     void insert(const QString &typed);
     void erase(bool forward);
     void eraseWord(bool forward);
     void moveTo(int position, bool extend);
-    bool hasSelection() const { return caret != anchor; }
+    mutable std::shared_ptr<TextLayout> m_layout;
+    mutable TextContent m_laidOut;
 };

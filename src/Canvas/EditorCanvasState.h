@@ -42,6 +42,8 @@ struct EditorCanvas::State {
         pen,
         convert,
         textSelect,
+        // Type tool: a drag draws an area type box.
+        textArea,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -183,6 +185,8 @@ struct EditorCanvas::State {
     QElapsedTimer sinceDoubleClick;
     QPointF doubleClickView;
     void textPress(QPointF view);
+    // A click makes point type where it was pressed; a drag makes area type.
+    void finishTextArea();
     void beginTextEditing(const VectorObject &object, bool inDocument, std::optional<QPointF> caretAt);
     void applyText();
     void finishText();

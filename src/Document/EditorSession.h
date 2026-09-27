@@ -197,6 +197,28 @@ public:
     // Pen tool: joins the picked end anchors of one open contour.
     void closePath(const QUuid &id, int contour);
 
+    // Type -------------------------------------------------------------------
+    // Text objects among the selected leaves.
+    std::vector<QUuid> selectedTexts() const;
+    // The selected texts' style, else the next text's.
+    TextContent shownText() const;
+    // Restyles the selected texts and the next text in one undo step named `name`;
+    // `coalesce` folds a held key's repeats into the step before.
+    void updateText(const std::function<void(TextContent &)> &change, const QString &name, bool coalesce = false);
+    enum class TextStep { tracking, leading, baselineShift, size };
+    // Illustrator's type keys: tracking in 1/1000 em, the rest in pt.
+    void stepText(TextStep step, double amount);
+    // Manual kerning before the character at `index` of the text being edited.
+    void kernText(const QUuid &id, int index, double amount);
+    // Type ▸ Convert to Area Type / Point Type, keeping the text where it is.
+    void convertTextType(bool toArea);
+    // Area type's box, in its own units; resizing leaves the glyphs alone.
+    void setTextArea(const QUuid &id, std::optional<QSizeF> area);
+    // Scale Strokes & Effects: scaling multiplies stroke widths too.
+    bool scaleStrokes = false;
+    // Scale Corners: kept for live corners; paths always scale their curves.
+    bool scaleCorners = true;
+
     // Layers panel -----------------------------------------------------------
     QUuid addLayer();
     void deleteObjects(const std::vector<QUuid> &ids);
@@ -262,6 +284,7 @@ private:
     std::vector<QUuid> selectionInOrder() const;
     std::optional<QUuid> insertionParent() const;
     std::vector<QUuid> duplicateInto(VectorDocument &document, QPointF offset) const;
+    void commitTextEdit(VectorDocument next, const QString &name, bool coalesce);
 
     std::optional<VectorDocument> m_document;
     DocumentHistory m_history;
@@ -280,4 +303,6 @@ private:
     };
     std::optional<Interaction> m_interaction;
     mutable int m_pasteCount = 0;
+    // When the last coalescing text step ran.
+    qint64 m_lastTextStep = 0;
 };
