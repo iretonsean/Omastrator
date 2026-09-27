@@ -61,8 +61,12 @@ target_include_directories(oma_live PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated
 oma_library(oma_anywhere src/Anywhere/*.cpp)
 target_link_libraries(oma_anywhere PUBLIC oma_live oma_io)
 
+# Design systems (docs/DESIGN-SYSTEMS.md): token files, the global library, site extraction, Omarchy themes and the confirmed sync.
+oma_library(oma_system src/System/*.cpp)
+target_link_libraries(oma_system PUBLIC oma_live oma_io)
+
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
-target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_cloud oma_canvas oma_agent oma_live oma_anywhere)
+target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_cloud oma_canvas oma_agent oma_live oma_anywhere oma_system)
 
 include(GNUInstallDirs)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
@@ -134,6 +138,7 @@ oma_tests(oma_canvas Canvas)
 oma_tests(oma_agent Agent)
 oma_tests(oma_live Live)
 oma_tests(oma_anywhere Anywhere)
+oma_tests(oma_system System)
 oma_tests(oma_ui UI)
 # The overlay's logic runs in a JavaScript engine in the shell plugin tests, where Qt Qml is installed.
 find_package(Qt6 QUIET COMPONENTS Qml)
