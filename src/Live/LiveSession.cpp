@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QTimer>
 
 namespace {
@@ -65,8 +66,10 @@ QString LiveSession::start(const Target &target)
 {
     if (m_state == State::starting)
         return QStringLiteral("Live is already starting.");
-    if (target.url.isEmpty() && target.folder.isEmpty())
-        return QStringLiteral("Choose a page or a project folder.");
+    if (target.url.isEmpty() && target.folder.isEmpty() && target.command.trimmed().isEmpty())
+        return QStringLiteral("Choose a page, an app or a project folder.");
+    if (!target.command.trimmed().isEmpty() && QProcess::splitCommand(target.command).isEmpty())
+        return QStringLiteral("That app command can't be read.");
     if (!target.url.isEmpty() && !target.url.isValid())
         return QStringLiteral("That isn't a web address.");
     if (!target.url.isEmpty() && target.url.scheme() != QLatin1String("http") && target.url.scheme() != QLatin1String("https")
@@ -74,7 +77,7 @@ QString LiveSession::start(const Target &target)
         return QStringLiteral("Live opens http, https and file pages.");
     if (!target.folder.isEmpty() && !QFileInfo(target.folder).isDir())
         return QStringLiteral("%1 isn't a folder.").arg(target.folder);
-    if (Browser::executable().isEmpty())
+    if (target.command.trimmed().isEmpty() && Browser::executable().isEmpty())
         return QStringLiteral("Chromium isn't installed. Install it with: sudo pacman -S chromium");
     stop();
     m_edits.clear();
@@ -99,6 +102,37 @@ void LiveSession::run(Target target)
             return fail(failure);
     } else if (!target.url.isEmpty()) {
         folder = ProjectRegistry::folderFor(target.url).value_or(QString());
+    }
+    // An Electron app brings its own page; everything after is the same pipeline.
+    if (!target.command.trimmed().isEmpty()) {
+        m_project = folder.isEmpty() ? QString() : QFileInfo(folder).canonicalFilePath();
+        setState(State::starting, QStringLiteral("Starting the app…"));
+        QStringList words = QProcess::splitCommand(target.command);
+        Browser::Options options;
+        options.program = words.takeFirst();
+        options.programArguments = words;
+        options.profile = target.profile.isEmpty()
+                              ? QDir(QFileInfo(Browser::defaultProfile()).absolutePath()).filePath(QStringLiteral("apps/") + QFileInfo(options.program).fileName())
+                              : target.profile;
+        if (const QString failure = m_browser.start(options); !failure.isEmpty())
+            return cancelled() ? void() : fail(failure);
+        if (cancelled())
+            return;
+        QString error;
+        m_page = m_browser.attachPage({}, &error);
+        if (!m_page)
+            return fail(error);
+        if (const QString failure = prepare(); !failure.isEmpty())
+            return fail(failure);
+        // A reload runs the overlay in the app's page.
+        if (const QString failure = m_browser.navigate(*m_page, {}); !failure.isEmpty())
+            return cancelled() ? void() : fail(failure);
+        m_url = QUrl(evaluate(QStringLiteral("location.href")).toString());
+        if (m_project.isEmpty() && (m_url.scheme() == QLatin1String("http") || m_url.scheme() == QLatin1String("https")))
+            m_project = ProjectRegistry::folderFor(m_url).value_or(QString());
+        rescanTokens();
+        setState(State::running, isMockup() ? QStringLiteral("Mock-up: changes stay in the app.") : QString());
+        return;
     }
     QUrl url = target.url;
     // A registered site runs from its own dev server, at the same path; a page already on localhost is used as it is.
@@ -131,20 +165,24 @@ void LiveSession::run(Target target)
     m_page = m_browser.attachPage({}, &error);
     if (!m_page)
         return fail(error);
-    CdpConnection &cdp = m_browser.cdp();
-    cdp.callAndWait(QStringLiteral("Runtime.addBinding"), {{"name", "omastratorSend"}}, m_page->sessionId, &error);
-    cdp.callAndWait(QStringLiteral("Page.addScriptToEvaluateOnNewDocument"), {{"source", overlayScript()}}, m_page->sessionId, &error);
-    if (!error.isEmpty())
-        return fail(QStringLiteral("Couldn't prepare the page: %1").arg(error));
-    // An app window already shows the page; a tab loads it now.
-    if (target.app)
-        cdp.callAndWait(QStringLiteral("Page.reload"), {}, m_page->sessionId, &error);
+    if (const QString failure = prepare(); !failure.isEmpty())
+        return fail(failure);
     if (const QString failure = m_browser.navigate(*m_page, url); !failure.isEmpty())
         return cancelled() ? void() : fail(failure);
     if (cancelled())
         return;
     rescanTokens();
     setState(State::running, isMockup() ? QStringLiteral("Mock-up: changes stay in the browser.") : QString());
+}
+
+QString LiveSession::prepare()
+{
+    QString error;
+    CdpConnection &cdp = m_browser.cdp();
+    cdp.callAndWait(QStringLiteral("Runtime.addBinding"), {{"name", "omastratorSend"}}, m_page->sessionId, &error);
+    if (error.isEmpty())
+        cdp.callAndWait(QStringLiteral("Page.addScriptToEvaluateOnNewDocument"), {{"source", overlayScript()}}, m_page->sessionId, &error);
+    return error.isEmpty() ? QString() : QStringLiteral("Couldn't prepare the page: %1").arg(error);
 }
 
 void LiveSession::fail(const QString &message)

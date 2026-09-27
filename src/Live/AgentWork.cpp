@@ -133,3 +133,20 @@ QString AgentWork::prompt(const Brief &brief) const
                 .arg(brief.command, requestId);
     return text;
 }
+
+QString AgentWork::handoffPrompt(const QString &instruction, const QString &png, const QString &svg, const QString &command) const
+{
+    return QStringLiteral(
+               "This is an Omastrator hand-off (request %1). The user redesigned part of this app's interface in Omastrator and "
+               "wants the source changed to match.\n\n"
+               "Work only in this folder, a git worktree on its own branch (%2): %3\n"
+               "Don't commit, push or deploy. The user reviews your changes as a diff and keeps or discards them.\n\n"
+               "The mockup: %4 (look at it), and the same as SVG: %5\n"
+               "%6\n"
+               "Find where this interface is built (widgets, QML, GTK builder files, CSS, or web views), and change it to match the "
+               "mockup using the toolkit's own styling and the project's conventions. Keep the change as small as it can be.\n\n"
+               "When you're done, run:\n  %7 agent live '{\"action\": \"agentDone\", \"requestId\": \"%1\", \"summary\": \"<one line on what changed>\"}'\n"
+               "If you can't do it, run the same with a summary that says why, and change nothing.\n")
+        .arg(requestId, branch, worktree, png, svg,
+             instruction.isEmpty() ? QString() : QStringLiteral("The user says: %1\n").arg(instruction), command);
+}

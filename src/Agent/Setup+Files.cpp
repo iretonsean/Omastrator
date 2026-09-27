@@ -49,6 +49,7 @@ constexpr Key captureKeys[] = {{"F", "capture color fill", "Pick colour for fill
                                {"S", "capture color stroke", "Pick colour for stroke"},
                                {"W", "capture color swatch", "Pick colour as a swatch"},
                                {"R", "capture screenshot", "Screenshot region"},
+                               {"A", "capture window", "Capture the focused window"},
                                {"V", "capture paste-svg", "Paste SVG"},
                                {"T", "capture theme-swatches", "Theme swatches"}};
 struct Mode {
@@ -224,10 +225,12 @@ QByteArray menuBlock(const QString &command)
         {"omastrator.capture.stroke", "\U000F00C9", "Pick Colour for Stroke", "capture color stroke", nullptr},
         {"omastrator.capture.swatch", "\U000F00C9", "Pick Colour as a Swatch", "capture color swatch", nullptr},
         {"omastrator.capture.screenshot", "", "Screenshot Region", "capture screenshot", "Open it in Omastrator and trace it"},
+        {"omastrator.capture.window", "\U000F0379", "Capture Window", "capture window", "The focused app, to redesign in Omastrator"},
         {"omastrator.capture.paste", "", "Paste SVG", "capture paste-svg", "The clipboard's SVG as editable paths"},
         {"omastrator.capture.theme", "\U000F0E0C", "Theme Swatches", "capture theme-swatches", "The Omarchy theme's colours as a swatch group"},
         {"omastrator.generate", "\U000F16A4", "Generate…", "ai generate", "Describe it; your agent draws variations"},
         {"omastrator.roast", "\uF06D", "Roast My Design", "ai roast", nullptr},
+        {"omastrator.handoff", "\U000F06A9", "Hand to Agent…", "ai handoff", "The document as a mockup, for an app's source"},
         {"omastrator.connect", "\U000F06A9", "Connect an Agent", "show connect-agent", "Drive Omastrator from any agent"},
     };
     QByteArray block = menuBegin + ": `omastrator setup --remove` takes these out.\n";

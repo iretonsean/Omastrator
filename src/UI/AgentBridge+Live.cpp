@@ -1,9 +1,12 @@
+#include "Agent/AgentProtocol.h"
 #include "Agent/Setup.h"
+#include "Document/EditorSession.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
 #include "UI/LiveReviewPanel.h"
 #include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 
@@ -21,11 +24,13 @@ QString jsonArgument(const QJsonValue &value)
 }
 }
 
-QString AgentBridge::startLive(const QUrl &url, const QString &folder)
+QString AgentBridge::startLive(const QUrl &url, const QString &folder, const QString &command, bool app)
 {
     LiveSession::Target target;
     target.url = url;
     target.folder = folder;
+    target.command = command;
+    target.app = app;
     target.headless = qEnvironmentVariableIsSet("OMASTRATOR_LIVE_HEADLESS");
     return m_live.start(target);
 }
@@ -55,7 +60,7 @@ QString AgentBridge::liveWriteBack(bool confirm)
         return failure;
     }
     if (!plan.changes.empty())
-        m_reviews.push_back({requestId(), QStringLiteral("Live edits"), plan.done.join(QLatin1Char('\n')), plan.changes});
+        m_reviews.push_back({requestId(), QStringLiteral("Live edits"), plan.done.join(QLatin1Char('\n')), plan.changes, project});
     m_live.setEdits(plan.unresolved);
     m_liveMessage.clear();
     QString agentFailure;
@@ -129,6 +134,56 @@ QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &eleme
     return {};
 }
 
+QString AgentBridge::handToAgent(const QString &folder, const QString &instruction, bool confirm)
+{
+    EditorSession *front = session();
+    if (!front || !front->hasDocument())
+        return QStringLiteral("Open the mockup in Omastrator first: the agent works from the document in front.");
+    if (!QFileInfo(folder).isDir())
+        return QStringLiteral("Choose the folder with the app's source.");
+    QString error;
+    const QString agent = AgentLauncher::defaultAgent(&error);
+    if (agent.isEmpty())
+        return error;
+    const QString project = QFileInfo(folder).canonicalFilePath();
+    if (const QStringList dirty = WriteBack::dirtyFiles(project); !dirty.isEmpty() && !confirm) {
+        m_liveMessage = QStringLiteral("%1 has changes you haven't committed (%2). Commit or stash them, or go ahead and the agent's changes "
+                                       "merge into yours.")
+                            .arg(QDir(project).dirName(), dirty.mid(0, 4).join(QStringLiteral(", ")));
+        m_confirm = [this, project, instruction] { return handToAgent(project, instruction, true); };
+        emit liveReviewChanged();
+        showReviewPanel();
+        return m_liveMessage;
+    }
+    AgentWork work{project, {}, {}, requestId(), confirm};
+    if (const QString failure = work.prepare(); !failure.isEmpty())
+        return failure;
+    // The mockup as the agent sees it, and as vectors to measure from.
+    const QString stem = QDir::temp().filePath(QStringLiteral("omastrator-handoff-%1").arg(work.requestId));
+    try {
+        m_tools.call(QStringLiteral("render"), {{"path", stem + QStringLiteral(".png")}, {"scale", 2}});
+        m_tools.call(QStringLiteral("export"), {{"path", stem + QStringLiteral(".svg")}, {"format", "svg"}});
+    } catch (const AgentProtocol::Error &failure) {
+        work.cleanup();
+        return failure.message();
+    }
+    error = AgentLauncher::launchIn(work.worktree,
+                                    work.handoffPrompt(instruction, stem + QStringLiteral(".png"), stem + QStringLiteral(".svg"),
+                                                       Setup::shellQuote(QCoreApplication::applicationFilePath())),
+                                    m_server.isListening() ? m_server.path() : QString());
+    if (!error.isEmpty()) {
+        work.cleanup();
+        return error;
+    }
+    m_liveJobs[work.requestId] = work;
+    m_waiting = Waiting{work.requestId, Task::live, agent};
+    m_liveMessage.clear();
+    emit waitingChanged();
+    emit liveReviewChanged();
+    showReviewPanel();
+    return {};
+}
+
 QString AgentBridge::liveAgentDone(const QString &id, const QString &summary, bool confirm)
 {
     auto job = m_liveJobs.find(id);
@@ -156,7 +211,7 @@ QString AgentBridge::liveAgentDone(const QString &id, const QString &summary, bo
         WriteBack::restore(changes);
         m_liveMessage = failure;
     } else {
-        m_reviews.push_back({id, QStringLiteral("Agent"), summary.isEmpty() ? QStringLiteral("The agent's change") : summary, changes});
+        m_reviews.push_back({id, QStringLiteral("Agent"), summary.isEmpty() ? QStringLiteral("The agent's change") : summary, changes, work.project});
         m_liveMessage.clear();
         m_resultsUnseen = true;
     }
@@ -175,10 +230,11 @@ QString AgentBridge::keepReview(const QString &id)
             ++it;
             continue;
         }
+        auto &[files, lines] = m_kept[it->folder];
         for (const auto &change : it->changes)
-            if (!m_keptFiles.contains(change.path))
-                m_keptFiles << change.path;
-        m_keptLines << it->summary.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+            if (!files.contains(change.path))
+                files << change.path;
+        lines << it->summary.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
         it = m_reviews.erase(it);
         found = true;
     }
@@ -209,24 +265,37 @@ QString AgentBridge::discardReview(const QString &id)
     return {};
 }
 
+int AgentBridge::unsavedFiles() const
+{
+    int count = 0;
+    for (const auto &[folder, kept] : m_kept)
+        count += int(kept.first.size());
+    return count;
+}
+
 QString AgentBridge::liveSave()
 {
     if (!m_reviews.empty())
         return QStringLiteral("Keep or discard the waiting changes first.");
-    if (m_keptFiles.isEmpty())
+    if (m_kept.empty())
         return QStringLiteral("Nothing kept to save.");
-    if (const QString failure = WriteBack::commit(m_live.project(), m_keptFiles, WriteBack::commitMessage(m_keptLines)); !failure.isEmpty())
-        return failure;
-    m_keptFiles.clear();
-    m_keptLines.clear();
-    m_liveMessage = QStringLiteral("Saved: committed to %1. Publishing is separate.").arg(QDir(m_live.project()).dirName());
+    QStringList saved;
+    for (auto it = m_kept.begin(); it != m_kept.end();) {
+        if (const QString failure = WriteBack::commit(it->first, it->second.first, WriteBack::commitMessage(it->second.second)); !failure.isEmpty())
+            return failure;
+        saved << QDir(it->first).dirName();
+        m_publishFolder = it->first;
+        it = m_kept.erase(it);
+    }
+    m_liveMessage = QStringLiteral("Saved: committed to %1. Publishing is separate.").arg(saved.join(QStringLiteral(", ")));
     emit liveReviewChanged();
     return {};
 }
 
 std::vector<WriteBack::PublishOption> AgentBridge::publishOptions() const
 {
-    return m_live.project().isEmpty() ? std::vector<WriteBack::PublishOption>{} : WriteBack::publishOptions(m_live.project());
+    const QString folder = m_live.project().isEmpty() ? m_publishFolder : m_live.project();
+    return folder.isEmpty() ? std::vector<WriteBack::PublishOption>{} : WriteBack::publishOptions(folder);
 }
 
 QString AgentBridge::livePublish(const QString &option, bool confirm, QString *output)
@@ -238,10 +307,10 @@ QString AgentBridge::livePublish(const QString &option, bool confirm, QString *o
                                : QStringLiteral("There's no publish option “%1”.").arg(option);
     if (!confirm)
         return QStringLiteral("%1 Confirm to go ahead.").arg(chosen->description);
-    if (!m_keptFiles.isEmpty() || !m_reviews.empty())
+    if (!m_kept.empty() || !m_reviews.empty())
         return QStringLiteral("Save or discard the Live changes first: publishing sends only what is committed.");
     QString error;
-    const QString printed = WriteBack::publish(m_live.project(), *chosen, &error);
+    const QString printed = WriteBack::publish(m_live.project().isEmpty() ? m_publishFolder : m_live.project(), *chosen, &error);
     if (output)
         *output = printed;
     m_liveMessage = error.isEmpty() ? QStringLiteral("Published: %1").arg(chosen->label) : error;
@@ -269,14 +338,25 @@ QString AgentBridge::live(const QString &action, const QJsonObject &params, QJso
     if (action == QLatin1String("start")) {
         const QUrl url = QUrl::fromUserInput(params["url"].toString());
         const QString folder = params["folder"].toString();
-        if (params["url"].toString().isEmpty() && folder.isEmpty()) {
+        const QString command = params["command"].toString();
+        if (params["url"].toString().isEmpty() && folder.isEmpty() && command.isEmpty()) {
             m_window.raise();
             m_window.activateWindow();
             QMetaObject::invokeMethod(this, [this] { AgentSheets::live(*this, &m_window); }, Qt::QueuedConnection);
             result["sheet"] = true;
             return {};
         }
-        return startLive(params["url"].toString().isEmpty() ? QUrl() : url, folder);
+        return startLive(params["url"].toString().isEmpty() ? QUrl() : url, folder, command, params["app"].toBool());
+    }
+    if (action == QLatin1String("handoff")) {
+        if (params["folder"].toString().isEmpty()) {
+            m_window.raise();
+            m_window.activateWindow();
+            QMetaObject::invokeMethod(this, [this] { AgentSheets::handoff(*this, &m_window); }, Qt::QueuedConnection);
+            result["sheet"] = true;
+            return {};
+        }
+        return handToAgent(params["folder"].toString(), params["prompt"].toString(), confirm);
     }
     if (action == QLatin1String("stop")) {
         m_live.stop();
@@ -291,7 +371,7 @@ QString AgentBridge::live(const QString &action, const QJsonObject &params, QJso
         result["selectionList"] = m_live.selection();
         QJsonArray reviews;
         for (const auto &review : m_reviews)
-            reviews.append(QJsonObject{{"id", review.id}, {"title", review.title}, {"summary", review.summary}, {"diff", review.diff(m_live.project())}});
+            reviews.append(QJsonObject{{"id", review.id}, {"title", review.title}, {"summary", review.summary}, {"folder", review.folder}, {"diff", review.diff()}});
         result["reviews"] = reviews;
         result["unsaved"] = unsavedFiles();
         result["liveMessage"] = m_liveMessage;

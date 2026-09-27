@@ -540,3 +540,55 @@ Choices the spec left open, made while building it, in build order.
   the logo rounder." (tier 2), synthesised with Piper's LJ Speech voice
   (public-domain data) and resampled to 16 kHz mono. The test transcribes them
   with the installed voxtype and skips, saying why, when it is absent.
+
+### Phase 8: native apps
+
+- **Omarchy web apps** are Chromium `--app=` windows, so Live opens a page
+  the same way (`island live start --url … --app`, or the Live sheet's "as an
+  app window"): Omastrator's own profile, the same overlay and tokens.
+- **Electron apps** are relaunched from their command line
+  (`--command`, or the sheet's App field) with
+  `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1` and
+  `--user-data-dir` set to a dedicated profile under
+  `$XDG_DATA_HOME/omastrator/apps/<name>`. The separate profile means a
+  second instance beside the user's own, with none of their signed-in state.
+  The socket is read from the app's "DevTools listening on" line (or
+  `DevToolsActivePort`). Omastrator never closes the user's running copy.
+  A program that isn't Chromium-based is reported plainly. The page is
+  reloaded once so the overlay runs; its URL decides write-back as for any
+  page, and a project folder can be given explicitly (an Electron app's
+  pages are usually `file://`, which has no origin to register).
+- **Tauri isn't possible here.** On Linux, Tauri draws with WebKitGTK, which
+  has no DevTools Protocol (its remote inspector speaks WebKit's own
+  protocol, and only with `WEBKIT_INSPECTOR_SERVER` set before launch). Tauri
+  apps get the GTK path below.
+- **GTK and Qt apps: capture and hand off.**
+  - *Capture to Omastrator* (`island capture window`, the Capture row, Capture
+    mode's A key) screenshots the focused window using the geometry
+    `hyprctl activewindow -j` gives, then opens and traces it like a region,
+    with Vectorize with AI offered next.
+  - *Hand to Agent* (File ▸ Hand to Agent…, the AI row, the menu) sends the
+    document in front as a PNG and an SVG, with the app's source folder, to
+    the default agent. It works as Live's agent path does: a git worktree on
+    its own branch, `agentDone`, then a diff to keep or discard, and Save
+    commits in that project. Reviews now carry their project, so Save commits
+    each project's kept files there.
+- **What a real GTK or Qt write-back would need** (not built):
+  - GTK: GTK Inspector (`GTK_DEBUG=interactive`, GTK 3 and 4) can pick
+    widgets and edit CSS live, but it has no external API. An integration
+    would need a GTK module loaded with `GTK_MODULES` (GTK 3) or an
+    `LD_PRELOAD` shim (GTK 4 dropped modules) that exposes the widget tree
+    and applies CSS providers over a socket, and a map from widgets back to
+    `.ui` or Blueprint files and code. GTK has no source locations for
+    widgets, so the mapping would need the builder's object IDs.
+  - Qt: GammaRay (KDAB, GPL) injects into a running Qt app and exposes
+    QObjects, properties, QML and styles through its own client protocol.
+    Omastrator would talk to GammaRay's probe (or ship a small probe of its
+    own), select an item under the pointer, apply property changes live, and
+    map QML items to their `.qml` file and line, which QML's debugging
+    metadata provides. Widgets built in C++ have no such locations.
+  - Either way, write-back would reuse Phase 6: deterministic when a location
+    is exact, the agent otherwise, and every change reviewed as a diff.
+- **Children die with the app.** Live's browser (and an Electron app it
+  relaunched) and dev servers get `PR_SET_PDEATHSIG`, so a crash of
+  Omastrator can't leave them running.

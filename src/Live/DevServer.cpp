@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <csignal>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 namespace {
@@ -88,7 +89,10 @@ DevServer::DevServer(QObject *parent) : QObject(parent)
     });
     connect(&m_process, &QProcess::finished, this, &DevServer::exited);
     // Its own process group, so stopping it stops what the script started too.
-    m_process.setChildProcessModifier([] { ::setsid(); });
+    m_process.setChildProcessModifier([] {
+        ::setsid();
+        ::prctl(PR_SET_PDEATHSIG, SIGTERM);
+    });
 }
 
 DevServer::~DevServer()

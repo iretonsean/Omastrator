@@ -185,7 +185,8 @@ QString helpText()
         "     [--fit] [--mode logo|sketch]\n"
         "                     Start an AI flow. Without a prompt, Generate and Edit\n"
         "                     open their sheet in Omastrator.\n"
-        "  live start [--url URL] [--folder PATH] | stop | select on|off | status\n"
+        "  live start [--url URL [--app]] [--command CMD] [--folder PATH] | stop\n"
+        "       | select on|off | status | handoff [FOLDER] [NOTES]\n"
         "  live writeback [--confirm] | ask TEXT [--confirm] | review | keep [ID]\n"
         "       | discard [ID] | save | publish [OPTION] [--confirm]\n"
         "                     Live mode: edit a page in Omastrator's Chromium. start\n"
@@ -198,6 +199,7 @@ QString helpText()
         "  capture color [fill|stroke|swatch]\n"
         "                     Pick a colour anywhere on screen (hyprpicker).\n"
         "  capture screenshot Choose a region (slurp, grim), open it and trace it.\n"
+        "  capture window     The focused window, opened and traced: Capture to Omastrator.\n"
         "  capture paste-svg  Paste the clipboard's SVG as editable paths.\n"
         "  capture theme-swatches\n"
         "                     Load the Omarchy theme's colours as a swatch group.\n"
@@ -283,8 +285,8 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
     }
     if (verb == QLatin1String("ai")) {
         const QString flow = args.value(1);
-        if (!QStringList{"generate", "edit", "roast", "vectorize", "cancel"}.contains(flow))
-            return failed(QStringLiteral("Choose an AI flow: generate, edit, roast, vectorize or cancel."));
+        if (!QStringList{"generate", "edit", "roast", "vectorize", "cancel", "handoff"}.contains(flow))
+            return failed(QStringLiteral("Choose an AI flow: generate, edit, roast, vectorize, handoff or cancel."));
         QJsonObject params{{"flow", flow}};
         const QStringList options = args.mid(2);
         for (qsizetype at = 0; at < options.size(); ++at) {
@@ -327,14 +329,26 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         if (action == QLatin1String("start")) {
             const QStringList options = args.mid(2);
             for (qsizetype at = 0; at + 1 < options.size(); at += 2) {
-                if (options[at] != QLatin1String("--url") && options[at] != QLatin1String("--folder"))
+                if (options[at] == QLatin1String("--app")) {
+                    // A bare flag: the page opens as an app window.
+                    params["app"] = true;
+                    --at;
+                    continue;
+                }
+                if (options[at] != QLatin1String("--url") && options[at] != QLatin1String("--folder") && options[at] != QLatin1String("--command"))
                     return failed(QStringLiteral("Unknown option %1.").arg(options[at]));
                 params[options[at].mid(2)] = options[at] == QLatin1String("--folder") ? QFileInfo(options[at + 1]).absoluteFilePath() : options[at + 1];
             }
-            if (options.size() % 2)
+            if ((options.size() - options.count(QStringLiteral("--app"))) % 2)
                 return failed(QStringLiteral("%1 needs a value.").arg(options.last()));
         } else if (action == QLatin1String("select")) {
             params["on"] = args.value(2) != QLatin1String("off");
+        } else if (action == QLatin1String("handoff")) {
+            QStringList rest = args.mid(2);
+            params["confirm"] = rest.removeAll(QStringLiteral("--confirm")) > 0;
+            if (!rest.isEmpty())
+                params["folder"] = QFileInfo(rest.takeFirst()).absoluteFilePath();
+            params["prompt"] = rest.join(QLatin1Char(' '));
         } else if (action == QLatin1String("writeback") || action == QLatin1String("ask") || action == QLatin1String("keep")
                    || action == QLatin1String("discard") || action == QLatin1String("publish")) {
             QStringList rest = args.mid(2);

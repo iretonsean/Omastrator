@@ -3,12 +3,21 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
+#include <csignal>
+#include <sys/prctl.h>
 
 Browser::Browser(QObject *parent) : QObject(parent)
 {
+    // Omastrator's browser goes when Omastrator does, even if it crashes.
+    m_process.setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
+    connect(&m_process, &QProcess::readyReadStandardError, this, [this] {
+        if (m_draining)
+            m_process.readAllStandardError();
+    });
     connect(&m_process, &QProcess::finished, this, [this] {
         m_cdp.close();
         emit exited();
@@ -49,7 +58,8 @@ bool Browser::isRunning() const
 QString Browser::start(const Options &options)
 {
     stop();
-    const QString program = executable();
+    const bool electron = !options.program.isEmpty();
+    const QString program = electron ? options.program : executable();
     if (program.isEmpty())
         return QStringLiteral("Chromium isn't installed. Install it with: sudo pacman -S chromium");
     m_profile = options.profile.isEmpty() ? defaultProfile() : options.profile;
@@ -58,35 +68,50 @@ QString Browser::start(const Options &options)
     QFile::remove(portFile);
     // Port 0 is a random free port, and DevTools answers on localhost only.
     QStringList arguments{QStringLiteral("--user-data-dir=") + m_profile, QStringLiteral("--remote-debugging-port=0"),
-                          QStringLiteral("--remote-debugging-address=127.0.0.1"), QStringLiteral("--no-first-run"),
-                          QStringLiteral("--no-default-browser-check"), QStringLiteral("--disable-sync")};
-    if (options.headless)
-        arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800");
-    arguments << options.extraArguments;
-    arguments << (options.app.isValid() ? QStringLiteral("--app=") + options.app.toString() : QStringLiteral("about:blank"));
-    m_process.setProcessChannelMode(QProcess::MergedChannels);
+                          QStringLiteral("--remote-debugging-address=127.0.0.1")};
+    if (electron) {
+        arguments = options.programArguments + arguments;
+    } else {
+        arguments << QStringLiteral("--no-first-run") << QStringLiteral("--no-default-browser-check") << QStringLiteral("--disable-sync");
+        if (options.headless)
+            arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800");
+        arguments << options.extraArguments;
+        arguments << (options.app.isValid() ? QStringLiteral("--app=") + options.app.toString() : QStringLiteral("about:blank"));
+    }
+    m_draining = false;
+    m_process.setProcessChannelMode(QProcess::SeparateChannels);
     m_process.setStandardOutputFile(QProcess::nullDevice());
     m_process.start(program, arguments);
     if (!m_process.waitForStarted(10'000))
         return QStringLiteral("Could not start %1: %2").arg(program, m_process.errorString());
-    // Chromium writes the port, then the browser's path, once DevTools listens.
-    QList<QByteArray> lines;
-    for (int waited = 0; waited < 20'000; waited += 100) {
+    // The socket is announced on stderr, and written to DevToolsActivePort; whichever comes first.
+    static const QRegularExpression announcement(QStringLiteral("DevTools listening on (ws://\\S+)"));
+    QByteArray printed;
+    QUrl socket;
+    for (int waited = 0; waited < 20'000 && socket.isEmpty(); waited += 100) {
+        printed += m_process.readAllStandardError();
+        if (const auto match = announcement.match(QString::fromUtf8(printed)); match.hasMatch())
+            socket = QUrl(match.captured(1));
         QFile file(portFile);
-        if (file.open(QIODevice::ReadOnly)) {
-            lines = file.readAll().split('\n');
+        if (socket.isEmpty() && file.open(QIODevice::ReadOnly)) {
+            const QList<QByteArray> lines = file.readAll().split('\n');
             if (lines.size() >= 2 && !lines[0].trimmed().isEmpty() && !lines[1].trimmed().isEmpty())
-                break;
+                socket = QUrl(QStringLiteral("ws://127.0.0.1:%1%2").arg(QString::fromLatin1(lines[0].trimmed()), QString::fromLatin1(lines[1].trimmed())));
         }
+        if (!socket.isEmpty())
+            break;
         if (m_process.state() != QProcess::Running)
-            return QStringLiteral("Chromium quit as it started. Another Chromium may be using Omastrator's profile at %1.").arg(m_profile);
+            return electron ? QStringLiteral("%1 quit as it started, without opening DevTools. It may not be an Electron app.").arg(program)
+                            : QStringLiteral("Chromium quit as it started. Another Chromium may be using Omastrator's profile at %1.").arg(m_profile);
         QEventLoop wait;
         QTimer::singleShot(100, &wait, &QEventLoop::quit);
         wait.exec();
     }
-    if (lines.size() < 2 || lines[1].trimmed().isEmpty())
-        return QStringLiteral("Chromium did not open DevTools in time.");
-    const QUrl socket(QStringLiteral("ws://127.0.0.1:%1%2").arg(QString::fromLatin1(lines[0].trimmed()), QString::fromLatin1(lines[1].trimmed())));
+    // Nobody reads it from here on; unread output mustn't pile up.
+    m_draining = true;
+    if (socket.isEmpty())
+        return electron ? QStringLiteral("%1 didn't open DevTools. Only Chromium-based apps (Electron, web apps) can be edited live.").arg(program)
+                        : QStringLiteral("Chromium did not open DevTools in time.");
     QString error;
     if (!m_cdp.openAndWait(socket, &error))
         return QStringLiteral("Could not connect to Chromium's DevTools: %1").arg(error);
@@ -163,7 +188,8 @@ QString Browser::navigate(const Page &page, const QUrl &url, int timeoutMs)
         }
     });
     QString error;
-    const QJsonObject result = m_cdp.callAndWait(QStringLiteral("Page.navigate"), {{"url", url.toString()}}, page.sessionId, &error);
+    const QJsonObject result = url.isEmpty() ? m_cdp.callAndWait(QStringLiteral("Page.reload"), {}, page.sessionId, &error)
+                                             : m_cdp.callAndWait(QStringLiteral("Page.navigate"), {{"url", url.toString()}}, page.sessionId, &error);
     if (!error.isEmpty() || !result["errorText"].toString().isEmpty()) {
         disconnect(watch);
         return QStringLiteral("Couldn't open %1: %2").arg(url.toString(), error.isEmpty() ? result["errorText"].toString() : error);

@@ -98,11 +98,14 @@ public:
 
     // Live mode: a page or project in Omastrator's Chromium. $OMASTRATOR_LIVE_HEADLESS runs it headless, for tests.
     LiveSession &liveSession() { return m_live; }
-    QString startLive(const QUrl &url, const QString &folder);
+    // `command` is an Electron app's command line; `app` opens `url` as an app window.
+    QString startLive(const QUrl &url, const QString &folder, const QString &command = QString(), bool app = false);
     // Writes the live edits back: the certain ones directly, the rest through the agent. `confirm` accepts uncommitted changes.
     QString liveWriteBack(bool confirm);
     // "Ask AI…" in the page: the agent changes the code in a worktree of its own.
     QString liveAsk(const QString &instruction, const QJsonArray &elements, bool confirm);
+    // Hand to agent: the front document as a mockup, for an app whose code is in `folder`.
+    QString handToAgent(const QString &folder, const QString &instruction, bool confirm);
     // The agent says it's done: its changes become a review.
     QString liveAgentDone(const QString &requestId, const QString &summary, bool confirm);
     const std::vector<WriteBack::Review> &liveReviews() const { return m_reviews; }
@@ -111,7 +114,7 @@ public:
     QString discardReview(const QString &id);
     // Commits what was kept since the last save.
     QString liveSave();
-    int unsavedFiles() const { return int(m_keptFiles.size()); }
+    int unsavedFiles() const;
     std::vector<WriteBack::PublishOption> publishOptions() const;
     // Runs one publish option; nothing runs without `confirm`. `output` gets what it printed.
     QString livePublish(const QString &option, bool confirm, QString *output);
@@ -167,8 +170,10 @@ private:
     Swatches m_swatches;
     LiveSession m_live;
     std::vector<WriteBack::Review> m_reviews;
-    QStringList m_keptFiles;
-    QStringList m_keptLines;
+    // Kept since the last save, per project folder: the files and the lines for the commit message.
+    std::map<QString, std::pair<QStringList, QStringList>> m_kept;
+    // Where Publish acts when Live isn't running: the last project saved.
+    QString m_publishFolder;
     std::map<QString, AgentWork> m_liveJobs;
     QString m_liveMessage;
     std::function<QString()> m_confirm;

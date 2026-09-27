@@ -7,16 +7,18 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
 
 namespace {
-const QHash<QString, QString> overrides{{"hyprpicker", "OMASTRATOR_HYPRPICKER"},
+const QHash<QString, QString> overrides{{"hyprctl", "OMASTRATOR_HYPRCTL"},
+                                        {"hyprpicker", "OMASTRATOR_HYPRPICKER"},
                                         {"slurp", "OMASTRATOR_SLURP"},
                                         {"grim", "OMASTRATOR_GRIM"},
                                         {"wl-paste", "OMASTRATOR_WL_PASTE"}};
-const QHash<QString, QString> packages{{"hyprpicker", "hyprpicker"}, {"slurp", "slurp"}, {"grim", "grim"}, {"wl-paste", "wl-clipboard"}};
+const QHash<QString, QString> packages{{"hyprctl", "hyprland"}, {"hyprpicker", "hyprpicker"}, {"slurp", "slurp"}, {"grim", "grim"}, {"wl-paste", "wl-clipboard"}};
 
 QString programFor(const QString &name)
 {
@@ -194,6 +196,30 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
                 return done(QStringLiteral("Screenshot opened. Image Trace found no shapes in it."));
             return done(QStringLiteral("Traced %1 paths. Vectorize with AI is next.").arg(result["paths"].toInt()));
         }
+        if (action == QLatin1String("window")) {
+            // The focused window, as Hyprland places it: a GTK or Qt app to redesign from.
+            const Run active = run(QStringLiteral("hyprctl"), {QStringLiteral("activewindow"), QStringLiteral("-j")}, 5000);
+            if (!active.error.isEmpty())
+                return failed(active.error);
+            const QJsonObject window = QJsonDocument::fromJson(active.out).object();
+            const QJsonArray at = window["at"].toArray(), size = window["size"].toArray();
+            if (at.size() != 2 || size.size() != 2 || size[0].toInt() <= 0)
+                return failed(QStringLiteral("No window has focus to capture."));
+            const QString geometry = QStringLiteral("%1,%2 %3x%4").arg(at[0].toInt()).arg(at[1].toInt()).arg(size[0].toInt()).arg(size[1].toInt());
+            const QString folder = capturesDirectory();
+            QDir().mkpath(folder);
+            const QString path = QDir(folder).filePath(
+                QStringLiteral("window-%1.png").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss-zzz"))));
+            const Run shot = run(QStringLiteral("grim"), {QStringLiteral("-g"), geometry, path}, 30'000);
+            if (!shot.error.isEmpty())
+                return failed(shot.error);
+            if (shot.exitCode != 0 || !QFileInfo::exists(path))
+                return failed(QStringLiteral("grim could not capture the window."));
+            const QJsonObject result = callApp(QStringLiteral("open_capture"), {{"path", path}});
+            const QString name = window["title"].toString().isEmpty() ? window["class"].toString() : window["title"].toString();
+            return done(result["traced"].toBool() ? QStringLiteral("Captured %1 and traced it. Vectorize with AI is next.").arg(name.left(40))
+                                                  : QStringLiteral("Captured %1.").arg(name.left(40)));
+        }
         if (action == QLatin1String("paste-svg")) {
             QString error;
             const QString svg = clipboardSvg(&error);
@@ -219,7 +245,7 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
     } catch (const AgentProtocol::Error &failure) {
         return failed(failure.message());
     }
-    err << "Usage: omastrator island capture <color [fill|stroke|swatch] | screenshot | paste-svg | theme-swatches>\n";
+    err << "Usage: omastrator island capture <color [fill|stroke|swatch] | screenshot | window | paste-svg | theme-swatches>\n";
     return 1;
 }
 }

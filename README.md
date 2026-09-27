@@ -77,6 +77,11 @@ Omastrator also works outside its window, through Omarchy's own shell
   custom property), the rest through your agent on a branch of its own. Each
   shows as a diff to keep or discard; **Save** commits, and **Publish**
   (a git push, or a Vercel, Netlify or Cloudflare preview) is its own step.
+- **Apps**: Live also opens Omarchy web apps as app windows, and Electron apps
+  relaunched with their own profile. For GTK and Qt apps, **Capture Window**
+  brings the focused app into Omastrator to redesign, and **File ▸ Hand to
+  Agent…** gives your agent the mockup and the app's source folder; its change
+  comes back as a diff to keep or discard.
 - **Dictate**: hold the island's microphone (or Super+Alt+V) and speak. "Select
   the pen tool", "align left", "fill hash F F six six zero zero" run at once;
   anything else goes to your agent as an instruction. The island shows what it

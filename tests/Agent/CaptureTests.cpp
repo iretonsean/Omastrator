@@ -202,6 +202,25 @@ private slots:
         QCOMPARE(out, QStringLiteral("No region chosen."));
     }
 
+    void captureWindowTakesTheFocusedApp()
+    {
+        // hyprctl stands in: the focused window is $FAKE_WINDOW.
+        script(fake(QStringLiteral("hyprctl")), "[ \"$1\" = activewindow ] && printf '%s' \"$FAKE_WINDOW\"\n");
+        qputenv("OMASTRATOR_HYPRCTL", fake(QStringLiteral("hyprctl")).toUtf8());
+        qputenv("FAKE_WINDOW", R"({"at": [10, 20], "size": [40, 30], "class": "org.gnome.Settings", "title": "Settings"})");
+        QString out, err;
+        QCOMPARE(capture({QStringLiteral("window")}, &out, &err), 0);
+        QVERIFY2(out.startsWith(QLatin1String("Captured Settings")), qPrintable(out + err));
+        QFile args(m_directory.filePath(QStringLiteral("grim-args")));
+        QVERIFY(args.open(QIODevice::ReadOnly));
+        QCOMPARE(args.readAll(), QByteArray("10,20 40x30"));
+        onBackend([&] { QCOMPARE(m_backend->host.editor.document()->size, QSizeF(40, 30)); });
+        qputenv("FAKE_WINDOW", "{}");
+        QCOMPARE(capture({QStringLiteral("window")}, &out, &err), 1);
+        QVERIFY(err.contains(QLatin1String("No window has focus")));
+        qunsetenv("OMASTRATOR_HYPRCTL");
+    }
+
     void pasteSvgMakesEditablePaths()
     {
         const QString clip = m_directory.filePath(QStringLiteral("clip"));

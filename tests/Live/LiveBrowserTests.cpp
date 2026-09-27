@@ -199,6 +199,54 @@ private slots:
         live.stop();
         QVERIFY(!DevServer::answers(live.url(), 500));
     }
+
+    void webAppsAndElectronAppsGoThroughLive()
+    {
+        StaticServer server;
+        QVERIFY(server.serve(m_fixtures + QStringLiteral("/plain")).isEmpty());
+
+        // An Omarchy web app: the page in its own app window.
+        LiveSession webApp;
+        LiveSession::Target app = target(QString(), server.url());
+        app.app = true;
+        QVERIFY(webApp.start(app).isEmpty());
+        QVERIFY2(waitRunning(webApp), qPrintable(webApp.message()));
+        click(webApp, QStringLiteral("#title"));
+        QTRY_COMPARE(webApp.selection().size(), 1);
+        QVERIFY(webApp.edit(QStringLiteral("#title"), QStringLiteral("color"), QStringLiteral("#e3204a")).isEmpty());
+        QCOMPARE(webApp.edits().front().token, QStringLiteral("--brand"));
+        webApp.stop();
+
+        // An Electron-style app: a Chromium program run with its own arguments, relaunched with
+        // debugging in a dedicated profile, found through what it prints.
+        const QString project = m_directory.filePath(QStringLiteral("electron-app"));
+        copyFolder(m_fixtures + QStringLiteral("/plain"), project);
+        LiveSession electron;
+        LiveSession::Target command;
+        command.command = QStringLiteral("\"%1\" --headless=new --no-first-run --app=%2").arg(Browser::executable(), server.url().toString());
+        command.folder = project;
+        command.profile = m_directory.filePath(QStringLiteral("electron-profile"));
+        QVERIFY(electron.start(command).isEmpty());
+        QVERIFY2(waitRunning(electron), qPrintable(electron.message()));
+        QCOMPARE(electron.url(), server.url());
+        QCOMPARE(electron.project(), QFileInfo(project).canonicalFilePath());
+        QVERIFY(QFileInfo::exists(m_directory.filePath(QStringLiteral("electron-profile"))));
+        click(electron, QStringLiteral(".lead"));
+        QTRY_COMPARE(electron.selection().size(), 1);
+        QVERIFY(electron.edit(QStringLiteral(".lead"), QStringLiteral("padding-top"), QStringLiteral("23px")).isEmpty());
+        QCOMPARE(computed(electron, QStringLiteral(".lead"), QStringLiteral("padding-top")), QStringLiteral("24px"));
+        electron.stop();
+        QVERIFY(!electron.browser().isRunning());
+
+        // Something that isn't Chromium-based is said plainly.
+        LiveSession notElectron;
+        LiveSession::Target plain;
+        plain.command = QStringLiteral("/bin/true");
+        plain.profile = m_directory.filePath(QStringLiteral("true-profile"));
+        QVERIFY(notElectron.start(plain).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(notElectron.state() == LiveSession::State::failed, 20'000);
+        QVERIFY(notElectron.message().contains(QLatin1String("Electron")));
+    }
 };
 
 QTEST_GUILESS_MAIN(LiveBrowserTests)

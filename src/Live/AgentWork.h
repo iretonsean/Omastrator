@@ -32,4 +32,6 @@ struct AgentWork {
         QString command;
     };
     QString prompt(const Brief &brief) const;
+    // Hand to agent: a redesign mockup (PNG and SVG) for an app whose source is this project.
+    QString handoffPrompt(const QString &instruction, const QString &png, const QString &svg, const QString &command) const;
 };

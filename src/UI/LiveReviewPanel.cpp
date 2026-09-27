@@ -96,7 +96,7 @@ void LiveReviewPanel::rebuild()
         auto *summary = new QLabel(review.summary, self);
         summary->setWordWrap(true);
         m_column->addWidget(summary);
-        auto *diff = new QPlainTextEdit(review.diff(live.project()), self);
+        auto *diff = new QPlainTextEdit(review.diff(), self);
         diff->setObjectName(QStringLiteral("liveReviewDiff"));
         diff->setReadOnly(true);
         diff->setLineWrapMode(QPlainTextEdit::NoWrap);
@@ -126,7 +126,7 @@ void LiveReviewPanel::rebuild()
     QPushButton *save = button(QStringLiteral("Save"), QStringLiteral("liveSave"), self);
     save->setEnabled(m_bridge.unsavedFiles() > 0 && m_bridge.liveReviews().empty());
     QPushButton *publish = button(QStringLiteral("Publish…"), QStringLiteral("livePublish"), self);
-    publish->setEnabled(!live.project().isEmpty());
+    publish->setEnabled(!m_bridge.publishOptions().empty());
     actions->addWidget(writeBack);
     actions->addStretch();
     actions->addWidget(save);

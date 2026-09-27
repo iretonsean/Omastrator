@@ -33,6 +33,7 @@ QString capturesDirectory();
 // SVG text from wl-paste's types, or empty with `error` set.
 QString clipboardSvg(QString *error);
 
-// `omastrator island capture <color [fill|stroke|swatch] | screenshot | paste-svg | theme-swatches>`.
+// `omastrator island capture <color [fill|stroke|swatch] | screenshot | window | paste-svg | theme-swatches>`.
+// `window` captures the focused window through hyprctl ($OMASTRATOR_HYPRCTL in tests).
 int runCli(const QStringList &args, QTextStream &out, QTextStream &err);
 }

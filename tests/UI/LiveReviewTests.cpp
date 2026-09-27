@@ -2,6 +2,7 @@
 #include "Live/StaticServer.h"
 #include "Live/WriteBack.h"
 #include "UI/AgentSheets.h"
+#include "Document/PathOperations.h"
 #include "UI/ProjectWorkspaceView.h"
 #include <QDirIterator>
 #include <QLabel>
@@ -185,6 +186,34 @@ private slots:
         QVERIFY(bridge.liveWriteBack(false).contains(QLatin1String("mock-up")));
         QVERIFY(bridge.liveAsk(QStringLiteral("rounder"), {}, false).contains(QLatin1String("mock-up")));
         bridge.liveSession().stop();
+    }
+
+    void handToAgentChangesTheAppsSourceForReview()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.handToAgent(m_repo, QString(), false).contains(QLatin1String("Open the mockup")));
+        workspace.createDocument(QSizeF(120, 80));
+        workspace.current().session.addPath(Shapes::rectangle({10, 10, 50, 30}), QStringLiteral("Button"));
+        QVERIFY(bridge.handToAgent(m_directory.filePath(QStringLiteral("missing")), QString(), false).contains(QLatin1String("app's source")));
+        // Clean the checkout from the test before.
+        git(m_repo, {"checkout", "--", "."});
+        QVERIFY(bridge.handToAgent(m_repo, QStringLiteral("The settings screen"), false).isEmpty());
+        const QString prompt = QString::fromUtf8(read(m_directory.filePath(QStringLiteral("prompt"))));
+        QVERIFY(prompt.contains(QLatin1String("hand-off")) && prompt.contains(QLatin1String("The settings screen")));
+        const QString png = prompt.section(QLatin1String("The mockup: "), 1).section(QLatin1Char(' '), 0, 0);
+        QVERIFY2(!QImage(png).isNull(), qPrintable(png));
+        QVERIFY(QFileInfo::exists(png.chopped(4) + QStringLiteral(".svg")));
+        const QString id = prompt.section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0);
+        QVERIFY(bridge.liveAgentDone(id, QStringLiteral("Restyled the button"), false).isEmpty());
+        QCOMPARE(bridge.liveReviews().back().folder, QFileInfo(m_repo).canonicalFilePath());
+        QVERIFY(bridge.liveReviews().back().diff().contains(QLatin1String("+#title { color: var(--brand); }")));
+        QVERIFY(bridge.keepReview(QString()).isEmpty());
+        QVERIFY(bridge.liveSave().isEmpty());
+        QCOMPARE(git(m_repo, {"log", "-1", "--format=%s"}).trimmed(), QStringLiteral("Restyled the button"));
+        // Live isn't running, so Publish acts on the project just saved.
+        QCOMPARE(bridge.publishOptions().size(), size_t(1));
     }
 };
 

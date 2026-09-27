@@ -40,8 +40,10 @@ public:
         QUrl url;
         QString folder;
         bool headless = false;
-        // Electron-style: the page opens as an app window (Phase 8).
+        // An Omarchy web app: the page opens as an app window.
         bool app = false;
+        // An Electron app's command line, relaunched with debugging in a dedicated profile.
+        QString command;
         QString profile;
     };
 
@@ -91,6 +93,8 @@ signals:
 
 private:
     void run(Target target);
+    // The binding and the overlay script, before the page loads.
+    QString prepare();
     void fail(const QString &message);
     void setState(State state, const QString &message = QString());
     void onEvent(const QString &method, const QJsonObject &params, const QString &sessionId);

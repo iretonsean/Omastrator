@@ -192,7 +192,7 @@ QJsonObject AgentTools::showPanel(const QJsonObject &params)
 QJsonObject AgentTools::aiStart(const QJsonObject &params)
 {
     static const QStringList flows{QStringLiteral("generate"), QStringLiteral("edit"), QStringLiteral("roast"), QStringLiteral("vectorize"),
-                                   QStringLiteral("cancel")};
+                                   QStringLiteral("cancel"), QStringLiteral("handoff")};
     AgentHost::AiRequest request;
     request.flow = flows.value(*choice(params, QStringLiteral("flow"), flows, true));
     request.prompt = string(params, QStringLiteral("prompt")).value_or(QString()).trimmed();
@@ -212,7 +212,7 @@ QJsonObject AgentTools::live(const QJsonObject &params)
     static const QStringList actions{QStringLiteral("start"), QStringLiteral("stop"), QStringLiteral("select"), QStringLiteral("edit"),
                                      QStringLiteral("status"), QStringLiteral("screenshot"), QStringLiteral("writeBack"),
                                      QStringLiteral("ask"), QStringLiteral("agentDone"), QStringLiteral("review"), QStringLiteral("keep"),
-                                     QStringLiteral("discard"), QStringLiteral("save"), QStringLiteral("publish")};
+                                     QStringLiteral("discard"), QStringLiteral("save"), QStringLiteral("publish"), QStringLiteral("handoff")};
     const QString action = actions.value(*choice(params, QStringLiteral("action"), actions, true));
     if (action == QLatin1String("edit")) {
         requiredString(params, QStringLiteral("selector"));

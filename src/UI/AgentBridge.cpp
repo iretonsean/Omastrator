@@ -382,6 +382,8 @@ QString AgentBridge::startAi(const AiRequest &request)
         stopWaiting();
         return {};
     }
+    if (request.flow == QLatin1String("handoff"))
+        return openSheet(&AgentSheets::handoff);
     if (request.flow == QLatin1String("roast")) {
         forward();
         return roast();

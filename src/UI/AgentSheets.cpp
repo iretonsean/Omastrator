@@ -6,7 +6,9 @@
 #include <QCheckBox>
 #include <QCommandLinkButton>
 #include <QComboBox>
+#include <QDir>
 #include <QFileDialog>
+#include <QHBoxLayout>
 #include <QLineEdit>
 #include <QTimer>
 #include <QDialogButtonBox>
@@ -165,6 +167,13 @@ QDialog *live(AgentBridge &bridge, QWidget *window)
     url->setObjectName(QStringLiteral("liveUrl"));
     url->setPlaceholderText(QStringLiteral("https://your-site.com, or leave empty to run a project folder"));
     form->addRow(QStringLiteral("Page:"), url);
+    auto *asApp = new QCheckBox(QStringLiteral("Open it as an app window, as Omarchy's web apps are"), dialog);
+    asApp->setObjectName(QStringLiteral("liveAsApp"));
+    form->addRow(QString(), asApp);
+    auto *command = new QLineEdit(dialog);
+    command->setObjectName(QStringLiteral("liveCommand"));
+    command->setPlaceholderText(QStringLiteral("Or an Electron app's command, such as /usr/bin/obsidian"));
+    form->addRow(QStringLiteral("App:"), command);
     auto *folder = new QComboBox(dialog);
     folder->setObjectName(QStringLiteral("liveFolder"));
     form->addRow(QStringLiteral("Its code:"), folder);
@@ -210,13 +219,44 @@ QDialog *live(AgentBridge &bridge, QWidget *window)
         folder->setCurrentIndex(0);
     });
     refresh();
-    finish(dialog, form, error, QStringLiteral("Start Live"), [&bridge, url, folder, choose] {
+    finish(dialog, form, error, QStringLiteral("Start Live"), [&bridge, url, folder, choose, command, asApp] {
         const QString text = url->text().trimmed();
         const QString code = folder->currentData().toString() == choose ? QString() : folder->currentData().toString();
-        if (text.isEmpty() && code.isEmpty())
-            return QStringLiteral("Enter a page, or choose its project folder.");
-        return bridge.startLive(text.isEmpty() ? QUrl() : QUrl::fromUserInput(text), code);
+        if (text.isEmpty() && code.isEmpty() && command->text().trimmed().isEmpty())
+            return QStringLiteral("Enter a page or an app, or choose a project folder.");
+        return bridge.startLive(text.isEmpty() ? QUrl() : QUrl::fromUserInput(text), code, command->text().trimmed(), asApp->isChecked());
     });
+    return dialog;
+}
+
+QDialog *handoff(AgentBridge &bridge, QWidget *window)
+{
+    QFormLayout *form = nullptr;
+    QLabel *error = nullptr;
+    QDialog *dialog = sheet(window, QStringLiteral("handoffSheet"), QStringLiteral("Hand to Agent"), form, error);
+    auto *intro = new QLabel(QStringLiteral("Your agent changes the app's source to match the document in front, on a git branch of its "
+                                            "own. You review the diff before anything is kept."),
+                             dialog);
+    intro->setWordWrap(true);
+    form->addRow(intro);
+    auto *row = new QHBoxLayout;
+    auto *folder = new QLineEdit(dialog);
+    folder->setObjectName(QStringLiteral("handoffFolder"));
+    folder->setPlaceholderText(QStringLiteral("The app's source folder"));
+    auto *choose = new QPushButton(QStringLiteral("Choose…"), dialog);
+    row->addWidget(folder);
+    row->addWidget(choose);
+    form->addRow(QStringLiteral("Source:"), row);
+    QObject::connect(choose, &QPushButton::clicked, dialog, [dialog, folder] {
+        const QString picked = QFileDialog::getExistingDirectory(dialog, QStringLiteral("The app's source"), QDir::homePath());
+        if (!picked.isEmpty())
+            folder->setText(picked);
+    });
+    QPlainTextEdit *field = prompt(dialog, QStringLiteral("handoffPrompt"), QStringLiteral("Anything the agent should know, such as which screen this is"),
+                                   QString());
+    form->addRow(QStringLiteral("Notes:"), field);
+    finish(dialog, form, error, QStringLiteral("Hand to Agent"),
+           [&bridge, folder, field] { return bridge.handToAgent(folder->text().trimmed(), field->toPlainText().trimmed(), false); });
     return dialog;
 }
 

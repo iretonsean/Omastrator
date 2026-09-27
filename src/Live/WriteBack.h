@@ -25,7 +25,10 @@ struct Review {
     QString title;
     QString summary;
     std::vector<FileChange> changes;
+    // The project the files belong to.
+    QString folder;
     QString diff(const QString &folder) const;
+    QString diff() const { return diff(folder); }
 };
 
 struct Plan {

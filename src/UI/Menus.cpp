@@ -65,6 +65,10 @@ void Menus::buildFile(QMenuBar &bar)
         [this] { m_workspace.save(m_workspace.current().id, true); });
     file->addSeparator();
     add(file, QStringLiteral("place"), QStringLiteral("Place…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), [this] { m_workspace.place(); });
+    add(file, QStringLiteral("handToAgent"), QStringLiteral("Hand to Agent…"), QKeySequence(), [this] {
+        if (m_agent)
+            AgentSheets::handoff(*m_agent, &m_window);
+    });
     QMenu *exports = file->addMenu(QStringLiteral("Export"));
     exports->menuAction()->setObjectName(QStringLiteral("exportMenu"));
     add(exports, QStringLiteral("exportPNG"), QStringLiteral("PNG…"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_E),

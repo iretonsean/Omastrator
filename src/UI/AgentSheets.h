@@ -16,6 +16,8 @@ QDialog *vectorize(AgentBridge &bridge, QWidget *window);
 QDialog *live(AgentBridge &bridge, QWidget *window);
 // Live's Publish: each option the project has, saying what it will do; choosing one runs it.
 QDialog *publish(AgentBridge &bridge, QWidget *window);
+// File ▸ Hand to Agent…: the document in front as a mockup, for an app whose source is in a folder.
+QDialog *handoff(AgentBridge &bridge, QWidget *window);
 // Help ▸ Connect an Agent…
 QDialog *connectAgent(AgentBridge &bridge, QWidget *window);
 // The text Connect an Agent shows.

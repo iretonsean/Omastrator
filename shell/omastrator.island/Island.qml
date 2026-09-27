@@ -62,6 +62,7 @@ Item {
     capture: [
       { id: "pickColor", tip: "Pick Colour: click for fill, Shift-click for stroke, right-click for a new swatch" },
       { id: "screenshot", tip: "Screenshot Region: opens it in Omastrator and traces it" },
+      { id: "window", tip: "Capture to Omastrator: the focused window, to redesign" },
       { id: "pasteSvg", tip: "Paste SVG as editable paths" },
       { id: "swatches", tip: "Theme Swatches: the Omarchy theme's colours as a swatch group" },
       { id: "vectorize", tip: "Vectorize with AI the screenshot just traced: click for Logo & icon, Shift-click for Sketch & line art", offerOnly: true }
@@ -72,6 +73,7 @@ Item {
       { id: "roast", tip: "Roast My Design" },
       { id: "vectorize", tip: "Vectorize with AI: click for Logo & icon, Shift-click for Sketch & line art" },
       { id: "dictate", tip: "Dictate: hold while you speak; Omastrator shows what it heard before it acts" },
+      { id: "handoff", tip: "Hand to Agent…: the document as a mockup, for an app whose source you have" },
       { id: "stop", tip: "Stop waiting for the agent", waitingOnly: true }
     ],
     live: [
@@ -148,6 +150,7 @@ Item {
       return ["island", "capture", "color", target]
     }
     if (id === "screenshot") return ["island", "capture", "screenshot"]
+    if (id === "window") return ["island", "capture", "window"]
     if (id === "pasteSvg") return ["island", "capture", "paste-svg"]
     if (id === "swatches") return ["island", "capture", "theme-swatches"]
     return []

@@ -108,7 +108,7 @@ private slots:
         QVERIFY(WriteBack::apply(plan.changes).isEmpty());
         QVERIFY(read(repo + "/index.html").contains(">Tailwind, edited</h1>"));
         QCOMPARE(read(repo + "/index.html").size(), page.size());
-        WriteBack::Review review{"r", "Live edits", plan.done.join('\n'), plan.changes};
+        WriteBack::Review review{"r", "Live edits", plan.done.join('\n'), plan.changes, repo};
         QVERIFY(review.diff(repo).contains("+  <h1 id=\"title\" class=\"text-3xl font-bold\">Tailwind, edited</h1>"));
         QVERIFY(review.diff(repo).startsWith("--- index.html"));
         QVERIFY(WriteBack::restore(plan.changes).isEmpty());

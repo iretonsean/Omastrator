@@ -180,7 +180,7 @@ constexpr const char *methodTable = R"json([
 {"name": "ai_start", "group": "desktop", "mcp": false,
  "description": "Starts one of the app's AI flows for the user, as its menu entry does. Generate and Edit open their sheet unless a prompt is given. Vectorize takes the selected image, else the last traced screenshot. Cancel stops waiting.",
  "inputSchema": {"type": "object", "required": ["flow"], "properties": {
-   "flow": {"type": "string", "enum": ["generate", "edit", "roast", "vectorize", "cancel"]},
+   "flow": {"type": "string", "enum": ["generate", "edit", "roast", "vectorize", "cancel", "handoff"]},
    "prompt": {"type": "string"},
    "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "Generate's variations. Default 3."},
    "fitToSelection": {"type": "boolean"},
@@ -189,7 +189,7 @@ constexpr const char *methodTable = R"json([
  "description": "Live mode: open a page or project in Omastrator's own Chromium with the editing overlay, and act on it. start with neither url nor folder opens the Live sheet.",
  "inputSchema": {"type": "object", "required": ["action"], "properties": {
    "action": {"type": "string", "enum": ["start", "stop", "select", "edit", "status", "screenshot", "writeBack", "ask", "agentDone",
-                                         "review", "keep", "discard", "save", "publish"]},
+                                         "review", "keep", "discard", "save", "publish", "handoff"]},
    "confirm": {"type": "boolean", "description": "writeBack, ask, agentDone: go ahead despite uncommitted changes. publish: run it."},
    "prompt": {"type": "string", "description": "ask: what the agent should change about the selection."},
    "requestId": {"type": "string", "description": "agentDone: the id your task gave you."},
@@ -198,7 +198,9 @@ constexpr const char *methodTable = R"json([
    "option": {"type": "string", "description": "publish: git, vercel, netlify or cloudflare. Without it, the Publish sheet opens."},
    "path": {"type": "string", "description": "screenshot: where to write the PNG."},
    "url": {"type": "string"},
-   "folder": {"type": "string", "description": "The page's code; with url, the user has confirmed it."},
+   "folder": {"type": "string", "description": "The page's code; with url, the user has confirmed it. handoff: the app's source."},
+   "command": {"type": "string", "description": "start: an Electron app's command line, relaunched with debugging in a dedicated profile."},
+   "app": {"type": "boolean", "description": "start with url: open it as an app window, as an Omarchy web app."},
    "on": {"type": "boolean", "description": "select without a selector: whether clicks in the page select elements."},
    "add": {"type": "boolean", "description": "select with a selector: add to the selection, as Shift-click does."},
    "selector": {"type": "string"},
