@@ -311,10 +311,29 @@ Clicks go straight through it to your apps.
   canvas for everything sent from any surface. Each frame is labelled with its
   source and time. It opens on its own Hyprland workspace, or as a normal
   window.
+- **Change Omarchy itself.** Desktop Look (the bar's Desktop Look on the
+  desktop, Edit Bar on Omarchy's bar, Gaps and Borders on a window) edits the
+  window gaps, borders and corners, the bar's position, height, colours and
+  widget order, the font and text size, the wallpaper (an image or the current
+  artboard) and the theme's colours. Gaps, borders, corners, the wallpaper and
+  the colours in the bar and panels change on screen as you go; drag the gap
+  beside a window on the overlay to widen it. The rest says it changes when
+  saved.
+- **Restyle an app** through its toolkit: GTK apps through `gtk.css`, Qt apps
+  through qt6ct (when they use it) or a stylesheet of their own passed by their
+  launcher. The preview opens a second copy of the app with the change; the
+  panel says plainly what can't change live.
+- **Nothing is written until you confirm.** Saving shows every file with its
+  full path and diff, and every command it runs (Omarchy's own, such as
+  `omarchy theme set` and `omarchy font set`, where they exist). Each file is
+  backed up first, and Desktop Look's history reverts any save byte for byte.
 
 ```sh
 omastrator design on | off | status     # design mode from a script
 omastrator design lift --region X,Y,W,H [--to desk]   # lift a region of the screen
+omastrator design look gapsOut=16 activeBorder=#ff375f   # preview on the desktop
+omastrator design look save | discard | history | revert ID
+omastrator design restyle --target N accent=#ff375f radius=8   # a second copy with the change
 omastrator desk [show|window]           # the Desk
 omastrator daemon [start|stop|status]   # the background app
 ```
