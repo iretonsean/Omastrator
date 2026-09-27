@@ -27,6 +27,11 @@ ProjectWorkspaceView::ProjectWorkspaceView(ProjectWorkspace &workspace, QWidget 
     auto *spacer = new QWidget(m_toolbar);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_toolbar->addWidget(spacer);
+    m_cloudStatus = new QLabel(m_toolbar);
+    m_cloudStatus->setObjectName(QStringLiteral("cloudStatus"));
+    m_cloudStatus->setForegroundRole(QPalette::PlaceholderText);
+    m_toolbar->addWidget(m_cloudStatus);
+    m_cloudAction = action(m_toolbar, QStringLiteral("Retry Now"), QString(), QStringLiteral("cloudAction"));
     m_fit = action(m_toolbar, QStringLiteral("Fit"), QStringLiteral("Fit artboard in window (Ctrl+0)"), QStringLiteral("fitToolbar"));
     m_actualSize = action(m_toolbar, QStringLiteral("100%"), QStringLiteral("Actual size (Ctrl+1)"), QStringLiteral("actualSizeToolbar"));
     m_zoomIn = action(m_toolbar, QStringLiteral("+"), QStringLiteral("Zoom in (Ctrl+=)"), QStringLiteral("zoomInToolbar"));
@@ -38,6 +43,13 @@ ProjectWorkspaceView::ProjectWorkspaceView(ProjectWorkspace &workspace, QWidget 
     connect(m_menus, &Menus::layersToggled, this, [this] { m_content->synchronizePanels(); });
     connect(m_menus, &Menus::propertiesToggled, this, [this] { m_content->synchronizePanels(); });
     connect(m_newTab, &QAction::triggered, this, [this] { m_workspace.newTab(); });
+    connect(m_cloudAction, &QAction::triggered, this, [this] {
+        const QUuid front = m_workspace.current().id;
+        if (m_workspace.uploadStatus(front).phase == CloudUploader::Phase::conflict)
+            m_workspace.resolveConflict(front);
+        else
+            m_workspace.retryUpload(front);
+    });
     connect(m_fit, &QAction::triggered, this, [this] { m_workspace.current().session.zoomToFit(); });
     connect(m_actualSize, &QAction::triggered, this, [this] { m_workspace.current().session.actualSize(); });
     connect(m_zoomIn, &QAction::triggered, this, [this] { m_workspace.current().session.zoomIn(); });
@@ -78,6 +90,11 @@ void ProjectWorkspaceView::synchronizeSession()
     setWindowTitle(front.title() + QStringLiteral("[*] — Omastrator"));
     setWindowModified(drawn && front.session.isModified());
     setWindowFilePath(front.path.value_or(QString()));
+    const CloudUploader::Status upload = m_workspace.uploadStatus(front.id);
+    m_cloudStatus->setText(m_workspace.cloudStatusText());
+    m_cloudStatus->setToolTip(upload.error);
+    m_cloudAction->setText(upload.phase == CloudUploader::Phase::conflict ? QStringLiteral("Resolve…") : QStringLiteral("Retry Now"));
+    m_cloudAction->setVisible(upload.phase == CloudUploader::Phase::conflict || upload.phase == CloudUploader::Phase::waiting);
 }
 
 void ProjectWorkspaceView::closeEvent(QCloseEvent *event)

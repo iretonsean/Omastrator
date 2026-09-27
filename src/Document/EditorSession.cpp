@@ -404,6 +404,12 @@ void EditorSession::markSaved()
     notify(false);
 }
 
+void EditorSession::markUnsaved()
+{
+    m_history.markUnsaved();
+    notify(false);
+}
+
 void EditorSession::beginInteraction(const QString &name)
 {
     if (!m_document)

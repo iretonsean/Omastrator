@@ -35,6 +35,10 @@ oma_library(oma_io src/IO/*.cpp)
 target_include_directories(oma_io PRIVATE third_party)
 target_link_libraries(oma_io PUBLIC oma_core)
 
+# Cloud storage through rclone: remotes, browsing, the cache and background uploads.
+oma_library(oma_cloud src/Cloud/*.cpp)
+target_link_libraries(oma_cloud PUBLIC oma_core)
+
 oma_library(oma_canvas src/Canvas/*.cpp)
 target_link_libraries(oma_canvas PUBLIC oma_core)
 
@@ -54,7 +58,7 @@ configure_file(cmake/OverlayScript.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/Li
 target_include_directories(oma_live PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
-target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas oma_agent oma_live)
+target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_cloud oma_canvas oma_agent oma_live)
 
 include(GNUInstallDirs)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
@@ -94,6 +98,9 @@ set(CPACK_RPM_PACKAGE_REQUIRES "shared-mime-info, hicolor-icon-theme")
 include(CPack)
 
 enable_testing()
+# The fake rclone cloud tests run through OMASTRATOR_RCLONE.
+add_executable(fake_rclone tests/Cloud/FakeRclone.cpp)
+target_link_libraries(fake_rclone PRIVATE Qt6::Core)
 # tests/<Library>/<Name>Tests.cpp, one executable each, linked to its library.
 function(oma_tests library folder)
     file(GLOB tests CONFIGURE_DEPENDS tests/${folder}/*Tests.cpp)
@@ -105,10 +112,15 @@ function(oma_tests library folder)
         # Tests that check the repo's own files (shell plugins, fixtures) find them here.
         target_compile_definitions(${name} PRIVATE OMASTRATOR_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS ${folder})
+        if(name MATCHES "Cloud")
+            target_compile_definitions(${name} PRIVATE FAKE_RCLONE="$<TARGET_FILE:fake_rclone>")
+            add_dependencies(${name} fake_rclone)
+        endif()
     endforeach()
 endfunction()
 oma_tests(oma_core Document)
 oma_tests(oma_io IO)
+oma_tests(oma_cloud Cloud)
 oma_tests(oma_canvas Canvas)
 oma_tests(oma_agent Agent)
 oma_tests(oma_live Live)

@@ -64,8 +64,31 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   - imports SVG
   - exports SVG, PDF (kept as vectors), PNG and JPEG
   - places JPEG, PNG, TIFF, WebP and GIF images
+  - opens and saves on cloud storage as well as on this computer
+    ([Cloud storage](#cloud-storage))
 - Tabs for several documents at once, and every keyboard shortcut can be
   remapped.
+
+## Cloud storage
+
+Open, save, place and export on Google Drive, Dropbox, OneDrive, iCloud Drive,
+Box, Proton Drive, pCloud, Mega, S3 (and R2, Wasabi, MinIO), Backblaze B2,
+Nextcloud or WebDAV, SFTP, or anything else [rclone](https://rclone.org)
+reaches.
+
+- **Connect** with File ▸ Connect Cloud Storage… or Cloud Storage… on the
+  welcome screen. Most services sign in through your browser. rclone keeps
+  every sign-in, and Omastrator never sees or stores one. Without rclone, the
+  sheet offers to install it (`omarchy pkg add rclone`).
+- **Open, Save As, Place and Export** then list This Computer and each service
+  you've connected, and remember where you were.
+- **Save** writes to this computer first, then uploads in the background.
+  Offline saves upload when the service is back.
+- **If someone else changed the file**, nothing is overwritten. You choose
+  Keep Both, Overwrite or Open Theirs.
+- **Recent files** show which service each document lives on.
+
+More in [docs/CLOUD-STORAGE.md](docs/CLOUD-STORAGE.md).
 
 ## AI, with the agent you already use
 
@@ -207,6 +230,7 @@ shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 ## Build
 
 You need C++20, Qt 6.4 or later (Widgets, Concurrent and Network), and CMake.
+rclone is optional: cloud storage uses it, and one test runs it when present.
 
 ```sh
 cmake -S . -B build

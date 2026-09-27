@@ -55,7 +55,7 @@ std::optional<double> NewDocumentSheet::dimension(const QString &text, LengthUni
 }
 
 NewDocumentSheet::NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::function<void()> onOpen,
-                                   std::function<void(const QString &)> onOpenRecent, QWidget *parent)
+                                   std::function<void(const QString &)> onOpenRecent, QWidget *parent, std::function<void()> onCloud)
     : QWidget(parent), m_onCreate(std::move(onCreate)), m_preset(new QComboBox(this)), m_width(new QLineEdit(this)), m_height(new QLineEdit(this)),
       m_unit(new QComboBox(this)), m_note(text(QString(), 12, QFont::Normal, QPalette::PlaceholderText, this)),
       m_create(new QPushButton(QStringLiteral("Create"), this))
@@ -93,6 +93,12 @@ NewDocumentSheet::NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::fu
     auto *buttons = new QHBoxLayout;
     buttons->setSpacing(10);
     buttons->addWidget(open);
+    if (onCloud) {
+        auto *cloud = new QPushButton(QStringLiteral("Cloud Storage…"), this);
+        cloud->setObjectName(QStringLiteral("cloudStorage"));
+        connect(cloud, &QPushButton::clicked, this, [onCloud = std::move(onCloud)] { onCloud(); });
+        buttons->addWidget(cloud);
+    }
     buttons->addStretch(1);
     buttons->addWidget(m_create);
 
@@ -117,7 +123,7 @@ NewDocumentSheet::NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::fu
         rows->setSpacing(2);
         rows->addWidget(text(QStringLiteral("Recent"), 12, QFont::Medium, QPalette::WindowText, list));
         for (const QString &path : recent.mid(0, 6)) {
-            auto *button = new QPushButton(QFileInfo(path).fileName(), list);
+            auto *button = new QPushButton(ProjectWorkspace::recentIcon(path), ProjectWorkspace::recentLabel(path), list);
             button->setFlat(true);
             button->setToolTip(path);
             button->setStyleSheet(QStringLiteral("text-align: left"));

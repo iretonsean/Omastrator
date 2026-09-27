@@ -26,6 +26,8 @@ public:
     bool isModified() const { return m_revision != m_savedRevision; }
     int undoCount() const { return int(m_past.size()); }
     void markSaved() { m_savedRevision = m_revision; }
+    // What's shown matches no file any more, as when a cloud conflict detaches it.
+    void markUnsaved() { m_savedRevision = QUuid::createUuid(); }
     void reset();
     // Takes the steps a staged copy of this history recorded.
     void adopt(DocumentHistory &&staged) noexcept;

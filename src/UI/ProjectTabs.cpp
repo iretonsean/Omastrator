@@ -51,7 +51,7 @@ void ProjectTabButton::synchronize()
     const bool modified = tab->session.hasDocument() && tab->session.isModified();
     m_select->setText((modified ? QStringLiteral("● ") : QString()) + tab->title());
     m_select->setFont(tabFont(active));
-    m_select->setToolTip(tab->path.value_or(tab->title()));
+    m_select->setToolTip(tab->cloudStatus.isEmpty() ? tab->place() : tab->place() + QLatin1Char('\n') + tab->cloudStatus);
     m_select->setEnabled(!m_workspace.isManaging() || active);
     m_close->setToolTip(QStringLiteral("Close %1").arg(tab->title()));
     m_close->setAccessibleName(QStringLiteral("Close %1").arg(tab->title()));

@@ -75,6 +75,7 @@ void Menus::buildFile(QMenuBar &bar)
     m_recent = file->addMenu(QStringLiteral("Open Recent"));
     m_recent->menuAction()->setObjectName(QStringLiteral("openRecent"));
     connect(m_recent, &QMenu::aboutToShow, this, &Menus::fillRecent);
+    add(file, QStringLiteral("connectCloud"), QStringLiteral("Connect Cloud Storage…"), QKeySequence(), [this] { m_workspace.connectCloud(); });
     file->addSeparator();
     add(file, QStringLiteral("closeDocument"), QStringLiteral("Close"), QKeySequence(Qt::CTRL | Qt::Key_W),
         [this] { m_workspace.close(m_workspace.current().id); });
@@ -103,7 +104,8 @@ void Menus::fillRecent()
 {
     m_recent->clear();
     for (const QString &path : ProjectWorkspace::recentFiles()) {
-        QAction *entry = m_recent->addAction(QFileInfo(path).fileName(), this, [this, path] { m_workspace.openFile(path); });
+        QAction *entry = m_recent->addAction(ProjectWorkspace::recentIcon(path), ProjectWorkspace::recentLabel(path), this,
+                                             [this, path] { m_workspace.openFile(path); });
         entry->setToolTip(path);
     }
     if (!m_recent->isEmpty())

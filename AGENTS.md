@@ -18,6 +18,12 @@ Each folder builds as its own static library:
 - `src/IO` → `oma_io`. `ProjectStore` (`.omai`), `SvgImporter` (vendored
   nanosvg in `third_party/`), `SvgExporter`, `DocumentExporter` (PDF, PNG,
   JPEG) and `ImageImporter`. Errors are thrown as `FileError`.
+- `src/Cloud` → `oma_cloud`. Cloud storage through rclone
+  (docs/CLOUD-STORAGE.md): `CloudStorage` runs it, `CloudLocation` is
+  `remote:path` plus the cache, `CloudUploader` uploads in the background with
+  conflict checks, and `CloudProviders` is the Connect list. Tests use the fake
+  in `tests/Cloud/FakeRclone.cpp`; `CloudRcloneTests` runs the real rclone on a
+  throwaway config and skips without it.
 - `src/Agent` → `oma_agent`. The agent socket, CLI and MCP bridge
   (docs/AI-DESIGN.md), plus the desktop-wide commands in docs/OS-SUITE.md:
   `Cli` dispatches every GUI-less command, `Island` keeps the island's mode
@@ -67,8 +73,10 @@ Each folder builds as its own static library:
   config. Setup tests run in a temporary `HOME`; outside programs are replaced
   through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
   `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
-  `OMASTRATOR_APP`, `OMASTRATOR_GH` and `OMASTRATOR_TERMINAL`. Live's deploy
-  tests push only to local bare repositories and run fake deploy commands.
+  `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL` and
+  `OMASTRATOR_RCLONE`. Live's deploy tests push only to local bare
+  repositories and run fake deploy commands. Cloud tests never read the user's
+  rclone config.
 - **Commits:** public repo. Commit as the GitHub no-reply address, and never add
   personal data.
 

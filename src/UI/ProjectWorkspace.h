@@ -1,6 +1,8 @@
 #pragma once
+#include "Cloud/CloudUploader.h"
 #include "Document/EditorSession.h"
 #include "IO/DocumentExporter.h"
+#include "UI/CloudBrowser.h"
 #include <QObject>
 #include <QPointer>
 #include <QWidget>
@@ -15,12 +17,23 @@ public:
     explicit ProjectTab(QString name);
 
     const QUuid id = QUuid::createUuid();
-    const QString defaultName;
+    // Changes only when a conflict leaves "yours" apart from theirs.
+    QString defaultName;
     EditorSession session;
     // The .omai file; SVGs and images open without one.
     std::optional<QString> path;
+    // A cloud document: `path` is its cache copy, uploaded to `location` after each save.
+    struct CloudLink {
+        CloudLocation location;
+        // The remote as it was when opened or last uploaded; a different one is a conflict.
+        std::optional<CloudStamp> base;
+    };
+    std::optional<CloudLink> cloud;
+    QString cloudStatus;
 
     QString title() const;
+    // Where it lives, for tooltips: "work:Designs/logo.omai" or the local path.
+    QString place() const;
     static QString nameWithoutSuffix(const QString &path);
 };
 
@@ -72,6 +85,24 @@ public:
     // Files named at launch; unknown ones are reported.
     void receive(const QStringList &paths);
 
+    // Cloud storage: rclone's remotes, and uploads after each save.
+    CloudStorage &cloud() const { return *m_cloud; }
+    CloudUploader &uploads() const { return *m_uploader; }
+    void openCloud(const CloudLocation &file);
+    bool saveToCloud(ProjectTab &tab, const CloudLocation &file, const CloudStamp &existing);
+    // File ▸ Connect Cloud Storage…
+    void connectCloud();
+    void retryUpload(QUuid id);
+    void resolveConflict(QUuid id);
+    CloudUploader::Status uploadStatus(QUuid id) const;
+    // The status line: a passing notice, else the front tab's upload.
+    QString cloudStatusText() const;
+    // Recent entries: a cloud one reads "logo.omai — Google Drive" with its badge.
+    static QString recentLabel(const QString &entry);
+    static QIcon recentIcon(const QString &entry);
+    // "png", "svg"… from dialog filters.
+    static QStringList suffixesOf(const QStringList &filters);
+
     static QStringList recentFiles();
     static void noteRecent(const QString &path);
     static void clearRecent();
@@ -93,9 +124,31 @@ private:
     void adopt(std::shared_ptr<ProjectTab> tab);
     void removeTab(QUuid id);
     QString suggestedName(const QString &suffix) const;
+    void openHere();
+    void saveHere(const std::shared_ptr<ProjectTab> &saving, bool asNew, std::function<void(bool)> done);
+    void placeHere();
+    // The cloud browser when a remote is connected; false means use the local dialog.
+    bool offerCloud(CloudBrowser::Mode mode, const QStringList &suffixes, const QString &name, std::function<void()> local,
+                    std::function<void(const QList<CloudLocation> &)> chosen, std::function<void(const CloudLocation &, const CloudStamp &)> chosenSave,
+                    std::function<void()> cancelled = {});
+    void setUpCloud();
+    void adoptCloud(const CloudLocation &file, const QString &local, const std::optional<CloudStamp> &base, const QString &status);
+    // After a local save: the upload for a cloud tab, or the link dropped when saved elsewhere.
+    bool syncCloud(ProjectTab &tab);
+    void showUploadStatus(const QString &key);
+    void askConflict(const std::shared_ptr<ProjectTab> &tab);
+    void openTheirs(const std::shared_ptr<ProjectTab> &tab);
+    void settleUpload(const std::shared_ptr<ProjectTab> &tab, std::function<void(bool)> then);
+    void askUnsent(const std::shared_ptr<ProjectTab> &tab, std::function<void(bool)> then);
+    void setNotice(const QString &text);
+    static void forgetRecent(const QString &path);
 
     std::vector<std::shared_ptr<ProjectTab>> m_tabs;
     QUuid m_selectedID;
     bool m_isManaging = false;
     int m_nextNumber = 2;
+    CloudStorage *m_cloud = nullptr;
+    CloudUploader *m_uploader = nullptr;
+    QString m_notice;
+    int m_noticeNumber = 0;
 };

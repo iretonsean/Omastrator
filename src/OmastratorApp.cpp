@@ -32,6 +32,8 @@ int main(int argc, char **argv)
     // Agents reach the open document here; a second Omastrator reports why it can't in Help ▸ Connect an Agent….
     window.agent()->startServer();
     window.show();
+    // Connected cloud storage, listed in the background for Open and Save As.
+    workspace.cloud().refreshRemotes();
     // Files named at launch: documents, SVGs and pictures.
     workspace.receive(QApplication::arguments().mid(1));
     return QApplication::exec();

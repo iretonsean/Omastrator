@@ -135,6 +135,7 @@ public:
     void redo();
     bool isModified() const { return m_history.isModified(); }
     void markSaved();
+    void markUnsaved();
 
     // Interactive edits: a drag previews against the objects as they were
     // when it began, and ends in one undo step or none.

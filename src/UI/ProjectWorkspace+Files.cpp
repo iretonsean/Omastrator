@@ -6,6 +6,7 @@
 #include "UI/ExportSheet.h"
 #include "UI/ProjectWorkspace.h"
 #include <QDialog>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QRegularExpression>
@@ -67,6 +68,13 @@ void ProjectWorkspace::reportLeftOut(const QString &path, const QStringList &war
 
 bool ProjectWorkspace::openFile(const QString &path)
 {
+    // "work:Designs/logo.omai", from Open Recent or the command line, when no local file has that name.
+    if (!path.startsWith(QLatin1Char('/')) && !QFileInfo::exists(path)) {
+        if (const std::optional<CloudLocation> cloud = CloudLocation::parse(path)) {
+            openCloud(*cloud);
+            return true;
+        }
+    }
     for (const std::shared_ptr<ProjectTab> &existing : m_tabs) {
         if (samePlace(existing->path, path)) {
             m_selectedID = existing->id;
@@ -112,7 +120,8 @@ bool ProjectWorkspace::saveTo(ProjectTab &tab, const QString &path)
     }
     tab.path = QFileInfo(path).absoluteFilePath();
     tab.session.markSaved();
-    noteRecent(path);
+    if (!syncCloud(tab))
+        noteRecent(path);
     emit changed();
     return true;
 }
@@ -179,6 +188,16 @@ bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format fo
 
 void ProjectWorkspace::open()
 {
+    const auto chosen = [this](const QList<CloudLocation> &files) {
+        for (const CloudLocation &file : files)
+            openCloud(file);
+    };
+    if (!offerCloud(CloudBrowser::Mode::open, suffixesOf(openFilters()), QString(), [this] { openHere(); }, chosen, {}))
+        openHere();
+}
+
+void ProjectWorkspace::openHere()
+{
     auto *panel = new QFileDialog(window, QStringLiteral("Open"));
     panel->setAttribute(Qt::WA_DeleteOnClose);
     panel->setFileMode(QFileDialog::ExistingFiles);
@@ -201,6 +220,17 @@ void ProjectWorkspace::save(QUuid id, bool asNew, std::function<void(bool)> done
         finish(done, saveTo(*saving, *saving->path));
         return;
     }
+    const QString suffix = QLatin1String(ProjectStore::extension);
+    const auto chosenSave = [this, saving, done](const CloudLocation &file, const CloudStamp &existing) {
+        finish(done, saveToCloud(*saving, file, existing));
+    };
+    if (!offerCloud(CloudBrowser::Mode::save, {suffix}, saving->title() + QLatin1Char('.') + suffix, [this, saving, asNew, done] { saveHere(saving, asNew, done); },
+                    {}, chosenSave, [this, done] { finish(done, false); }))
+        saveHere(saving, asNew, done);
+}
+
+void ProjectWorkspace::saveHere(const std::shared_ptr<ProjectTab> &saving, bool asNew, std::function<void(bool)> done)
+{
     const QString suffix = QLatin1String(ProjectStore::extension);
     auto *panel = new QFileDialog(window, asNew ? QStringLiteral("Save As") : QStringLiteral("Save"));
     panel->setAttribute(Qt::WA_DeleteOnClose);
@@ -225,6 +255,30 @@ void ProjectWorkspace::place()
 {
     if (!current().session.hasDocument())
         return;
+    // Each file comes down to the cache first, then places as a local one would.
+    const auto chosen = [this](const QList<CloudLocation> &files) {
+        for (const CloudLocation &file : files) {
+            QString local;
+            try {
+                local = CloudCache::localPath(file);
+            } catch (const FileError &error) {
+                showError(QStringLiteral("Couldn’t place “%1”").arg(file.fileName()), error.message());
+                continue;
+            }
+            m_cloud->download(file, local, [this, file, local](const QString &error) {
+                if (!error.isEmpty())
+                    showError(QStringLiteral("Couldn’t place “%1” from %2").arg(file.fileName(), m_cloud->serviceName(file.remote)), error);
+                else
+                    placeFile(local);
+            });
+        }
+    };
+    if (!offerCloud(CloudBrowser::Mode::place, suffixesOf(ImageImporter::nameFilters()), QString(), [this] { placeHere(); }, chosen, {}))
+        placeHere();
+}
+
+void ProjectWorkspace::placeHere()
+{
     auto *panel = new QFileDialog(window, QStringLiteral("Place"));
     panel->setAttribute(Qt::WA_DeleteOnClose);
     panel->setFileMode(QFileDialog::ExistingFiles);
@@ -257,17 +311,36 @@ void ProjectWorkspace::exportAs(DocumentExporter::Format format)
         return {};
     }();
     const auto choosePath = [this, format, filter, suffix](RasterOptions options) {
-        auto *panel = new QFileDialog(window, QStringLiteral("Export"));
-        panel->setAttribute(Qt::WA_DeleteOnClose);
-        panel->setAcceptMode(QFileDialog::AcceptSave);
-        panel->setNameFilter(filter);
-        panel->setDefaultSuffix(suffix);
-        panel->selectFile(suggestedName(suffix));
-        connect(panel, &QDialog::finished, this, [this, panel, format, options](int result) {
-            if (result == QDialog::Accepted && !panel->selectedFiles().isEmpty())
-                exportTo(panel->selectedFiles().constFirst(), format, options);
-        });
-        panel->open();
+        // To a remote: written to the cache, then uploaded in the background.
+        const auto chosenSave = [this, format, options](const CloudLocation &file, const CloudStamp &) {
+            QString local;
+            try {
+                local = CloudCache::localPath(file);
+            } catch (const FileError &error) {
+                showError(QStringLiteral("Couldn’t export “%1”").arg(file.fileName()), error.message());
+                return;
+            }
+            QDir().mkpath(QFileInfo(local).absolutePath());
+            if (!exportTo(local, format, options))
+                return;
+            setNotice(QStringLiteral("Exporting to %1…").arg(m_cloud->serviceName(file.remote)));
+            m_uploader->upload(QStringLiteral("export:") + file.toString(), local, file, std::nullopt);
+        };
+        const auto here = [this, filter, suffix, format, options] {
+            auto *panel = new QFileDialog(window, QStringLiteral("Export"));
+            panel->setAttribute(Qt::WA_DeleteOnClose);
+            panel->setAcceptMode(QFileDialog::AcceptSave);
+            panel->setNameFilter(filter);
+            panel->setDefaultSuffix(suffix);
+            panel->selectFile(suggestedName(suffix));
+            connect(panel, &QDialog::finished, this, [this, panel, format, options](int result) {
+                if (result == QDialog::Accepted && !panel->selectedFiles().isEmpty())
+                    exportTo(panel->selectedFiles().constFirst(), format, options);
+            });
+            panel->open();
+        };
+        if (!offerCloud(CloudBrowser::Mode::exportFile, {suffix}, suggestedName(suffix), here, {}, chosenSave))
+            here();
     };
     if (format == DocumentExporter::Format::pdf || format == DocumentExporter::Format::svg) {
         choosePath({});

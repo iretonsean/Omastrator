@@ -4,6 +4,7 @@
 #include "UI/Menus.h"
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspace.h"
+#include <QLabel>
 #include <QMainWindow>
 #include <QToolBar>
 
@@ -36,6 +37,8 @@ private:
     QAction *m_actualSize = nullptr;
     QAction *m_zoomIn = nullptr;
     QAction *m_zoomOut = nullptr;
+    QLabel *m_cloudStatus = nullptr;
+    QAction *m_cloudAction = nullptr;
     ContentView *m_content = nullptr;
     // Held until its editor goes, which refers to its session.
     std::shared_ptr<ProjectTab> m_shownTab;
