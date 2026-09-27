@@ -27,6 +27,7 @@ Item {
   readonly property var detail: design.detail || null
   readonly property var proposal: design.proposal || null
   readonly property string tool: design.tool || "inspect"
+  readonly property var lifting: design.lift || null
 
   readonly property color ink: Color.popups.text
   readonly property color paper: Color.popups.background
@@ -513,6 +514,23 @@ Item {
             Chip {
               label: "Discard"
               onClicked: root.run(["design", "discard"])
+            }
+          }
+
+          Row {
+            spacing: Style.space(4)
+            visible: root.lifting !== null
+
+            Label {
+              anchors.verticalCenter: parent.verticalCenter
+              text: Logic.liftText(root.lifting)
+              width: Math.min(implicitWidth, Style.space(280))
+              elide: Text.ElideRight
+            }
+
+            Chip {
+              label: "Cancel"
+              onClicked: root.run(["design", "lift", "cancel"])
             }
           }
 

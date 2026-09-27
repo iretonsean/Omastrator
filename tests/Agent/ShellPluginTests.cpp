@@ -169,6 +169,10 @@ private slots:
         spot = call("barPosition", {QVariantList{3700, 1000, 100, 60}, 300, 60, screen, 10}).toMap();
         QCOMPARE(spot["x"].toInt(), 1610);
         QCOMPARE(spot["y"].toInt(), 930);
+        // A lift's progress reads plainly on the bar.
+        QCOMPARE(call("liftText", {QVariantMap{{"label", "div.card"}, {"stage", "Fetching pictures…"}, {"done", 3}, {"total", 8}}}).toString(),
+                 QStringLiteral("Lifting div.card: Fetching pictures… 3 of 8"));
+        QCOMPARE(call("liftText", {QVariant()}).toString(), QString());
         // A drawing becomes `omastrator design draw`.
         const QVariantList points{QVariantMap{{"x", 10.4}, {"y", 20}}, QVariantMap{{"x", 300}, {"y", 40.6}}};
         QCOMPARE(call("drawArgs", {"arrow", points, ""}).toStringList(), (QStringList{"design", "draw", "arrow", "10,20", "300,41"}));

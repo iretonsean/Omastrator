@@ -10,6 +10,7 @@
 #include "../Agent/FakeAgents.h"
 #include "../Anywhere/FakeDesktop.h"
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -138,7 +139,7 @@ private slots:
         status = app.status();
         QJsonObject bar = status["bar"].toObject();
         QCOMPARE(bar["kind"].toString(), QStringLiteral("window"));
-        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"capture", "measure"}));
+        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"capture", "lift", "measure"}));
         QCOMPARE(bar["surface"].toString(), QStringLiteral("window:foot"));
         QVERIFY(!bar["placeholder"].toString().isEmpty());
 
@@ -267,6 +268,85 @@ private slots:
         QVERIFY(app.design().deskTab());
     }
 
+    void liftLandsWhereTheUserChoosesAsOneUndoStep()
+    {
+        App app;
+        app.call(QStringLiteral("on"));
+        app.call(QStringLiteral("onboarding"), {{"finish", false}});
+        const QJsonObject tree{{"root", QJsonObject{{"role", "frame"}, {"name", "Terminal"}, {"rect", QJsonArray{0, 0, 800, 600}},
+                                                   {"children", QJsonArray{QJsonObject{{"role", "label"}, {"rect", QJsonArray{10, 10, 200, 20}},
+                                                                                       {"text", "~ $ ls"}, {"index", 0}}}}}}};
+        app.desktop->trees.insert(4242, tree);
+        auto hovered = [&] {
+            app.call(QStringLiteral("deselect"));
+            app.desktop->pointer = QPoint(300, 300);
+            app.design().mode().poll();
+            return app.status()["bar"].toObject()["target"];
+        };
+        auto lifted = [&](const QJsonObject &params) {
+            QString error;
+            const QJsonObject result = app.call(QStringLiteral("lift"), params, &error);
+            if (!error.isEmpty())
+                return error;
+            QElapsedTimer clock;
+            clock.start();
+            while (app.design().liftJob() && clock.elapsed() < 20'000)
+                QTest::qWait(20);
+            return app.design().liftJob() ? QStringLiteral("still lifting") : QString();
+        };
+
+        // Onto the overlay, in place: the window's own coordinates, one step named for it.
+        QCOMPARE(lifted({{"target", hovered()}}), QString());
+        const auto art = app.design().overlays().art(QStringLiteral("window:foot"));
+        QCOMPARE(art.size(), size_t(1));
+        EditorSession &overlay = app.design().overlays().session();
+        QCOMPARE(overlay.undoName(), QStringLiteral("Lift foot"));
+        QCOMPARE(overlay.document()->find(art.front())->name, QStringLiteral("foot"));
+        QVERIFY(app.status()["message"].toString().startsWith(QLatin1String("Lifted foot")));
+        QCOMPARE(app.status()["bar"].toObject()["kind"].toString(), QStringLiteral("art:group"));
+        app.call(QStringLiteral("undo"));
+        QVERIFY(app.design().overlays().art(QStringLiteral("window:foot")).empty());
+
+        // To the Desk, remembered for this surface.
+        QCOMPARE(lifted({{"target", hovered()}, {"to", "desk"}}), QString());
+        ProjectTab *desk = app.design().deskTab();
+        QVERIFY(desk);
+        QCOMPARE(Desk::frames(*desk->session.document()).size(), size_t(1));
+        QCOMPARE(desk->session.undoName(), QStringLiteral("Lift foot"));
+        QCOMPARE(AnywhereSettings::destination(QStringLiteral("window:foot")), QStringLiteral("desk"));
+        QVERIFY(app.design().overlays().art(QStringLiteral("window:foot")).empty());
+        // The next lift of it goes there by itself.
+        QCOMPARE(lifted({{"target", hovered()}}), QString());
+        QCOMPARE(Desk::frames(*desk->session.document()).size(), size_t(2));
+
+        // To a new document of the art's size.
+        const size_t tabs = app.workspace.tabs().size();
+        QCOMPARE(lifted({{"target", hovered()}, {"to", "document"}}), QString());
+        QCOMPARE(app.workspace.tabs().size(), tabs + 1);
+        const ProjectTab &document = *app.workspace.tabs().back();
+        QCOMPARE(document.session.undoName(), QStringLiteral("Lift foot"));
+        QCOMPARE(document.session.document()->size, QSizeF(800, 600));
+
+        // No tree: traced, and the bar offers the agent's clean-up.
+        app.desktop->trees.clear();
+        QCOMPARE(lifted({{"target", hovered()}, {"to", "overlay"}}), QString());
+        QVERIFY(app.status()["message"].toString().contains(QLatin1String("traced")));
+        QCOMPARE(ids(app.status()["bar"].toObject()["actions"].toArray()).first(), QStringLiteral("cleanUp"));
+
+        // A second lift waits for the first; cancelling drops it.
+        QString error;
+        app.call(QStringLiteral("lift"), {{"target", hovered()}}, &error);
+        QCOMPARE(error, QString());
+        // Its progress is on the bar while it runs.
+        QCOMPARE(app.status()["lift"].toObject()["label"].toString(), QStringLiteral("foot"));
+        app.call(QStringLiteral("lift"), {{"target", hovered()}}, &error);
+        QVERIFY(error.startsWith(QLatin1String("Already lifting")));
+        app.call(QStringLiteral("lift"), {{"cancel", true}}, &error);
+        QCOMPARE(error, QString());
+        QTRY_VERIFY(!app.design().liftJob());
+        QCOMPARE(app.status()["message"].toString(), QStringLiteral("Lift cancelled."));
+    }
+
     void inspectingAPageGivesItsCssAndTheBarOffersPageActions()
     {
         App app;
@@ -300,10 +380,10 @@ private slots:
         app.call(QStringLiteral("action"), {{"id", "copyCss"}});
         QTRY_VERIFY(read(m_directory.filePath(QStringLiteral("wl-copy.out"))).contains(QLatin1String("button.buy {")));
         QVERIFY(read(m_directory.filePath(QStringLiteral("wl-copy.out"))).contains(QLatin1String("background: #3355ff;")));
-        // Lift is for the next build, and says so.
+        // Lift needs the page itself: with no browser running, it says so plainly.
         QString error;
         app.call(QStringLiteral("action"), {{"id", "lift"}, {"target", bar["target"]}}, &error);
-        QVERIFY(error.contains(QLatin1String("next build")));
+        QVERIFY2(error.contains(QLatin1String("Omastrator's browser")), qPrintable(error));
         // Mock Up: the rectangle tool, pinned to the element.
         app.call(QStringLiteral("action"), {{"id", "mockup"}, {"target", bar["target"]}});
         QCOMPARE(app.status()["tool"].toString(), QStringLiteral("rectangle"));

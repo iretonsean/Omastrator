@@ -24,6 +24,8 @@ struct Frame {
     VectorDocument art;
     // The frame's size in points; empty: the screenshot's, else the art's.
     QSizeF size;
+    // The undo step's name; empty is "Send to Desk".
+    QString step;
 };
 // "foot · 14:05"
 QString label(const QString &source, const QDateTime &time);

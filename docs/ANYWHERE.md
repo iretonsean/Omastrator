@@ -123,7 +123,9 @@ Nothing is written, committed or published without that confirmation.
 - ~~The exact design-mode hotkey and the Desk's workspace number~~: settled in
   phase 1 as Super+Alt+O and the special workspace `omastrator-desk` (see
   Decisions).
-- How accessibility-tree lifting performs on large apps.
+- How accessibility-tree lifting performs on large apps: capped at 800 nodes
+  and four seconds in phase 2 (see Decisions); not yet measured on a real
+  large app.
 - ~~Privacy~~: onboarding says it plainly, and captures stay in Omastrator's
   own captures folder (see Decisions).
 
@@ -245,9 +247,10 @@ everywhere) on 2026-09-27.
 ### The floating bar and Ask
 
 - **Actions per surface kind** (literal labels):
-  - a page element: Inspect (with Copy CSS), Lift (shown, and held back until
-    phase 2), Mock Up (the rectangle tool, pinned to it), Measure
-  - a window or the desktop: Capture to Desk, Measure
+  - a page element: Inspect (with Copy CSS), Lift, Mock Up (the rectangle
+    tool, pinned to it), Measure
+  - a window: Capture to Desk, Lift, Measure
+  - the desktop: Capture to Desk, Measure
   - another browser: Open in Omastrator's Browser
   - art: the in-app task bar's actions for that kind of selection (Unite and
     Group, Ungroup, Create Outlines, Image Trace, Release Clipping Mask), then
@@ -315,3 +318,97 @@ everywhere) on 2026-09-27.
 - Overlapping floating windows can show one window's art over another's.
 - Art on a page is anchored to its address, and shows in whichever window
   Omastrator's browser has that page open.
+
+## Decisions: Lift into vectors (phase 2)
+
+Made while building phase 2 on 2026-09-27.
+
+### What lifts, and how
+
+- **Lift is on the bar** for a page element and for a window, and on the
+  command line as `omastrator design lift [--target N] [--region X,Y,W,H]
+  [--to overlay|desk|document]` (and `lift cancel`). A region on the desktop
+  is traced.
+- **Pages** (in Omastrator's browser, any site): one script
+  (`src/Anywhere/LiftScript.h`) walks the DOM from the element the bar showed,
+  found again by its box under its centre. Pointing at the page itself (`html`
+  or `body`), or giving a region, lifts everything in the viewport (or the
+  region), with the page's canvas colour as a "Page background" rectangle and
+  one clip to the region. Per element:
+  - its box: background colour and gradient layers as the fill stack
+    (linear and radial; CSS's first layer on top), a live rectangle with the
+    per-corner radii (a plain path when a corner is elliptical), and the
+    border (one inside stroke when every side matches, dashed and dotted too;
+    a filled ring when only the widths differ; a filled side each when the
+    colours differ). Sharp box shadows become offset rectangles.
+  - text: one text object per element with inline text. The browser's own line
+    breaks are kept: each line is a paragraph, placed on the page's baseline
+    (the word's box and the font's ascent share), with the gaps between lines
+    as leading and each line's start as its indent. Real family (the first in
+    the stack this machine has, as Chromium chose), size, weight, italic,
+    letter-spacing as tracking, colour, underline, strike-through and
+    uppercase. Inline children (`<b>`, `<span>`, links) become runs; their
+    backgrounds become "Highlight" rectangles. Inputs show their value or
+    placeholder.
+  - images: the original file through the DevTools Protocol
+    (`Page.getResourceContent`, so no cross-origin limits), drawn where
+    `object-fit` and `object-position` put it and cropped to the box. An
+    image that isn't in the page's cache is a screenshot of its box instead.
+    An SVG file becomes vectors. Background images the same, placed once
+    (not tiled).
+  - inline SVG: cloned with its computed paint written onto each element and
+    `<use>` copies resolved, then imported with the SVG importer at its size.
+  - canvas, video and frames: a screenshot of the box.
+  - structure: a group per element, named by `aria-label`, `#id` or
+    `tag.class`; a wrapper that draws nothing and holds one thing is that
+    thing. Children are in paint order (negative z-index, flow, floats,
+    positioned, positive z-index). Opacity is the group's; a CSS transform is
+    measured with the transform off and put back on the group, about its
+    origin, so rotated and scaled things keep their true boxes. `overflow`
+    other than visible makes a clip group from the padding box, rounded.
+  - every object keeps **the element's selector** in `liftedFrom` (saved in
+    `.omai`), for applying changes to the source later.
+- **Other apps**: the whole accessibility tree through a second Python helper
+  (up to 800 showing nodes, four seconds), over one screenshot of the window.
+  Each node is a group named by role and name (its path of roles and indexes
+  is its `liftedFrom`), a rectangle in the colour most of its pixels are where
+  that differs from its parent's, its text as a text object with the tree's
+  font (a flat crop of an icon or picture otherwise), all in the window's
+  coordinates. A widget pointed at lifts that widget; a window, all of it.
+- **No tree**: the screenshot is traced (eight colours, at most 1,400 pixels a
+  side) and placed over the original. The bar then offers **Ask Agent to
+  Clean Up**, which runs the agent headlessly on the traced group as a
+  preview to keep or discard, like Ask.
+
+### Where it lands
+
+- The surface's remembered destination decides: the overlay (the default),
+  the Desk (a frame labelled with the source, moved to the frame's corner) or
+  a new document the size of the art. Source and agent aren't places for art,
+  so they fall back to the overlay. `--to` chooses, and is remembered.
+- Each is **one undo step, "Lift <thing>"**, in the session it lands in; on
+  the overlay the surface's layer, if new, is made in the same step. The
+  lifted group is selected, so the bar shows its actions.
+
+### Performance
+
+- Caps: 1,500 elements, 40,000 characters and 80 pictures on a page; 800
+  nodes in a tree. A capped lift says what it left out.
+- The lift runs in the background: the page's answer and each picture arrive
+  as separate DevTools replies, and an app's tree, screenshot and trace are
+  read on a worker thread. The bar shows the stage ("Reading the page",
+  "Fetching pictures 3 of 8", "Building shapes", "Tracing") with **Cancel**;
+  a cancelled lift lands nothing. One lift runs at a time.
+
+### Limits in phase 2
+
+- Blurred and inset box shadows, text shadows, filters, blend modes,
+  `clip-path`, masks and pseudo-elements (`::before`, `::after`) aren't
+  lifted. Tiled backgrounds are placed once. The individual `rotate`,
+  `scale` and `translate` properties aren't read; `transform` is.
+- Stacking is approximated within each parent; nested stacking contexts
+  across parents aren't reordered.
+- Text keeps the page's line breaks, so editing it doesn't reflow across
+  lines; justified text is set flush left.
+- AT-SPI extents and fonts are only as good as the toolkit's; Flutter and
+  Electron apps give coarse panels, terminals none (so they're traced).

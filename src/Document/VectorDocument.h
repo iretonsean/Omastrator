@@ -230,6 +230,9 @@ struct VectorObject {
     bool isClipGroup = false;
     // Rectangles: the live shape, while the path is still what it makes.
     std::optional<LiveRectangle> shape;
+    // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
+    // applying changes back to the source.
+    QString liftedFrom;
 
     bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group; }
     bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text; }

@@ -34,12 +34,12 @@ private slots:
     void eachSurfaceKindHasItsLikeliestActions()
     {
         QCOMPARE(ids(Bar::actions(QStringLiteral("web"))), (QStringList{"inspect", "lift", "mockup", "measure"}));
-        // Lift comes later: shown, but held back with the reason.
+        // Lift is on, for pages and windows alike.
         const QJsonObject lift = Bar::actions(QStringLiteral("web"))[1].toObject();
-        QCOMPARE(lift["enabled"].toBool(true), false);
-        QVERIFY(lift["tip"].toString().contains(QLatin1String("next build")));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("window"))), (QStringList{"capture", "measure"}));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("browser"))), (QStringList{"capture", "measure", "openInBrowser"}));
+        QCOMPARE(lift["enabled"].toBool(true), true);
+        QCOMPARE(lift["label"].toString(), QStringLiteral("Lift"));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("window"))), (QStringList{"capture", "lift", "measure"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("browser"))), (QStringList{"capture", "lift", "measure", "openInBrowser"}));
         QCOMPARE(ids(Bar::actions(QStringLiteral("desktop"))), (QStringList{"capture", "measure"}));
         // Art on the overlay: the in-app task bar's actions for that kind of selection.
         QCOMPARE(ids(Bar::actions(QStringLiteral("art:paths"))), (QStringList{"unite", "group", "duplicate", "delete", "undo"}));

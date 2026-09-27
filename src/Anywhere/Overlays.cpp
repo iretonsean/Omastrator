@@ -245,6 +245,47 @@ QUuid OverlayStore::draw(const Surface &surface, const Stroke &stroke, QString *
     return made;
 }
 
+QUuid OverlayStore::place(const Surface &surface, const VectorDocument &art, const QUuid &root, const QString &step, QString *error)
+{
+    if (!m_session.hasDocument())
+        load(m_path.isEmpty() ? defaultPath() : m_path);
+    if (m_session.isInteracting()) {
+        if (error)
+            *error = QStringLiteral("Keep or discard the preview on the overlay first.");
+        return {};
+    }
+    std::vector<VectorObject> copies = art.copySubtree(root);
+    if (copies.empty()) {
+        if (error)
+            *error = QStringLiteral("There's nothing to place.");
+        return {};
+    }
+    VectorDocument next = *m_session.document();
+    QUuid layerId;
+    if (const auto found = layer(surface.key)) {
+        layerId = *found;
+    } else {
+        VectorObject made;
+        made.kind = ObjectKind::layer;
+        made.name = surface.key;
+        made.layerColor = nextLayerColor(int(next.layers().size()));
+        layerId = made.id;
+        next.objects.push_back(made);
+    }
+    const QUuid placed = copies.front().id;
+    copies.front().parentID = layerId;
+    for (VectorObject &copy : copies) {
+        const QUuid parent = *copy.parentID;
+        next.insert(std::move(copy), parent);
+    }
+    // The layer and the art arrive together: one step.
+    m_session.beginInteraction(step);
+    m_session.previewDocument(next, {placed});
+    m_session.commitInteraction();
+    m_session.setActiveLayer(layerId);
+    return placed;
+}
+
 bool OverlayStore::selectArt(const QString &key, const std::vector<QUuid> &ids)
 {
     const std::vector<QUuid> all = art(key);

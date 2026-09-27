@@ -143,7 +143,7 @@ QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error)
     const QRectF all = next.bounds(groupId, true);
     next.size = QSizeF(std::max(next.size.width(), all.right() + margin), std::max(next.size.height(), all.bottom() + margin));
 
-    desk.beginInteraction(QStringLiteral("Send to Desk"));
+    desk.beginInteraction(frame.step.isEmpty() ? QStringLiteral("Send to Desk") : frame.step);
     desk.previewDocument(next, {groupId});
     desk.commitInteraction();
     return groupId;

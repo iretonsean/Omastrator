@@ -442,6 +442,8 @@ QJsonObject encode(const VectorObject &object)
         json["layerColor"] = color(object.layerColor);
     if (object.isClipGroup)
         json["clip"] = true;
+    if (!object.liftedFrom.isEmpty())
+        json["liftedFrom"] = object.liftedFrom;
     switch (object.kind) {
     case ObjectKind::path:
         json["path"] = encode(object.path);
@@ -502,6 +504,7 @@ VectorObject decodeObject(const QJsonObject &json)
     if (json.contains("layerColor"))
         object.layerColor = readColor(json["layerColor"]);
     object.isClipGroup = json["clip"].toBool();
+    object.liftedFrom = json["liftedFrom"].toString();
     object.transform = readTransform(json["transform"]);
     if (object.kind == ObjectKind::path) {
         object.path = decodePath(json["path"].toObject());
