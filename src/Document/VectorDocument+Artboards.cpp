@@ -5,6 +5,10 @@ std::vector<Artboard> VectorDocument::allArtboards() const
 {
     if (artboards.empty()) {
         Artboard board;
+        // A fixed id (not a fresh random one each call, and not the null id `QUuid()` some
+        // code uses for "no artboard"), so code that looks it up between calls (an
+        // interactive drag, for one) keeps finding the same artboard.
+        board.id = QUuid(QStringLiteral("{a64944e6-2b31-4a97-8a97-1b3f6e4c9c01}"));
         board.name = QStringLiteral("Artboard 1");
         board.rect = QRectF(QPointF(0, 0), size);
         board.background = background;
