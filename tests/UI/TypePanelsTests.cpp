@@ -1,4 +1,5 @@
 #include "Document/FontFeatures.h"
+#include "IO/ProjectStore.h"
 #include "UI/NumberField.h"
 #include "UI/ObjectDialogs.h"
 #include "UI/ProjectWorkspaceView.h"
@@ -11,6 +12,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QtTest>
 
 // The type panels: Paragraph for area type, the text style button, the
@@ -200,6 +202,23 @@ private slots:
         QCOMPARE(session.document()->find(first)->text.family, made.text.family);
         QCOMPARE(session.document()->find(second)->text.family, made.text.family);
         dialog->close();
+    }
+
+    void openingAFileWithMissingFontsSaysSo()
+    {
+        QTemporaryDir folder;
+        const QString path = folder.filePath(QStringLiteral("lost.omai"));
+        VectorDocument document = VectorDocument::blank({400, 300});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.text.text = QStringLiteral("Lost");
+        text.text.family = QStringLiteral("Helvetica Neue Condensed Black");
+        document.insert(text, document.layers().front());
+        ProjectStore::write(document, path);
+        ProjectWorkspace workspace;
+        QVERIFY(workspace.openFile(path));
+        QCOMPARE(workspace.cloudStatusText(),
+                 QStringLiteral("Missing font: Helvetica Neue Condensed Black. Type ▸ Find/Replace Font… replaces it."));
     }
 
     void theMenusReachFindFontAndTypeStyles()

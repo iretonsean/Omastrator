@@ -801,10 +801,10 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Multiple fills and strokes | ✓ | ✓ | one of each | P1 |
 | Stroke align, arrowheads | ✓ | ✓ | enum declared, unused | P1 |
 | Per-corner radius / live corners | ✓ | ✓ | tool setting only | P1 |
-| Styled runs (per-character styles, manual kerning) | ✓ | ✓ | ✗ | P1 |
-| OpenType features | ✓ | ✓ | ✗ | P1 |
-| Paragraph indents and spacing | ✓ | ✓ | ✗ | P1 |
-| Character/paragraph/text styles | ✓ | ✓ | ✗ | P1 |
+| Styled runs (per-character styles, manual kerning) | ✓ | ✓ | ✓ done | P1 |
+| OpenType features | ✓ | ✓ | ✓ done | P1 |
+| Paragraph indents and spacing | ✓ | ✓ | ✓ done | P1 |
+| Character/paragraph/text styles | ✓ | ✓ | ✓ done | P1 |
 | Isolation mode | ✓ | (enter group) | from the context menu | P1 |
 | Join, Average, Scissors, Reverse path | ✓ | ✓ | ✗ | P1 |
 | Selection colours, recent colours, hex field | ✓ | ✓ | picker only | P1 |
@@ -1240,6 +1240,84 @@ has Qt Test coverage in `tests/<Folder>/`.
 > and remembers the offset; the grip's right-click pins it in place, resets
 > it, or hides it. View ▸ Contextual Task Bar turns it on and off, remembered.
 > Tests: `tests/Canvas/TaskBarTests.cpp`, `tests/UI/TaskBarActionsTests.cpp`.
+
+> **P1-1 to P1-5 done: the type detail layer.**
+>
+> **Styled runs (P1-1):** `TextContent` is now its own `CharacterFormat` and
+> `ParagraphFormat` (the object's look), plus `runs` (character ranges
+> formatted apart, each a full format: family, style, size, tracking, baseline
+> shift, case, decoration, OpenType features, colour) and `paragraphFormats`
+> (paragraphs formatted apart, by index). It stays one string with ranges on
+> it rather than nested paragraph objects, so everything that reads `text.size`
+> or `text.family` still reads the object's own format. `replace()` keeps runs,
+> kerns and paragraphs on their characters as text is typed or deleted; typed
+> text takes the format it replaces, else the one before it.
+> - While type is edited in place, the canvas hands its selection to
+>   `EditorSession::setTextRange`. With characters selected, every type edit
+>   (the Character fields, the type keys, styles) and a solid fill colour apply
+>   to them alone; with only a caret, to the whole object, as before. Each
+>   stretch of the target is edited on its own, so a size step keeps each run's
+>   size and an absolute value reaches every run. The Character section reads
+>   Mixed when the stretches differ.
+> - Layout: runs become `QTextLayout` formats. Sizes that miss the object's
+>   pixel grid are laid out on a 1/16 pt grid, so a 13.5 pt run is exact. Auto
+>   leading is 120 % of the largest size on each line.
+> - Manual kerning is still per caret (Alt+←/→ with no range) and shifts only
+>   what follows.
+> - Create Outlines makes one path, or a group of one path per run colour.
+> - `.omai` is version 3: runs and paragraphs are written as differences from
+>   the object's format, so version 2 files read unchanged. SVG writes a
+>   `<tspan>` per run inside each line's span and reads nested spans back as
+>   runs (the most common look becomes the object's).
+> - Deviations: horizontal and vertical scale and the kerning mode stay per
+>   object, since SVG can't scale one span. A manual kern still separates its
+>   character's shaping, so a kern pair (AV) around a manual kern is lost, as
+>   it was in P0.
+>
+> **OpenType (P1-2):** `Document/FontFeatures`, `UI/OpenTypePopover`. A "…"
+> button at the end of Show more's decoration row opens a popover: Standard
+> and Discretionary ligatures, Contextual alternates, Small caps, Fractions,
+> Ordinals, Figures (Lining or Oldstyle) and Spacing (Tabular or Proportional),
+> and stylistic sets 1–20. The font's GSUB and GPOS feature lists decide what's
+> enabled. Features apply through `QFont::setFeature` on Qt 6.7 and later; on
+> older Qt the button is left out and the features are only kept. SVG writes
+> `font-feature-settings`.
+>
+> **Paragraph (P1-3):** `UI/ParagraphSection`. Shown when every selected text
+> is area type: left and right indent, first-line indent (below 0 hangs),
+> space before and after, and, for justified text, where the last line sits
+> (left, center, right: `justifyCenter` and `justifyRight`; Justify all stays
+> in Character). Each paragraph can differ; with characters selected, fields
+> apply to the paragraphs they touch.
+>
+> **Text styles (P1-4):** `EditorSession+TextStyles.cpp`, `UI/TextStylesPanel`,
+> `CharacterSection+Styles.cpp`. `VectorDocument::textStyles` holds character
+> styles (character attributes) and paragraph styles (paragraph attributes
+> plus the character attributes their unstyled characters take). Colour isn't
+> part of a style, as in Figma. The style ids live in the formats themselves
+> (`CharacterFormat::characterStyle`, `ParagraphFormat::paragraphStyle`)
+> rather than a `TextContent::styleId`, so a run can carry its own.
+> - Character's heading has a style button: it names the style shown, with
+>   "+" when overridden, and its menu applies styles, makes New Paragraph or
+>   New Character Style from the selection, and offers Redefine, Clear
+>   Overrides, Detach Style and Type Styles….
+> - Window ▸ Type Styles lists both kinds. A click applies, a double-click
+>   renames, the right-click menu redefines or deletes, and "+" makes one.
+> - Redefine updates every use in one undo step. Fields someone changed by
+>   hand keep their values, as Illustrator's overrides do.
+> - Deleting a style keeps the look of the text that used it.
+>
+> **Find Font (P1-5):** `UI/ObjectDialogs+Fonts.cpp`,
+> `EditorSession::replaceFont`. Type ▸ Find/Replace Font… lists the families
+> used in the document or the selection, missing ones marked with a warning.
+> **Find** selects the text that uses one. **Replace All** swaps it everywhere
+> (runs and styles too) for the chosen family, at the nearest face, in one undo
+> step. Opening a file with missing fonts says so in the status line instead of
+> an alert.
+>
+> Tests: `tests/Document/TextRunsTests.cpp`, `tests/Document/TextStylesTests.cpp`,
+> `tests/IO/TextRunsIOTests.cpp`, `tests/Canvas/TextRangeTests.cpp`,
+> `tests/UI/TypePanelsTests.cpp`.
 
 | # | Item | One-line spec | Where | Acceptance |
 |---|---|---|---|---|
