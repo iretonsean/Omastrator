@@ -4,6 +4,7 @@
 #include "UI/ColorPaletteControls.h"
 #include "UI/ColorPickerSheet.h"
 #include "UI/NumberField.h"
+#include "UI/ParagraphSection.h"
 #include "UI/ToolHeaderStyle.h"
 #include <QAction>
 #include <QEvent>
@@ -45,9 +46,10 @@ PropertiesPanel::PropertiesPanel(EditorSession &session, QWidget *parent) : QScr
     column->setContentsMargins(0, 4, 0, 0);
     column->setSpacing(0);
     m_character = new CharacterSection(m_session, content);
+    m_paragraph = new ParagraphSection(m_session, content);
     bool first = true;
-    for (PanelSection *block : {documentSection(), transformSection(), static_cast<PanelSection *>(m_character), appearanceSection(), strokeSection(),
-                                alignSection(), pathfinderSection()}) {
+    for (PanelSection *block : {documentSection(), transformSection(), static_cast<PanelSection *>(m_character), static_cast<PanelSection *>(m_paragraph),
+                                appearanceSection(), strokeSection(), alignSection(), pathfinderSection()}) {
         if (!first) {
             // A section's rule hides with it.
             QFrame *rule = divider(content);
@@ -240,6 +242,14 @@ void PropertiesPanel::synchronize()
     show(m_document, !selected);
     show(m_transform, selected);
     show(m_character, text);
+    // Area type has paragraphs to indent and space; point type keeps the panel short.
+    const std::vector<QUuid> texts = m_session.selectedTexts();
+    const bool area = text && !texts.empty() && std::all_of(texts.begin(), texts.end(), [this](const QUuid &id) {
+        return m_session.document()->find(id)->text.area.has_value();
+    });
+    show(m_paragraph, area);
+    if (area)
+        m_paragraph->synchronize();
     show(m_align, selected);
     show(m_pathfinder, m_session.canCombine());
     if (text)

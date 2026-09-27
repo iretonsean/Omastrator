@@ -68,7 +68,13 @@ void drawLeaf(QPainter &painter, const VectorObject &object, const VectorRendere
         painter.setTransform(object.transform, true);
         const QPainterPath glyphs = object.text.outline();
         const QRectF bounds = glyphs.boundingRect();
-        painter.fillPath(glyphs, object.fill.brush(bounds));
+        if (object.text.runs.empty()) {
+            painter.fillPath(glyphs, object.fill.brush(bounds));
+        } else {
+            // Runs with a colour of their own; the rest take the object's fill.
+            for (const auto &[color, piece] : object.text.fills())
+                painter.fillPath(piece, color ? QBrush(*color) : object.fill.brush(bounds));
+        }
         if (object.stroke.isVisible())
             painter.strokePath(glyphs, object.stroke.pen(bounds));
         painter.restore();

@@ -8,10 +8,12 @@
 #include <QPainterPath>
 #include <QSizeF>
 #include <QString>
+#include <QStringList>
 #include <QTransform>
 #include <QUuid>
-#include <map>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -20,10 +22,11 @@ enum class ObjectKind { layer, group, path, text, image };
 QString rawValue(ObjectKind kind);
 std::optional<ObjectKind> objectKind(const QString &rawValue);
 
-// Justify leaves a paragraph's last line flush left; justifyAll stretches it too.
-enum class TextAlignment { left, center, right, justify, justifyAll };
+// Justify leaves a paragraph's last line flush left, centred or right; justifyAll stretches it too.
+enum class TextAlignment { left, center, right, justify, justifyAll, justifyCenter, justifyRight };
 QString rawValue(TextAlignment alignment);
 std::optional<TextAlignment> textAlignment(const QString &rawValue);
+bool isJustified(TextAlignment alignment);
 
 // Metrics uses the font's kern pairs; none sets every pair to 0.
 enum class TextKerning { metrics, none };
@@ -34,53 +37,129 @@ enum class TextCase { normal, allCaps, smallCaps };
 QString rawValue(TextCase textCase);
 std::optional<TextCase> textCase(const QString &rawValue);
 
-// Point type: lines start at the object's origin, the first baseline at y 0.
-// Area type: text wraps inside `area`, whose top-left is the origin.
-struct TextContent {
-    QString text;
+// How characters look. A text object's own format covers every character a run doesn't.
+struct CharacterFormat {
     QString family = QStringLiteral("Sans Serif");
     // A face from QFontDatabase::styles(family), such as "Bold Italic".
     QString style = QStringLiteral("Regular");
     double size = 24;
-    TextAlignment alignment = TextAlignment::left;
-    // Baseline to baseline in pt; nullopt is Auto, 120 % of the size.
-    std::optional<double> leading;
     // In 1/1000 em, added after every character.
     double tracking = 0;
+    // pt, positive is up.
+    double baselineShift = 0;
+    TextCase textCase = TextCase::normal;
+    bool underline = false;
+    bool strikethrough = false;
+    // OpenType features by tag ("liga", "ss01"): 0 is off, 1 on; a tag left out follows the font.
+    std::map<QString, int> features;
+    // A run's own colour; unset, the characters take the object's fill.
+    std::optional<QColor> fill;
+    // The character style these characters were given, if any.
+    QUuid characterStyle;
+
+    bool isBold() const;
+    bool isItalic() const;
+    // The font at `pixelsPerPoint`, as layout uses it.
+    QFont font(double pixelsPerPoint, TextKerning kerning = TextKerning::metrics) const;
+    friend bool operator==(const CharacterFormat &, const CharacterFormat &) = default;
+};
+
+// How a paragraph sits: alignment, leading, indents and spacing.
+struct ParagraphFormat {
+    TextAlignment alignment = TextAlignment::left;
+    // Baseline to baseline in pt; nullopt is Auto, 120 % of the line's largest size.
+    std::optional<double> leading;
+    // Indents and spacing in pt; a negative first-line indent hangs.
+    double leftIndent = 0;
+    double rightIndent = 0;
+    double firstLineIndent = 0;
+    double spaceBefore = 0;
+    double spaceAfter = 0;
+    // The paragraph style these paragraphs were given, if any.
+    QUuid paragraphStyle;
+    friend bool operator==(const ParagraphFormat &, const ParagraphFormat &) = default;
+};
+
+// Characters start..start+length formatted apart from their object.
+struct TextRun {
+    int start = 0;
+    int length = 0;
+    CharacterFormat format;
+    friend bool operator==(const TextRun &, const TextRun &) = default;
+};
+
+// A named format kept in the document. A paragraph style carries a character
+// format too, which its paragraphs' unstyled characters take.
+enum class TextStyleKind { character, paragraph };
+struct TextStyle {
+    QUuid id = QUuid::createUuid();
+    QString name;
+    TextStyleKind kind = TextStyleKind::character;
+    CharacterFormat character;
+    ParagraphFormat paragraph;
+    friend bool operator==(const TextStyle &, const TextStyle &) = default;
+};
+
+// Point type: lines start at the object's origin, the first baseline at y 0.
+// Area type: text wraps inside `area`, whose top-left is the origin.
+// The object's own character and paragraph formats cover whatever `runs` and
+// `paragraphFormats` leave alone.
+struct TextContent : CharacterFormat, ParagraphFormat {
+    QString text;
     TextKerning kerning = TextKerning::metrics;
     // Manual kerning in 1/1000 em, keyed by the index of the character it moves.
     std::map<int, double> kerns;
     // Percent.
     double horizontalScale = 100;
     double verticalScale = 100;
-    // pt, positive is up.
-    double baselineShift = 0;
-    TextCase textCase = TextCase::normal;
-    bool underline = false;
-    bool strikethrough = false;
-    // Paragraph indents and spacing in pt; a negative first-line indent hangs.
-    double leftIndent = 0;
-    double rightIndent = 0;
-    double firstLineIndent = 0;
-    double spaceBefore = 0;
-    double spaceAfter = 0;
     // Area type's box; a height of 0 grows with the text.
     std::optional<QSizeF> area;
+    // Ranges formatted apart from the object's own format: in order, apart and never empty.
+    std::vector<TextRun> runs;
+    // Paragraphs formatted apart from the object's own format, by paragraph index.
+    std::map<int, ParagraphFormat> paragraphFormats;
 
+    CharacterFormat &character() { return *this; }
+    const CharacterFormat &character() const { return *this; }
+    ParagraphFormat &paragraph() { return *this; }
+    const ParagraphFormat &paragraph() const { return *this; }
     double effectiveLeading() const { return leading.value_or(size * 1.2); }
-    bool isBold() const;
-    bool isItalic() const;
     // The family's face nearest a weight and slant.
     static QString styleFor(const QString &family, int weight, bool italic);
+    // The object's own format as a font, at its whole-pixel design size.
     QFont font() const;
     // The glyph outlines, in the text's own coordinates.
     QPainterPath outline() const;
+    // The same, split by the colour runs give them; nullopt is the object's fill.
+    std::vector<std::pair<std::optional<QColor>, QPainterPath>> fills() const;
     // Area type with a fixed height: lines past it are hidden.
     bool overflows() const;
     // Area type's box, else the glyphs' bounds.
     QRectF frame() const;
     // Keeps manual kerns on their characters when `from`..`to` becomes `length` characters.
     void replaceKerns(int from, int to, int length);
+
+    // The format at a character; the end of the text reads the last one's.
+    CharacterFormat formatAt(int index) const;
+    int paragraphCount() const;
+    int paragraphOf(int position) const;
+    // A paragraph's first character.
+    int paragraphStart(int paragraph) const;
+    ParagraphFormat paragraphAt(int paragraph) const;
+    // Replaces `from`..`to` with `with`; runs, kerns and paragraphs stay with their characters.
+    // What's typed takes the format of what it replaces, else of the character before.
+    void replace(int from, int to, const QString &with);
+    // Changes the format of characters `from`..`to`, run by run.
+    void formatCharacters(int from, int to, const std::function<void(CharacterFormat &)> &change);
+    // Changes paragraphs `first`..`last`, inclusive, one by one.
+    void formatParagraphs(int first, int last, const std::function<void(ParagraphFormat &)> &change);
+    // Runs merged where equal, dropped where the object's own format says the same.
+    void normalize();
+    // The object as each distinct stretch of `from`..`to` sees it: that
+    // stretch's character and paragraph formats in place of the object's own.
+    std::vector<TextContent> facets(int from, int to) const;
+    // Every family used, the object's own first.
+    QStringList families() const;
     friend bool operator==(const TextContent &, const TextContent &) = default;
 };
 
@@ -127,6 +206,8 @@ struct VectorDocument {
     // The artboard's paper; transparent exports leave it out.
     QColor background = Qt::white;
     std::vector<VectorObject> objects;
+    // Character and paragraph styles, in the order they were made.
+    std::vector<TextStyle> textStyles;
 
     // A document with one empty layer.
     static VectorDocument blank(QSizeF size);

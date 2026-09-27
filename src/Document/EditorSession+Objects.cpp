@@ -609,6 +609,39 @@ void EditorSession::simplifySelection(double tolerance)
     });
 }
 
+namespace {
+// One path, or a group of one path per colour when runs have their own; each keeps the run's look.
+void outlineText(VectorDocument &document, const QUuid &id)
+{
+    VectorObject &text = *document.find(id);
+    const auto fills = text.text.fills();
+    const QTransform place = text.transform;
+    text.transform = {};
+    if (fills.size() <= 1) {
+        text.path = VectorPath::fromPainterPath(place.map(text.text.outline()));
+        text.path.fillRule = Qt::WindingFill;
+        text.kind = ObjectKind::path;
+        text.text = {};
+        return;
+    }
+    const VectorObject made = text;
+    text.kind = ObjectKind::group;
+    text.text = {};
+    text.fill = Paint::none();
+    text.stroke.paint = Paint::none();
+    for (const auto &[color, glyphs] : fills) {
+        VectorObject piece;
+        piece.kind = ObjectKind::path;
+        piece.name = made.name;
+        piece.path = VectorPath::fromPainterPath(place.map(glyphs));
+        piece.path.fillRule = Qt::WindingFill;
+        piece.fill = color ? Paint::solid(*color) : made.fill;
+        piece.stroke = made.stroke;
+        document.insert(piece, id);
+    }
+}
+}
+
 void EditorSession::convertTextToPaths()
 {
     if (!m_document)
@@ -626,13 +659,8 @@ void EditorSession::convertTextToPaths()
                 if (document.find(nested)->kind == ObjectKind::text)
                     texts.push_back(nested);
             }
-            for (const QUuid &textID : texts) {
-                VectorObject *text = document.find(textID);
-                text->path = VectorPath::fromPainterPath(text->outline());
-                text->path.fillRule = Qt::WindingFill;
-                text->kind = ObjectKind::path;
-                text->transform = {};
-            }
+            for (const QUuid &textID : texts)
+                outlineText(document, textID);
             results.push_back(id);
         }
         m_selection = results;
@@ -701,12 +729,17 @@ void EditorSession::setFillOfSelection(const Paint &fill)
         setDefaultFill(fill);
         return;
     }
+    if (fillTextRange(fill))
+        return;
     m_defaultFill = fill;
     edit(QStringLiteral("Fill"), [&](VectorDocument &document) {
         for (const QUuid &id : selectedLeaves()) {
             VectorObject *object = document.find(id);
-            if (object && object->hasPaint() && !document.isEffectivelyLocked(id))
+            if (object && object->hasPaint() && !document.isEffectivelyLocked(id)) {
                 object->fill = fill;
+                // A whole text's fill reaches the runs coloured on their own too.
+                object->text.formatCharacters(0, int(object->text.text.size()), [](CharacterFormat &format) { format.fill.reset(); });
+            }
         }
     });
 }
@@ -773,6 +806,10 @@ void EditorSession::pickStyle(const QUuid &from)
                     const QString text = object->text.text;
                     object->text = style.text;
                     object->text.text = text;
+                    // The source's own look only: its runs, kerns and paragraphs belong to its characters.
+                    object->text.runs.clear();
+                    object->text.paragraphFormats.clear();
+                    object->text.kerns.clear();
                 }
             }
         }

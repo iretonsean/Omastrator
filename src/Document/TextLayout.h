@@ -2,10 +2,9 @@
 #include "Document/VectorDocument.h"
 #include <QPainterPath>
 #include <QRectF>
+#include <QTextLayout>
 #include <memory>
 #include <vector>
-
-class QTextLayout;
 
 // A text object laid out in its own coordinates: point type line by line,
 // area type wrapped and justified in its box. The canvas, the inline editor
@@ -43,6 +42,10 @@ public:
     // The nearest caret position to a point in the text's coordinates.
     int positionAt(QPointF local) const;
     QPainterPath outline() const;
+    // The outline split by the colour runs give it; nullopt is the object's fill.
+    std::vector<std::pair<std::optional<QColor>, QPainterPath>> fills() const;
+    // Glyphs shaped, ligatures counting as one.
+    int glyphCount() const;
     bool overflows() const { return m_overflows; }
     // Area type's box; point type's glyphs, or the caret's band when empty.
     QRectF frame() const;
@@ -52,10 +55,18 @@ public:
 
 private:
     struct Paragraph;
+    QList<QTextLayout::FormatRange> characterFormats(int start, int length) const;
+    double leadingOf(const ParagraphFormat &format, int start, int length) const;
+    double ascentOf(int start, int length) const;
+    double rawWidth(const Line &line) const;
     double shift(const Line &line, double x) const;
     double rawX(const Line &line, int position) const;
 
     const TextContent m_text;
+    // The formats in use, the object's own first, and which one each character has.
+    std::vector<CharacterFormat> m_formats;
+    std::vector<int> m_formatOf;
+    std::vector<double> m_formatAscents;
     std::vector<std::unique_ptr<Paragraph>> m_paragraphs;
     std::vector<Line> m_lines;
     // Layout units to pt: the font is laid out at a whole pixel size.

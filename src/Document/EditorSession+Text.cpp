@@ -20,6 +20,49 @@ void keepInRange(TextContent &text)
     if (text.area)
         text.area = QSizeF(std::max(1.0, text.area->width()), std::max(0.0, text.area->height()));
 }
+
+// Applies a type edit to each stretch of `range` on its own (all of the text when unset),
+// so relative steps keep each run's value and absolute ones reach every run.
+void restyle(TextContent &text, const std::function<void(TextContent &)> &change, std::optional<std::pair<int, int>> range)
+{
+    const TextContent before = text;
+    const auto probe = [&](const CharacterFormat &character, const ParagraphFormat &paragraph) {
+        TextContent seen = before;
+        seen.runs.clear();
+        seen.paragraphFormats.clear();
+        seen.character() = character;
+        seen.paragraph() = paragraph;
+        change(seen);
+        keepInRange(seen);
+        return seen;
+    };
+    const TextContent own = probe(before.character(), before.paragraph());
+    if (!range) {
+        text.character() = own.character();
+        text.paragraph() = own.paragraph();
+        for (TextRun &run : text.runs)
+            run.format = probe(run.format, before.paragraph()).character();
+        for (auto &[index, format] : text.paragraphFormats)
+            format = probe(before.character(), format).paragraph();
+    } else {
+        const auto [from, to] = *range;
+        text.formatCharacters(from, to, [&](CharacterFormat &format) { format = probe(format, before.paragraph()).character(); });
+        text.formatParagraphs(text.paragraphOf(from), text.paragraphOf(std::max(from, to - 1)),
+                              [&](ParagraphFormat &format) { format = probe(before.character(), format).paragraph(); });
+    }
+    // The object's own fields: kerning, kerns, scale and the area box.
+    if (own.kerning != before.kerning)
+        text.kerning = own.kerning;
+    if (own.kerns != before.kerns)
+        text.kerns = own.kerns;
+    if (own.horizontalScale != before.horizontalScale)
+        text.horizontalScale = own.horizontalScale;
+    if (own.verticalScale != before.verticalScale)
+        text.verticalScale = own.verticalScale;
+    if (own.area != before.area)
+        text.area = own.area;
+    text.normalize();
+}
 }
 
 std::vector<QUuid> EditorSession::selectedTexts() const
@@ -37,8 +80,60 @@ std::vector<QUuid> EditorSession::selectedTexts() const
 
 TextContent EditorSession::shownText() const
 {
-    const std::vector<QUuid> texts = selectedTexts();
-    return texts.empty() ? defaultText : m_document->find(texts.front())->text;
+    return shownTexts().front();
+}
+
+std::optional<std::pair<int, int>> EditorSession::rangeIn(const QUuid &id) const
+{
+    if (!m_textRange || m_textRange->id != id || !m_document)
+        return std::nullopt;
+    const VectorObject *object = m_document->find(id);
+    if (!object)
+        return std::nullopt;
+    const int length = int(object->text.text.size());
+    const int from = std::clamp(std::min(m_textRange->from, m_textRange->to), 0, length);
+    const int to = std::clamp(std::max(m_textRange->from, m_textRange->to), 0, length);
+    if (from == to)
+        return std::nullopt;
+    return std::pair{from, to};
+}
+
+void EditorSession::setTextRange(std::optional<TextRange> range)
+{
+    const bool same = range.has_value() == m_textRange.has_value()
+        && (!range || (range->id == m_textRange->id && range->from == m_textRange->from && range->to == m_textRange->to));
+    if (same)
+        return;
+    m_textRange = range;
+    notify(false);
+}
+
+std::vector<TextContent> EditorSession::shownTexts() const
+{
+    std::vector<TextContent> shown;
+    for (const QUuid &id : selectedTexts()) {
+        const TextContent &text = m_document->find(id)->text;
+        const auto range = rangeIn(id);
+        for (TextContent &facet : text.facets(range ? range->first : 0, range ? range->second : int(text.text.size())))
+            shown.push_back(std::move(facet));
+    }
+    if (shown.empty())
+        shown.push_back(defaultText);
+    return shown;
+}
+
+bool EditorSession::fillTextRange(const Paint &fill)
+{
+    if (!m_textRange || fill.kind != PaintKind::solid)
+        return false;
+    const QUuid id = m_textRange->id;
+    const auto range = rangeIn(id);
+    if (!range || m_document->isEffectivelyLocked(id))
+        return false;
+    edit(QStringLiteral("Fill"), [&](VectorDocument &document) {
+        document.find(id)->text.formatCharacters(range->first, range->second, [&fill](CharacterFormat &format) { format.fill = fill.color; });
+    });
+    return true;
 }
 
 void EditorSession::commitTextEdit(VectorDocument next, const QString &name, bool coalesce)
@@ -77,8 +172,7 @@ void EditorSession::updateText(const std::function<void(TextContent &)> &change,
             continue;
         TextContent &text = next.find(id)->text;
         const TextContent before = text;
-        change(text);
-        keepInRange(text);
+        restyle(text, change, rangeIn(id));
         changed = changed || !(before == text);
     }
     if (!changed) {
@@ -154,8 +248,7 @@ void EditorSession::convertTextType(bool toArea)
                 if (line->lastInParagraph)
                     continue;
                 const int at = line->start + line->length;
-                text.replaceKerns(at, at, 1);
-                text.text.insert(at, QLatin1Char('\n'));
+                text.replace(at, at, QStringLiteral("\n"));
             }
             const double width = text.area->width();
             const double x = text.alignment == TextAlignment::center ? width / 2 : text.alignment == TextAlignment::right ? width : 0;

@@ -227,6 +227,40 @@ public:
     std::vector<QUuid> selectedTexts() const;
     // The selected texts' style, else the next text's.
     TextContent shownText() const;
+    // Characters selected in type being edited in place: type edits, styles and
+    // fills apply to them alone. Without one, or when it's empty, they apply to whole objects.
+    struct TextRange {
+        QUuid id;
+        int from = 0;
+        int to = 0;
+    };
+    const std::optional<TextRange> &textRange() const { return m_textRange; }
+    void setTextRange(std::optional<TextRange> range);
+    // Each distinct stretch of what type edits would change, as its own text:
+    // the Character section shows a field as Mixed when these differ.
+    std::vector<TextContent> shownTexts() const;
+    // Text styles: made from what's shown, applied to the selection or range,
+    // redefined everywhere in one step. Paragraph styles also set their paragraphs' unstyled characters.
+    const TextStyle *textStyle(const QUuid &id) const;
+    QUuid newTextStyle(TextStyleKind kind, const QString &name = QString());
+    void applyTextStyle(const QUuid &id);
+    // Detaches from the style of `kind`, keeping the look.
+    void clearTextStyle(TextStyleKind kind);
+    // Back to the style's own look.
+    void clearTextOverrides(TextStyleKind kind);
+    void redefineTextStyle(const QUuid &id);
+    void renameTextStyle(const QUuid &id, const QString &name);
+    void deleteTextStyle(const QUuid &id);
+    // The style of `kind` everything shown shares, if one; `overridden` says whether any of it differs from the style.
+    std::optional<QUuid> shownTextStyle(TextStyleKind kind, bool *overridden = nullptr) const;
+    // Type ▸ Find/Replace Font: families in the document or the selection, those not installed,
+    // and every use of one swapped for another, nearest face kept, in one undo step.
+    QStringList usedFonts(bool selectionOnly = false) const;
+    QStringList missingFonts() const;
+    static bool isFontInstalled(const QString &family);
+    int replaceFont(const QString &from, const QString &to, bool selectionOnly = false);
+    // Selects the texts that use a family.
+    void selectTextsUsing(const QString &family);
     // Restyles the selected texts and the next text in one undo step named `name`;
     // `coalesce` folds a held key's repeats into the step before.
     void updateText(const std::function<void(TextContent &)> &change, const QString &name, bool coalesce = false);
@@ -323,6 +357,10 @@ private:
     std::optional<QUuid> insertionParent() const;
     std::vector<QUuid> duplicateInto(VectorDocument &document, QPointF offset) const;
     void commitTextEdit(VectorDocument next, const QString &name, bool coalesce);
+    // The range within `id` type edits apply to; nullopt is the whole text.
+    std::optional<std::pair<int, int>> rangeIn(const QUuid &id) const;
+    // Setting the fill with characters selected colours just them.
+    bool fillTextRange(const Paint &fill);
     void runSelect(const std::function<void()> &command);
 
     std::optional<VectorDocument> m_document;
@@ -347,6 +385,7 @@ private:
     mutable int m_pasteCount = 0;
     // When the last coalescing text step ran.
     qint64 m_lastTextStep = 0;
+    std::optional<TextRange> m_textRange;
     // What Transform Again repeats. With a centre, it pivots on the selection's centre as it did there.
     struct RepeatTransform {
         QTransform transform;

@@ -11,6 +11,7 @@
 #include <QToolButton>
 
 class CharacterSection;
+class ParagraphSection;
 class NumberField;
 class PaintSwatch;
 
@@ -80,6 +81,7 @@ private:
     PanelSection *m_document = nullptr;
     PanelSection *m_transform = nullptr;
     CharacterSection *m_character = nullptr;
+    ParagraphSection *m_paragraph = nullptr;
     PanelSection *m_appearance = nullptr;
     PanelSection *m_stroke = nullptr;
     PanelSection *m_align = nullptr;

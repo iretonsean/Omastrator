@@ -10,6 +10,7 @@
 class AgentBridge;
 class CommandPalette;
 class ShareController;
+class TextStylesPanel;
 
 // The menu bar: Illustrator's commands whose session functions exist.
 class Menus : public QObject {
@@ -58,6 +59,9 @@ private:
     ShareController *const m_share;
     QMenu *m_recent = nullptr;
     FloatingPanel m_shortcutsPanel{QStringLiteral("keyboardShortcuts"), m_window};
+    // Window ▸ Type Styles, following the front tab.
+    FloatingPanel m_typeStylesPanel{QStringLiteral("typeStylesPanel"), m_window};
+    QPointer<TextStylesPanel> m_typeStyles;
     QMetaObject::Connection m_sessionWatch;
     QMetaObject::Connection m_canvasWatch;
     QMetaObject::Connection m_menuWatch;

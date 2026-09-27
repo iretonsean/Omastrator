@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QFontComboBox>
 #include <QPushButton>
+#include <QMenu>
 #include <array>
 
 class NumberField;
@@ -31,6 +32,10 @@ protected:
     void changeEvent(QEvent *event) override;
 
 private:
+    // The text style button in the heading, and its menu.
+    void buildStyles();
+    void synchronizeStyles();
+    QMenu *stylesMenu();
     NumberField *number(const QString &label, const QString &suffix, const QString &name, const QString &undo,
                         const std::function<void(TextContent &, double)> &set, const std::function<double(const TextContent &)> &get);
     QToolButton *toggleButton(const QString &name, const QString &text, const QString &tip);
@@ -54,6 +59,9 @@ private:
     QToolButton *m_underline = nullptr;
     QToolButton *m_strikethrough = nullptr;
     QComboBox *const m_kind;
+    QToolButton *m_styles = nullptr;
+    // OpenType features, behind their own button; hidden where Qt can't apply them.
+    QToolButton *m_openType = nullptr;
     // Fields a number is read from, to sync them together.
     std::vector<std::pair<NumberField *, std::function<double(const TextContent &)>>> m_numbers;
 };

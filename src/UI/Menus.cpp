@@ -9,6 +9,7 @@
 #include "UI/ShareController.h"
 #include "UI/SharePanels.h"
 #include "UI/TaskBarActions.h"
+#include "UI/TextStylesPanel.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QFileInfo>
@@ -266,6 +267,7 @@ void Menus::buildObject(QMenuBar &bar)
         [this] { session().convertTextToPaths(); });
     add(type, QStringLiteral("convertToAreaType"), QStringLiteral("Convert to Area Type"), QKeySequence(), [this] { session().convertTextType(true); });
     add(type, QStringLiteral("convertToPointType"), QStringLiteral("Convert to Point Type"), QKeySequence(), [this] { session().convertTextType(false); });
+    add(type, QStringLiteral("findFont"), QStringLiteral("Find/Replace Font…"), QKeySequence(), [this] { ObjectDialogs::findFont(session(), &m_window); });
     type->addSeparator();
     buildTypeKeys(*type);
 }
@@ -359,6 +361,12 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
         synchronize();
     });
     properties->setCheckable(true);
+    add(window, QStringLiteral("showTypeStyles"), QStringLiteral("Type Styles"), QKeySequence(), [this] {
+        if (!m_typeStyles || !m_typeStylesPanel.isVisible()) {
+            m_typeStyles = new TextStylesPanel([this]() -> EditorSession * { return &session(); });
+            m_typeStylesPanel.show(QStringLiteral("Type Styles"), m_typeStyles);
+        }
+    });
     add(window, QStringLiteral("showSwatches"), QStringLiteral("Swatches"), QKeySequence(), [this] {
         if (m_agent)
             m_agent->showSwatchesPanel();
@@ -388,6 +396,8 @@ void Menus::watchFront(EditorCanvas *canvas)
     m_sessionWatch = connect(&session(), &EditorSession::changed, this, &Menus::synchronize);
     disconnect(m_canvasWatch);
     m_canvas = canvas;
+    if (m_typeStyles)
+        m_typeStyles->follow();
     disconnect(m_menuWatch);
     if (m_canvas) {
         if (!m_canvas->findChild<TaskBar *>())

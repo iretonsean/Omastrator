@@ -49,8 +49,11 @@ double InlineTextEditor::baseline(int line) const
 
 QRectF InlineTextEditor::caretRect() const
 {
-    const double ascent = layout().ascent() * object.text.verticalScale / 100, descent = layout().descent();
-    const double y = baseline(lineOf(caret));
+    // As tall as the character it follows: runs can be larger or smaller than the rest.
+    const CharacterFormat format = object.text.formatAt(caret > 0 ? caret - 1 : caret);
+    const double scale = format.size / std::max(0.1, object.text.size);
+    const double ascent = layout().ascent() * scale * object.text.verticalScale / 100, descent = layout().descent() * scale;
+    const double y = baseline(lineOf(caret)) + object.text.baselineShift - format.baselineShift;
     return QRectF(xAt(caret), y - ascent, 0, ascent + descent);
 }
 
@@ -143,7 +146,8 @@ QString InlineTextEditor::displayText() const
 VectorObject InlineTextEditor::displayObject() const
 {
     VectorObject shown = object;
-    shown.text.text = displayText();
+    if (!preedit.isEmpty())
+        shown.text.replace(std::clamp(caret, 0, int(text().size())), std::clamp(caret, 0, int(text().size())), preedit);
     return shown;
 }
 
@@ -159,10 +163,8 @@ void InlineTextEditor::eraseWord(bool forward)
 
 void InlineTextEditor::insert(const QString &typed)
 {
-    QString &content = object.text.text;
     const int from = std::min(caret, anchor), to = std::max(caret, anchor);
-    object.text.replaceKerns(from, to, int(typed.size()));
-    content.replace(from, to - from, typed);
+    object.text.replace(from, to, typed);
     caret = anchor = from + int(typed.size());
 }
 
@@ -172,16 +174,14 @@ void InlineTextEditor::erase(bool forward)
         insert(QString());
         return;
     }
-    QString &content = object.text.text;
+    const QString &content = object.text.text;
     if (forward && caret < content.size()) {
         // Whole surrogate pairs, never half a character.
         const int length = content[caret].isHighSurrogate() && caret + 1 < content.size() ? 2 : 1;
-        object.text.replaceKerns(caret, caret + length, 0);
-        content.remove(caret, length);
+        object.text.replace(caret, caret + length, QString());
     } else if (!forward && caret > 0) {
         const int length = content[caret - 1].isLowSurrogate() && caret >= 2 ? 2 : 1;
-        object.text.replaceKerns(caret - length, caret, 0);
-        content.remove(caret - length, length);
+        object.text.replace(caret - length, caret, QString());
         caret -= length;
     }
     anchor = caret;

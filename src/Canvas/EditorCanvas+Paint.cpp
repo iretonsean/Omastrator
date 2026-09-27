@@ -73,7 +73,7 @@ void EditorCanvas::State::paint(QPainter &painter)
     if (text && text->inDocument && !text->preedit.isEmpty() && document->find(text->object.id)) {
         // The input method's preedit shows in the type itself, pushing the rest along.
         VectorDocument shown = *document;
-        shown.find(text->object.id)->text.text = text->displayText();
+        shown.find(text->object.id)->text = text->displayObject().text;
         VectorRenderer::draw(painter, shown, options);
     } else {
         VectorRenderer::draw(painter, *document, options);
