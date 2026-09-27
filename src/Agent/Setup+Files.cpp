@@ -34,6 +34,11 @@ constexpr Key drawKeys[] = {{"V", "select", "Selection"},   {"A", "directSelect"
                             {"backslash", "line", "Line Segment"}, {"I", "eyedropper", "Eyedropper"},
                             {"H", "hand", "Hand"},          {"Z", "zoom", "Zoom"}};
 // Capture mode: one action, then the keyboard goes back.
+// AI mode: each starts a flow and hands the keyboard back, since Generate and Edit open a sheet to type in.
+constexpr Key aiKeys[] = {{"G", "ai generate", "Generate"},
+                          {"E", "ai edit", "Edit with Instruction"},
+                          {"R", "ai roast", "Roast My Design"},
+                          {"V", "ai vectorize", "Vectorize with AI"}};
 constexpr Key captureKeys[] = {{"F", "capture color fill", "Pick colour for fill"},
                                {"S", "capture color stroke", "Pick colour for stroke"},
                                {"W", "capture color swatch", "Pick colour as a swatch"},
@@ -118,7 +123,14 @@ QByteArray hyprlandLua(const QString &command)
     text += QStringLiteral(
         "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
         "end)\n");
-    for (const char *mode : {"ai", "live"})
+    text += QStringLiteral("\nhl.define_submap(\"omastrator-ai\", function()\n");
+    for (const Key &key : aiKeys)
+        text += QStringLiteral("  hl.bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
+                    .arg(QLatin1String(key.key), QLatin1String(key.tool), QLatin1String(key.label));
+    text += QStringLiteral(
+        "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
+        "end)\n");
+    for (const char *mode : {"live"})
         text += QStringLiteral(
                     "\nhl.define_submap(\"omastrator-%1\", function()\n"
                     "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
@@ -149,7 +161,11 @@ QByteArray hyprlandConf(const QString &command)
     for (const Key &key : captureKeys)
         text += back(QLatin1String(key.key), QLatin1String(key.tool));
     text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
-    for (const char *mode : {"ai", "live"})
+    text += QStringLiteral("\nsubmap = omastrator-ai\n");
+    for (const Key &key : aiKeys)
+        text += back(QLatin1String(key.key), QLatin1String(key.tool));
+    text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
+    for (const char *mode : {"live"})
         text += QStringLiteral("\nsubmap = omastrator-%1\n").arg(QLatin1String(mode)) + back(QStringLiteral("escape"), QStringLiteral("mode normal"))
                 + QStringLiteral("submap = reset\n");
     return text.toUtf8();
@@ -191,6 +207,8 @@ QByteArray menuBlock(const QString &command)
         {"omastrator.capture.screenshot", "", "Screenshot Region", "capture screenshot", "Open it in Omastrator and trace it"},
         {"omastrator.capture.paste", "", "Paste SVG", "capture paste-svg", "The clipboard's SVG as editable paths"},
         {"omastrator.capture.theme", "\U000F0E0C", "Theme Swatches", "capture theme-swatches", "The Omarchy theme's colours as a swatch group"},
+        {"omastrator.generate", "\U000F16A4", "Generate…", "ai generate", "Describe it; your agent draws variations"},
+        {"omastrator.roast", "\uF06D", "Roast My Design", "ai roast", nullptr},
         {"omastrator.connect", "\U000F06A9", "Connect an Agent", "show connect-agent", "Drive Omastrator from any agent"},
     };
     QByteArray block = menuBegin + ": `omastrator setup --remove` takes these out.\n";

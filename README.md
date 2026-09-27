@@ -65,7 +65,8 @@ Omastrator also works outside its window, through Omarchy's own shell
 - **The island**: a pill under the bar with modes. *Draw* holds the canvas
   tools; *Capture* picks a colour anywhere on screen, traces a screenshot
   region, pastes clipboard SVG as paths, or loads your theme's colours as
-  swatches.
+  swatches. *AI* starts Generate…, Edit with Instruction…, Roast My Design and
+  Vectorize with AI, and shows when your agent is working.
 - **The tray light**: one glyph in the bar that shows when your agent is
   working, when results are ready, or when something went wrong. Click it for
   the island's AI mode.

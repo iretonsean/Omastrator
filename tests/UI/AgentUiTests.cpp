@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLocalSocket>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QStandardPaths>
@@ -480,6 +481,61 @@ private slots:
         QCOMPARE(workspace.tabs().size(), before + 1);
         QCOMPARE(workspace.current().session.document()->size, QSizeF(30, 20));
         QVERIFY(!opened["imageId"].toString().isEmpty());
+    }
+
+    void islandStartsTheFlows()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        workspace.createDocument(QSizeF(200, 200));
+        AgentBridge &bridge = *window.agent();
+        auto start = [&](const QJsonObject &params) -> QString {
+            try {
+                bridge.tools().call(QStringLiteral("ai_start"), params);
+                return {};
+            } catch (const AgentProtocol::Error &failure) {
+                return failure.message();
+            }
+        };
+
+        // With a prompt, Generate launches at once and the status says so.
+        QVERIFY(start({{"flow", "generate"}, {"prompt", "a paper plane"}, {"count", 2}}).isEmpty());
+        QVERIFY(prompt().contains(QStringLiteral("a paper plane")));
+        QCOMPARE(bridge.tools().status()["waiting"].toString(), QStringLiteral("Waiting for sh…"));
+        QCOMPARE(bridge.tools().status()["task"].toString(), QStringLiteral("generate"));
+        QVERIFY(start({{"flow", "cancel"}}).isEmpty());
+        QVERIFY(bridge.tools().status()["waiting"].toString().isEmpty());
+
+        // Without one, the sheet opens to type in.
+        QVERIFY(start({{"flow", "generate"}}).isEmpty());
+        QDialog *sheet = nullptr;
+        QTRY_VERIFY((sheet = shown<QDialog>(QStringLiteral("generateSheet"))));
+        sheet->close();
+        QVERIFY(start({{"flow", "edit"}}).isEmpty());
+        QTRY_VERIFY((sheet = shown<QDialog>(QStringLiteral("editInstructionSheet"))));
+        sheet->close();
+
+        // Vectorize needs an image or a traced screenshot.
+        QVERIFY(start({{"flow", "vectorize"}}).contains(QLatin1String("Capture mode")));
+        const QString png = m_directory.filePath(QStringLiteral("shot.png"));
+        QImage image(40, 30, QImage::Format_ARGB32);
+        image.fill(Qt::white);
+        QPainter(&image).fillRect(QRect(5, 5, 20, 15), Qt::black);
+        QVERIFY(image.save(png));
+        const QJsonObject traced = bridge.tools().call(QStringLiteral("open_capture"), {{"path", png}});
+        QVERIFY(traced["traced"].toBool());
+        QCOMPARE(bridge.tools().status()["offer"].toString(), QStringLiteral("vectorize"));
+        QVERIFY(start({{"flow", "vectorize"}, {"mode", "sketch"}}).isEmpty());
+        QVERIFY(prompt().contains(png));
+        QVERIFY(prompt().contains(traced["id"].toString()));
+        QCOMPARE(bridge.tools().status()["task"].toString(), QStringLiteral("vectorize"));
+        bridge.stopWaiting();
+
+        QVERIFY(start({{"flow", "roast"}}).isEmpty());
+        QVERIFY(prompt().contains(QStringLiteral("Roast My Design")));
+        QVERIFY(bridge.roastPanel().isVisible());
+        QVERIFY(start({{"flow", "fly"}}).contains(QLatin1String("flow")));
     }
 };
 

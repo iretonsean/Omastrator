@@ -179,6 +179,10 @@ QString helpText()
         "  new                Bring Omastrator forward on a new document.\n"
         "  show <swatches|variations|roast|connect-agent>\n"
         "                     Bring Omastrator forward on a panel.\n"
+        "  ai <generate|edit|roast|vectorize|cancel> [--prompt TEXT] [--count N]\n"
+        "     [--fit] [--mode logo|sketch]\n"
+        "                     Start an AI flow. Without a prompt, Generate and Edit\n"
+        "                     open their sheet in Omastrator.\n"
         "  capture color [fill|stroke|swatch]\n"
         "                     Pick a colour anywhere on screen (hyprpicker).\n"
         "  capture screenshot Choose a region (slurp, grim), open it and trace it.\n"
@@ -262,6 +266,46 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
                                 {{"panel", args[1] == QLatin1String("connect-agent") ? QStringLiteral("connectAgent") : args[1]}});
             return 0;
         } catch (const AgentProtocol::Error &failure) {
+            return failed(failure.message());
+        }
+    }
+    if (verb == QLatin1String("ai")) {
+        const QString flow = args.value(1);
+        if (!QStringList{"generate", "edit", "roast", "vectorize", "cancel"}.contains(flow))
+            return failed(QStringLiteral("Choose an AI flow: generate, edit, roast, vectorize or cancel."));
+        QJsonObject params{{"flow", flow}};
+        const QStringList options = args.mid(2);
+        for (qsizetype at = 0; at < options.size(); ++at) {
+            const QString option = options[at];
+            if (option == QLatin1String("--fit")) {
+                params["fitToSelection"] = true;
+            } else if (option == QLatin1String("--prompt") || option == QLatin1String("--count") || option == QLatin1String("--mode")) {
+                if (at + 1 >= options.size())
+                    return failed(QStringLiteral("%1 needs a value.").arg(option));
+                const QString value = options[++at];
+                if (option == QLatin1String("--count"))
+                    params["count"] = value.toInt();
+                else
+                    params[option.mid(2)] = value;
+            } else {
+                return failed(QStringLiteral("Unknown option %1.").arg(option));
+            }
+        }
+        if (const QString failure = ensureAppRunning(); !failure.isEmpty()) {
+            setActivity(failure, 6);
+            return failed(failure);
+        }
+        try {
+            AgentClient::Connection connection;
+            connection.call(QStringLiteral("ai_start"), params);
+            if ((flow == QLatin1String("generate") || flow == QLatin1String("edit")) && !params.contains("prompt"))
+                setActivity(flow == QLatin1String("generate") ? QStringLiteral("Generate is open in Omastrator")
+                                                              : QStringLiteral("Edit with Instruction is open in Omastrator"),
+                            3);
+            return 0;
+        } catch (const AgentProtocol::Error &failure) {
+            // The island says why, since nobody sees this command's output.
+            setActivity(failure.message(), 6);
             return failed(failure.message());
         }
     }

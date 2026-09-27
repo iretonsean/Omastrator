@@ -177,6 +177,14 @@ constexpr const char *methodTable = R"json([
  "description": "Brings Omastrator forward showing one panel or sheet.",
  "inputSchema": {"type": "object", "required": ["panel"], "properties": {
    "panel": {"type": "string", "enum": ["swatches", "variations", "roast", "connectAgent"]}}}},
+{"name": "ai_start", "group": "desktop", "mcp": false,
+ "description": "Starts one of the app's AI flows for the user, as its menu entry does. Generate and Edit open their sheet unless a prompt is given. Vectorize takes the selected image, else the last traced screenshot. Cancel stops waiting.",
+ "inputSchema": {"type": "object", "required": ["flow"], "properties": {
+   "flow": {"type": "string", "enum": ["generate", "edit", "roast", "vectorize", "cancel"]},
+   "prompt": {"type": "string"},
+   "count": {"type": "integer", "minimum": 1, "maximum": 6, "description": "Generate's variations. Default 3."},
+   "fitToSelection": {"type": "boolean"},
+   "mode": {"type": "string", "enum": ["logo", "sketch"], "description": "Vectorize's mode. Default logo."}}}},
 {"name": "paste_svg", "group": "desktop", "mcp": false,
  "description": "The user's paste of SVG from the clipboard: editable paths, grouped and centred, as one undo step. A new document is made when none is open.",
  "inputSchema": {"type": "object", "required": ["svg"], "properties": {

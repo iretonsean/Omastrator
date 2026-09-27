@@ -123,6 +123,11 @@ it only reads.
 - `open_capture {path, trace?, colors?}`: a screenshot as a new document,
   traced.
 - `paste_svg {svg, name?}`
+- `new_document {}`, `show_panel {panel}`: bring the window forward.
+- `ai_start {flow: generate|edit|roast|vectorize|cancel, prompt?, count?,
+  fitToSelection?, mode?: logo|sketch}`: the island's AI mode. Generate and
+  Edit open their sheet unless a prompt is given; Vectorize takes the selected
+  image, else the screenshot Capture last traced.
 
 ## Flows
 

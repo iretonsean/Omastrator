@@ -374,3 +374,25 @@ Choices the spec left open, made while building it, in build order.
   `<prefix>/share/omastrator/shell` (CMake installs `shell/` there), else the
   source tree the binary was built from. The vocabulary is written once and
   then left to the user.
+
+### Phase 4: AI mode
+
+- **One method.** The island starts flows with `omastrator island ai <flow>`,
+  which calls the desktop method `ai_start`. The app runs the same code as its
+  menus, so launching, waiting, proposals and panels behave exactly as in
+  AI-DESIGN.md.
+- **Typing happens in the app.** The island never takes keyboard focus, so
+  Generate… and Edit with Instruction… bring Omastrator forward with their
+  sheet open (the island says so). With `--prompt` they launch at once; that
+  is how dictation (Phase 7) and scripts use them.
+- **Vectorize with AI** takes the selected placed image, else the screenshot
+  Capture traced last, whose group and original PNG go to the smart-trace
+  prompt. The Capture row shows a Vectorize button only while that offer
+  stands. Click is *Logo & icon*; Shift-click or right-click is
+  *Sketch & line art*.
+- **Stop** appears on the AI row only while the app waits for the agent, and
+  stops waiting as the Variations panel's Cancel does.
+- **Errors reach the island.** A flow that can't start (no agent chosen,
+  nothing to roast) puts its plain reason on the island's activity line.
+- **Keys.** The AI submap takes G, E, R and V, each handing the keyboard back.
+  The menu gains Generate… and Roast My Design.

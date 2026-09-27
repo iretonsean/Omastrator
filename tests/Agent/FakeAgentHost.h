@@ -47,6 +47,12 @@ public:
     QJsonObject statusExtras() override { return extras; }
     Swatches library{QString()};
     Swatches *swatches() override { return &library; }
+    AiRequest lastAi;
+    QString startAi(const AiRequest &request) override
+    {
+        lastAi = request;
+        return failure;
+    }
     QString newDocument(QSizeF size) override
     {
         editor.createDocument(size);

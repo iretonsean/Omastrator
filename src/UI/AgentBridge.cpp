@@ -347,6 +347,61 @@ QString AgentBridge::showPanel(const QString &panel)
     return {};
 }
 
+QString AgentBridge::startAi(const AiRequest &request)
+{
+    auto forward = [this] {
+        m_window.raise();
+        m_window.activateWindow();
+    };
+    // Sheets run their own loop; they open after this call answers.
+    auto openSheet = [this, forward](QDialog *(*open)(AgentBridge &, QWidget *)) {
+        forward();
+        QMetaObject::invokeMethod(this, [this, open] { open(*this, &m_window); }, Qt::QueuedConnection);
+        return QString();
+    };
+    if (m_workspace.isManaging())
+        return QStringLiteral("Omastrator is showing a dialog. Try again when it's answered.");
+    if (request.flow == QLatin1String("cancel")) {
+        stopWaiting();
+        return {};
+    }
+    if (request.flow == QLatin1String("roast")) {
+        forward();
+        return roast();
+    }
+    if (request.flow == QLatin1String("generate")) {
+        if (request.prompt.isEmpty())
+            return openSheet([](AgentBridge &bridge, QWidget *window) { return AgentSheets::generate(bridge, window); });
+        return generate(request.prompt, request.count, request.fitToSelection);
+    }
+    if (request.flow == QLatin1String("edit")) {
+        if (request.prompt.isEmpty())
+            return openSheet(&AgentSheets::editWithInstruction);
+        return editWithInstruction(request.prompt);
+    }
+    if (request.flow == QLatin1String("vectorize")) {
+        const auto mode = request.sketch ? AgentLauncher::TraceMode::sketch : AgentLauncher::TraceMode::logo;
+        if (session()->hasDocument() && session()->selectedImage())
+            return vectorize(mode);
+        if (m_tools.pendingCapture())
+            return vectorizeCapture(mode);
+        return QStringLiteral("Select one placed image, or take a screenshot in Capture mode first.");
+    }
+    return QStringLiteral("There is no AI flow “%1”.").arg(request.flow);
+}
+
+QString AgentBridge::vectorizeCapture(AgentLauncher::TraceMode mode)
+{
+    const auto capture = m_tools.pendingCapture();
+    if (!capture)
+        return QStringLiteral("The traced screenshot is gone. Take another in Capture mode.");
+    if (session()->isInteracting())
+        return QStringLiteral("Finish the edit or proposal in front first.");
+    const QString requestId = newRequestId();
+    return launch(requestId, Task::vectorize,
+                  AgentLauncher::smartTracePrompt(requestId, capture->group.toString(QUuid::WithoutBraces), capture->imagePath, mode));
+}
+
 EditorSession *AgentBridge::session()
 {
     return &m_workspace.current().session;

@@ -188,3 +188,21 @@ QJsonObject AgentTools::showPanel(const QJsonObject &params)
         throw Error(AgentProtocol::busy, failure);
     return {{"shown", panel}};
 }
+
+QJsonObject AgentTools::aiStart(const QJsonObject &params)
+{
+    static const QStringList flows{QStringLiteral("generate"), QStringLiteral("edit"), QStringLiteral("roast"), QStringLiteral("vectorize"),
+                                   QStringLiteral("cancel")};
+    AgentHost::AiRequest request;
+    request.flow = flows.value(*choice(params, QStringLiteral("flow"), flows, true));
+    request.prompt = string(params, QStringLiteral("prompt")).value_or(QString()).trimmed();
+    const auto count = number(params, QStringLiteral("count"));
+    if (count && (*count < 1 || *count > 6 || *count != std::floor(*count)))
+        fail(QStringLiteral("“count” must be a whole number from 1 to 6."));
+    request.count = int(count.value_or(3));
+    request.fitToSelection = boolean(params, QStringLiteral("fitToSelection"), false);
+    request.sketch = choice(params, QStringLiteral("mode"), {QStringLiteral("logo"), QStringLiteral("sketch")}).value_or(0) == 1;
+    if (const QString failure = m_host.startAi(request); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return {{"started", request.flow}};
+}

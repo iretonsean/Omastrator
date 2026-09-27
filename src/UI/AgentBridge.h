@@ -89,6 +89,9 @@ public:
     QString newDocument(QSizeF size) override;
     QString showNewDocument() override;
     QString showPanel(const QString &panel) override;
+    QString startAi(const AiRequest &request) override;
+    // Vectorize with AI on the last screenshot Capture traced.
+    QString vectorizeCapture(AgentLauncher::TraceMode mode);
 
     // Window ▸ Swatches.
     void showSwatchesPanel();

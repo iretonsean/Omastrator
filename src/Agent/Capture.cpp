@@ -192,7 +192,7 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
             const QJsonObject result = callApp(QStringLiteral("open_capture"), {{"path", path}});
             if (!result["traced"].toBool())
                 return done(QStringLiteral("Screenshot opened. Image Trace found no shapes in it."));
-            return done(QStringLiteral("Traced %1 paths. Vectorize with AI is next, in AI mode.").arg(result["paths"].toInt()));
+            return done(QStringLiteral("Traced %1 paths. Vectorize with AI is next.").arg(result["paths"].toInt()));
         }
         if (action == QLatin1String("paste-svg")) {
             QString error;

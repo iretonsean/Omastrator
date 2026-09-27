@@ -54,4 +54,13 @@ public:
     // Brings the window forward; the first on the New Document sheet, the second on a panel.
     virtual QString showNewDocument() { return QStringLiteral("This Omastrator has no window."); }
     virtual QString showPanel(const QString &) { return QStringLiteral("This Omastrator has no window."); }
+    // ai_start: one of the AI flows, as the user starts it. Returns why it couldn't start, or empty.
+    struct AiRequest {
+        QString flow;
+        QString prompt;
+        int count = 3;
+        bool fitToSelection = false;
+        bool sketch = false;
+    };
+    virtual QString startAi(const AiRequest &) { return QStringLiteral("This Omastrator can't start AI flows."); }
 };

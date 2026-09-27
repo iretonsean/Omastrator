@@ -233,6 +233,32 @@ private slots:
         QCOMPARE(island({QStringLiteral("tool"), QStringLiteral("select")}), 0);
     }
 
+    void islandAiStartsFlowsInTheApp()
+    {
+        QString out, err;
+        QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("generate"), QStringLiteral("--prompt"), QStringLiteral("a fox"),
+                         QStringLiteral("--count"), QStringLiteral("4"), QStringLiteral("--fit")}, &out, &err), 0);
+        onBackend([&] {
+            const auto &request = m_backend->host.lastAi;
+            QCOMPARE(request.flow, QStringLiteral("generate"));
+            QCOMPARE(request.prompt, QStringLiteral("a fox"));
+            QCOMPARE(request.count, 4);
+            QVERIFY(request.fitToSelection);
+        });
+        QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("vectorize"), QStringLiteral("--mode"), QStringLiteral("sketch")}), 0);
+        onBackend([&] { QVERIFY(m_backend->host.lastAi.sketch); });
+        // A sheet opening is said on the island, since the window may be elsewhere.
+        QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("edit")}), 0);
+        QCOMPARE(Island::read().activity, QStringLiteral("Edit with Instruction is open in Omastrator"));
+        QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("fly")}, &out, &err), 1);
+        QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("generate"), QStringLiteral("--count")}, &out, &err), 1);
+        // The app's refusal reaches the island as its plain reason.
+        onBackend([&] { m_backend->host.failure = QStringLiteral("Choose an agent in Omarchy → Setup → Default → Agent."); });
+        QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("roast")}, &out, &err), 1);
+        QCOMPARE(Island::read().activity, QStringLiteral("Choose an agent in Omarchy → Setup → Default → Agent."));
+        onBackend([&] { m_backend->host.failure.clear(); });
+    }
+
     void drawStartsTheAppOnlyWhenItIsClosed()
     {
         QVERIFY(Island::appIsRunning());

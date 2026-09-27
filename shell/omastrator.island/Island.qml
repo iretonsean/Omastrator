@@ -63,9 +63,16 @@ Item {
       { id: "pickColor", tip: "Pick Colour: click for fill, Shift-click for stroke, right-click for a new swatch" },
       { id: "screenshot", tip: "Screenshot Region: opens it in Omastrator and traces it" },
       { id: "pasteSvg", tip: "Paste SVG as editable paths" },
-      { id: "swatches", tip: "Theme Swatches: the Omarchy theme's colours as a swatch group" }
+      { id: "swatches", tip: "Theme Swatches: the Omarchy theme's colours as a swatch group" },
+      { id: "vectorize", tip: "Vectorize with AI the screenshot just traced: click for Logo & icon, Shift-click for Sketch & line art", offerOnly: true }
     ],
-    ai: [],
+    ai: [
+      { id: "generate", tip: "Generate…: describe it in Omastrator, and your agent draws variations" },
+      { id: "edit", tip: "Edit with Instruction…" },
+      { id: "roast", tip: "Roast My Design" },
+      { id: "vectorize", tip: "Vectorize with AI: click for Logo & icon, Shift-click for Sketch & line art" },
+      { id: "stop", tip: "Stop waiting for the agent", waitingOnly: true }
+    ],
     live: []
   })
 
@@ -127,10 +134,26 @@ Item {
     return []
   }
 
+  function aiArgs(id, mouse) {
+    if (id === "stop") return ["island", "ai", "cancel"]
+    if (id === "vectorize") {
+      var sketch = (mouse.modifiers & Qt.ShiftModifier) || mouse.button === Qt.RightButton
+      return ["island", "ai", "vectorize", "--mode", sketch ? "sketch" : "logo"]
+    }
+    return ["island", "ai", id]
+  }
+
   function runAction(item, mouse) {
     if (root.mode === "draw") chooseTool(item.id)
+    else if (item.id === "vectorize" || root.mode === "ai") status.run(aiArgs(item.id, mouse))
     else if (root.mode === "capture") status.run(captureArgs(item.id, mouse))
-    else if (item.action) status.run(item.action)
+  }
+
+  // Buttons that only make sense now: Stop while an agent works, Vectorize after a traced screenshot.
+  function shows(item) {
+    if (item.waitingOnly) return status.value("waiting", "") !== ""
+    if (item.offerOnly) return status.value("offer", "") === "vectorize"
+    return true
   }
 
   function stepMode(direction) {
@@ -296,6 +319,7 @@ Item {
 
             IslandButton {
               required property var modelData
+              visible: root.shows(modelData)
               glyph: modelData.icon || modelData.id
               tip: modelData.tip
               selected: root.mode === "draw" && root.running && root.tool === modelData.id
