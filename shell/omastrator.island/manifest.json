@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "omastrator.island",
+  "name": "Omastrator island",
+  "version": "0.1.0",
+  "author": "Omastrator",
+  "license": "MIT",
+  "description": "A pill under the bar with Omastrator's modes: Draw drives the canvas tools, Capture works on the whole screen, AI starts the agent flows, and Live edits web pages.",
+  "kinds": ["service"],
+  "entryPoints": {
+    "service": "Island.qml"
+  }
+}

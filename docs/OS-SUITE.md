@@ -266,3 +266,32 @@ Choices the spec left open, made while building it, in build order.
 - **Starting the app.** `island mode draw` and `island tool …` start
   Omastrator when nothing answers on the socket and wait up to 15 s for it.
   `$OMASTRATOR_APP` replaces the command in tests.
+
+### Phase 1: the island
+
+- **Files.** `shell/omastrator.island/` is the plugin (kind `service`,
+  `Island.qml`). Code both plugins share lives in `shell/omastrator-ui/`, a
+  plain QML folder with no manifest that setup copies beside them, as
+  `graphite-ui` is shared on this machine. It holds `Status.qml` (the stream),
+  `Glyph.qml` and `Icons.js`.
+- **Icons are drawn, not typed.** Every glyph is SVG path data on an 18-point
+  square, drawn with `QtQuick.Shapes` in the theme's text colour. The tool
+  icons copy the app's own toolbar (`src/UI/ToolIcons.cpp`), so the island
+  and the canvas match and nothing depends on a Nerd Font codepoint.
+- **Which binary.** The plugins run `omastrator` from `PATH`, unless
+  `~/.config/omastrator/shell.json` names another `binary` (setup writes it
+  when the running binary is not on `PATH`).
+- **Surface.** One `PanelWindow` per screen, visible only on Hyprland's
+  focused monitor. It is anchored to the top edge alone (so it is centred),
+  on the `Top` layer, with `ExclusionMode.Normal` and a zero exclusive zone
+  so it sits under the bar without reserving space. Keyboard focus is `None`
+  and the input mask is the pill, so it never takes focus or blocks clicks
+  beside it.
+- **Activity is derived.** The island turns stream changes into its brief
+  line: an explicit `island activity`, an error, "Working with Claude…" when
+  a task starts, "3 variations ready", "Roast ready", and a waiting proposal.
+  Each shows for its seconds, then the island returns to its state.
+- **Clicks.** Clicking the mode glyph expands or rests; the arrows step
+  modes. A click shows the chosen tool at once and the stream confirms it.
+  First-use labels show beside the glyph for five seconds, then
+  `island seen <mode>` retires them.
