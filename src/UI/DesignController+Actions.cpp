@@ -1,3 +1,4 @@
+#include "System/SiteExtract.h"
 #include "Agent/AgentLauncher.h"
 #include "Agent/Capture.h"
 #include "Agent/Island.h"
@@ -245,6 +246,19 @@ QString DesignController::action(const QString &id, const Target &target, QJsonO
         return send(QStringLiteral("desk"), target, QString(), result);
     if (id == QLatin1String("openInBrowser"))
         return m_bridge.live(QStringLiteral("start"), {}, result);
+    if (id == QLatin1String("extractSystem")) {
+        LiveSession &live = m_bridge.liveSession();
+        if (live.state() != LiveSession::State::running || live.pageSession().isEmpty())
+            return QStringLiteral("Open the page in Omastrator's browser to extract its design system.");
+        QString error;
+        const QJsonObject scan = SiteExtract::scan(live.browser(), live.pageSession(), &error);
+        if (!error.isEmpty())
+            return error;
+        m_bridge.showWindow({}, true);
+        // The proposal waits for confirmation in the Design System panel.
+        emit m_bridge.designSystemRequested(nullptr, scan, inspection.surface.url.toString());
+        return {};
+    }
     return QStringLiteral("There is no bar action “%1”.").arg(id);
 }
 
@@ -282,6 +296,12 @@ QString DesignController::artAction(const QString &id, const QString &surface)
         if (!overlay.canUndo())
             return QStringLiteral("There's nothing on the overlay to undo.");
         overlay.undo();
+    } else if (id == QLatin1String("makeComponent")) {
+        if (!overlay.makeComponent())
+            return QStringLiteral("Select the art to make a component of.");
+    } else if (id == QLatin1String("designSystem")) {
+        m_bridge.showWindow({}, true);
+        emit m_bridge.designSystemRequested(&overlay, {}, {});
     } else if (id == QLatin1String("sendDesk")) {
         QJsonObject ignored;
         return send(QStringLiteral("desk"), Target{std::nullopt, surface}, QString(), ignored);

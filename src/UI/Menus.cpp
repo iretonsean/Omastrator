@@ -11,6 +11,7 @@
 #include "UI/SharePanels.h"
 #include "UI/TaskBarActions.h"
 #include "UI/TextStylesPanel.h"
+#include "UI/DesignSystemPanel.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QFileInfo>
@@ -31,8 +32,15 @@ Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentB
     connect(&m_workspace, &ProjectWorkspace::changed, this, &Menus::synchronize);
     // Copying changes no document, but it's what the Paste entries wait for.
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &Menus::synchronize);
-    if (m_agent)
+    if (m_agent) {
         connect(m_agent, &AgentBridge::proposalChanged, this, &Menus::synchronize);
+        connect(m_agent, &AgentBridge::designSystemRequested, this, [this](EditorSession *on, const QJsonObject &scan, const QString &source) {
+            QPointer<EditorSession> target = on;
+            DesignSystemPanel *panel = on ? showDesignSystem([target]() -> EditorSession * { return target; }) : showDesignSystem();
+            if (!scan.isEmpty())
+                panel->useProposal(SiteExtract::propose(scan, source));
+        });
+    }
     if (m_share)
         connect(m_share, &ShareController::changed, this, &Menus::synchronize);
     watchFront(nullptr);
@@ -230,6 +238,19 @@ void Menus::buildObject(QMenuBar &bar)
     add(object, QStringLiteral("group"), QStringLiteral("Group"), QKeySequence(Qt::CTRL | Qt::Key_G), [this] { session().groupSelection(); });
     add(object, QStringLiteral("ungroup"), QStringLiteral("Ungroup"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G), [this] { session().ungroupSelection(); });
     object->addSeparator();
+    // Components (docs/DESIGN-SYSTEMS.md): Figma's keys for Make and Detach.
+    QMenu *components = object->addMenu(QStringLiteral("Components"));
+    components->menuAction()->setObjectName(QStringLiteral("componentsMenu"));
+    add(components, QStringLiteral("makeComponent"), QStringLiteral("Make Component"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_K),
+        [this] { session().makeComponent(); });
+    add(components, QStringLiteral("detachInstance"), QStringLiteral("Detach Instance"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_B),
+        [this] { session().detachInstances(); });
+    add(components, QStringLiteral("resetOverrides"), QStringLiteral("Reset Overrides"), QKeySequence(), [this] { session().resetOverrides(); });
+    add(components, QStringLiteral("selectMainComponent"), QStringLiteral("Select Main Component"), QKeySequence(), [this] {
+        if (const auto master = session().selectedMaster())
+            session().select({*master});
+    });
+    object->addSeparator();
     add(object, QStringLiteral("lockSelection"), QStringLiteral("Lock Selection"), QKeySequence(Qt::CTRL | Qt::Key_2), [this] { session().lockSelection(); });
     add(object, QStringLiteral("unlockAll"), QStringLiteral("Unlock All"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_2), [this] { session().unlockAll(); });
     add(object, QStringLiteral("hideSelection"), QStringLiteral("Hide Selection"), QKeySequence(Qt::CTRL | Qt::Key_3), [this] { session().hideSelection(); });
@@ -404,6 +425,7 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
             m_typeStylesPanel.show(QStringLiteral("Type Styles"), m_typeStyles);
         }
     });
+    add(window, QStringLiteral("showDesignSystem"), QStringLiteral("Design System"), QKeySequence(), [this] { showDesignSystem(); });
     add(window, QStringLiteral("showSwatches"), QStringLiteral("Swatches"), QKeySequence(), [this] {
         if (m_agent)
             m_agent->showSwatchesPanel();
@@ -426,6 +448,20 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     })->setMenuRole(QAction::AboutRole);
 }
 
+DesignSystemPanel *Menus::designSystem() const
+{
+    return m_designSystem;
+}
+
+DesignSystemPanel *Menus::showDesignSystem(std::function<EditorSession *()> sessionOf)
+{
+    if (!sessionOf)
+        sessionOf = [this]() -> EditorSession * { return &session(); };
+    m_designSystem = new DesignSystemPanel(std::move(sessionOf));
+    m_designSystemPanel.show(QStringLiteral("Design System"), m_designSystem);
+    return m_designSystem;
+}
+
 void Menus::showHistory()
 {
     m_historyPanel.onClose = [this] { m_historyPanel.close(); };
@@ -444,6 +480,8 @@ void Menus::watchFront(EditorCanvas *canvas)
     m_canvas = canvas;
     if (m_typeStyles)
         m_typeStyles->follow();
+    if (m_designSystem)
+        m_designSystem->follow();
     disconnect(m_menuWatch);
     if (m_canvas) {
         if (!m_canvas->findChild<TaskBar *>())

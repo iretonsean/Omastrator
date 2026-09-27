@@ -59,6 +59,11 @@ void Menus::synchronize()
     for (const char *name : {"transformMenu", "arrangeMenu", "pathMenu", "compoundMenu", "clippingMenu"})
         action(QString::fromLatin1(name))->setEnabled(drawn);
     action(QStringLiteral("group"))->setEnabled(editing && s.canGroup());
+    action(QStringLiteral("componentsMenu"))->setEnabled(drawn);
+    action(QStringLiteral("makeComponent"))->setEnabled(editing && selected);
+    action(QStringLiteral("detachInstance"))->setEnabled(editing && !s.selectedInstances().empty());
+    action(QStringLiteral("resetOverrides"))->setEnabled(editing && !s.selectedInstances().empty());
+    action(QStringLiteral("selectMainComponent"))->setEnabled(drawn && s.selectedMaster().has_value());
     action(QStringLiteral("ungroup"))->setEnabled(editing && s.canUngroup());
     action(QStringLiteral("makeCompoundPath"))->setEnabled(editing && s.canCombine());
     action(QStringLiteral("makeClippingMask"))->setEnabled(editing && s.selection().size() >= 2);

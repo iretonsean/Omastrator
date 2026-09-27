@@ -39,7 +39,8 @@ QJsonArray actions(const QString &kind)
         return {action("inspect", "Inspect", "Every style of this element, with Copy CSS"),
                 later("lift", "Lift", "Lift into vectors comes in the next build."),
                 action("mockup", "Mock Up", "Draw over this element with the rectangle tool"),
-                action("measure", "Measure", "Distances from this element to the next one you point at")};
+                action("measure", "Measure", "Distances from this element to the next one you point at"),
+                action("extractSystem", "Extract Design System", "This page's colours, type, spacing, radii, shadows and repeated components, as a system to review")};
     if (kind == QLatin1String("window") || kind == QLatin1String("browser")) {
         QJsonArray list{action("capture", "Capture to Desk", "A screenshot of this window as a frame on the Desk"),
                         action("measure", "Measure", "Distances from this to the next thing you point at")};
@@ -71,6 +72,8 @@ QJsonArray actions(const QString &kind)
         list.append(action("releaseClippingMask", "Release Clipping Mask", "Object: Clipping Mask: Release"));
         list.append(action("ungroup", "Ungroup", "Ungroup"));
     }
+    list.append(action("makeComponent", "Make Component", "Make this art a component, with instances that follow it"));
+    list.append(action("designSystem", "Design System", "Tokens and components from your library, for this art"));
     list.append(action("duplicate", "Duplicate", "Duplicate"));
     list.append(action("delete", "Delete", "Delete"));
     list.append(action("undo", "Undo", "Undo the last change to this surface's art"));

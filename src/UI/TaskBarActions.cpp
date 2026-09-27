@@ -355,6 +355,10 @@ struct Filler {
             action("imageTraceMake", QStringLiteral("Image Trace"));
             action("vectorizeWithAI");
         } else if (kind == QLatin1String("group")) {
+            if (!session().selectedInstances().empty())
+                action("detachInstance", QStringLiteral("Detach"));
+            else if (!session().selectedMaster())
+                action("makeComponent", QStringLiteral("Make Component"));
             action("ungroup");
             QToolButton *isolate = button(QStringLiteral("taskBarIsolate"), QStringLiteral("Isolate"), parent);
             isolate->setToolTip(QStringLiteral("Isolate Selected Group"));
