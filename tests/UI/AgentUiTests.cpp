@@ -3,6 +3,7 @@
 #include "UI/AgentPanels.h"
 #include "UI/AgentSheets.h"
 #include "UI/ProjectWorkspaceView.h"
+#include <QAbstractButton>
 #include <QCommandLinkButton>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -443,6 +444,42 @@ private slots:
         QTRY_COMPARE(drain()["proposal"].toString(), QStringLiteral("AI: Generate"));
         bridge.keepProposal();
         QTRY_VERIFY(!drain()["ready"].toBool());
+    }
+
+    void swatchesPanelAppliesColours()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        workspace.createDocument(QSizeF(200, 200));
+        EditorSession &session = workspace.current().session;
+        const QUuid shape = rectangle(session, {10, 10, 40, 40});
+        AgentBridge &bridge = *window.agent();
+        bridge.swatches()->removeGroup(QStringLiteral("Test"));
+        window.menus()->action(QStringLiteral("showSwatches"))->trigger();
+        QVERIFY(bridge.swatchesPanel().isVisible());
+        // Adding shows the panel and the new chip.
+        bridge.tools().call(QStringLiteral("swatches_add"), {{"group", "Test"}, {"swatches", QJsonArray{QJsonObject{{"color", "#336699"}}}}});
+        QAbstractButton *chip = nullptr;
+        QTRY_VERIFY((chip = shown<QAbstractButton>(QStringLiteral("swatch"))));
+        QVERIFY(chip->toolTip().contains(QLatin1String("#336699")));
+        QTest::mouseClick(chip, Qt::LeftButton);
+        QCOMPARE(session.document()->find(shape)->fill, Paint::solid(QColor(0x33, 0x66, 0x99)));
+        QTRY_VERIFY((chip = shown<QAbstractButton>(QStringLiteral("swatch"))));
+        QTest::mouseClick(chip, Qt::LeftButton, Qt::ShiftModifier);
+        QCOMPARE(session.document()->find(shape)->stroke.paint, Paint::solid(QColor(0x33, 0x66, 0x99)));
+        QCOMPARE(session.undoName(), QStringLiteral("Stroke"));
+        bridge.swatches()->removeGroup(QStringLiteral("Test"));
+        // A capture with no document opens one of its own.
+        const QString png = m_directory.filePath(QStringLiteral("capture.png"));
+        QImage image(30, 20, QImage::Format_ARGB32);
+        image.fill(Qt::black);
+        QVERIFY(image.save(png));
+        const qsizetype before = workspace.tabs().size();
+        const QJsonObject opened = bridge.tools().call(QStringLiteral("open_capture"), {{"path", png}, {"trace", false}});
+        QCOMPARE(workspace.tabs().size(), before + 1);
+        QCOMPARE(workspace.current().session.document()->size, QSizeF(30, 20));
+        QVERIFY(!opened["imageId"].toString().isEmpty());
     }
 };
 

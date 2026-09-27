@@ -71,6 +71,11 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("show_variations"), &AgentTools::showVariations},
         {QStringLiteral("show_roast"), &AgentTools::showRoast},
         {QStringLiteral("select_tool"), &AgentTools::selectTool},
+        {QStringLiteral("apply_color"), &AgentTools::applyColor},
+        {QStringLiteral("swatches_get"), &AgentTools::swatchesGet},
+        {QStringLiteral("swatches_add"), &AgentTools::swatchesAdd},
+        {QStringLiteral("open_capture"), &AgentTools::openCapture},
+        {QStringLiteral("paste_svg"), &AgentTools::pasteSvg},
     };
     try {
         if (method == QLatin1String("selection_get"))
@@ -131,6 +136,8 @@ QJsonObject AgentTools::status()
                        {"document", current && current->hasDocument()},
                        {"tool", current ? rawValue(current->tool()) : QStringLiteral("select")},
                        {"proposal", proposalTitle()}};
+    if (pendingCapture())
+        result["offer"] = QStringLiteral("vectorize");
     const QJsonObject extras = m_host.statusExtras();
     for (auto it = extras.begin(); it != extras.end(); ++it)
         result.insert(it.key(), it.value());

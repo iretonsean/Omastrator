@@ -59,7 +59,12 @@ Item {
       { id: "hand", tip: "Hand (H)" },
       { id: "zoom", tip: "Zoom (Z)" }
     ],
-    capture: [],
+    capture: [
+      { id: "pickColor", tip: "Pick Colour: click for fill, Shift-click for stroke, right-click for a new swatch" },
+      { id: "screenshot", tip: "Screenshot Region: opens it in Omastrator and traces it" },
+      { id: "pasteSvg", tip: "Paste SVG as editable paths" },
+      { id: "swatches", tip: "Theme Swatches: the Omarchy theme's colours as a swatch group" }
+    ],
     ai: [],
     live: []
   })
@@ -111,8 +116,20 @@ Item {
     status.run(["island", "tool", id])
   }
 
-  function runAction(item) {
+  function captureArgs(id, mouse) {
+    if (id === "pickColor") {
+      var target = mouse.button === Qt.RightButton ? "swatch" : (mouse.modifiers & Qt.ShiftModifier) ? "stroke" : "fill"
+      return ["island", "capture", "color", target]
+    }
+    if (id === "screenshot") return ["island", "capture", "screenshot"]
+    if (id === "pasteSvg") return ["island", "capture", "paste-svg"]
+    if (id === "swatches") return ["island", "capture", "theme-swatches"]
+    return []
+  }
+
+  function runAction(item, mouse) {
     if (root.mode === "draw") chooseTool(item.id)
+    else if (root.mode === "capture") status.run(captureArgs(item.id, mouse))
     else if (item.action) status.run(item.action)
   }
 
@@ -155,7 +172,7 @@ Item {
     property string tip: ""
     property bool selected: false
     property bool dim: false
-    signal clicked()
+    signal clicked(var mouse)
 
     width: root.buttonSize
     height: root.buttonSize
@@ -180,7 +197,8 @@ Item {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: button.clicked()
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: function (mouse) { button.clicked(mouse) }
       onContainsMouseChanged: {
         if (containsMouse) root.hoveredButton = button
         else if (root.hoveredButton === button) root.hoveredButton = null
@@ -282,7 +300,7 @@ Item {
               tip: modelData.tip
               selected: root.mode === "draw" && root.running && root.tool === modelData.id
               dim: modelData.enabled === false
-              onClicked: if (modelData.enabled !== false) root.runAction(modelData)
+              onClicked: function (mouse) { if (modelData.enabled !== false) root.runAction(modelData, mouse) }
             }
           }
         }

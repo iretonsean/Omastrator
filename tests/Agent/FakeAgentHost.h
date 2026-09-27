@@ -1,6 +1,7 @@
 #pragma once
 #include "Agent/AgentHost.h"
 #include "Document/EditorSession.h"
+#include "Document/Swatches.h"
 #include <QStringList>
 #include <optional>
 
@@ -44,4 +45,11 @@ public:
         ++finishedCount;
     }
     QJsonObject statusExtras() override { return extras; }
+    Swatches library{QString()};
+    Swatches *swatches() override { return &library; }
+    QString newDocument(QSizeF size) override
+    {
+        editor.createDocument(size);
+        return failure;
+    }
 };

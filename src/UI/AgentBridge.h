@@ -3,6 +3,7 @@
 #include "Agent/AgentLauncher.h"
 #include "Agent/AgentServer.h"
 #include "Agent/AgentTools.h"
+#include "Document/Swatches.h"
 #include "UI/FloatingPanel.h"
 #include <QObject>
 #include <QPointer>
@@ -84,6 +85,12 @@ public:
     void showRoast(const AgentRoast &roast) override;
     void proposalFinished(const QString &title, const QString &summary) override;
     QJsonObject statusExtras() override;
+    Swatches *swatches() override { return &m_swatches; }
+    QString newDocument(QSizeF size) override;
+
+    // Window ▸ Swatches.
+    void showSwatchesPanel();
+    FloatingPanel &swatchesPanel() { return m_swatchesPanel; }
 
 signals:
     // A proposal opened, grew, was renamed or ended.
@@ -119,4 +126,7 @@ private:
     FloatingPanel m_roastPanel{QStringLiteral("roastPanel"), m_window};
     QPointer<QWidget> m_variationsContent;
     QPointer<QWidget> m_roastContent;
+    Swatches m_swatches;
+    FloatingPanel m_swatchesPanel{QStringLiteral("swatchesPanel"), m_window};
+    QPointer<QWidget> m_swatchesContent;
 };

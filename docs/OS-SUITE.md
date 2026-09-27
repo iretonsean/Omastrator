@@ -295,3 +295,34 @@ Choices the spec left open, made while building it, in build order.
   modes. A click shows the chosen tool at once and the stream confirms it.
   First-use labels show beside the glyph for five seconds, then
   `island seen <mode>` retires them.
+
+### Phase 2: Capture
+
+- **Commands.** `omastrator island capture color [fill|stroke|swatch]`,
+  `… screenshot`, `… paste-svg` and `… theme-swatches`. Each runs the outside
+  program, starts the app if needed, calls a desktop method on the socket, and
+  sets the island's activity line to the outcome (the plain error when it
+  fails, with the `pacman` command for a missing program). Escape in
+  hyprpicker or slurp is not an error.
+- **User actions are not proposals.** Capture's methods (`apply_color`,
+  `swatches_add`, `open_capture`, `paste_svg`) commit normal undo steps. They
+  are marked `mcp: false`: MCP neither lists nor forwards them, so agents
+  keep going through proposals. They refuse while a proposal or drag is open.
+- **Pick Colour on the island:** click for fill, Shift-click for stroke,
+  right-click for a new swatch. With nothing selected, the colour becomes the
+  default for the next shape, as the app's own wells work.
+- **Swatches.** The app had no Swatches panel, so Phase 2 adds one
+  (Window ▸ Swatches): groups of named colours, kept per install in
+  QSettings. Click sets the fill, Shift-click the stroke; right-click deletes.
+  Picked colours go to the "Swatches" group. Theme Swatches reads
+  `~/.local/state/omarchy/current/theme/colors.toml` (every `key = "#hex"`,
+  in file order, named from the key) into "Omarchy: <theme>", replacing that
+  group each time.
+- **Screenshots** are kept in `$XDG_DATA_HOME/omastrator/captures/`, so the
+  image outlives the trace. The capture opens as a new document the size of
+  the region, places the image (one undo step) and traces it in colour (a
+  second step), so Undo returns the raw screenshot. The traced group is then
+  offered to Vectorize with AI: `status` carries `"offer": "vectorize"` while
+  that group is in the front document. The AI mode (Phase 4) acts on it.
+- **Paste SVG** reads `image/svg+xml` from `wl-paste`, else plain text that
+  contains `<svg`. With no document open, it makes one the SVG's size.

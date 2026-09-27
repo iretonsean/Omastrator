@@ -39,6 +39,8 @@ struct Method {
     QString group;
     QString description;
     QJsonObject inputSchema;
+    // False for the user's own desktop actions, which agents must not call: their edits are proposals.
+    bool mcp = true;
 };
 // Every method the app answers, in the order help lists them.
 const std::vector<Method> &methods();

@@ -1,10 +1,12 @@
 #pragma once
 #include <QJsonObject>
+#include <QSizeF>
 #include <QString>
 #include <QUuid>
 #include <vector>
 
 class EditorSession;
+class Swatches;
 
 // One option for the Variations panel; `svg` has already parsed once.
 struct AgentVariation {
@@ -45,4 +47,8 @@ public:
     virtual void proposalFinished(const QString &title, const QString &summary) = 0;
     // What only the app knows for status_get: the agent task it waits on, variations ready, the live session.
     virtual QJsonObject statusExtras() { return {}; }
+    // The Swatches panel's library, or null in a host without one.
+    virtual Swatches *swatches() { return nullptr; }
+    // A new blank document in front, for a capture or a paste with none open. Returns why it failed, or empty.
+    virtual QString newDocument(QSizeF size) = 0;
 };

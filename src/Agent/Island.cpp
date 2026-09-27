@@ -1,6 +1,7 @@
 #include "Agent/Island.h"
 #include "Agent/AgentClient.h"
 #include "Agent/AgentProtocol.h"
+#include "Agent/Capture.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -175,6 +176,12 @@ QString helpText()
         "  activity <text> [--seconds N]\n"
         "                     Show a line briefly, then go back.\n"
         "  seen <mode>        Stop showing the mode's first-use label.\n"
+        "  capture color [fill|stroke|swatch]\n"
+        "                     Pick a colour anywhere on screen (hyprpicker).\n"
+        "  capture screenshot Choose a region (slurp, grim), open it and trace it.\n"
+        "  capture paste-svg  Paste the clipboard's SVG as editable paths.\n"
+        "  capture theme-swatches\n"
+        "                     Load the Omarchy theme's colours as a swatch group.\n"
         "  state              Print the island's state as JSON.\n");
 }
 
@@ -238,6 +245,8 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         const QString failure = setActivity(words.join(QLatin1Char(' ')).trimmed(), seconds);
         return failure.isEmpty() ? 0 : failed(failure);
     }
+    if (verb == QLatin1String("capture"))
+        return Capture::runCli(args.mid(1), out, err);
     if (verb == QLatin1String("tool")) {
         if (args.size() != 2)
             return failed(QStringLiteral("Name one tool, such as: omastrator island tool pen"));

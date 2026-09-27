@@ -234,7 +234,10 @@ private slots:
         QCOMPARE(initialize["serverInfo"]["name"].toString(), QStringLiteral("omastrator"));
 
         const QJsonArray tools = replies[1]["result"]["tools"].toArray();
-        QCOMPARE(size_t(tools.size()), AgentProtocol::methods().size());
+        QCOMPARE(tools.size(), std::count_if(AgentProtocol::methods().begin(), AgentProtocol::methods().end(),
+                                             [](const AgentProtocol::Method &each) { return each.mcp; }));
+        for (const QJsonValue &tool : tools)
+            QVERIFY(tool["name"].toString() != QLatin1String("apply_color"));
         for (const QJsonValue &tool : tools) {
             QCOMPARE(tool["inputSchema"]["type"].toString(), QStringLiteral("object"));
             QVERIFY(!tool["description"].toString().isEmpty());

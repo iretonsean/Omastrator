@@ -112,6 +112,18 @@ UUID strings.
   notification each time that answer changes. `omastrator status --follow`
   uses it; see [OS-SUITE.md](OS-SUITE.md).
 
+**Desktop** (the island's Capture mode; see [OS-SUITE.md](OS-SUITE.md))
+
+These are the user's own actions, so each is a normal undo step, not a
+proposal. `tools/list` leaves them out and `tools/call` refuses them, so an
+agent can't use them to skip the accept bar. `swatches_get` is the exception:
+it only reads.
+- `apply_color {color, target?: fill|stroke}`
+- `swatches_get {}`, `swatches_add {group?, swatches: [{name?, color}], replace?}`
+- `open_capture {path, trace?, colors?}`: a screenshot as a new document,
+  traced.
+- `paste_svg {svg, name?}`
+
 ## Flows
 
 1. **Generate…** (Object ▸ Generate…). A prompt, a variation count from 1 to 6

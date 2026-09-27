@@ -148,12 +148,14 @@ QJsonObject answerMcp(const QByteArray &line, const AgentProtocol::Call &forward
         if (method == QLatin1String("tools/list")) {
             QJsonArray tools;
             for (const AgentProtocol::Method &each : AgentProtocol::methods())
-                tools.append(QJsonObject{{"name", each.name}, {"description", each.description}, {"inputSchema", each.inputSchema}});
+                if (each.mcp)
+                    tools.append(QJsonObject{{"name", each.name}, {"description", each.description}, {"inputSchema", each.inputSchema}});
             return {{"tools", tools}};
         }
         if (method == QLatin1String("tools/call")) {
             const QString name = params["name"].toString();
-            if (!AgentProtocol::method(name))
+            const AgentProtocol::Method *tool = AgentProtocol::method(name);
+            if (!tool || !tool->mcp)
                 throw Error(AgentProtocol::invalidParams, QStringLiteral("There is no tool “%1”.").arg(name));
             if (!params["arguments"].isUndefined() && !params["arguments"].isNull() && !params["arguments"].isObject())
                 throw Error(AgentProtocol::invalidParams, QStringLiteral("Tool arguments must be a JSON object."));

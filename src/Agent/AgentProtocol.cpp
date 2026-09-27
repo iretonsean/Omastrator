@@ -148,7 +148,33 @@ constexpr const char *methodTable = R"json([
    "tool": {"type": "string", "description": "select, directSelect, pen, pencil, text, line, rectangle, roundedRectangle, ellipse, polygon, star, rotate, scale, eyedropper, hand or zoom (move, direct, type and eyedrop work too)."}}}},
 {"name": "status_get", "group": "session",
  "description": "What the app is doing: the tool, whether a document is open, the proposal waiting for the user, the agent task it waits on and the variations ready. Not a document read.",
- "inputSchema": {"type": "object", "properties": {}}}
+ "inputSchema": {"type": "object", "properties": {}}},
+{"name": "apply_color", "group": "desktop", "mcp": false,
+ "description": "The user's own colour pick: sets the selection's fill or stroke colour as one undo step, or the default for new objects when nothing is selected. Not for agents: agent edits go through set_style.",
+ "inputSchema": {"type": "object", "required": ["color"], "properties": {
+   "color": {"type": "string", "description": "A colour such as \"#ff6600\"."},
+   "target": {"type": "string", "enum": ["fill", "stroke"], "description": "Default fill."}}}},
+{"name": "swatches_get", "group": "desktop",
+ "description": "The Swatches panel's groups of named colours.",
+ "inputSchema": {"type": "object", "properties": {}}},
+{"name": "swatches_add", "group": "desktop", "mcp": false,
+ "description": "Adds colours to a swatch group, creating it. A colour already in the group is skipped. Returns how many were added.",
+ "inputSchema": {"type": "object", "required": ["swatches"], "properties": {
+   "group": {"type": "string", "description": "Default \"Swatches\"."},
+   "swatches": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["color"], "properties": {
+     "name": {"type": "string"}, "color": {"type": "string"}}}},
+   "replace": {"type": "boolean", "description": "Empty the group first. Default false."}}}},
+{"name": "open_capture", "group": "desktop", "mcp": false,
+ "description": "Opens a screenshot as a new document and runs Image Trace on it, as two undo steps. The traced group is offered to Vectorize with AI next.",
+ "inputSchema": {"type": "object", "required": ["path"], "properties": {
+   "path": {"type": "string"},
+   "trace": {"type": "boolean", "description": "Default true."},
+   "colors": {"type": "integer", "minimum": 2, "maximum": 16, "description": "Default 6."}}}},
+{"name": "paste_svg", "group": "desktop", "mcp": false,
+ "description": "The user's paste of SVG from the clipboard: editable paths, grouped and centred, as one undo step. A new document is made when none is open.",
+ "inputSchema": {"type": "object", "required": ["svg"], "properties": {
+   "svg": {"type": "string"},
+   "name": {"type": "string"}}}}
 ])json";
 }
 
@@ -163,7 +189,7 @@ const std::vector<Method> &methods()
         for (const QJsonValue &value : array) {
             const QJsonObject object = value.toObject();
             result.push_back({object["name"].toString(), object["group"].toString(), object["description"].toString(),
-                              object["inputSchema"].toObject()});
+                              object["inputSchema"].toObject(), object["mcp"].toBool(true)});
         }
         return result;
     }();

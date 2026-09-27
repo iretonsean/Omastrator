@@ -3,6 +3,7 @@
 #include "Logging.h"
 #include "UI/AgentPanels.h"
 #include "UI/ProjectWorkspace.h"
+#include "UI/SwatchesPanel.h"
 #include <QJsonArray>
 
 namespace {
@@ -20,6 +21,12 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
         m_resultsUnseen = false;
         m_server.statusMayHaveChanged();
     };
+    m_swatchesPanel.onClose = [this] { m_swatchesPanel.close(); };
+    // New swatches show where they landed.
+    connect(&m_swatches, &Swatches::changed, this, [this] {
+        if (!m_swatchesPanel.isVisible())
+            showSwatchesPanel();
+    });
     m_roastPanel.onClose = [this] {
         m_roastPanel.close();
         m_resultsUnseen = false;
@@ -293,6 +300,22 @@ void AgentBridge::showRoastPanel()
         m_roastContent = new RoastPanel(*this);
         m_roastPanel.show(QStringLiteral("Roast My Design"), m_roastContent);
     }
+}
+
+void AgentBridge::showSwatchesPanel()
+{
+    if (!m_swatchesContent || !m_swatchesPanel.isVisible()) {
+        m_swatchesContent = new SwatchesPanel(m_swatches, [this]() -> EditorSession & { return *session(); });
+        m_swatchesPanel.show(QStringLiteral("Swatches"), m_swatchesContent);
+    }
+}
+
+QString AgentBridge::newDocument(QSizeF size)
+{
+    if (m_workspace.isManaging())
+        return QStringLiteral("Omastrator is showing a dialog. Try again when it's answered.");
+    m_workspace.createDocument(size);
+    return {};
 }
 
 EditorSession *AgentBridge::session()

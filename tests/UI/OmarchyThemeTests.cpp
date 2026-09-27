@@ -63,9 +63,9 @@ void write(const QString &path, const QString &text)
 bool shortReads = false;
 
 // A window filled with the palette's window colour.
-struct Swatch {
+struct ThemeWell {
     QLabel label;
-    Swatch()
+    ThemeWell()
     {
         label.setAutoFillBackground(true);
         label.resize(40, 40);
@@ -202,7 +202,7 @@ void OmarchyThemeTests::withoutAThemeTheBuiltInDarkApplies()
     QCOMPARE(QApplication::palette().color(QPalette::PlaceholderText), QColor(0x8a, 0x8a, 0x8a));
     QCOMPARE(QApplication::palette().color(QPalette::BrightText), QColor(0xff, 0x9f, 0x0a));
     QCOMPARE(QApplication::style()->objectName(), QString("fusion"));
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0x24, 0x24, 0x24));
     // A theme appearing later is taken up, unnamed or not.
     QTest::failOnWarning(QRegularExpression("QIODevice"));
@@ -218,7 +218,7 @@ void OmarchyThemeTests::aSwitchRetintsTheWindowsWhileTheyShow()
     write(state.path() + "/theme.name", "catppuccin-macchiato\n");
     QTest::ignoreMessage(QtInfoMsg, QRegularExpression("Omarchy theme catppuccin-macchiato dark from .*colors.toml"));
     OmarchyTheme theme(state.path());
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0x24, 0x27, 0x3a));
     // omarchy-theme-set: remove, move the next in, write the name.
     write(state.path() + "/next-theme/colors.toml", QString::fromLatin1(latte));
@@ -248,7 +248,7 @@ void OmarchyThemeTests::anUnreadableSwitchKeepsThePalette()
     QTemporaryDir state;
     write(state.path() + "/theme/colors.toml", QString::fromLatin1(macchiato));
     OmarchyTheme theme(state.path());
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0x24, 0x27, 0x3a));
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Omarchy theme unreadable, keeping the palette: colors.toml lacks accent"));
     write(state.path() + "/theme/colors.toml", QString::fromLatin1(macchiato).replace("accent = \"#8aadf4\"\n", ""));
@@ -267,7 +267,7 @@ void OmarchyThemeTests::aMalformedFileAtStartupLeavesTheBuiltInDark()
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Omarchy theme unreadable, keeping the palette: colors.toml lacks mode"));
     OmarchyTheme theme(state.path());
     QCOMPARE(theme.colors(), OmarchyColors::builtInDark());
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0x24, 0x24, 0x24));
     write(state.path() + "/theme/colors.toml", QString::fromLatin1(latte));
     QTRY_COMPARE(swatch.pixel(), qRgb(0xef, 0xf1, 0xf5));
@@ -279,7 +279,7 @@ void OmarchyThemeTests::aFileThatCannotBeOpenedKeepsThePalette()
     const QString path = state.path() + "/theme/colors.toml";
     write(path, QString::fromLatin1(latte));
     OmarchyTheme theme(state.path());
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0xef, 0xf1, 0xf5));
     // A file that will not open is no absent file.
     QVERIFY(QFile::setPermissions(path, QFileDevice::Permissions()));
@@ -303,7 +303,7 @@ void OmarchyThemeTests::anAbsentStateDirectoryIsWatchedForItsBirth()
     const QString state = root.path() + "/omarchy/current";
     QTest::ignoreMessage(QtInfoMsg, QRegularExpression("no Omarchy theme at .*colors.toml - built-in dark"));
     OmarchyTheme theme(state);
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0x24, 0x24, 0x24));
     // Omarchy installed later: the theme arrives with its folders.
     auto &watcher = *theme.findChild<QFileSystemWatcher *>();
@@ -324,7 +324,7 @@ void OmarchyThemeTests::aBarredStateDirectoryIsWatchedFromAbove()
     QVERIFY(QFile::setPermissions(state, QFileDevice::Permissions()));
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Omarchy theme unreadable, keeping the palette: .*colors.toml"));
     OmarchyTheme theme(state);
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0x24, 0x24, 0x24));
     auto &watcher = *theme.findChild<QFileSystemWatcher *>();
     QCOMPARE(watcher.directories(), QStringList{root.path()});
@@ -341,7 +341,7 @@ void OmarchyThemeTests::aReadCutShortKeepsThePalette()
     QTemporaryDir state;
     write(state.path() + "/theme/colors.toml", QString::fromLatin1(latte));
     OmarchyTheme theme(state.path());
-    Swatch swatch;
+    ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0xef, 0xf1, 0xf5));
     // Sixty-four bytes, then an error: a prefix, not the file.
     write(state.path() + "/theme/colors.toml", QString::fromLatin1(macchiato));

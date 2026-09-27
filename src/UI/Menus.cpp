@@ -248,6 +248,10 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
         synchronize();
     });
     properties->setCheckable(true);
+    add(window, QStringLiteral("showSwatches"), QStringLiteral("Swatches"), QKeySequence(), [this] {
+        if (m_agent)
+            m_agent->showSwatchesPanel();
+    })->setEnabled(m_agent != nullptr);
     QMenu *help = bar.addMenu(QStringLiteral("&Help"));
     add(help, QStringLiteral("connectAgent"), QStringLiteral("Connect an Agent…"), QKeySequence(), [this] {
         if (m_agent)

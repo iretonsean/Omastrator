@@ -30,6 +30,15 @@ public:
     // status_get's answer: never throws, and needs no document.
     QJsonObject status();
 
+    // The last screenshot open_capture traced, which Vectorize with AI can take next.
+    struct Capture {
+        QPointer<EditorSession> session;
+        QUuid group;
+        QString imagePath;
+    };
+    // Only while its traced group is still in the front document.
+    std::optional<Capture> pendingCapture();
+
 signals:
     // A proposal opened, grew or was renamed.
     void proposalChanged();
@@ -73,6 +82,16 @@ private:
     QJsonObject place(const QJsonObject &params);
     // Session.
     QJsonObject selectTool(const QJsonObject &params);
+    // Desktop: the user's own actions from the island, each a normal undo step.
+    QJsonObject applyColor(const QJsonObject &params);
+    QJsonObject swatchesGet(const QJsonObject &params);
+    QJsonObject swatchesAdd(const QJsonObject &params);
+    QJsonObject openCapture(const QJsonObject &params);
+    QJsonObject pasteSvg(const QJsonObject &params);
+    // The session to act on for the user; refused while a drag or proposal is open.
+    EditorSession &idleSession();
+    // Commits `document` as one undo step named `name`.
+    void commit(EditorSession &session, const QString &name, const VectorDocument &document, const std::vector<QUuid> &selection);
     // Panels.
     QJsonObject showVariations(const QJsonObject &params);
     QJsonObject showRoast(const QJsonObject &params);
@@ -82,4 +101,5 @@ private:
     // The document as last proposed: a user's drag never matches it.
     std::optional<VectorDocument> m_preview;
     QString m_title;
+    std::optional<Capture> m_capture;
 };
