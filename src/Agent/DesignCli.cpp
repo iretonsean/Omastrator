@@ -80,6 +80,17 @@ QString designHelp()
         "                     The overlay's history, and taking a surface's art away.\n"
         "  onboarding [open|close|done|skip] | onboarding QUESTION VALUE…\n"
         "                     The few questions that tune the suggestions.\n"
+        "  look [get|history|discard|save|panel [SECTION]|revert ID|KEY=VALUE…]\n"
+        "                     Omarchy's own look: gapsIn, gapsOut, borderSize,\n"
+        "                     rounding, activeBorder, inactiveBorder, barPosition,\n"
+        "                     barTransparent, barHeight, barBackground, barText,\n"
+        "                     font, textSize, wallpaper and colors.KEY. KEY=VALUE\n"
+        "                     previews on the desktop; save asks first, with every\n"
+        "                     file and command, and backs them up for revert.\n"
+        "  restyle [--target N] [get|save|discard|KEY=VALUE…]\n"
+        "                     Restyle the app pointed at through its toolkit:\n"
+        "                     accent, background, foreground, font, fontSize,\n"
+        "                     radius. KEY=VALUE opens a second copy to preview.\n"
         "  status             Print design mode's state as JSON.\n\n"
         "Also: omastrator desk [show|window|toggle|hide]\n"
         "      omastrator daemon [start|stop|status]\n");
@@ -207,6 +218,41 @@ int runDesign(const QStringList &args, QTextStream &out, QTextStream &err)
             params["question"] = first;
             params["values"] = QJsonArray::fromStringList(rest.mid(1));
         }
+    } else if (verb == QLatin1String("look") || verb == QLatin1String("restyle")) {
+        if (verb == QLatin1String("restyle") && !targetOption())
+            return failed(err, QStringLiteral("--target needs an id."));
+        // KEY=VALUE pairs are an edit to preview; a word is the operation.
+        QJsonObject edits;
+        for (const QString &word : rest) {
+            const qsizetype equals = word.indexOf(QLatin1Char('='));
+            if (equals <= 0) {
+                if (params.contains(QLatin1String("op")))
+                    params[verb == QLatin1String("look") && params["op"] == QLatin1String("revert") ? QStringLiteral("id") : QStringLiteral("section")] = word;
+                else
+                    params["op"] = word;
+                continue;
+            }
+            const QString key = word.left(equals);
+            const QString text = word.mid(equals + 1);
+            bool number = false;
+            const double value = text.toDouble(&number);
+            const QJsonValue parsed = number ? QJsonValue(value)
+                : text == QLatin1String("true") || text == QLatin1String("false") ? QJsonValue(text == QLatin1String("true"))
+                : text.startsWith(QLatin1Char('{')) ? QJsonValue(QJsonDocument::fromJson(text.toUtf8()).object())
+                                                    : QJsonValue(text);
+            if (key.startsWith(QLatin1String("colors."))) {
+                QJsonObject colours = edits["colors"].toObject();
+                colours[key.mid(7)] = text;
+                edits["colors"] = colours;
+            } else {
+                edits[key] = parsed;
+            }
+        }
+        if (!edits.isEmpty()) {
+            params["op"] = QStringLiteral("preview");
+            params[verb == QLatin1String("look") ? QStringLiteral("edits") : QStringLiteral("style")] = edits;
+        }
+        return call(QStringLiteral("design"), params, out, err, params["op"].toString(QStringLiteral("get")) == QLatin1String("get"));
     } else if (!QStringList{"keep", "discard", "undo", "redo", "deselect"}.contains(verb)) {
         return failed(err, QStringLiteral("There is no design verb “%1”. Run `omastrator design --help`.").arg(verb));
     }

@@ -661,10 +661,13 @@ private:
 namespace SvgExporter {
 QByteArray serialize(const VectorDocument &document, const Options &options)
 {
+    // Several artboards: this exports the first one alone, so single-artboard
+    // output (the common case) stays byte-identical to before.
+    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);
-    Writer(document, options, &buffer).write();
+    Writer(page, options, &buffer).write();
     return bytes;
 }
 

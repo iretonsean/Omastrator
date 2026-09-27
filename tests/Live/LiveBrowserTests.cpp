@@ -152,7 +152,7 @@ private slots:
         QVERIFY(live.start(target(QString(), server.url())).isEmpty());
         QVERIFY2(waitRunning(live), qPrintable(live.message()));
         QVERIFY(live.isMockup());
-        QVERIFY(live.message().contains(QLatin1String("Mock-up")));
+        QVERIFY(live.message().contains(QLatin1String("Not your site")));
         QCOMPARE(live.status()["mockup"].toBool(), true);
         live.stop();
         QVERIFY(live.start(target(QString(), QUrl(QStringLiteral("ftp://example.com")))).contains(QLatin1String("http")));

@@ -57,7 +57,8 @@ SmartGuides::SmartGuides(const VectorDocument &document, const std::vector<QUuid
             continue;
         m_objects.push_back(bounds);
     }
-    m_boards.push_back(QRectF(QPointF(0, 0), document.size));
+    for (const Artboard &board : document.allArtboards())
+        m_boards.push_back(board.rect);
 }
 
 void SmartGuides::addGuides(const std::vector<Guide> &guides)

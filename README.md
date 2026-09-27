@@ -48,7 +48,19 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   Properties with nothing selected (Shift for ten times it, Alt to nudge a
   copy; with only type selected, Alt+arrows adjust the type instead). Number keys set opacity: 5 is 50 %, 0 is
   100 %, and two quick digits make an exact value.
-- Zoom to Selection (Shift+2) and Fit Artboard (Shift+1).
+- Zoom to Selection (Shift+2), Fit Artboard (Shift+1) and View ▸ Fit All in Window.
+- Multiple artboards: the Artboard tool (Shift+O) draws, moves and resizes
+  them, Alt-drags a duplicate, and Delete removes the active one (never the
+  last). Object ▸ Artboards has New, Duplicate, Rename…, Delete, Fit to
+  Artwork Bounds, Switch Orientation and Next/Previous (Shift+PgDn/PgUp); an
+  Artboards list sits in Properties ▸ Document. Export, Share and the active
+  artboard's own size and background follow whichever one is active.
+- The rail's tools sit in slots that share a button when more than one lives
+  together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
+  Paint, Navigate): a corner triangle marks a group, right-click or a long
+  press flies it open, Alt-click cycles through it, and it remembers the last
+  one picked. Its own context menu (or View ▸ Toolbar) switches Basic, which
+  hides the least-used tools, and Advanced, which shows all of them.
 - Rulers (Ctrl+R) with the pointer marked on each. Drag a guide out of a
   ruler, drag it back to remove it, or double-click it to type its place.
   Objects snap to guides even with smart guides off. View ▸ Guides hides
@@ -124,6 +136,9 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   - saves and opens `.omai` documents (oh my)
   - imports SVG
   - exports SVG, PDF (kept as vectors), PNG and JPEG
+  - File ▸ Export ▸ Export for Screens… batches any artboards and objects
+    collected with Object ▸ Collect for Export, at several scales (0.5×–4×,
+    suffixed `@2x` and so on) and formats (PNG, JPG, SVG, PDF, WebP) at once
   - places JPEG, PNG, TIFF, WebP and GIF images
   - opens and saves on cloud storage as well as on this computer
     ([Cloud storage](#cloud-storage))
@@ -245,8 +260,8 @@ Omastrator also works outside its window, through Omarchy's own shell
   then change its text, colour, spacing, size, type or radius from a bar beside
   it. Values snap to the project's own tokens: its Tailwind theme, its CSS
   custom properties, then your Omarchy colours. Pages whose code isn't on this
-  machine work as mock-ups. **Deploy** is the one button: it writes the
-  changes into the code (the ones it can be sure of directly, the rest through
+  machine keep their edits on this machine (see "Sites that aren't yours"
+  below). **Deploy** is the one button: it writes the changes into the code (the ones it can be sure of directly, the rest through
   your agent on a branch of its own), commits them, pushes, and deploys to
   production with the project's own setup: a remembered command, a `deploy`
   script, the Vercel, Netlify, Cloudflare or Fly CLI, a Makefile or
@@ -309,15 +324,50 @@ Clicks go straight through it to your apps.
 - **Where work goes** is your choice each time, and it's remembered per
   surface: keep it on the overlay, send it to the Desk, open it as a document,
   or hand it to the agent. Pages with their code on this machine can also take
-  it into the source.
+  it into the source: lifted text, colours, radii, sizes and padding you
+  changed on the overlay go back as page edits, then into the code the way
+  Live's edits do.
+- **Sites that aren't yours** take the same Live tools in Omastrator's browser
+  as real DOM and CSS edits, snapped to the site's own CSS variables. The page
+  and the Live panel say "Not your site: changes stay on this machine", and
+  there's no Deploy. **Keep Edits** saves them as a named edit set for that
+  site, which comes back every time you open it in Omastrator and can be
+  switched off and on. **Export CSS…** writes them as a style sheet or a
+  userstyle (Stylus), in the site's variables where they snapped to one.
+  **Before and After to Desk** lifts the page without its edits and with them,
+  as two frames in one undo step.
+- **Hand to Agent…** is on the bar for a page, a window and your art. Your
+  agent gets the mock-up (a picture and SVG), which element or widget each
+  lifted shape came from, a page's edits as CSS, and screenshots, and works in
+  a git branch of your app's source folder. Its change waits under Review
+  changes. The folder is remembered for next time.
 - **The Desk** (Super+Alt+W, the island, or the launcher's "The Desk") is one
   canvas for everything sent from any surface. Each frame is labelled with its
   source and time. It opens on its own Hyprland workspace, or as a normal
   window.
+- **Change Omarchy itself.** Desktop Look (the bar's Desktop Look on the
+  desktop, Edit Bar on Omarchy's bar, Gaps and Borders on a window) edits the
+  window gaps, borders and corners, the bar's position, height, colours and
+  widget order, the font and text size, the wallpaper (an image or the current
+  artboard) and the theme's colours. Gaps, borders, corners, the wallpaper and
+  the colours in the bar and panels change on screen as you go; drag the gap
+  beside a window on the overlay to widen it. The rest says it changes when
+  saved.
+- **Restyle an app** through its toolkit: GTK apps through `gtk.css`, Qt apps
+  through qt6ct (when they use it) or a stylesheet of their own passed by their
+  launcher. The preview opens a second copy of the app with the change; the
+  panel says plainly what can't change live.
+- **Nothing is written until you confirm.** Saving shows every file with its
+  full path and diff, and every command it runs (Omarchy's own, such as
+  `omarchy theme set` and `omarchy font set`, where they exist). Each file is
+  backed up first, and Desktop Look's history reverts any save byte for byte.
 
 ```sh
 omastrator design on | off | status     # design mode from a script
 omastrator design lift --region X,Y,W,H [--to desk]   # lift a region of the screen
+omastrator design look gapsOut=16 activeBorder=#ff375f   # preview on the desktop
+omastrator design look save | discard | history | revert ID
+omastrator design restyle --target N accent=#ff375f radius=8   # a second copy with the change
 omastrator desk [show|window]           # the Desk
 omastrator daemon [start|stop|status]   # the background app
 ```

@@ -415,3 +415,255 @@ Made while building phase 2 on 2026-09-27.
   lines; justified text is set flush left.
 - AT-SPI extents and fonts are only as good as the toolkit's; Flutter and
   Electron apps give coarse panels, terminals none (so they're traced).
+
+## Decisions: Change the real thing on the desktop (phase 4)
+
+Made while building the Omarchy and GTK/Qt parts of phase 4 on 2026-09-27.
+Any-site editing in Omastrator's browser and Hand to Agent are recorded
+separately.
+
+### Where it's reached
+
+- **The floating bar** offers **Desktop Look** on the desktop, **Edit Bar** on
+  Omarchy's bar, and **Gaps and Borders** and **Restyle App** on a window. The
+  bar is told from the desktop by Hyprland's layers: the pointer over the
+  `omarchy-bar` layer is "the bar", with its own actions.
+- They open **Desktop Look**, one panel with Windows, Bar, Font, Wallpaper,
+  Colours and App tabs, plus Discard Preview, Save to Desktop… and a History
+  of saves with Revert…. Numbers scrub by dragging their label, colours are
+  picked with a live preview (Cancel puts the colour back), and the bar's
+  widgets are dragged within and between Left, Center and Right.
+- **On the overlay**, while the Windows tab is up, the gap to the right of
+  the window the bar is on is a handle: at the monitor's edge it's the outer
+  gap, between windows twice the inner gap. Dragging shows the new value;
+  letting go previews it (`OverlayLogic.gapHandle`, tested in a JS engine).
+- `omastrator design look KEY=VALUE…` and `design restyle` do the same from a
+  script, with `save`, `discard`, `history` and `revert ID`.
+
+### What previews live, and how
+
+Nothing is written for a preview.
+
+- **Gaps, borders and corners:** `hyprctl eval 'hl.config({…})'` on Omarchy
+  4's Lua config, `hyprctl keyword` on hyprlang. Discard runs `hyprctl reload
+  config-only`, which reads the unchanged files again.
+- **The theme's colours and the bar's size and colours:** the shell's own IPC,
+  `omarchy-shell shell applyTheme <colors.toml> <shell.toml>` (base64), with
+  the edited copies held in memory. Discard sends the files as they are.
+  `~/.config/omarchy/shell.toml` wins over a preview, so a key it already sets
+  (Omarchy's text size lives there) shows only once saved, and the panel says
+  so.
+- **The wallpaper:** `omarchy-shell -q background set <image>`; Discard sets
+  the current one back.
+- **Only on saving:** the bar's position, transparency and widget order (the
+  shell reads shell.json only when told to reload), the font (Omarchy restarts
+  the shell for it), and the rest of the theme (terminals, GTK apps), which
+  `omarchy theme set` remakes.
+- The panel's note always says which of these apply to the edit at hand.
+
+### Where each setting is written
+
+- **Gaps, borders, corners:** one marked block, `-- BEGIN Omastrator: desktop
+  look` … `-- END`, at the end of `~/.config/hypr/looknfeel.lua` (hyprlang:
+  `looknfeel.conf`, else `hyprland.conf`), which Omarchy loads after the theme.
+  A later edit merges into the block, so earlier values stay. Border colours
+  also set the group borders, as Omarchy's themes do. Border colours set here
+  outlive theme switches until reverted, and the dialog says so. Then
+  `hyprctl reload config-only`.
+- **The bar's position, transparency and widgets:** `~/.config/omarchy/
+  shell.json`, edited with jq so its key order and escapes stay (Omarchy's own
+  `omarchy bar` sorts every key with `jq -S`, which would rewrite the whole
+  file, so the dialog's diff wouldn't be what happens). Widgets keep their
+  options when they move. Then `omarchy-shell shell reloadConfig`, the refresh
+  `omarchy bar` itself runs.
+- **The bar's height and colours, and the text size:** the machine-level
+  `~/.config/omarchy/shell.toml` (`[bar] size-horizontal` or `size-vertical`,
+  `background`, `background-alpha`, `text`; `[font] base-size`), the file
+  `omarchy display text size` writes. The shell watches it, so no command runs.
+- **The font:** `omarchy font set "<family>"`. The command writes its files
+  itself; the dialog lists each one it will change (fontconfig's `fonts.conf`,
+  and alacritty, kitty, ghostty and foot's configs where present) with the
+  change predicted from its script, marked "(by the command)", and they're
+  backed up like the rest.
+- **The wallpaper:** `omarchy theme bg set <image>`, which moves the
+  `~/.local/state/omarchy/current/background` link (shown as the link's
+  change). A picture made from the current artboard (at the monitor's width)
+  is first kept in `$XDG_DATA_HOME/omastrator/wallpapers`.
+- **The theme's colours:** the theme's own `colors.toml`, through phase 3's
+  `OmarchyThemes::savePlan`, then `omarchy theme set <theme>`. A theme the user
+  owns is changed in place; one of Omarchy's own is copied as "<Theme> Edited".
+
+### The confirmation, backups and Revert
+
+- Every save and every revert goes through `SyncConfirmDialog`, as phase 3's
+  pushes do: every file's full path with its diff (a picture by size, a link by
+  where it points), every command in the order it runs, where the backup goes,
+  and a note on what shows when. Cancel is the default; nothing is written or
+  run without Confirm, and a file changed since the preview stops the save.
+- `SyncPlan` grew what this needed: several commands, files a command writes
+  (checked and backed up, not written by Omastrator), links, deletions,
+  a backup folder, revert commands, a note and the confirm button's words.
+- **Backups** (`System/ConfigBackup`): before anything is written, each file
+  the plan touches is copied as it is (a link as where it points, a missing
+  file as missing) to `$XDG_DATA_HOME/omastrator/backups/<time>-<title>/`, with
+  a manifest naming the commands that make the old files take effect again
+  (`hyprctl reload`, `omarchy theme set <old>`, `omarchy restart shell`,
+  `omarchy-shell background set <old>`).
+- **Revert** (the panel's History, or `design look revert ID`) is a plan of its
+  own: every file back byte for byte, a file that didn't exist deleted, the
+  link put back, then those commands. Being a write, it asks first too, which
+  is the author's rule, and it's backed up, so a revert can be reverted.
+
+### GTK and Qt apps
+
+- **The toolkit** is read from `/proc/<pid>/maps` (libgtk-3, libgtk-4,
+  libQt5/6), the Qt platform theme from the process's environment, and the
+  launcher entry by window class, entry name or program.
+- **GTK:** one marked block at the end of `~/.config/gtk-3.0/gtk.css` or
+  `gtk-4.0/gtk.css`. The accent is named for the theme (`@define-color
+  accent_bg_color`, `theme_selected_bg_color`, and libadwaita's
+  `--accent-bg-color` on GTK 4); background, text colour, font, size and
+  corner radius go on the kind of widget pointed at (AT-SPI's "push button" is
+  `button`), or the window when nothing finer is known. GTK has no selector for
+  one app, so this reaches every app of that GTK version, and the dialog and
+  panel say so. GTK's own CSS parser checks the output in the tests.
+- **Qt with qt6ct or qt5ct** (the app runs with that platform theme): a colour
+  scheme with every palette role (21 for qt5ct, all of this Qt's for qt6ct), a
+  stylesheet, and `qt6ct.conf` pointing at both with the font set; its other
+  keys stay.
+- **Other Qt Widgets apps** (Omarchy runs Qt with the `gtk3` platform theme):
+  a stylesheet of their own in `~/.config/omastrator/styles/<app>.qss`, passed
+  by a copy of their launcher entry in `$XDG_DATA_HOME/applications` whose Exec
+  lines gain `-stylesheet`. Only that app changes, from its next launch. Qt
+  Quick apps ignore stylesheets and don't use qt6ct here, so Restyle App says
+  so and offers nothing to save.
+- **Preview** starts a second copy of the app with the change, never touching
+  the real files: GTK and qt6ct through a copy of `$XDG_CONFIG_HOME` in the
+  runtime folder, made of links to the real entries except the one file
+  changed (a written file never goes through a link); plain Qt with
+  `-stylesheet` pointing at a copy. Apps that hand a second launch to the one
+  already open show nothing new, and the note says to close it first. Discard
+  stops only that copy (its environment or arguments must name the preview
+  folder).
+
+### Limits in phase 4
+
+- Hyprland previews and reloads assume the Lua config Omarchy 4 ships or
+  hyprlang's `keyword`; other setups show changes only once saved.
+- A preview of a shell.toml key the user's own file already sets can't show,
+  since that file wins; it shows on saving.
+- GTK rules reach every app of that GTK version, and GTK apps (and most Qt
+  apps) pick up a change only when restarted. There's no per-app GTK scope.
+- Qt Quick apps, Electron and Flutter apps, and terminals can't be restyled
+  through a toolkit: mock them up on the overlay and hand them to the agent.
+- `omarchy theme set` also remakes the current theme's generated files; those
+  are named in the dialog's note, not listed one by one, and are remade again
+  by Revert's `omarchy theme set`.
+- The gap handle covers the gap on a window's right; the other gaps and the
+  corner radius are set from the panel.
+
+## Decisions: change the real thing, widened (phase 4)
+
+Made while building phase 4's sites, Hand to Agent and lifted write-back on
+2026-09-27. (Visual Omarchy config and GTK/Qt styling are decided separately.)
+
+### Any site, without deploy
+
+- **The same tools.** A page whose origin isn't registered as a project runs
+  the whole Live overlay: select, the contextual bar (text, colour, spacing,
+  size, type, radius), handles, and snapping to the page's own CSS custom
+  properties (Tailwind v4 theme variables too, then the Omarchy colours).
+  Every change is a real DOM or CSS change in Omastrator's browser.
+- **Said plainly.** The page shows a small strip, bottom right: "Not your
+  site: changes stay on this machine." The Live panel says the same in place
+  of the project, the island's activity line adds it to the address, and the
+  status stream's `live.site` carries it. Deploy and Save are hidden on the
+  island and in the panel while such a page is open; `liveDeploy` refuses.
+- **Edit sets.** Keep Edits saves the edits not kept yet as a named set for
+  the origin (the name field, else "Edits 1", "Edits 2"…), in
+  `$XDG_DATA_HOME/omastrator/edit-sets.json`, never in the site or the
+  browser profile. A later change to the same element and property replaces
+  the earlier one and keeps the page's first value. Each edit remembers its
+  page's path, and comes back only there. Every enabled set is put back when
+  the page loads (including reloads and new sessions); elements a framework
+  renders late are caught for ten seconds. Sets are switched off and on in the
+  strip's Edit Sets list or the panel's checkboxes, and removed with
+  `removeEdits`. Edits not kept yet also survive a reload within the session.
+- **Undoing on the page.** The overlay records each element's `style`,
+  `class` and text before its first change, so switching a set off (and
+  Before) puts the page back exactly as the site made it, then re-applies what
+  stays on.
+- **Export CSS…** writes what's on the page (or one set) as plain CSS or a
+  userstyle, chosen by the file name (`.user.css`) or `format`. Rules are
+  `!important`, grouped by selector and page; a value that snapped to one of
+  the page's custom properties is written as `var(--name)`, so it follows the
+  site. The userstyle has the `==UserStyle==` header and one `@-moz-document
+  url-prefix()` per page. Text can't be CSS: text changes are listed in a
+  comment. From the page, the app comes forward with a save dialog in
+  Downloads.
+- **Before and After to Desk** lifts the whole viewport with every edit off,
+  then with them back on, and lands both as Desk frames ("host/path, before",
+  "…, after") in one undo step, "Before and After to Desk". The edits go back
+  on whatever happens to the lift.
+- The `live` method's new actions: `editSets`, `keepEdits`, `toggleEdits`,
+  `removeEdits`, `exportEdits`, `beforeAfter`, `original`, and `handoff` with
+  `"page": true`. The strip's buttons go through the same code, queued so a
+  dialog never opens inside a DevTools reply.
+
+### Hand to Agent, from any surface
+
+- **Where.** "Hand to Agent…" is on the floating bar for a page element, a
+  window and art; on the page strip and the Live panel for a site that isn't
+  yours; and `design handoff {surface|target, folder, prompt}`. File ▸ Hand to
+  Agent… (the document in front) goes through the same path.
+- **The package**, in one temporary folder the prompt names:
+  - `mockup.png` (rendered at 2×) and `mockup.svg`: all the art on the
+    surface, drawn and lifted, since the lifted UI says what the drawing is
+    over. A page with no art hands over its screenshot as the mockup.
+  - `selectors.json`: for each lifted element or widget, its `liftedFrom` (a
+    CSS selector, or the accessible path of roles), its name and its box.
+  - `edits.css` and a before → after list: a page's edits, kept and not.
+  - the surface's screenshot now (grim for windows, DevTools for pages), and
+    for a page with edits, a screenshot with them off.
+- **The run** is the existing project path: a git worktree of the chosen
+  folder on its own branch, headless where the agent allows, `agentDone`, and
+  the change written and recorded under Review changes. Nothing opens by
+  itself.
+- **The folder** is asked for in the Hand to Agent sheet, which offers the
+  one used last for that surface (`anywhere.json`'s `handoff`). Given in the
+  call, it runs at once.
+
+### Lifted vectors back to the source
+
+- **Only your own page**: Apply to Source (the bar's Send to) for art on a
+  page open in Live with its project. It first looks for lifted objects that
+  changed; if there are none it falls back to the agent with a picture of the
+  mock-up, as before.
+- **What it compares with.** When a page's lift lands on the overlay, each
+  lifted object's state is kept by id in `lifted.json` beside
+  `overlays.omai`. Apply to Source compares the selected art (else all of it)
+  with that, and afterwards records the new state, so nothing is applied
+  twice.
+- **What maps** (`LiftDiff`):
+  - text object: its words (line breaks become spaces; only an element that
+    holds text alone), fill → `color`, drawn size → `font-size`, face →
+    `font-weight`.
+  - an element's box: flat fill → `background-color`, live corner radii →
+    `border-radius` (four values when they differ). A box with nothing in it
+    resized → `width`/`height` by as much. A box whose edges moved around its
+    content → `padding-*` by as much; content that only grew doesn't count.
+  - Each becomes a Live edit (`LiveSession::edit`, snapped to tokens), then
+    `liveWriteBack`: certain ones are written directly, the rest go to the
+    agent, as with any Live edit.
+
+### Limits in phase 4
+
+- Edit sets match elements by the overlay's selector (an id, else a path of
+  `nth-of-type`), so a site that reorders its markup can lose an edit; it's
+  skipped quietly. Single-page apps that change the path without loading
+  aren't followed until the next load.
+- Userstyles can't change text; exported text changes are comments only.
+- Apply to Source doesn't move things: a lifted element dragged elsewhere is
+  said ("moves aren't applied"), and left for Hand to Agent. Gradients, images
+  and borders on lifted art aren't mapped back. Apps' lifted widgets have no
+  write-back of their own: Hand to Agent carries their accessible paths.

@@ -72,6 +72,10 @@ void emptyCanvas(QMenu *menu, Menus &menus)
         share(menu, &menus, name);
     menu->addSeparator();
     share(menu, &menus, "artboardSize");
+    QMenu *artboards = submenu(menu, QStringLiteral("contextArtboards"), QStringLiteral("Artboards"));
+    for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "deleteArtboard", "fitArtboardToArtwork",
+                             "switchArtboardOrientation", "nextArtboard", "previousArtboard"})
+        share(artboards, &menus, name);
 }
 }
 
@@ -81,6 +85,15 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
     menu->setObjectName(QStringLiteral("canvasContextMenu"));
     if (!session.hasDocument())
         return menu;
+    // The Artboard tool: its own commands, whatever else is selected.
+    if (session.tool() == Tool::artboard) {
+        for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "deleteArtboard", "fitArtboardToArtwork", "switchArtboardOrientation"})
+            share(menu, &menus, name);
+        menu->addSeparator();
+        for (const char *name : {"nextArtboard", "previousArtboard"})
+            share(menu, &menus, name);
+        return menu;
+    }
     const VectorDocument &document = *session.document();
     // Stacked objects: pick any one of them, topmost first (Figma's Select layer, Paper's ⌘-right-click).
     const auto layerPicker = [&] {

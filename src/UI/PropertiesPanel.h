@@ -17,6 +17,8 @@ class NumberField;
 class PaintStack;
 class PaintSwatch;
 class SelectionColors;
+class QListWidget;
+class QListWidgetItem;
 
 // A fill or stroke: kind, colour, gradient end. Several different paints read Mixed.
 class PaintRow : public QWidget {
@@ -83,6 +85,9 @@ private:
     // contextual rows (alignment for closed paths, arrowheads for open ones).
     void synchronizePaint();
     void synchronize();
+    // Properties ▸ Document's Artboards list: rows, selection and the right-click menu.
+    void synchronizeArtboards();
+    void artboardsMenu(int index, QPoint at);
     void applyIcons();
     // One height and one font for the section's fields and menus.
     void evenControls();
@@ -129,6 +134,7 @@ private:
     NumberField *m_artboardWidth = nullptr;
     NumberField *m_artboardHeight = nullptr;
     PaintSwatch *m_background = nullptr;
+    QListWidget *m_artboards = nullptr;
     QCheckBox *m_grid = nullptr;
     QCheckBox *m_snap = nullptr;
     QCheckBox *m_outline = nullptr;

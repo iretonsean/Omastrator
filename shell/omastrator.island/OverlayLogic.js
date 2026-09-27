@@ -120,6 +120,32 @@ function sendArgs(bar, destination, prompt) {
   return args
 }
 
+// Desktop Look's gap handle (docs/ANYWHERE.md, phase 4): the gap on a window's right. At the monitor's edge it's
+// the outer gap; between windows it's twice the inner gap. Null unless Desktop Look shows handles. Rectangles are
+// the overlay's own coordinates on `screen`.
+function gapHandle(look, bounds, screen) {
+  if (!look || !look.handles || !bounds)
+    return null
+  var box = local(bounds, screen)
+  var right = box.x + box.width
+  var outer = right + look.gapsOut + (look.borderSize || 0) >= screen.width - 2
+  var width = outer ? look.gapsOut : look.gapsIn * 2
+  return { key: outer ? "gapsOut" : "gapsIn", label: outer ? "Outer gap" : "Inner gap",
+           value: outer ? look.gapsOut : look.gapsIn, x: right, y: box.y, width: width, height: box.height }
+}
+
+// The gap a handle dragged by `dx` pixels asks for, within Hyprland's sensible range.
+function gapAfterDrag(handle, dx) {
+  var width = Math.max(0, handle.width + dx)
+  var value = handle.key === "gapsOut" ? width : width / 2
+  return Math.max(0, Math.min(200, Math.round(value)))
+}
+
+// The command a released gap handle runs: a live preview through `omastrator design look`.
+function gapArgs(handle, value) {
+  return ["design", "look", handle.key + "=" + value]
+}
+
 // A lift's progress on the bar: "Lifting div.card: Fetching pictures… 3 of 8".
 function liftText(lift) {
   if (!lift) return ""

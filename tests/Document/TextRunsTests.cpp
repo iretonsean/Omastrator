@@ -358,7 +358,7 @@ private slots:
         object.text.features[QStringLiteral("ss01")] = 1;
         document.objects.push_back(object);
         const QJsonObject json = DocumentCodec::encode(document);
-        QCOMPARE(json["version"].toInt(), 4);
+        QCOMPARE(json["version"].toInt(), 5);
         const VectorDocument back = DocumentCodec::decode(json);
         QCOMPARE(back.find(object.id)->text, object.text);
         QCOMPARE(back, document);

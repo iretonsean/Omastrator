@@ -664,6 +664,22 @@ QJsonObject encode(const VectorDocument &document)
         json["tokenModes"] = QJsonArray::fromStringList(document.tokenModes);
         json["tokenMode"] = document.tokenMode;
     }
+    if (!document.artboards.empty()) {
+        QJsonArray boards;
+        for (const Artboard &board : document.artboards) {
+            boards.append(QJsonObject{{"id", board.id.toString(QUuid::WithoutBraces)}, {"name", board.name},
+                                       {"x", board.rect.x()}, {"y", board.rect.y()},
+                                       {"width", board.rect.width()}, {"height", board.rect.height()},
+                                       {"background", color(board.background)}});
+        }
+        json["artboards"] = boards;
+    }
+    if (!document.exportAssets.empty()) {
+        QJsonArray assets;
+        for (const QUuid &assetId : document.exportAssets)
+            assets.append(assetId.toString(QUuid::WithoutBraces));
+        json["exportAssets"] = assets;
+    }
     return json;
 }
 
@@ -689,6 +705,22 @@ VectorDocument decode(const QJsonObject &json)
             document.tokenModes.append(mode.toString());
     }
     document.tokenMode = document.tokenModes.contains(json["tokenMode"].toString()) ? json["tokenMode"].toString() : document.tokenModes.value(0);
+    // Version 5: artboards and export assets. Earlier files (or v4 files without them) give the implicit one.
+    for (const QJsonValue &value : json["artboards"].toArray()) {
+        const QJsonObject board = value.toObject();
+        const QUuid boardId = QUuid::fromString(board["id"].toString());
+        if (boardId.isNull())
+            continue;
+        const QRectF rect(board["x"].toDouble(), board["y"].toDouble(), board["width"].toDouble(), board["height"].toDouble());
+        if (!(rect.width() > 0 && rect.height() > 0))
+            continue;
+        document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white)});
+    }
+    for (const QJsonValue &value : json["exportAssets"].toArray()) {
+        const QUuid assetId = QUuid::fromString(value.toString());
+        if (!assetId.isNull())
+            document.exportAssets.push_back(assetId);
+    }
     // Every parent must exist, come first, and be a container; ids are unique.
     std::set<QUuid> seen;
     for (const VectorObject &object : document.objects) {
