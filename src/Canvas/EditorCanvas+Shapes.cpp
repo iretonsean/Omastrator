@@ -78,10 +78,22 @@ void EditorCanvas::State::dragShape(QPointF view, Qt::KeyboardModifiers modifier
     if (modifiers.testFlag(Qt::ShiftModifier) && session.tool() != Tool::line)
         clearGuides();
     const VectorPath path = shapePath(drag->pressDocument, to, modifiers);
+    // Rectangles stay live, so their corners can change later.
+    const auto place = [&](VectorObject &object) {
+        object.path = path;
+        if (session.tool() == Tool::rectangle || session.tool() == Tool::roundedRectangle) {
+            LiveRectangle shape;
+            shape.rect = path.bounds();
+            shape.radii.fill(session.tool() == Tool::roundedRectangle ? std::max(0.0, session.cornerRadius) : 0.0);
+            EditorSession::reshape(object, shape);
+        }
+    };
     if (!drag->interacting) {
         const QString name = shapeName(session.tool());
         session.beginInteraction(QStringLiteral("Draw %1").arg(name));
-        drag->object = session.previewAddObject(session.pathObject(path, name));
+        VectorObject object = session.pathObject(path, name);
+        place(object);
+        drag->object = session.previewAddObject(object);
         drag->interacting = true;
         return;
     }
@@ -89,6 +101,6 @@ void EditorCanvas::State::dragShape(QPointF view, Qt::KeyboardModifiers modifier
     if (!current)
         return;
     VectorObject object = *current;
-    object.path = path;
+    place(object);
     session.previewObject(object);
 }

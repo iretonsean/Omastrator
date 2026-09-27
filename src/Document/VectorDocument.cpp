@@ -306,9 +306,20 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform)
     VectorObject *object = find(id);
     if (!object)
         return;
-    if (object->kind == ObjectKind::path)
-        object->path = object->path.transformed(transform);
-    else if (object->kind == ObjectKind::text || object->kind == ObjectKind::image)
+    if (object->kind == ObjectKind::path) {
+        // A live rectangle stays live while it stays a rectangle.
+        std::optional<LiveRectangle> live;
+        if (const LiveRectangle *shape = object->liveShape())
+            live = shape->transformed(transform);
+        object->shape = live;
+        if (live) {
+            const Qt::FillRule rule = object->path.fillRule;
+            object->path = live->path();
+            object->path.fillRule = rule;
+        } else {
+            object->path = object->path.transformed(transform);
+        }
+    } else if (object->kind == ObjectKind::text || object->kind == ObjectKind::image)
         object->transform = object->transform * transform;
     for (const QUuid &child : children(id))
         this->transform(child, transform);

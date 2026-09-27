@@ -182,28 +182,61 @@ PanelSection *PropertiesPanel::alignSection()
     row->setSpacing(2);
     for (const auto &[edge, name, tip, icon] : edges) {
         m_alignButtons.push_back(iconButton(QString::fromLatin1(name), QString::fromLatin1(tip), icon, [this, edge] {
-            m_session.align(edge, m_alignTarget->currentIndex() == 1 ? AlignTarget::artboard : AlignTarget::selection);
+            const int target = m_alignTarget->currentIndex();
+            m_session.align(edge, target == 1 ? AlignTarget::artboard : target == 2 ? AlignTarget::keyObject : AlignTarget::selection);
         }));
         row->addWidget(m_alignButtons.back());
     }
     row->addStretch(1);
     m_align->body->addLayout(row);
+    // Distribute, by each object's edge or centre, in align's order.
+    const std::array<std::tuple<AlignEdge, const char *, const char *, PanelIcon>, 6> spreads{{
+        {AlignEdge::left, "distributeLeft", "Distribute left edges (three or more objects)", PanelIcon::distributeLeft},
+        {AlignEdge::horizontalCenter, "distributeHorizontal", "Distribute horizontal centers (three or more objects)", PanelIcon::distributeHorizontal},
+        {AlignEdge::right, "distributeRight", "Distribute right edges (three or more objects)", PanelIcon::distributeRight},
+        {AlignEdge::top, "distributeTop", "Distribute top edges (three or more objects)", PanelIcon::distributeTop},
+        {AlignEdge::verticalCenter, "distributeVertical", "Distribute vertical centers (three or more objects)", PanelIcon::distributeVertical},
+        {AlignEdge::bottom, "distributeBottom", "Distribute bottom edges (three or more objects)", PanelIcon::distributeBottom},
+    }};
     auto *second = new QHBoxLayout;
     second->setSpacing(2);
-    m_distributeButtons.push_back(iconButton(QStringLiteral("distributeHorizontal"), QStringLiteral("Distribute horizontal centers (three or more objects)"),
-                                             PanelIcon::distributeHorizontal, [this] { m_session.distribute(DistributeAxis::horizontal); }));
-    m_distributeButtons.push_back(iconButton(QStringLiteral("distributeVertical"), QStringLiteral("Distribute vertical centers (three or more objects)"),
-                                             PanelIcon::distributeVertical, [this] { m_session.distribute(DistributeAxis::vertical); }));
-    for (QToolButton *button : m_distributeButtons)
-        second->addWidget(button);
-    second->addSpacing(8);
+    for (const auto &[edge, name, tip, icon] : spreads) {
+        m_distributeButtons.push_back(iconButton(QString::fromLatin1(name), QString::fromLatin1(tip), icon, [this, edge] { m_session.distribute(edge); }));
+        second->addWidget(m_distributeButtons.back());
+    }
+    second->addStretch(1);
+    m_align->body->addLayout(second);
+    auto *third = new QHBoxLayout;
+    third->setSpacing(2);
+    m_spacingButtons.push_back(iconButton(QStringLiteral("distributeSpacingHorizontal"),
+                                          QStringLiteral("Distribute spacing horizontally: the gap from the key object, or even gaps on Auto"),
+                                          PanelIcon::spaceHorizontal, [this] { m_session.distributeSpacing(DistributeAxis::horizontal, m_spacing); }));
+    m_spacingButtons.push_back(iconButton(QStringLiteral("distributeSpacingVertical"),
+                                          QStringLiteral("Distribute spacing vertically: the gap from the key object, or even gaps on Auto"),
+                                          PanelIcon::spaceVertical, [this] { m_session.distributeSpacing(DistributeAxis::vertical, m_spacing); }));
+    for (QToolButton *button : m_spacingButtons)
+        third->addWidget(button);
+    m_spacingField = new NumberField(QStringLiteral("Gap"), QStringLiteral("pt"), [this](double gap) {
+        m_spacing = gap;
+        synchronize();
+    }, m_align);
+    m_spacingField->setObjectName(QStringLiteral("distributeGap"));
+    m_spacingField->field->setObjectName(QStringLiteral("distributeGapField"));
+    m_spacingField->lengths = true;
+    m_spacingField->setToolTip(QStringLiteral("The gap Distribute Spacing leaves, in points; empty spaces evenly"));
+    m_spacingField->cleared = [this] {
+        m_spacing.reset();
+        synchronize();
+    };
+    third->addWidget(m_spacingField, 1);
+    third->addSpacing(6);
     m_alignTarget = new QComboBox(m_align);
     m_alignTarget->setObjectName(QStringLiteral("alignTarget"));
     m_alignTarget->setAccessibleName(QStringLiteral("Align to"));
-    m_alignTarget->setToolTip(QStringLiteral("What the selection aligns to"));
-    m_alignTarget->addItems({QStringLiteral("To selection"), QStringLiteral("To artboard")});
-    second->addWidget(m_alignTarget, 1);
-    m_align->body->addLayout(second);
+    m_alignTarget->setToolTip(QStringLiteral("What the selection aligns to. Click a selected object to make it the key object"));
+    m_alignTarget->addItems({QStringLiteral("To selection"), QStringLiteral("To artboard"), QStringLiteral("To key object")});
+    third->addWidget(m_alignTarget, 1);
+    m_align->body->addLayout(third);
     return m_align;
 }
 

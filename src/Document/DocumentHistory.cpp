@@ -4,8 +4,24 @@
 #include <utility>
 
 DocumentHistory::DocumentHistory(int entryLimit, qint64 retainedByteLimit)
-    : entryLimit(std::max(0, entryLimit)), retainedByteLimit(std::max<qint64>(0, retainedByteLimit))
+    : retainedByteLimit(std::max<qint64>(0, retainedByteLimit)), m_entryLimit(std::max(0, entryLimit))
 {
+}
+
+std::vector<QString> DocumentHistory::undoNames() const
+{
+    std::vector<QString> names;
+    for (const Entry &entry : m_past)
+        names.push_back(entry.name);
+    return names;
+}
+
+std::vector<QString> DocumentHistory::redoNames() const
+{
+    std::vector<QString> names;
+    for (auto entry = m_future.rbegin(); entry != m_future.rend(); ++entry)
+        names.push_back(entry->name);
+    return names;
 }
 
 void DocumentHistory::reset()
@@ -117,7 +133,7 @@ qint64 DocumentHistory::retainedBytes(const std::optional<VectorDocument> &curre
 
 void DocumentHistory::trim(const std::optional<VectorDocument> &current)
 {
-    while (int(m_past.size() + m_future.size()) > entryLimit || retainedBytes(current) > retainedByteLimit) {
+    while (int(m_past.size() + m_future.size()) > m_entryLimit || retainedBytes(current) > retainedByteLimit) {
         if (!m_past.empty())
             m_past.erase(m_past.begin());
         else if (!m_future.empty())

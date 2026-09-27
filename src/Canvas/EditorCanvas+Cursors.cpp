@@ -339,6 +339,8 @@ void EditorCanvas::State::updateCursor()
     CursorKind kind = CursorKind::arrow;
     if (drag && drag->kind == DragKind::pan) {
         kind = CursorKind::closedHand;
+    } else if (drag && drag->kind == DragKind::guide) {
+        kind = drag->guideAxis == Qt::Horizontal ? CursorKind::sizeVertical : CursorKind::sizeHorizontal;
     } else if (drag && drag->kind == DragKind::scale) {
         kind = handleCursor(drag->handle);
     } else if (drag && drag->kind == DragKind::rotate && tool == Tool::select) {
@@ -357,6 +359,8 @@ void EditorCanvas::State::updateCursor()
                     kind = CursorKind::rotate;
                 else if (alt && hovered)
                     kind = CursorKind::duplicate;
+                else if (const std::optional<int> guide = !hovered ? guideAt(*hover) : std::nullopt)
+                    kind = session.document()->guides[size_t(*guide)].orientation == Qt::Horizontal ? CursorKind::sizeVertical : CursorKind::sizeHorizontal;
             } else if (drag && drag->duplicate) {
                 kind = CursorKind::duplicate;
             }

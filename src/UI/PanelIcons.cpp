@@ -128,6 +128,52 @@ void distribute(QPainter &painter, bool vertical)
     painter.restore();
 }
 
+// Three bars and a line through the edge each is spaced by.
+void distributeEdge(QPainter &painter, bool vertical, bool far)
+{
+    const QColor ink = painter.pen().color();
+    painter.save();
+    if (vertical) {
+        painter.translate(9, 9);
+        painter.rotate(90);
+        painter.translate(-9, -9);
+    }
+    for (const double x : {2.0, 7.5, 13.0}) {
+        painter.fillRect(QRectF(x, 6, 3, 9), ink);
+        const double edge = far ? x + 3 : x;
+        painter.drawLine(QPointF(edge, 2), QPointF(edge, 16));
+    }
+    painter.restore();
+}
+
+// Two bars with the gap between them marked.
+void spacing(QPainter &painter, bool vertical)
+{
+    const QColor ink = painter.pen().color();
+    painter.save();
+    if (vertical) {
+        painter.translate(9, 9);
+        painter.rotate(90);
+        painter.translate(-9, -9);
+    }
+    painter.fillRect(QRectF(2, 3, 3.5, 12), ink);
+    painter.fillRect(QRectF(12.5, 3, 3.5, 12), ink);
+    painter.drawLine(QPointF(6.5, 9), QPointF(11.5, 9));
+    painter.drawLine(QPointF(6.5, 7), QPointF(6.5, 11));
+    painter.drawLine(QPointF(11.5, 7), QPointF(11.5, 11));
+    painter.restore();
+}
+
+// A square corner rounded off.
+void corner(QPainter &painter)
+{
+    QPainterPath path(QPointF(3, 15));
+    path.lineTo(QPointF(3, 9));
+    path.cubicTo(QPointF(3, 5.7), QPointF(5.7, 3), QPointF(9, 3));
+    path.lineTo(QPointF(15, 3));
+    painter.drawPath(path);
+}
+
 // Two overlapping squares; the part the operation keeps is filled.
 void pathfinder(QPainter &painter, int operation)
 {
@@ -232,6 +278,13 @@ void PanelIcons::paint(QPainter &painter, PanelIcon icon, QPointF origin, double
     case PanelIcon::alignBottom: align(painter, true, 1); break;
     case PanelIcon::distributeHorizontal: distribute(painter, false); break;
     case PanelIcon::distributeVertical: distribute(painter, true); break;
+    case PanelIcon::distributeLeft: distributeEdge(painter, false, false); break;
+    case PanelIcon::distributeRight: distributeEdge(painter, false, true); break;
+    case PanelIcon::distributeTop: distributeEdge(painter, true, false); break;
+    case PanelIcon::distributeBottom: distributeEdge(painter, true, true); break;
+    case PanelIcon::spaceHorizontal: spacing(painter, false); break;
+    case PanelIcon::spaceVertical: spacing(painter, true); break;
+    case PanelIcon::cornerRadius: corner(painter); break;
     case PanelIcon::unite: pathfinder(painter, 0); break;
     case PanelIcon::minusFront: pathfinder(painter, 1); break;
     case PanelIcon::intersect: pathfinder(painter, 2); break;

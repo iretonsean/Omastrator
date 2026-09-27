@@ -4,6 +4,7 @@
 #include "UI/AgentSheets.h"
 #include "UI/CommandPalette.h"
 #include "UI/ContextMenus.h"
+#include "UI/HistoryPanel.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
 #include "UI/ShareController.h"
@@ -233,11 +234,23 @@ void Menus::buildObject(QMenuBar &bar)
     add(path, QStringLiteral("outlineStroke"), QStringLiteral("Outline Stroke"), QKeySequence(), [this] { session().outlineSelectedStrokes(); });
     add(path, QStringLiteral("offsetPath"), QStringLiteral("Offset Path…"), QKeySequence(), [this] { ObjectDialogs::offsetPath(session(), &m_window); });
     add(path, QStringLiteral("simplify"), QStringLiteral("Simplify"), QKeySequence(), [this] { session().simplifySelection(1); });
+    path->addSeparator();
+    // Duplicate moved to Ctrl+Alt+D so Ctrl+J is Join, as in Illustrator.
+    add(path, QStringLiteral("join"), QStringLiteral("Join"), QKeySequence(Qt::CTRL | Qt::Key_J), [this] { session().joinPaths(); });
+    add(path, QStringLiteral("average"), QStringLiteral("Average…"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_J),
+        [this] { ObjectDialogs::average(session(), &m_window); });
+    add(path, QStringLiteral("reversePathDirection"), QStringLiteral("Reverse Path Direction"), QKeySequence(), [this] { session().reversePaths(); });
     QMenu *compound = object->addMenu(QStringLiteral("Compound Path"));
     compound->menuAction()->setObjectName(QStringLiteral("compoundMenu"));
     add(compound, QStringLiteral("makeCompoundPath"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_8), [this] { session().makeCompoundPath(); });
     add(compound, QStringLiteral("releaseCompoundPath"), QStringLiteral("Release"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_8),
         [this] { session().releaseCompoundPath(); });
+    compound->addSeparator();
+    add(compound, QStringLiteral("evenOddFillRule"), QStringLiteral("Even-Odd Fill Rule"), QKeySequence(), [this] {
+        const std::vector<QUuid> paths = session().selectedCompoundPaths();
+        const bool evenOdd = !paths.empty() && session().document()->find(paths.front())->path.fillRule == Qt::OddEvenFill;
+        session().setFillRuleOfSelection(evenOdd ? Qt::WindingFill : Qt::OddEvenFill);
+    })->setCheckable(true);
     QMenu *clipping = object->addMenu(QStringLiteral("Clipping Mask"));
     clipping->menuAction()->setObjectName(QStringLiteral("clippingMenu"));
     add(clipping, QStringLiteral("makeClippingMask"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_7), [this] { session().makeClippingMask(); });
@@ -340,6 +353,24 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     add(view, QStringLiteral("snapToGrid"), QStringLiteral("Snap to Grid"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Apostrophe),
         [this] { session().setSnapsToGrid(!session().snapsToGrid); })
         ->setCheckable(true);
+    add(view, QStringLiteral("snapToPixel"), QStringLiteral("Snap to Pixel"), QKeySequence(), [this] { session().setSnapsToPixel(!session().snapsToPixel); })
+        ->setCheckable(true);
+    add(view, QStringLiteral("pixelGrid"), QStringLiteral("Pixel Grid"), QKeySequence(), [this] { session().setShowsPixelGrid(!session().showsPixelGrid); })
+        ->setCheckable(true);
+    view->addSeparator();
+    add(view, QStringLiteral("rulers"), QStringLiteral("Rulers"), QKeySequence(Qt::CTRL | Qt::Key_R), [this] { session().setShowsRulers(!session().showsRulers); })
+        ->setCheckable(true);
+    QMenu *guides = view->addMenu(QStringLiteral("Guides"));
+    guides->menuAction()->setObjectName(QStringLiteral("guidesMenu"));
+    add(guides, QStringLiteral("hideGuides"), QStringLiteral("Hide Guides"), QKeySequence(Qt::CTRL | Qt::Key_Semicolon),
+        [this] { session().setShowsGuides(!session().showsGuides); });
+    add(guides, QStringLiteral("lockGuides"), QStringLiteral("Lock Guides"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Semicolon),
+        [this] { session().setGuidesLocked(!session().guidesLocked); })
+        ->setCheckable(true);
+    add(guides, QStringLiteral("makeGuides"), QStringLiteral("Make Guides"), QKeySequence(Qt::CTRL | Qt::Key_5), [this] { session().makeGuides(); });
+    add(guides, QStringLiteral("releaseGuides"), QStringLiteral("Release Guides"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_5),
+        [this] { session().releaseGuides(); });
+    add(guides, QStringLiteral("clearGuides"), QStringLiteral("Clear Guides"), QKeySequence(), [this] { session().clearGuides(); });
     view->addSeparator();
     add(view, QStringLiteral("contextualTaskBar"), QStringLiteral("Contextual Task Bar"), QKeySequence(), [this] {
         TaskBar::setTurnedOn(!TaskBar::isTurnedOn());
@@ -359,6 +390,7 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
         synchronize();
     });
     properties->setCheckable(true);
+    add(window, QStringLiteral("showHistory"), QStringLiteral("History"), QKeySequence(), [this] { showHistory(); });
     add(window, QStringLiteral("showSwatches"), QStringLiteral("Swatches"), QKeySequence(), [this] {
         if (m_agent)
             m_agent->showSwatchesPanel();
@@ -381,8 +413,17 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     })->setMenuRole(QAction::AboutRole);
 }
 
+void Menus::showHistory()
+{
+    m_historyPanel.onClose = [this] { m_historyPanel.close(); };
+    m_historyPanel.show(QStringLiteral("History"), new HistoryPanel(session()));
+}
+
 void Menus::watchFront(EditorCanvas *canvas)
 {
+    // The History panel follows the front document.
+    if (m_historyPanel.isVisible())
+        showHistory();
     // The front tab's session and canvas drive every entry.
     disconnect(m_sessionWatch);
     m_sessionWatch = connect(&session(), &EditorSession::changed, this, &Menus::synchronize);

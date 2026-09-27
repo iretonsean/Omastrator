@@ -58,6 +58,9 @@ private:
     ShareController *const m_share;
     QMenu *m_recent = nullptr;
     FloatingPanel m_shortcutsPanel{QStringLiteral("keyboardShortcuts"), m_window};
+    FloatingPanel m_historyPanel{QStringLiteral("historyPanel"), m_window};
+    // Window ▸ History, following the front document.
+    void showHistory();
     QMetaObject::Connection m_sessionWatch;
     QMetaObject::Connection m_canvasWatch;
     QMetaObject::Connection m_menuWatch;

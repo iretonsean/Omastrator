@@ -46,8 +46,8 @@ PropertiesPanel::PropertiesPanel(EditorSession &session, QWidget *parent) : QScr
     column->setSpacing(0);
     m_character = new CharacterSection(m_session, content);
     bool first = true;
-    for (PanelSection *block : {documentSection(), transformSection(), static_cast<PanelSection *>(m_character), appearanceSection(), strokeSection(),
-                                alignSection(), pathfinderSection()}) {
+    for (PanelSection *block : {documentSection(), transformSection(), shapeSection(), static_cast<PanelSection *>(m_character), appearanceSection(),
+                                strokeSection(), alignSection(), pathfinderSection()}) {
         if (!first) {
             // A section's rule hides with it.
             QFrame *rule = divider(content);
@@ -242,6 +242,9 @@ void PropertiesPanel::synchronize()
     show(m_character, text);
     show(m_align, selected);
     show(m_pathfinder, m_session.canCombine());
+    show(m_shape, drawn && selected && (!m_session.selectedShapes().empty() || !m_session.selectedCompoundPaths().empty()));
+    if (!m_shape->isHidden())
+        synchronizeShape();
     if (text)
         m_character->synchronize();
 
@@ -285,6 +288,22 @@ void PropertiesPanel::synchronize()
         button->setEnabled(selected);
     for (QToolButton *button : m_distributeButtons)
         button->setEnabled(m_session.selection().size() >= 3);
+    // An exact gap spaces two; an even one needs three.
+    for (QToolButton *button : m_spacingButtons)
+        button->setEnabled(m_session.selection().size() >= (m_spacing ? 2u : 3u));
+    if (m_spacing)
+        m_spacingField->sync(*m_spacing);
+    else
+        m_spacingField->syncUnset(0, QStringLiteral("Auto"));
+    // A key object, once clicked, is what Align works to, as in Illustrator.
+    if (m_session.keyObject() != m_shownKey) {
+        m_shownKey = m_session.keyObject();
+        const QSignalBlocker quiet(m_alignTarget);
+        if (m_shownKey)
+            m_alignTarget->setCurrentIndex(2);
+        else if (m_alignTarget->currentIndex() == 2)
+            m_alignTarget->setCurrentIndex(0);
+    }
     for (QToolButton *button : m_pathfinderButtons)
         button->setEnabled(m_session.canCombine());
 }

@@ -96,10 +96,10 @@ struct ToolKey {
     const char *key;
     int modifiers = 0;
 };
-const std::array<ToolKey, 14> toolKeys{{
+const std::array<ToolKey, 15> toolKeys{{
     {Tool::select, "v"}, {Tool::directSelect, "a"}, {Tool::pen, "p"}, {Tool::pencil, "n"}, {Tool::text, "t"}, {Tool::line, "\\"},
     {Tool::rectangle, "m"}, {Tool::ellipse, "l"}, {Tool::rotate, "r"}, {Tool::scale, "s"}, {Tool::eyedropper, "i"}, {Tool::hand, "h"},
-    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8},
+    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8}, {Tool::scissors, "c"},
 }};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)
@@ -157,7 +157,9 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Make Compound Path", "8", 1, true), entry("Release Compound Path", "8", 11, true),
             entry("Create Outlines", "o", 9, true), entry("Zoom In", "=", 1, true), entry("Zoom Out", "-", 1, true),
             entry("Fit Artboard in Window", "0", 1, true), entry("Actual Size", "1", 1, true), entry("Outline", "y", 1, true),
-            entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true), entry("Command Palette", "k", 1, true)};
+            entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true), entry("Command Palette", "k", 1, true),
+            entry("Rulers", "r", 1, true), entry("Hide Guides", ";", 1, true), entry("Lock Guides", ";", 3, true),
+            entry("Make Guides", "5", 1, true), entry("Release Guides", "5", 3, true), entry("Join", "j", 1, true), entry("Average", "j", 3, true)};
         // Illustrator's type keys: they work on selected type and while typing, and rest otherwise.
         const QString left(QChar(0xf702)), right(QChar(0xf703)), up(QChar(0xf700)), down(QChar(0xf701));
         for (const auto &[title, key, modifiers] : std::vector<std::tuple<const char *, QString, int>>{
