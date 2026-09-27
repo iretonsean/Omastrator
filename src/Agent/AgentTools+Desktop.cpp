@@ -207,6 +207,39 @@ QJsonObject AgentTools::aiStart(const QJsonObject &params)
     return {{"started", request.flow}};
 }
 
+const QStringList &AgentTools::designActions()
+{
+    static const QStringList actions{"on",     "off",    "toggle", "status", "tool", "alt",  "select", "selectArt", "deselect", "measure", "draw",
+                                     "action", "ask",    "keep",   "discard", "send", "undo", "redo",   "clear",     "onboarding", "desk"};
+    return actions;
+}
+
+QJsonObject AgentTools::design(const QJsonObject &params)
+{
+    const QString action = designActions().value(*choice(params, QStringLiteral("action"), designActions(), true));
+    QJsonObject result;
+    if (const QString failure = m_host.design(action, params, result); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return result;
+}
+
+QJsonObject AgentTools::showWindow(const QJsonObject &params)
+{
+    QStringList files;
+    for (const QJsonValue &file : params["files"].toArray())
+        files << file.toString();
+    if (const QString failure = m_host.showWindow(files, params["raise"].toBool(true)); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return {{"shown", true}};
+}
+
+QJsonObject AgentTools::quitApp(const QJsonObject &)
+{
+    if (const QString failure = m_host.quitApp(); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return {{"quitting", true}};
+}
+
 QJsonObject AgentTools::live(const QJsonObject &params)
 {
     static const QStringList actions{"start", "stop", "select", "edit", "status", "screenshot", "writeBack", "ask", "agentDone", "review", "discard",

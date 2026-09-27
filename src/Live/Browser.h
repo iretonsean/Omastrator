@@ -41,6 +41,8 @@ public:
     QString start(const Options &options);
     void stop();
     bool isRunning() const;
+    // The browser's own process, which owns its windows: design mode knows its pages by it.
+    qint64 processId() const { return m_process.processId(); }
     CdpConnection &cdp() { return m_cdp; }
     // The first page tab, attached, with Page and Runtime enabled; `url` loaded if given.
     std::optional<Page> attachPage(const QUrl &url, QString *error);

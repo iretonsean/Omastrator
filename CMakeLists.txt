@@ -57,8 +57,12 @@ file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/overlay.js OVERLAY_SOURCE)
 configure_file(cmake/OverlayScript.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/Live/OverlayScript.h @ONLY)
 target_include_directories(oma_live PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
+# Design mode everywhere (docs/ANYWHERE.md): the desktop's surfaces, inspecting them, the overlays, the Desk and the floating bar.
+oma_library(oma_anywhere src/Anywhere/*.cpp)
+target_link_libraries(oma_anywhere PUBLIC oma_live oma_io)
+
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
-target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_cloud oma_canvas oma_agent oma_live)
+target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_cloud oma_canvas oma_agent oma_live oma_anywhere)
 
 include(GNUInstallDirs)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
@@ -112,6 +116,11 @@ function(oma_tests library folder)
         # Tests that check the repo's own files (shell plugins, fixtures) find them here.
         target_compile_definitions(${name} PRIVATE OMASTRATOR_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS ${folder})
+        # The background app is started as itself.
+        if(name STREQUAL "DesignModeUiTests")
+            target_compile_definitions(${name} PRIVATE OMASTRATOR_BINARY="$<TARGET_FILE:omastrator>")
+            add_dependencies(${name} omastrator)
+        endif()
         if(name MATCHES "Cloud|Share")
             target_compile_definitions(${name} PRIVATE FAKE_RCLONE="$<TARGET_FILE:fake_rclone>")
             add_dependencies(${name} fake_rclone)
@@ -124,4 +133,11 @@ oma_tests(oma_cloud Cloud)
 oma_tests(oma_canvas Canvas)
 oma_tests(oma_agent Agent)
 oma_tests(oma_live Live)
+oma_tests(oma_anywhere Anywhere)
 oma_tests(oma_ui UI)
+# The overlay's logic runs in a JavaScript engine in the shell plugin tests, where Qt Qml is installed.
+find_package(Qt6 QUIET COMPONENTS Qml)
+if(TARGET Qt6::Qml AND TARGET ShellPluginTests)
+    target_link_libraries(ShellPluginTests PRIVATE Qt6::Qml)
+    target_compile_definitions(ShellPluginTests PRIVATE OMASTRATOR_HAVE_QML)
+endif()

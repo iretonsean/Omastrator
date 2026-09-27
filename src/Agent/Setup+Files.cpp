@@ -1,4 +1,8 @@
 #include "Agent/Setup.h"
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -81,7 +85,68 @@ QString shellQuote(const QString &word)
     return QLatin1Char('\'') + quoted + QLatin1Char('\'');
 }
 
-QByteArray hyprlandLua(const QString &command)
+DesignKeys DesignKeys::from(const Environment &environment)
+{
+    DesignKeys keys;
+    QFile file(QDir(environment.omastratorConfig()).filePath(QStringLiteral("anywhere.json")));
+    if (!file.open(QIODevice::ReadOnly))
+        return keys;
+    const QJsonObject chosen = QJsonDocument::fromJson(file.readAll()).object()["keys"].toObject();
+    // Only what reads as a key combination, so a typo can't break the Hyprland file.
+    static const QRegularExpression combination(QStringLiteral("^[A-Za-z0-9_ +:]+$"));
+    if (combination.match(chosen["design"].toString()).hasMatch())
+        keys.design = chosen["design"].toString().trimmed();
+    if (combination.match(chosen["desk"].toString()).hasMatch())
+        keys.desk = chosen["desk"].toString().trimmed();
+    return keys;
+}
+
+// "SUPER + ALT + O" as hyprlang writes it: "SUPER ALT, O".
+static QString confKey(const QString &luaKey)
+{
+    QStringList parts = luaKey.split(QLatin1Char('+'), Qt::SkipEmptyParts);
+    for (QString &part : parts)
+        part = part.trimmed();
+    const QString key = parts.isEmpty() ? QString() : parts.takeLast();
+    return parts.join(QLatin1Char(' ')) + QStringLiteral(", ") + key;
+}
+
+static QString designLua(const DesignKeys &keys)
+{
+    return QStringLiteral(
+               "\n-- Design mode everywhere (docs/ANYWHERE.md): %1 inspects, measures and draws on any\n"
+               "-- window or page; clicks still reach the apps. Hold Alt to measure; Escape leaves.\n"
+               "-- %2 opens the Desk on its own workspace. Remap both with \"keys\" in\n"
+               "-- ~/.config/omastrator/anywhere.json, then run `omastrator setup` again.\n"
+               "local function design(args)\n"
+               "  return hl.dsp.exec_cmd(omastrator .. \" design \" .. args)\n"
+               "end\n"
+               "\n"
+               "local function leaveDesign()\n"
+               "  hl.dispatch(design(\"off\"))\n"
+               "  hl.dispatch(hl.dsp.submap(\"reset\"))\n"
+               "end\n"
+               "\n"
+               "hl.bind(\"%1\", function()\n"
+               "  hl.dispatch(design(\"on\"))\n"
+               "  hl.dispatch(hl.dsp.submap(\"omastrator-design\"))\n"
+               "end, { description = \"Omastrator: design mode\" })\n"
+               "hl.bind(\"%2\", hl.dsp.exec_cmd(omastrator .. \" desk toggle\"), { description = \"Omastrator: the Desk\" })\n"
+               "hl.define_submap(\"omastrator-design\", function()\n"
+               "  hl.bind(\"Escape\", leaveDesign, { description = \"Leave design mode\" })\n"
+               "  hl.bind(\"%1\", leaveDesign, { description = \"Leave design mode\" })\n"
+               "  hl.bind(\"Alt_L\", design(\"alt on\"), { description = \"Measure (hold)\" })\n"
+               "  hl.bind(\"ALT + Alt_L\", design(\"alt off\"), { release = true })\n"
+               "end)\n"
+               "\n"
+               "-- Omastrator in the background: the overlays, the Desk and the agent socket, no window until asked.\n"
+               "hl.on(\"hyprland.start\", function()\n"
+               "  hl.exec_cmd(omastrator .. \" --daemon\")\n"
+               "end)\n")
+        .arg(keys.design, keys.desk);
+}
+
+QByteArray hyprlandLua(const QString &command, const DesignKeys &keys)
 {
     QString text = QStringLiteral(
         "-- Omastrator's island keys, written by `omastrator setup` (docs/OS-SUITE.md).\n"
@@ -152,10 +217,11 @@ QByteArray hyprlandLua(const QString &command)
     text += QStringLiteral(
         "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
         "end)\n");
+    text += designLua(keys);
     return text.toUtf8();
 }
 
-QByteArray hyprlandConf(const QString &command)
+QByteArray hyprlandConf(const QString &command, const DesignKeys &keys)
 {
     const QString island = shellQuote(command) + QStringLiteral(" island ");
     QString text = QStringLiteral(
@@ -189,6 +255,21 @@ QByteArray hyprlandConf(const QString &command)
     for (const Key &key : liveKeys)
         text += back(QLatin1String(key.key), QLatin1String(key.tool));
     text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
+    // Design mode everywhere: its key, Escape and Alt inside, the Desk, and the background app.
+    const QString design = shellQuote(command) + QStringLiteral(" design ");
+    text += QStringLiteral("\nbindd = %1, Omastrator: design mode, exec, %2on\n"
+                           "bind = %1, submap, omastrator-design\n"
+                           "bindd = %3, Omastrator: the Desk, exec, %4 desk toggle\n"
+                           "\nsubmap = omastrator-design\n"
+                           "bind = , escape, exec, %2off\n"
+                           "bind = , escape, submap, reset\n"
+                           "bind = %1, exec, %2off\n"
+                           "bind = %1, submap, reset\n"
+                           "bind = , Alt_L, exec, %2alt on\n"
+                           "bindr = ALT, Alt_L, exec, %2alt off\n"
+                           "submap = reset\n"
+                           "\nexec-once = %4 --daemon\n")
+                .arg(confKey(keys.design), design, confKey(keys.desk), shellQuote(command));
     return text.toUtf8();
 }
 
@@ -221,6 +302,8 @@ QByteArray menuBlock(const QString &command)
         {"omastrator.mode.capture", "", "Capture", "mode capture", "Colour, screenshots and SVG from anywhere on screen"},
         {"omastrator.mode.ai", "\U000F16A4", "AI", "mode ai", "Generate, edit and roast with your agent"},
         {"omastrator.mode.live", "", "Live", "mode live", "Edit a web page in the browser"},
+        {"omastrator.mode.design", "\U000F0E0C", "Design", "mode design", "Inspect, measure and draw on any window or page"},
+        {"omastrator.desk", "\U000F0E0C", "The Desk", "@desk window", "Everything sent from any surface, on one canvas"},
         {"omastrator.capture", "", "Capture", nullptr, nullptr},
         {"omastrator.capture.fill", "\U000F00C9", "Pick Colour for Fill", "capture color fill", nullptr},
         {"omastrator.capture.stroke", "\U000F00C9", "Pick Colour for Stroke", "capture color stroke", nullptr},
@@ -240,7 +323,10 @@ QByteArray menuBlock(const QString &command)
         if (entry.description)
             line += QStringLiteral(", \"description\": %1").arg(jsonString(QString::fromUtf8(entry.description)));
         if (entry.args)
-            line += QStringLiteral(", \"action\": %1").arg(jsonString(island + QLatin1String(entry.args)));
+            // "@…" is a command of its own rather than an island verb.
+            line += QStringLiteral(", \"action\": %1")
+                        .arg(jsonString(entry.args[0] == '@' ? shellQuote(command) + QLatin1Char(' ') + QLatin1String(entry.args + 1)
+                                                               : island + QLatin1String(entry.args)));
         block += line.toUtf8() + "},\n";
     }
     block += menuEnd + "\n";

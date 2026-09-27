@@ -30,7 +30,9 @@ Each folder builds as its own static library:
   file and `omastrator island …`, `StatusStream` is `omastrator status
   --follow`, `Capture` runs hyprpicker, slurp, grim and wl-paste, `Setup` is
   `omastrator setup`, `Dictation` is push-to-talk (normalising, the grammar,
-  Heard), and `Vocabulary` is dictation's word list.
+  Heard), `Vocabulary` is dictation's word list, `Hyprland` reads windows,
+  monitors and the pointer from Hyprland's socket and runs dispatchers, and
+  `DesignCli` is `omastrator design`, `desk` and `daemon`.
 - `shell/` → the omarchy-shell plugins, QML: `omastrator.island` (the island),
   `omastrator.ai` (the tray light) and `omastrator-ui` (what they share).
   Setup copies them to `~/.config/omarchy/plugins/`. To try a change without
@@ -45,13 +47,25 @@ Each folder builds as its own static library:
   with GitHub through `gh`). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
   tests run the fixtures in `tests/Live/fixtures` and skip without Chromium.
+- `src/Anywhere` → `oma_anywhere`. Design mode everywhere (docs/ANYWHERE.md):
+  `DesignMode` (on and off with the island's Design mode, hover, Alt distances),
+  `DesktopSource` (Hyprland, AT-SPI and grim; tests use
+  `tests/Anywhere/FakeDesktop.h`), `Inspect` (the web inspector script, the
+  AT-SPI helper, distances), `Overlays` (`overlays.omai`, a layer per surface),
+  `Desk` (frames), `Bar` (actions and suggestions) and `AnywhereSettings`
+  (onboarding, destinations, in `anywhere.json`). The app side is
+  `src/UI/DesignController` behind the `design` method. The overlay itself is
+  `shell/omastrator.island/Overlay.qml`; its decisions are in
+  `OverlayLogic.js`, which `ShellPluginTests` runs in a `QJSEngine`.
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides`,
   `Rulers` and `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,
   sheets, shortcuts and the Omarchy theme. Share with client
   (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and
   `SharePanels`; its tests use the fake rclone and a fake `gh`.
-- `src/OmastratorApp.cpp` holds `main`.
+- `src/OmastratorApp.cpp` holds `main`. `omastrator --daemon` runs the app in the
+  background with no window until one is asked for (`show_window`); a second
+  `omastrator` hands its files to the running one.
 - Tests live in `tests/<Folder>/*Tests.cpp`, one executable per file, found by a
   glob.
 
@@ -67,7 +81,9 @@ Each folder builds as its own static library:
   named undo step. Drags use `beginInteraction`, then a `preview*` call, then
   `commitInteraction` or `cancelInteraction`.
 - **Style:** comments are one line and say why. Use Qt types directly and add no
-  wrapper types. A file over about 500 lines splits as `Name+Part.cpp`.
+  wrapper types. A file over about 500 lines splits as `Name+Part.cpp`. moc
+  can't read a raw string with `)"` inside it (the test class silently gets no
+  meta-object): keep such fixtures in a header, as `tests/Anywhere/InspectFixtures.h` does.
 - **Humor:** follow `docs/HUMOR.md`. Menu items, buttons, data-loss prompts and
   accessibility text are never jokes.
 - **AI features:** follow `docs/AI-ROADMAP.md`.
@@ -75,8 +91,10 @@ Each folder builds as its own static library:
   config. Setup tests run in a temporary `HOME`; outside programs are replaced
   through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
   `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
-  `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL` and
-  `OMASTRATOR_RCLONE`. Live's deploy tests push only to local bare
+  `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL`, `OMASTRATOR_RCLONE`,
+  `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_ATSPI`
+  and `OMASTRATOR_WL_COPY`. Unset `HYPRLAND_INSTANCE_SIGNATURE` in tests that
+  build a `DesignController`, and give it a `FakeDesktop`. Live's deploy tests push only to local bare
   repositories and run fake deploy commands. Cloud tests never read the user's
   rclone config.
 - **Commits:** public repo. Commit as the GitHub no-reply address, and never add

@@ -127,6 +127,10 @@ struct Round {
 QString generatePrompt(const QString &requestId, const QString &brief, int count, std::optional<QRectF> fitTo,
                        const std::vector<Round> &history = {});
 QString editPrompt(const QString &requestId, const QString &instruction, bool hasSelection);
+// Ask in design mode's floating bar (docs/ANYWHERE.md): the agent works on the overlay drawn over a surface.
+// `context` describes the surface and what is pointed at; `screenshot` is a PNG of it, or empty.
+QString surfacePrompt(const QString &requestId, const QString &instruction, const QString &context, const QString &screenshot,
+                      bool hasSelection);
 enum class TraceMode { logo, sketch };
 QString smartTracePrompt(const QString &requestId, const QString &traceGroupId, const QString &imagePath, TraceMode mode);
 // How hard Roast My Design hits; the user picks it and it is remembered.

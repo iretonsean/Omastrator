@@ -1,16 +1,22 @@
+#include "Agent/AgentClient.h"
+#include "Agent/AgentProtocol.h"
 #include "Agent/Cli.h"
+#include "Agent/Island.h"
 #include "Logging.h"
+#include "UI/DesignController.h"
 #include "UI/OmarchyTheme.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "UI/SliderSnap.h"
 #include <QApplication>
 #include <QCoreApplication>
+#include <QFileInfo>
+#include <QJsonArray>
 
 int main(int argc, char **argv)
 {
     qSetMessagePattern(QStringLiteral("%{time yyyy-MM-dd hh:mm:ss.zzz} %{type} %{category}: %{message}"));
-    // `omastrator agent …`, `--mcp`, `status`, `island` and the rest start no GUI.
+    // `omastrator agent …`, `--mcp`, `status`, `island`, `design` and the rest start no GUI.
     if (argc > 1 && Cli::handles(argv[1])) {
         QCoreApplication application(argc, argv);
         QCoreApplication::setApplicationName(QStringLiteral("Omastrator"));
@@ -22,7 +28,26 @@ int main(int argc, char **argv)
     QApplication::setApplicationVersion(QStringLiteral(OMASTRATOR_VERSION));
     // The desktop entry's name: icons and windows find each other.
     QGuiApplication::setDesktopFileName(QStringLiteral("io.github.iretonsean.Omastrator"));
-    qCInfo(lcApp).noquote() << "Omastrator" << OMASTRATOR_VERSION << "on Qt" << qVersion() << "platform" << QGuiApplication::platformName();
+    QStringList files = QApplication::arguments().mid(1);
+    // `--daemon`: in the background, owning documents, the agent socket and the overlays; no window until asked.
+    const bool background = files.removeAll(QStringLiteral("--daemon")) > 0;
+    // One Omastrator: when one is running, it shows its window with the files, and this one ends.
+    if (Island::appIsRunning()) {
+        if (background)
+            return 0;
+        QJsonArray paths;
+        for (const QString &file : files)
+            paths.append(QFileInfo(file).absoluteFilePath());
+        try {
+            AgentClient::Connection connection;
+            connection.call(QStringLiteral("show_window"), {{"files", paths}}, 5000);
+            return 0;
+        } catch (const AgentProtocol::Error &) {
+            // An older Omastrator without show_window: this one opens on its own, as before.
+        }
+    }
+    qCInfo(lcApp).noquote() << "Omastrator" << OMASTRATOR_VERSION << "on Qt" << qVersion() << "platform" << QGuiApplication::platformName()
+                            << (background ? "in the background" : "");
     // The desktop's colours, retinted when the theme switches.
     OmarchyTheme theme;
     // Slider knobs snap to a click on the track.
@@ -31,10 +56,21 @@ int main(int argc, char **argv)
     ProjectWorkspaceView window(workspace);
     // Agents reach the open document here; a second Omastrator reports why it can't in Help ▸ Connect an Agent….
     window.agent()->startServer();
-    window.show();
+    // Design mode everywhere: the overlays and the island's design mode (docs/ANYWHERE.md).
+    window.agent()->designMode().start();
+    if (background) {
+        // Closing the window hides it; the overlays and the Desk stay.
+        window.setProperty("background", true);
+        QApplication::setQuitOnLastWindowClosed(false);
+    } else {
+        window.show();
+    }
     // Connected cloud storage, listed in the background for Open and Save As.
     workspace.cloud().refreshRemotes();
     // Files named at launch: documents, SVGs and pictures.
-    workspace.receive(QApplication::arguments().mid(1));
+    if (!files.isEmpty()) {
+        workspace.receive(files);
+        window.show();
+    }
     return QApplication::exec();
 }

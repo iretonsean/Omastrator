@@ -9,6 +9,9 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTest>
+#ifdef OMASTRATOR_HAVE_QML
+#include <QJSEngine>
+#endif
 
 // The omarchy-shell plugins in shell/: each manifest keeps the contract in
 // /usr/share/omarchy/shell/README.md, and the island can draw every tool.
@@ -84,8 +87,105 @@ private slots:
             const QString name = found.captured(2).isEmpty() ? found.captured(1) : found.captured(2);
             QVERIFY2(hasIcon(name), qPrintable(name));
         }
-        for (const char *mode : {"normal", "draw", "capture", "ai", "live", "previous", "next"})
+        for (const char *mode : {"normal", "draw", "capture", "ai", "live", "design", "previous", "next"})
             QVERIFY2(hasIcon(QLatin1String(mode)), mode);
+        // Design mode's row: the overlay's own tools, as `omastrator design tool` takes them.
+        const qsizetype design = island.indexOf(QStringLiteral("design: ["));
+        QVERIFY(design > 0);
+        const QString designList = island.mid(design, island.indexOf(QLatin1Char(']'), design) - design);
+        for (const char *tool : {"inspect", "pen", "rectangle", "ellipse", "arrow", "text", "note", "desk", "done"})
+            QVERIFY2(designList.contains(QStringLiteral("id: \"%1\"").arg(QLatin1String(tool))), tool);
+    }
+
+    // Design mode's overlay (docs/ANYWHERE.md) sits over every window and must never steal their clicks
+    // unless the user asked it to: an empty input mask by default.
+    void theOverlayIsClickThroughByDefault()
+    {
+        const QString overlay = read(QStringLiteral("omastrator.island/Overlay.qml"));
+        QVERIFY(!overlay.isEmpty());
+        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Overlay { status: status }")));
+        const QString window = block(overlay, QStringLiteral("PanelWindow"));
+        QVERIFY(window.contains(QStringLiteral("WlrLayershell.layer: WlrLayer.Overlay")));
+        QVERIFY(window.contains(QStringLiteral("exclusionMode: ExclusionMode.Ignore")));
+        // The mask's own item is empty unless a drawing tool is chosen; each card joins only while shown.
+        const QString mask = block(window, QStringLiteral("mask: Region"));
+        QVERIFY(mask.contains(QStringLiteral("item: window.maskMode === \"full\" ? everything : null")));
+        const QRegularExpression part(QStringLiteral("Region \\{ item: window\\.maskMode === \"panels\" && (\\w+)\\.visible \\? \\1 : null \\}"));
+        int parts = 0;
+        for (auto match = part.globalMatch(mask); match.hasNext(); match.next())
+            ++parts;
+        QCOMPARE(parts, 4);
+        // The keyboard stays with the apps unless something is being typed.
+        QVERIFY(window.contains(QStringLiteral("WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None")));
+        QVERIFY(!overlay.contains(QStringLiteral("WlrKeyboardFocus.Exclusive")));
+    }
+
+    void theOverlaysDecisionsRunWithoutACompositor()
+    {
+#ifndef OMASTRATOR_HAVE_QML
+        QSKIP("Qt Qml isn't installed, so the overlay's JavaScript can't run here.");
+#else
+        QString source = read(QStringLiteral("omastrator.island/OverlayLogic.js"));
+        QVERIFY(source.startsWith(QStringLiteral(".pragma library")));
+        source.remove(0, source.indexOf(QLatin1Char('\n')));
+        QJSEngine engine;
+        const QJSValue loaded = engine.evaluate(source, QStringLiteral("OverlayLogic.js"));
+        QVERIFY2(!loaded.isError(), qPrintable(loaded.toString()));
+        auto call = [&](const char *name, const QVariantList &args) {
+            QJSValueList values;
+            for (const QVariant &arg : args)
+                values << engine.toScriptValue(arg);
+            const QJSValue result = engine.globalObject().property(QLatin1String(name)).call(values);
+            if (result.isError())
+                qWarning() << result.toString();
+            return result.toVariant();
+        };
+        const QVariantMap screen{{"name", "DP-1"}, {"x", 1920}, {"y", 0}, {"width", 1920}, {"height", 1080}};
+        QVariantMap design{{"on", false}, {"monitor", "DP-1"}, {"tool", "inspect"}};
+        // Off, or inspecting with nothing shown: nothing takes a click.
+        QCOMPARE(call("maskMode", {design, screen, true}).toString(), QStringLiteral("none"));
+        design["on"] = true;
+        QCOMPARE(call("maskMode", {design, screen, false}).toString(), QStringLiteral("none"));
+        // The bar or a card takes clicks only where it is.
+        QCOMPARE(call("maskMode", {design, screen, true}).toString(), QStringLiteral("panels"));
+        // Another monitor stays click-through.
+        QVariantMap other = screen;
+        other["name"] = "HDMI-A-1";
+        QCOMPARE(call("maskMode", {design, other, true}).toString(), QStringLiteral("none"));
+        // A drawing tool takes the monitor until Inspect gives it back.
+        design["tool"] = "rectangle";
+        QCOMPARE(call("maskMode", {design, screen, false}).toString(), QStringLiteral("full"));
+        QVERIFY(!call("wantsKeyboard", {design, screen, false}).toBool());
+        design["tool"] = "text";
+        QVERIFY(call("wantsKeyboard", {design, screen, false}).toBool());
+        design["tool"] = "inspect";
+        QVERIFY(call("wantsKeyboard", {design, screen, true}).toBool());
+        QVERIFY(!call("wantsKeyboard", {design, other, true}).toBool());
+
+        // The bar under the thing, above it near the bottom, always inside the screen.
+        QVariantMap spot = call("barPosition", {QVariantList{2000, 100, 200, 40}, 300, 60, screen, 10}).toMap();
+        QCOMPARE(spot["x"].toInt(), 30);
+        QCOMPARE(spot["y"].toInt(), 150);
+        spot = call("barPosition", {QVariantList{3700, 1000, 100, 60}, 300, 60, screen, 10}).toMap();
+        QCOMPARE(spot["x"].toInt(), 1610);
+        QCOMPARE(spot["y"].toInt(), 930);
+        // A drawing becomes `omastrator design draw`.
+        const QVariantList points{QVariantMap{{"x", 10.4}, {"y", 20}}, QVariantMap{{"x", 300}, {"y", 40.6}}};
+        QCOMPARE(call("drawArgs", {"arrow", points, ""}).toStringList(), (QStringList{"design", "draw", "arrow", "10,20", "300,41"}));
+        QCOMPARE(call("drawArgs", {"note", points, "Too tight"}).toStringList().mid(5), (QStringList{"--text", "Too tight"}));
+        QCOMPARE(call("addPoint", {points, 301, 41, 3}).toList().size(), 2);
+        QCOMPARE(call("addPoint", {points, 320, 60, 3}).toList().size(), 3);
+        // The bar's buttons, chips and destinations name what they act on.
+        const QVariantMap bar{{"target", 7}, {"surface", "window:foot"}};
+        QCOMPARE(call("actionArgs", {bar, QVariantMap{{"id", "capture"}}}).toStringList(), (QStringList{"design", "action", "capture", "--target", "7"}));
+        QCOMPARE(call("askArgs", {bar, "tighten  this"}).toStringList(), (QStringList{"design", "ask", "--target", "7", "tighten", "this"}));
+        QCOMPARE(call("sendArgs", {QVariantMap{{"target", 0}, {"surface", "window:foot"}}, "desk", ""}).toStringList(),
+                 (QStringList{"design", "send", "desk", "--surface", "window:foot"}));
+        QCOMPARE(call("chipArgs", {bar, QVariantMap{{"action", "ask"}, {"prompt", "Pull its palette"}}}).toStringList().mid(4),
+                 (QStringList{"Pull", "its", "palette"}));
+        QCOMPARE(call("sizeLabel", {QVariantMap{{"bounds", QVariantList{0, 0, 120, 40}}, {"source", "dom"}, {"name", "button.buy"}}}).toString(),
+                 QStringLiteral("button.buy  120 × 40"));
+#endif
     }
 
     void everyQmlFileParses()

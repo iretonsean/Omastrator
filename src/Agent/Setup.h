@@ -49,9 +49,17 @@ enum class HyprFormat { lua, conf };
 // Lua when ~/.config/hypr/hyprland.lua exists (Omarchy 4), else hyprlang.
 HyprFormat hyprFormat(const Environment &environment);
 
+// Design mode's keys (docs/ANYWHERE.md), in Lua's "SUPER + ALT + O" form. Omarchy's defaults leave both free;
+// "keys" in ~/.config/omastrator/anywhere.json remaps them the next time setup runs.
+struct DesignKeys {
+    QString design = QStringLiteral("SUPER + ALT + O");
+    QString desk = QStringLiteral("SUPER + ALT + W");
+    static DesignKeys from(const Environment &environment);
+};
+
 // The generated files.
-QByteArray hyprlandLua(const QString &command);
-QByteArray hyprlandConf(const QString &command);
+QByteArray hyprlandLua(const QString &command, const DesignKeys &keys = {});
+QByteArray hyprlandConf(const QString &command, const DesignKeys &keys = {});
 // The text setup appends to the user's Hyprland config with --apply.
 QByteArray sourceBlock(HyprFormat format);
 // The Omastrator entries of the Omarchy menu, between BEGIN and END markers.

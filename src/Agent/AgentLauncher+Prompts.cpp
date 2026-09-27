@@ -181,6 +181,28 @@ QString editPrompt(const QString &requestId, const QString &instruction, bool ha
     return text;
 }
 
+QString surfacePrompt(const QString &requestId, const QString &instruction, const QString &context, const QString &screenshot,
+                      bool hasSelection)
+{
+    QString text = header(QStringLiteral("Ask on a surface"), requestId);
+    text += QStringLiteral(
+        "The user is in design mode, pointing at something on their screen. The open document is the overlay drawn on top of "
+        "it: its active layer belongs to that surface, and its coordinates are the surface's own, with 0,0 at the surface's "
+        "top-left corner, in screen points.\n\n");
+    text += QStringLiteral("What is pointed at:\n%1\n\n").arg(context);
+    if (!screenshot.isEmpty())
+        text += QStringLiteral("A screenshot of it is %1: look at it closely before you draw.\n\n").arg(screenshot);
+    text += QStringLiteral("The request:\n%1\n\n").arg(instruction);
+    text += hasSelection ? QStringLiteral("The art the user selected on the overlay is the selection: call selection_get for it.\n\n")
+                         : QString();
+    text += QStringLiteral(
+        "Answer by drawing on the overlay with the edit methods (insert_svg with \"at\" in the coordinates above, set_style, "
+        "transform, update_object, delete). Mock-ups, annotations, measurements and swatches of colours all belong there; keep "
+        "notes short. You can't change the app or page itself. Then call proposal_finish {\"title\": \"…\", \"summary\": \"…\"} "
+        "with a short title and one line on what you drew. Do not save.");
+    return text;
+}
+
 QString smartTracePrompt(const QString &requestId, const QString &traceGroupId, const QString &imagePath, TraceMode mode)
 {
     const bool logo = mode == TraceMode::logo;

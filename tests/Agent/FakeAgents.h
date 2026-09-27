@@ -5,7 +5,7 @@
 
 // Stand-ins for claude, codex, opencode and gemini. Each records its arguments,
 // folder, socket and opencode config as $FAKE_OUT/<name>.*, then does what
-// $FAKE_MODE says: roast or variations (answers through "$OMASTRATOR_BIN" agent),
+// $FAKE_MODE says: roast, variations or overlay (answers through "$OMASTRATOR_BIN" agent),
 // quiet (exits without answering), fail (an error on stderr) or hang.
 namespace FakeAgents {
 inline constexpr const char *script = R"sh(#!/bin/sh
@@ -25,6 +25,10 @@ roast)
   ;;
 variations)
   "$OMASTRATOR_BIN" agent show_variations "{\"requestId\": \"$request\", \"variations\": [{\"name\": \"Box\", \"svg\": \"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><rect width='10' height='10'/></svg>\"}]}" || exit 1
+  ;;
+overlay)
+  "$OMASTRATOR_BIN" agent insert_svg "{\"svg\": \"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 20'><rect width='40' height='20' fill='#00ff00'/></svg>\", \"name\": \"Mock-up\", \"at\": [5, 5]}" || exit 1
+  "$OMASTRATOR_BIN" agent proposal_finish "{\"title\": \"Mock-up\", \"summary\": \"A green box over it.\"}" || exit 1
   ;;
 quiet)
   echo "I looked at it and decided not to."

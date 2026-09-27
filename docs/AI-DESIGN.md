@@ -197,6 +197,15 @@ it only reads.
   fitToSelection?, mode?: logo|sketch}`: the island's AI mode. Generate and
   Edit open their sheet unless a prompt is given; Vectorize takes the selected
   image, else the screenshot Capture last traced.
+- `design {action, …}`: design mode everywhere ([ANYWHERE.md](ANYWHERE.md)).
+  Actions: `on`, `off`, `toggle`, `status`, `tool`, `alt`, `select`,
+  `selectArt`, `deselect`, `measure`, `draw`, `action`, `ask`, `keep`,
+  `discard`, `send`, `undo`, `redo`, `clear`, `onboarding`, `desk`. Its Ask
+  launches the agent on the overlay drawn over a surface: the agent's edit
+  methods then act on the overlay, as a proposal the bar keeps or discards.
+- `show_window {files?, raise?}`: brings the window forward (the app may run in
+  the background without one) with the files opened. `quit_app {}` quits,
+  asking about unsaved documents first.
 
 ## Flows
 

@@ -69,4 +69,21 @@ public:
         editor.createDocument(size);
         return failure;
     }
+    // Every `design` call, in order, and what the last one answers.
+    std::vector<std::pair<QString, QJsonObject>> designCalls;
+    QJsonObject designResult;
+    QString design(const QString &action, const QJsonObject &params, QJsonObject &result) override
+    {
+        designCalls.emplace_back(action, params);
+        result = designResult;
+        return failure;
+    }
+    QStringList shownFiles;
+    int windowShown = 0;
+    QString showWindow(const QStringList &files, bool) override
+    {
+        ++windowShown;
+        shownFiles = files;
+        return failure;
+    }
 };

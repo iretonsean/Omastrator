@@ -127,6 +127,12 @@ void ProjectWorkspaceView::synchronizeSession()
 
 void ProjectWorkspaceView::closeEvent(QCloseEvent *event)
 {
+    // In the background (`omastrator --daemon`) the window only hides: documents, overlays and the Desk stay open.
+    if (property("background").toBool()) {
+        event->ignore();
+        hide();
+        return;
+    }
     // The workspace asks first, then closes us with its mark.
     if (property("closeConfirmed").toBool()) {
         setProperty("closeConfirmed", QVariant());

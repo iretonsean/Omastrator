@@ -21,6 +21,11 @@ Item {
     onChanged: function (prev, next) { root.noticeChange(prev, next) }
   }
 
+  // Design mode everywhere (docs/ANYWHERE.md): the click-through overlay on every monitor.
+  Overlay { status: status }
+
+  readonly property string designTool: (status.value("design", {}) || {}).tool || "inspect"
+
   readonly property string mode: status.value("mode", "normal")
   readonly property bool expanded: status.value("expanded", false)
   readonly property bool running: status.value("running", false)
@@ -32,13 +37,14 @@ Item {
   onToolChanged: if (pendingTool !== "" && status.value("tool", "") === pendingTool) pendingTool = ""
   Timer { id: pendingExpiry; interval: 3000; onTriggered: root.pendingTool = "" }
 
-  readonly property var modeNames: ({ normal: "Normal", draw: "Draw", capture: "Capture", ai: "AI", live: "Live" })
+  readonly property var modeNames: ({ normal: "Normal", draw: "Draw", capture: "Capture", ai: "AI", live: "Live", design: "Design" })
   readonly property var modeTips: ({
     normal: "Normal: the computer as usual",
     draw: "Draw: Omastrator's canvas tools",
     capture: "Capture: colour, screenshots and SVG from anywhere on screen",
     ai: "AI: generate, edit and roast with your agent",
-    live: "Live: edit a web page in the browser"
+    live: "Live: edit a web page in the browser",
+    design: "Design: inspect, measure and draw on any window or page"
   })
 
   // What each mode's expanded row holds. `action` runs `omastrator <action…>`.
@@ -84,6 +90,19 @@ Item {
       { id: "changes", icon: "review", tip: "Review changes: the diff of every write-back, with Discard", projectOnly: true },
       { id: "history", tip: "History: commits, what was deployed, and Restore", projectOnly: true },
       { id: "stop", tip: "Stop Live", runningOnly: true }
+    ],
+    design: [
+      { id: "inspect", tip: "Inspect: point at anything for its size, colours and font; Alt measures. Clicks still reach the app" },
+      { id: "pen", icon: "pencil", tip: "Pen: draw freehand on the window or page under it" },
+      { id: "rectangle", tip: "Rectangle" },
+      { id: "ellipse", tip: "Ellipse" },
+      { id: "arrow", tip: "Arrow" },
+      { id: "text", tip: "Text: click, type, then Enter" },
+      { id: "note", tip: "Note: click or drag, type, then Enter" },
+      { id: "undoArt", icon: "undo", tip: "Undo on the overlay" },
+      { id: "desk", tip: "The Desk: everything sent from any surface" },
+      { id: "onboarding", icon: "help", tip: "Tune the suggestions: a few questions about your work" },
+      { id: "done", icon: "close", tip: "Leave design mode (Esc)" }
     ]
   })
 
@@ -114,6 +133,8 @@ Item {
       flash(next.activity, next.activitySeconds)
     else if (next.error && next.error !== prev.error)
       flash(next.error, 6)
+    else if (designLine(prev.design || {}, next.design || {}))
+      flash(designLine(prev.design || {}, next.design || {}), 4)
     else if (liveLine(prev.live || {}, next.live || {}))
       flash(liveLine(prev.live || {}, next.live || {}), liveSeconds(next.live || {}))
     else if (next.waiting && !prev.waiting)
@@ -126,6 +147,13 @@ Item {
       flash(next.proposal + " is ready: Enter keeps it, Esc discards it", 4)
     else if (next.running && !prev.running && root.mode === "draw")
       flash("Omastrator is open", 2)
+  }
+
+  function designLine(prev, next) {
+    if (next.on && !prev.on) return "Design mode: point at anything. Clicks still reach the app; Esc leaves"
+    if (next.message && next.message !== prev.message) return next.message
+    if (next.proposal && !prev.proposal) return next.proposal.title + " is on the overlay: Keep or Discard it in the bar"
+    return ""
   }
 
   function liveLine(prev, next) {
@@ -189,9 +217,18 @@ Item {
     return ["island", "live", "start"]
   }
 
+  function designArgs(id) {
+    if (id === "undoArt") return ["design", "undo"]
+    if (id === "desk") return ["desk", "show"]
+    if (id === "onboarding") return ["design", "onboarding", "open"]
+    if (id === "done") return ["design", "off"]
+    return ["design", "tool", id]
+  }
+
   function runAction(item, mouse) {
     if (item.id === "dictate") return
-    if (root.mode === "draw") chooseTool(item.id)
+    if (root.mode === "design") status.run(designArgs(item.id))
+    else if (root.mode === "draw") chooseTool(item.id)
     else if (root.mode === "live") status.run(liveArgs(item.id))
     else if (item.id === "vectorize" || root.mode === "ai") status.run(aiArgs(item.id, mouse))
     else if (root.mode === "capture") status.run(captureArgs(item.id, mouse))
@@ -441,6 +478,7 @@ Item {
                    : modelData.id === "deploy" && root.live.deploy && root.live.deploy.failed ? root.live.deploy.message + " Click the island's message for details."
                    : modelData.tip
               selected: (root.mode === "draw" && root.running && root.tool === modelData.id)
+                        || (root.mode === "design" && root.designTool === modelData.id)
                         || (root.mode === "live" && modelData.id === "element" && root.selecting)
                         || (modelData.id === "dictate" && status.value("dictation", "idle") === "listening")
               onHeld: function (down) { if (modelData.id === "dictate") status.run(["island", "dictate", down ? "start" : "stop"]) }

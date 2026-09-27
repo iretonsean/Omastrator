@@ -3,6 +3,7 @@
 #include "Logging.h"
 #include "UI/AgentPanels.h"
 #include "UI/AgentSheets.h"
+#include "UI/DesignController.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/SwatchesPanel.h"
 #include <QFileInfo>
@@ -103,6 +104,8 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
     connect(&m_live, &LiveSession::changed, &m_server, &AgentServer::statusMayHaveChanged);
     connect(this, &AgentBridge::liveReviewChanged, &m_server, &AgentServer::statusMayHaveChanged);
     wireDeploy();
+    m_design = std::make_unique<DesignController>(*this, m_workspace, m_window);
+    connect(m_design.get(), &DesignController::changed, &m_server, &AgentServer::statusMayHaveChanged);
     // "Ask AI…" in the page; a refusal is said in the page's own bar.
     connect(&m_live, &LiveSession::askRequested, this, [this](const QString &prompt, const QJsonArray &elements) {
         if (const QString failure = liveAsk(prompt, elements); !failure.isEmpty())
@@ -151,6 +154,8 @@ QJsonObject AgentBridge::statusExtras()
                                                          {"suggested", m_deployState.suggested}};
                             return live;
                         }()}};
+    extras["design"] = m_design->status();
+    extras["window"] = m_window.isVisible();
     // The newest round that has come back.
     for (auto round = m_rounds.rbegin(); round != m_rounds.rend(); ++round) {
         if (!round->variations.empty()) {
@@ -194,6 +199,7 @@ void AgentBridge::keepProposal()
         open->commitInteraction();
     m_summary.clear();
     m_variationProposed = false;
+    m_designTarget = nullptr;
     emit proposalChanged();
 }
 
@@ -204,6 +210,7 @@ void AgentBridge::discardProposal()
         open->cancelInteraction();
     m_summary.clear();
     m_variationProposed = false;
+    m_designTarget = nullptr;
     emit proposalChanged();
 }
 
@@ -236,6 +243,8 @@ void AgentBridge::stopWaiting()
     if (m_run)
         m_run->cancel();
     m_run = nullptr;
+    if (!m_tools.hasProposal())
+        m_designTarget = nullptr;
     if (!m_waiting)
         return;
     m_waiting.reset();
@@ -302,6 +311,9 @@ void AgentBridge::runFinished(const QString &requestId, AgentRun &run)
     const QString message = endMessage(run);
     m_logPath = run.logPath();
     m_waiting.reset();
+    // An Ask on the overlay that drew nothing gives the agent's methods back to the front document.
+    if (!m_tools.hasProposal())
+        m_designTarget = nullptr;
     if (task == Task::edit || task == Task::vectorize)
         m_barMessage = message;
     else
@@ -569,15 +581,13 @@ QString AgentBridge::showNewDocument()
     if (m_workspace.isManaging())
         return QStringLiteral("Omastrator is showing a dialog. Try again when it's answered.");
     m_workspace.newTab();
-    m_window.raise();
-    m_window.activateWindow();
+    bringForward();
     return {};
 }
 
 QString AgentBridge::showPanel(const QString &panel)
 {
-    m_window.raise();
-    m_window.activateWindow();
+    bringForward();
     if (panel == QLatin1String("swatches"))
         showSwatchesPanel();
     else if (panel == QLatin1String("variations"))
@@ -595,8 +605,7 @@ QString AgentBridge::showPanel(const QString &panel)
 QString AgentBridge::startAi(const AiRequest &request)
 {
     auto forward = [this] {
-        m_window.raise();
-        m_window.activateWindow();
+        bringForward();
     };
     // Sheets run their own loop; they open after this call answers.
     auto openSheet = [this, forward](QDialog *(*open)(AgentBridge &, QWidget *)) {
@@ -651,6 +660,9 @@ QString AgentBridge::vectorizeCapture(AgentLauncher::TraceMode mode)
 
 EditorSession *AgentBridge::session()
 {
+    // An Ask from the floating bar works on the overlay until it is kept, discarded or given up.
+    if (m_designTarget)
+        return m_designTarget;
     return &m_workspace.current().session;
 }
 
