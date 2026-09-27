@@ -80,7 +80,7 @@ public:
     }
     QStringList shownFiles;
     int windowShown = 0;
-    QString showWindow(const QStringList &files) override
+    QString showWindow(const QStringList &files, bool) override
     {
         ++windowShown;
         shownFiles = files;

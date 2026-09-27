@@ -265,6 +265,15 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
             if (const QString failure = ensureAppRunning(); !failure.isEmpty())
                 return failed(failure);
         }
+        // Draw drives the canvas, so its window shows; Design works on the desktop without one.
+        if (mode == QLatin1String("draw")) {
+            try {
+                AgentClient::Connection connection;
+                connection.call(QStringLiteral("show_window"), {{"raise", false}});
+            } catch (const AgentProtocol::Error &) {
+                // An Omastrator without show_window already shows its window.
+            }
+        }
         return 0;
     }
     if (verb == QLatin1String("expand") || verb == QLatin1String("rest") || verb == QLatin1String("toggle")) {

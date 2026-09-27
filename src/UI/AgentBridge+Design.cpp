@@ -19,8 +19,14 @@ QString AgentBridge::design(const QString &action, const QJsonObject &params, QJ
     return m_design->run(action, params, result);
 }
 
-QString AgentBridge::showWindow(const QStringList &files)
+QString AgentBridge::showWindow(const QStringList &files, bool raise)
 {
+    // Work on the canvas from the island shows the window if it's hidden, without pulling a shown one forward.
+    if (!raise && files.isEmpty()) {
+        if (!m_window.isVisible())
+            bringForward();
+        return {};
+    }
     if (m_workspace.isManaging()) {
         bringForward();
         return QStringLiteral("Omastrator is showing a dialog. Try again when it's answered.");

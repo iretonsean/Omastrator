@@ -92,9 +92,15 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
             return selectionGet();
         if (method == QLatin1String("status_get"))
             return status();
+        // The island's canvas work shows the window when the app runs in the background with none on show.
+        static const QStringList onCanvas{"select_tool", "apply_color", "open_capture", "paste_svg", "command"};
         for (const auto &[name, handler] : handlers) {
-            if (name == method)
-                return (this->*handler)(params);
+            if (name != method)
+                continue;
+            QJsonObject result = (this->*handler)(params);
+            if (onCanvas.contains(method))
+                m_host.showWindow({}, false);
+            return result;
         }
     } catch (const FileError &failure) {
         throw Error(AgentProtocol::fileError, failure.message());

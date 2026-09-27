@@ -252,6 +252,46 @@ Omastrator also works outside its window, through Omarchy's own shell
   inside Draw. Escape goes back.
 - **Menu**: an Omastrator group in the Omarchy menu.
 
+### Design mode, on any window or page
+
+Omastrator doesn't need its window open ([docs/ANYWHERE.md](docs/ANYWHERE.md)).
+It runs in the background (`omastrator --daemon`, started with Hyprland once
+setup's keys are loaded) and lays a transparent overlay over every monitor.
+Clicks go straight through it to your apps.
+
+- **Super+Alt+O** (or the island's Design mode) turns design mode on for the
+  monitor you're on. Esc leaves.
+- **Inspect and measure**: point at anything to see its size and position, and
+  its colours and font where they can be read. A page open in Omastrator's
+  browser is read from its DOM, including sites that aren't yours. Other apps
+  are read through the accessibility tree, and the colour under the pointer
+  through grim. Hold Alt to measure the distances from one thing to the next.
+- **Draw on top**: the island's pen, rectangle, ellipse, arrow, text and note
+  tools draw over the window or page under the pointer. The art stays anchored
+  to that window (by app) or page (by address, scrolling with it). It is a real
+  Omastrator document, kept for next time, and every drawing is one undo step.
+- **The floating bar** sits next to what you point at or select. It holds the
+  likeliest actions for that kind of surface: Inspect (with Copy CSS), Mock Up
+  and Measure for a page element; Capture to Desk and Measure for a window; the
+  task bar's actions for your art. It also has an **Ask** field, where the agent
+  answers with a preview on the overlay that you keep or discard. Up to three
+  suggestions are tuned by a short, skippable questionnaire on the first run.
+  Captures stay on this machine, and nothing goes to an agent unless you ask.
+- **Where work goes** is your choice each time, and it's remembered per
+  surface: keep it on the overlay, send it to the Desk, open it as a document,
+  or hand it to the agent. Pages with their code on this machine can also take
+  it into the source.
+- **The Desk** (Super+Alt+W, the island, or the launcher's "The Desk") is one
+  canvas for everything sent from any surface. Each frame is labelled with its
+  source and time. It opens on its own Hyprland workspace, or as a normal
+  window.
+
+```sh
+omastrator design on | off | status     # design mode from a script
+omastrator desk [show|window]           # the Desk
+omastrator daemon [start|stop|status]   # the background app
+```
+
 Set it up with:
 
 ```sh
@@ -320,6 +360,7 @@ shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 ## Build
 
 You need C++20, Qt 6.4 or later (Widgets, Concurrent and Network), and CMake.
+Qt Qml is optional: one test runs the overlay's logic with it.
 rclone is optional: cloud storage uses it, and one test runs it when present.
 
 ```sh

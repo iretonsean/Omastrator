@@ -228,7 +228,7 @@ QJsonObject AgentTools::showWindow(const QJsonObject &params)
     QStringList files;
     for (const QJsonValue &file : params["files"].toArray())
         files << file.toString();
-    if (const QString failure = m_host.showWindow(files); !failure.isEmpty())
+    if (const QString failure = m_host.showWindow(files, params["raise"].toBool(true)); !failure.isEmpty())
         throw Error(AgentProtocol::busy, failure);
     return {{"shown", true}};
 }

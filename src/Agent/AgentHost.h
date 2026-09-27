@@ -71,7 +71,12 @@ public:
         return QStringLiteral("This Omastrator has no design mode (%1).").arg(action);
     }
     // show_window: the window forward, with `files` opened in it. The app may run in the background without one shown.
-    virtual QString showWindow(const QStringList &) { return QStringLiteral("This Omastrator has no window."); }
+    // Without `raise`, a window already on show is left where it is.
+    virtual QString showWindow(const QStringList &, bool raise)
+    {
+        Q_UNUSED(raise)
+        return QStringLiteral("This Omastrator has no window.");
+    }
     // quit_app: the app asks about unsaved documents, then quits, background and all.
     virtual QString quitApp() { return QStringLiteral("This Omastrator can't be quit from here."); }
 };
