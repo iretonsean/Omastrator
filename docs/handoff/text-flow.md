@@ -146,9 +146,12 @@ README's Type on a Path/wrap/threads/hyphenation entry for the final summary.
   Skip lines that belong to another frame or are hidden (`continue`, not
   `break`). Strip U+00AD, append `-` when `line.hyphenated`, and keep the `dx`
   kern indices in step. For path text, write
-  `<defs><path id=… d=…/></defs>` (reversed when flipped, and doubled when a
-  closed path wraps), then
+  `<defs><path id=… d=…/></defs>` (reversed when flipped), then
   `<text><textPath href="#…" startOffset="N%">…runs…</textPath></text>`.
+  Deviation: the canvas wraps once around a closed path, but the exported
+  `<textPath>` doesn't double the `d`, so a plain SVG viewer won't run text
+  past a closed path's own end; round-tripping through our own importer
+  reads `start` straight back as a plain percentage either way.
 - SvgImporter: `readText` already collects `textPath` children. Record the
   href target and `startOffset`, then parse the target's `d` through nanosvg
   (add `SvgImport::parsePathData(const QString &d)` in `SvgImporter.cpp`, which
