@@ -130,6 +130,13 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
         share(menu, &menus, "releaseClippingMask");
     else if (selected.size() >= 2)
         share(menu, &menus, "makeClippingMask");
+    if (single && single->mask) {
+        share(menu, &menus, "releaseOpacityMask");
+        share(menu, &menus, "opacityMaskClip");
+        share(menu, &menus, "invertOpacityMask");
+    } else if (selected.size() >= 2) {
+        share(menu, &menus, "makeOpacityMask");
+    }
     if (selectionHas(session, ObjectKind::text)) {
         share(menu, &menus, "createOutlines");
         share(menu, &menus, "convertToAreaType");

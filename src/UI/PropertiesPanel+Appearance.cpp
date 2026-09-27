@@ -1,3 +1,4 @@
+#include "Document/StrokeGeometry.h"
 #include "UI/ColorPaletteControls.h"
 #include "UI/ColorPickerSheet.h"
 #include "UI/LayerAppearanceControls.h"
@@ -236,6 +237,11 @@ PanelSection *PropertiesPanel::strokeSection()
         else
             m_session.endEdit();
     };
+    m_widthProfile = new QComboBox(block);
+    m_widthProfile->setObjectName(QStringLiteral("strokeWidthProfile"));
+    m_widthProfile->addItems(
+        {QStringLiteral("Uniform"), QStringLiteral("Taper Start"), QStringLiteral("Taper End"), QStringLiteral("Bulge"), QStringLiteral("Custom")});
+    m_widthProfile->setToolTip(QStringLiteral("The Width tool's (Shift-W) profile along the stroke"));
     m_cap = new QComboBox(block);
     m_cap->setObjectName(QStringLiteral("strokeCap"));
     m_cap->addItems({QStringLiteral("Butt"), QStringLiteral("Round"), QStringLiteral("Projecting")});
@@ -293,18 +299,31 @@ PanelSection *PropertiesPanel::strokeSection()
     grid->setVerticalSpacing(6);
     grid->addWidget(caption(QStringLiteral("Weight"), block), 0, 0);
     grid->addWidget(m_strokeWidth, 0, 1);
-    grid->addWidget(caption(QStringLiteral("Cap"), block), 1, 0);
-    grid->addWidget(m_cap, 1, 1);
-    grid->addWidget(caption(QStringLiteral("Corner"), block), 2, 0);
-    grid->addWidget(m_join, 2, 1);
-    grid->addWidget(caption(QStringLiteral("Dashes"), block), 3, 0);
-    grid->addWidget(m_dashes, 3, 1);
-    grid->addWidget(m_alignDashes, 4, 1);
-    grid->addWidget(m_strokeAlignCaption, 5, 0);
-    grid->addWidget(m_strokeAlign, 5, 1);
+    grid->addWidget(caption(QStringLiteral("Profile"), block), 1, 0);
+    grid->addWidget(m_widthProfile, 1, 1);
+    grid->addWidget(caption(QStringLiteral("Cap"), block), 2, 0);
+    grid->addWidget(m_cap, 2, 1);
+    grid->addWidget(caption(QStringLiteral("Corner"), block), 3, 0);
+    grid->addWidget(m_join, 3, 1);
+    grid->addWidget(caption(QStringLiteral("Dashes"), block), 4, 0);
+    grid->addWidget(m_dashes, 4, 1);
+    grid->addWidget(m_alignDashes, 5, 1);
+    grid->addWidget(m_strokeAlignCaption, 6, 0);
+    grid->addWidget(m_strokeAlign, 6, 1);
     grid->setColumnStretch(1, 1);
     body->addLayout(grid);
     body->addWidget(m_arrows);
+    connect(m_widthProfile, &QComboBox::activated, this, [this](int index) {
+        const auto profile = std::array{StrokeWidthProfile::uniform, StrokeWidthProfile::taperStart, StrokeWidthProfile::taperEnd,
+                                        StrokeWidthProfile::bulge, StrokeWidthProfile::custom}
+                                  .at(size_t(index));
+        StrokeStyle stroke = shownStroke();
+        stroke.widthProfile = profile;
+        // Custom is what a hand-dragged set of points shows as; picking it keeps them.
+        if (profile != StrokeWidthProfile::custom)
+            stroke.widthPoints = StrokeGeometry::presetWidthPoints(profile, stroke.width);
+        applyStroke(stroke);
+    });
     connect(m_cap, &QComboBox::activated, this, [this](int index) {
         StrokeStyle stroke = shownStroke();
         stroke.cap = std::array{Qt::FlatCap, Qt::RoundCap, Qt::SquareCap}.at(size_t(index));

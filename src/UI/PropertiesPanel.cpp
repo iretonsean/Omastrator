@@ -289,6 +289,7 @@ void PropertiesPanel::synchronize()
         m_strokeWidth->syncMixed();
     else
         m_strokeWidth->sync(stroke.width);
+    m_widthProfile->setCurrentIndex(int(stroke.widthProfile));
     m_cap->setCurrentIndex(stroke.cap == Qt::RoundCap ? 1 : stroke.cap == Qt::SquareCap ? 2 : 0);
     m_join->setCurrentIndex(stroke.join == Qt::RoundJoin ? 1 : stroke.join == Qt::BevelJoin ? 2 : 0);
     if (!m_dashes->hasFocus()) {

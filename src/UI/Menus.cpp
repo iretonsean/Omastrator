@@ -283,6 +283,21 @@ void Menus::buildObject(QMenuBar &bar)
     add(clipping, QStringLiteral("makeClippingMask"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_7), [this] { session().makeClippingMask(); });
     add(clipping, QStringLiteral("releaseClippingMask"), QStringLiteral("Release"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_7),
         [this] { session().releaseClippingMask(); });
+    QMenu *opacityMask = object->addMenu(QStringLiteral("Opacity Mask"));
+    opacityMask->menuAction()->setObjectName(QStringLiteral("opacityMaskMenu"));
+    add(opacityMask, QStringLiteral("makeOpacityMask"), QStringLiteral("Make Mask"), QKeySequence(), [this] { session().makeOpacityMask(); });
+    add(opacityMask, QStringLiteral("releaseOpacityMask"), QStringLiteral("Release"), QKeySequence(), [this] { session().releaseOpacityMask(); });
+    opacityMask->addSeparator();
+    add(opacityMask, QStringLiteral("opacityMaskClip"), QStringLiteral("Clip"), QKeySequence(), [this] {
+        const std::optional<QUuid> group = session().selectedMaskGroup();
+        const bool clipped = group && session().document()->find(*group)->mask->clip;
+        session().setOpacityMaskClip(!clipped);
+    })->setCheckable(true);
+    add(opacityMask, QStringLiteral("invertOpacityMask"), QStringLiteral("Invert Mask"), QKeySequence(), [this] {
+        const std::optional<QUuid> group = session().selectedMaskGroup();
+        const bool inverted = group && session().document()->find(*group)->mask->inverted;
+        session().setOpacityMaskInverted(!inverted);
+    })->setCheckable(true);
     QMenu *trace = object->addMenu(QStringLiteral("Image Trace"));
     trace->menuAction()->setObjectName(QStringLiteral("imageTraceMenu"));
     add(trace, QStringLiteral("imageTraceMake"), QStringLiteral("Make"), QKeySequence(), [this] { session().traceSelectedImage(); });

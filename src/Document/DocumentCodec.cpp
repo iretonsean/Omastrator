@@ -263,6 +263,14 @@ QJsonObject encode(const StrokeStyle &stroke)
         json["arrowScale"] = stroke.arrowScale;
     if (stroke.alignDashes)
         json["alignDashes"] = true;
+    if (stroke.widthProfile != StrokeWidthProfile::uniform)
+        json["widthProfile"] = rawValue(stroke.widthProfile);
+    if (!stroke.widthPoints.empty()) {
+        QJsonArray points;
+        for (const StrokeWidthPoint &point : stroke.widthPoints)
+            points.append(QJsonObject{{"t", point.t}, {"left", point.left}, {"right", point.right}});
+        json["widthPoints"] = points;
+    }
     return json;
 }
 
@@ -282,6 +290,12 @@ StrokeStyle decodeStroke(const QJsonObject &json)
     stroke.endArrow = arrowhead(json["endArrow"].toString());
     stroke.arrowScale = std::clamp(json["arrowScale"].toDouble(100), 1.0, 1000.0);
     stroke.alignDashes = json["alignDashes"].toBool();
+    stroke.widthProfile = strokeWidthProfile(json["widthProfile"].toString());
+    for (const QJsonValue &value : json["widthPoints"].toArray()) {
+        const QJsonObject point = value.toObject();
+        stroke.widthPoints.push_back({std::clamp(point["t"].toDouble(), 0.0, 1.0), std::max(0.0, point["left"].toDouble()),
+                                      std::max(0.0, point["right"].toDouble())});
+    }
     return stroke;
 }
 
@@ -448,6 +462,8 @@ QJsonObject encode(const VectorObject &object)
         json["layerColor"] = color(object.layerColor);
     if (object.isClipGroup)
         json["clip"] = true;
+    if (object.mask)
+        json["mask"] = QJsonObject{{"clip", object.mask->clip}, {"inverted", object.mask->inverted}};
     if (!object.liftedFrom.isEmpty())
         json["liftedFrom"] = object.liftedFrom;
     switch (object.kind) {
@@ -520,6 +536,10 @@ VectorObject decodeObject(const QJsonObject &json)
     if (json.contains("layerColor"))
         object.layerColor = readColor(json["layerColor"]);
     object.isClipGroup = json["clip"].toBool();
+    if (json.contains("mask")) {
+        const QJsonObject mask = json["mask"].toObject();
+        object.mask = OpacityMask{mask["clip"].toBool(true), mask["inverted"].toBool()};
+    }
     object.liftedFrom = json["liftedFrom"].toString();
     object.transform = readTransform(json["transform"]);
     if (object.kind == ObjectKind::path) {

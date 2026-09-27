@@ -126,7 +126,7 @@ private slots:
         const QJsonObject again = DocumentCodec::encode(read);
         for (const char *key : {"moreFills", "moreStrokes"})
             QVERIFY(!again.contains(QLatin1String(key)));
-        for (const char *key : {"align", "startArrow", "endArrow", "arrowScale", "alignDashes"})
+        for (const char *key : {"align", "startArrow", "endArrow", "arrowScale", "alignDashes", "widthProfile", "widthPoints"})
             QVERIFY(!again["stroke"].toObject().contains(QLatin1String(key)));
         QCOMPARE(again["fill"].toObject().keys(), json["fill"].toObject().keys());
     }
@@ -194,6 +194,63 @@ private slots:
         big.arrowScale = 200;
         QVERIFY(StrokeGeometry::heads(Shapes::line({0, 0}, {100, 0}).painterPath(), big).boundingRect().height()
                 > StrokeGeometry::heads(Shapes::line({0, 0}, {100, 0}).painterPath(), arrowed).boundingRect().height() * 1.9);
+    }
+
+    void widthToolProfilesRenderAsFilledOutlines()
+    {
+        StrokeStyle style = stroke(Qt::black, 20);
+        const QPainterPath line = Shapes::line({0, 0}, {200, 0}).painterPath();
+        QVERIFY(style.isPlain());
+
+        StrokeStyle bulge = style;
+        bulge.widthProfile = StrokeWidthProfile::bulge;
+        bulge.widthPoints = StrokeGeometry::presetWidthPoints(StrokeWidthProfile::bulge, style.width);
+        QVERIFY(!bulge.isPlain());
+        const QPainterPath bulged = StrokeGeometry::area(line, bulge);
+        // The middle bulges past the plain pen width; it still covers the centerline throughout.
+        QVERIFY(bulged.boundingRect().height() > style.width * 1.5);
+        QVERIFY(bulged.contains(QPointF(100, 0)));
+        QVERIFY(bulged.contains(QPointF(10, 0)));
+
+        StrokeStyle taperStart = style;
+        taperStart.widthPoints = StrokeGeometry::presetWidthPoints(StrokeWidthProfile::taperStart, style.width);
+        const QPainterPath tapered = StrokeGeometry::area(line, taperStart);
+        // It tapers to a point at the very start and is at full width well before the end.
+        QVERIFY(!tapered.contains(QPointF(0, style.width / 2 - 1)));
+        QVERIFY(tapered.contains(QPointF(150, 0)));
+
+        StrokeStyle taperEnd = style;
+        taperEnd.widthPoints = StrokeGeometry::presetWidthPoints(StrokeWidthProfile::taperEnd, style.width);
+        const QPainterPath taperedEnd = StrokeGeometry::area(line, taperEnd);
+        QVERIFY(taperedEnd.contains(QPointF(50, 0)));
+        QVERIFY(!taperedEnd.contains(QPointF(199, style.width / 2 - 1)));
+
+        // Outline Stroke and the codec both go through the same geometry.
+        const StrokeStyle back = DocumentCodec::decodeStroke(DocumentCodec::encode(bulge));
+        QCOMPARE(back, bulge);
+        QCOMPARE(DocumentCodec::encode(bulge)["widthProfile"].toString(), QStringLiteral("bulge"));
+    }
+
+    void widthToolOutlineStrokeKeepsTheProfile()
+    {
+        Drawn d;
+        d.session.createDocument({220, 40});
+        d.add(Shapes::line({10, 20}, {210, 20}));
+        d.session.setFillsOfSelection({Paint::none()}, QStringLiteral("Fill"));
+        StrokeStyle bulge = stroke(Qt::black, 10);
+        bulge.widthProfile = StrokeWidthProfile::bulge;
+        bulge.widthPoints = StrokeGeometry::presetWidthPoints(StrokeWidthProfile::bulge, bulge.width);
+        d.session.setStrokeOfSelection(bulge);
+        // The bulge doubles the half-width at the middle: 7 pt off-centre is covered there, but not near the start.
+        QVERIFY(close(pixel(*d.session.document(), {110, 13}), Qt::black));
+        QVERIFY(close(pixel(*d.session.document(), {15, 13}), Qt::white));
+        d.session.outlineSelectedStrokes();
+        QCOMPARE(d.session.undoName(), QStringLiteral("Outline Stroke"));
+        // No fill to keep, so Outline Stroke replaces the line outright with its filled outline.
+        QCOMPARE(d.session.selection().size(), size_t(1));
+        const VectorObject &outlined = d.read(d.session.selection().back());
+        QVERIFY(outlined.path.bounds().height() > bulge.width * 1.5);
+        QCOMPARE(outlined.fill, Paint::solid(Qt::black));
     }
 
     void dashesAlignToCorners()

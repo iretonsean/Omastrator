@@ -31,13 +31,15 @@ enum class Tool {
     rotate,          // R
     scale,           // S
     gradient,        // G
+    width,           // Shift-W
     eyedropper,      // I
     hand,            // H
     zoom,            // Z
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
-                                     Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper, Tool::hand, Tool::zoom};
+                                     Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
+                                     Tool::eyedropper, Tool::hand, Tool::zoom};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -206,6 +208,14 @@ public:
     // Object ▸ Clipping Mask ▸ Make: the topmost object clips the rest.
     void makeClippingMask();
     void releaseClippingMask();
+    // Object ▸ Opacity Mask ▸ Make (P2-9): the topmost object's luminance masks the rest.
+    void makeOpacityMask();
+    void releaseOpacityMask();
+    // Whether the mask hides what falls outside its own rendered coverage.
+    void setOpacityMaskClip(bool clip);
+    void setOpacityMaskInverted(bool inverted);
+    // The single selected mask group, for the Clip and Invert Mask menu checks.
+    std::optional<QUuid> selectedMaskGroup() const;
     void arrange(ArrangeOrder order);
     void align(AlignEdge edge, AlignTarget target = AlignTarget::selection);
     // Distribute: centres along `axis`, or the chosen edge of each object.

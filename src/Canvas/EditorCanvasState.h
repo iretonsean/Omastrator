@@ -49,6 +49,8 @@ struct EditorCanvas::State {
         shapeBuilder,
         // Gradient tool: an end, a stop, or a new start-to-end drag.
         gradient,
+        // Width tool: an existing point, or a new one dropped where the drag started.
+        width,
         // A ruler guide moved, or one drawn out of a ruler.
         guide,
         // Direct Selection: a live corner's widget.
@@ -82,6 +84,8 @@ struct EditorCanvas::State {
         double guidePosition = 0;
         // A click on what was already selected: it becomes the key object if nothing moves.
         std::optional<QUuid> keyCandidate;
+        // Width tool: the point's position along the path (0..1), fixed at press.
+        double pathT = 0;
     };
     std::optional<Drag> drag;
     // A fresh drag of `kind` pressed at `view`.
@@ -280,6 +284,21 @@ struct EditorCanvas::State {
     void dragGradient(QPointF view, Qt::KeyboardModifiers modifiers);
     void finishGradient();
     void drawGradient(QPainter &painter) const;
+
+    // Width (Shift-W) -----------------------------------------------------------
+    // The point (last selected leaf with a visible stroke) the annotator edits.
+    std::optional<QUuid> widthTarget() const;
+    // An existing width point's index near `view`, if any.
+    std::optional<int> widthHandleAt(QPointF view) const;
+    // The object and index a Delete press would remove, once set by a click or drag.
+    std::optional<QUuid> widthPointObject;
+    std::optional<int> widthPointIndex;
+    void widthPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragWidth(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishWidth();
+    void drawWidth(QPainter &painter) const;
+    // Removes `widthPointObject`'s point at `widthPointIndex`, as its own undo step.
+    bool deleteWidthPoint();
 
     // Measuring and readouts ----------------------------------------------------
     // Alt held over something else: the gaps from the selection to it, or to the artboard.

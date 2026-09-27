@@ -1482,9 +1482,9 @@ has Qt Test coverage in `tests/<Folder>/`.
 | P2-4 | **Text wrap and threads** | Area type flows around objects marked "text wrap" (with an offset), and threads overflow into a linked box. | `TextContent`, the layout in `VectorDocument.cpp` | Text avoids a wrap object's bounds + offset; overflow continues in the next box |
 | P2-5 | **Hyphenation** | Optional, using hyphen patterns (TeX patterns, `hyphen` data) for area type. Honour soft hyphens (U+00AD) first. | The area-type layout | Soft hyphens break with a visible hyphen at a line end and are hidden otherwise |
 | P2-6 ✓ | **Symbols** (done as components: docs/DESIGN-SYSTEMS.md) | A symbol definition stored in the document plus instances (a transform plus an id). Editing the master updates every instance; Break Link expands one. | `VectorDocument`, `VectorRenderer`, a Symbols panel | Recolouring a master updates 10 instances in one undo step |
-| P2-7 | **Width tool / variable strokes** | Width points along a stroke, and profiles, rendered as an outline. | `StrokeStyle::widthProfile`, `PathOperations` | Uniform, tapered and bulge profiles render and export as filled outlines |
+| P2-7 ✓ | **Width tool / variable strokes** (done: see below) | Width points along a stroke, and profiles, rendered as an outline. | `StrokeStyle::widthProfile`, `StrokeGeometry`, `PathOperations` | Uniform, tapered and bulge profiles render and export as filled outlines |
 | P2-8 ✓ | **On-canvas gradient annotator** (done: see below) | With the Gradient tool (G), drag the start and end on the object and drag the stops. | `EditorCanvas`, `Paint` | Dragging the end point changes the gradient angle live; one undo step |
-| P2-9 | **Opacity masks** | Make Mask (top object's luminance), Clip, Invert. | `VectorObject::mask`, `VectorRenderer` | A white-to-black gradient mask fades the art; PDF and SVG export keep it |
+| P2-9 ✓ | **Opacity masks** (done: see below) | Make Mask (top object's luminance), Clip, Invert. | `VectorObject::mask`, `VectorRenderer` | A white-to-black gradient mask fades the art; PDF and SVG export keep it |
 | P2-10 | **Export for Screens / per-object export** | Mark objects or artboards for export; scales 0.5×–3× with suffixes; PNG/JPG/SVG/PDF/WebP in one batch. | `ExportSheet`, `DocumentExporter` | Exporting two assets at 1× and 2× writes four files with `@2x` suffixes |
 | P2-11 | **Snap to pixel / Make Pixel Perfect** | Snap anchors and bounds to whole pixels while drawing and moving; pixel grid at ≥ 600 %. | `EditorSession::snapped`, `EditorCanvas+Paint.cpp` | A dragged rectangle's edges land on integers |
 | P2-12 | **Toolbar flyouts and presets** | Group tools with flyouts, Alt-click to cycle, and Basic/Advanced presets. | `ContentView`, `ToolIcons` | The tool order is saved; flyouts open on long-press or right-click |
@@ -1498,6 +1498,40 @@ has Qt Test coverage in `tests/<Folder>/`.
 > length, or a stop to slide it along. Everything previews live and ends in one
 > "Gradient" step. A click on another object selects it. Radial gradients use
 > the same bar: centre and radius.
+
+> **P2-7 done.** `src/Document/Paint.h` (`StrokeWidthPoint`, `StrokeWidthProfile`),
+> `src/Document/StrokeGeometry.{h,cpp}` (`variableArea`, `widthAt`,
+> `presetWidthPoints`, `locate`/`locateAtT`) and `src/Canvas/EditorCanvas+Width.cpp`.
+> The Width tool (Shift+W, in the toolbar by the Gradient tool) drags on a
+> selected path's stroke to add a point there or move one that's already there;
+> Alt-drag moves just the side under the pointer. Each width point keeps its own
+> left and right half-width, interpolated (smoothstep) between points along the
+> path's whole length, so the stroke renders, exports (SVG as a filled path,
+> PDF as vector fills, same as an aligned or arrowed stroke already did) and
+> Outline Stroke's shows the same outline everywhere, through
+> `StrokeGeometry::area()`. Properties ▸ Stroke's new Profile menu (Uniform,
+> Taper Start, Taper End, Bulge, Custom) sets a preset's points in one "Stroke"
+> step; dragging on the canvas is one "Width Point" step, and Delete on a
+> touched point is "Remove Width Point". Deviation from the one-line spec:
+> width points are measured along the whole path (every subpath's length, in
+> order) rather than per subpath, dashes are ignored on a variable-width
+> stroke, and open ends get a flat seam rather than the stroke's own cap.
+
+> **P2-9 done.** `src/Document/VectorDocument.h` (`OpacityMask`,
+> `VectorObject::mask`), `src/Rendering/VectorRenderer.cpp`
+> (`renderIsolated`/`applyLuminanceMask` in `drawChildren`) and
+> `src/IO/SvgExporter.cpp` (`writeOpacityMask`). Object ▸ Opacity Mask ▸ Make
+> Mask groups the selection and turns its topmost object into the mask (as
+> Clipping Mask does, but the mask object keeps its own paint instead of being
+> cleared); Release, Clip and Invert Mask sit beside it, each its own undo step
+> ("Make Mask", "Release Mask", "Mask Clip", "Invert Mask"). The canvas and PNG
+> render it by rasterizing the mask and its content apart and multiplying the
+> content's alpha by the mask's luminance (its own alpha too, so what a
+> clipped mask never covers stays hidden; unclipped, that area stays visible).
+> PDF export draws through the same renderer, so it keeps the mask as an
+> embedded raster patch rather than a live PDF soft mask; SVG export writes a
+> real `<mask>` (luminance is the format's own rule), with Invert Mask as an
+> `feColorMatrix` filter and an unclipped mask backed by a white rect.
 
 ### Out of scope
 

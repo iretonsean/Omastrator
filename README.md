@@ -100,15 +100,18 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
   opacity and blend, and a grip to reorder. Strokes align inside, centre or
   outside, take arrowheads (arrow, triangle, circle, square, bar) and can
   stretch their dashes to sit on the corners. The Gradient tool (G) drags a
-  gradient's ends and stops right on the object.
+  gradient's ends and stops right on the object. The Width tool (Shift+W)
+  drags on a stroke to add or move a width point, and the Stroke section's
+  Profile menu sets a taper, bulge or custom shape along the whole path.
 - Colour: hex fields beside every well, the last twelve colours under the
   picker, Selection colors to recolour every use of a colour in a mixed
   selection at once, and global swatches that update everything painted with
   them. Copy Properties and Paste Properties (Ctrl+Alt+C, Ctrl+Alt+V) move a
   whole appearance between objects; the eyedropper's Alt-click gives the
   selection's style to what you click.
-- Layers and groups with visibility, locking and drag-to-reorder, clipping masks
-  and compound paths.
+- Layers and groups with visibility, locking and drag-to-reorder, clipping masks,
+  opacity masks (Object ▸ Opacity Mask: the top object's luminance masks the
+  rest, with Clip and Invert Mask) and compound paths.
 - Pathfinder (Unite, Minus Front, Intersect, Exclude), plus Outline Stroke,
   Offset Path and Simplify.
 - Align and distribute, arrange, and transform: move, rotate, reflect and scale.

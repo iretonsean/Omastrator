@@ -96,10 +96,10 @@ struct ToolKey {
     const char *key;
     int modifiers = 0;
 };
-const std::array<ToolKey, 16> toolKeys{{
+const std::array<ToolKey, 17> toolKeys{{
     {Tool::select, "v"}, {Tool::directSelect, "a"}, {Tool::pen, "p"}, {Tool::pencil, "n"}, {Tool::text, "t"}, {Tool::line, "\\"},
     {Tool::rectangle, "m"}, {Tool::ellipse, "l"}, {Tool::rotate, "r"}, {Tool::scale, "s"}, {Tool::eyedropper, "i"}, {Tool::hand, "h"},
-    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8}, {Tool::gradient, "g"}, {Tool::scissors, "c"},
+    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8}, {Tool::gradient, "g"}, {Tool::scissors, "c"}, {Tool::width, "w", 8},
 }};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)

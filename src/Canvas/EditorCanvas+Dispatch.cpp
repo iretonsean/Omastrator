@@ -94,6 +94,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     case Tool::gradient:
         gradientPress(view, modifiers);
         break;
+    case Tool::width:
+        widthPress(view, modifiers);
+        break;
     case Tool::eyedropper:
         eyedropperPress(view, modifiers);
         break;
@@ -168,6 +171,9 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::gradient:
         dragGradient(view, modifiers);
         break;
+    case DragKind::width:
+        dragWidth(view, modifiers);
+        break;
     case DragKind::guide:
         dragGuide(view, modifiers);
         break;
@@ -238,6 +244,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
         break;
     case DragKind::gradient:
         finishGradient();
+        break;
+    case DragKind::width:
+        finishWidth();
         break;
     case DragKind::textArea:
         finishTextArea();
@@ -330,6 +339,7 @@ void EditorCanvas::State::toolChanged()
     hoverGuides.reset();
     builderRegion.reset();
     builderEdge.reset();
+    widthPointIndex.reset();
     updateHoverGuides(drag ? std::nullopt : hover);
     updateCursor();
 }

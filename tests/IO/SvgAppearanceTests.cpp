@@ -1,4 +1,6 @@
+#include "Document/EditorSession.h"
 #include "Document/PathOperations.h"
+#include "Document/StrokeGeometry.h"
 #include "IO/DocumentExporter.h"
 #include "IO/SvgExporter.h"
 #include <QFile>
@@ -136,6 +138,49 @@ private slots:
         arrow.stroke = headed;
         const QByteArray svg = SvgExporter::serialize(withObject(arrow));
         QVERIFY(svg.contains("fill=\"#ff0000\""));
+    }
+
+    void variableWidthStrokesExportAsFilledOutlines()
+    {
+        VectorObject line;
+        line.name = QStringLiteral("Line");
+        line.path = Shapes::line({10, 100}, {190, 100});
+        line.fill = Paint::none();
+        StrokeStyle bulge = stroke(Qt::black, 10);
+        bulge.widthProfile = StrokeWidthProfile::bulge;
+        bulge.widthPoints = StrokeGeometry::presetWidthPoints(StrokeWidthProfile::bulge, bulge.width);
+        line.stroke = bulge;
+        const std::vector<Element> all = elements(SvgExporter::serialize(withObject(line)));
+        const auto group = std::find_if(all.begin(), all.end(), [](const Element &e) { return e.attributes.value("id") == QLatin1String("Line"); });
+        QVERIFY(group != all.end());
+        const Element &outline = *(group + 1);
+        // A filled path, not a stroked line: no stroke-width, the stroke's colour as a fill.
+        QCOMPARE(outline.attributes.value("fill").toString(), QStringLiteral("#000000"));
+        QVERIFY(!outline.attributes.hasAttribute("stroke-width"));
+        QVERIFY(!outline.attributes.value("d").toString().isEmpty());
+    }
+
+    void opacityMasksExportAsAnSvgMask()
+    {
+        EditorSession session;
+        session.createDocument({100, 20});
+        session.setDefaultFill(Paint::solid(Qt::red));
+        const QUuid art = session.addPath(Shapes::rectangle({0, 0, 100, 20}), QStringLiteral("Art"));
+        const QUuid fade = session.addPath(Shapes::rectangle({0, 0, 100, 20}), QStringLiteral("Fade"));
+        session.select({fade});
+        session.setFillOfSelection(Paint::linear(Qt::white, Qt::black));
+        session.select({art, fade});
+        session.makeOpacityMask();
+        const QByteArray svg = SvgExporter::serialize(*session.document());
+        QVERIFY(svg.contains("<mask"));
+        const std::vector<Element> all = elements(svg);
+        const auto masked = std::find_if(all.begin(), all.end(), [](const Element &e) { return e.attributes.hasAttribute("mask"); });
+        QVERIFY(masked != all.end());
+        QVERIFY(masked->attributes.value("mask").toString().startsWith(QStringLiteral("url(#")));
+
+        // Invert Mask runs the mask through a colour-matrix filter.
+        session.setOpacityMaskInverted(true);
+        QVERIFY(SvgExporter::serialize(*session.document()).contains("feColorMatrix"));
     }
 
     void pdfExportDrawsTheStack()

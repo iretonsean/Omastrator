@@ -205,6 +205,14 @@ enum class SameAttribute { fillColor, strokeColor, fillAndStroke, strokeWeight, 
 // Select ▸ Object: kinds of object picked across the document.
 enum class ObjectFilter { textObjects, images, clippingMasks, openPaths, strayPoints };
 
+// Groups (P2-9): the top child's luminance masks the rest. Clip hides whatever
+// falls outside the mask's own rendered coverage; off, that area stays visible.
+struct OpacityMask {
+    bool clip = true;
+    bool inverted = false;
+    friend bool operator==(const OpacityMask &, const OpacityMask &) = default;
+};
+
 struct VectorObject {
     QUuid id = QUuid::createUuid();
     ObjectKind kind = ObjectKind::path;
@@ -232,6 +240,8 @@ struct VectorObject {
     QTransform transform;
     // Groups: the first child clips the rest.
     bool isClipGroup = false;
+    // Groups: set makes this an opacity mask group (P2-9); the top child is the mask.
+    std::optional<OpacityMask> mask;
     // Rectangles: the live shape, while the path is still what it makes.
     std::optional<LiveRectangle> shape;
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for

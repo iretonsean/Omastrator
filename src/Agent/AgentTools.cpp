@@ -175,7 +175,7 @@ QJsonObject AgentTools::selectTool(const QJsonObject &params)
     const std::optional<Tool> tool = toolNamed(name);
     if (!tool)
         fail(QStringLiteral("There is no tool “%1”. Use one of: select, directSelect, pen, pencil, text, line, rectangle, "
-                            "roundedRectangle, ellipse, polygon, star, shapeBuilder, scissors, rotate, scale, gradient, eyedropper, hand, zoom.").arg(given));
+                            "roundedRectangle, ellipse, polygon, star, shapeBuilder, scissors, rotate, scale, gradient, width, eyedropper, hand, zoom.").arg(given));
     EditorSession *current = m_host.session();
     if (!current)
         throw Error(AgentProtocol::noDocument, QStringLiteral("Omastrator has no window open."));

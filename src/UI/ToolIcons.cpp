@@ -172,6 +172,20 @@ void zoom(QPainter &painter)
     painter.drawEllipse(QRectF(2, 2, 10.5, 10.5));
     painter.drawLine(QPointF(11.2, 11.2), QPointF(16, 16));
 }
+
+// A stroke that tapers to a point and bulges in the middle, standing for the
+// Width tool's variable weight.
+void width(QPainter &painter)
+{
+    QPainterPath shape(QPointF(2, 9));
+    shape.lineTo(9, 3);
+    shape.lineTo(16, 9);
+    shape.lineTo(9, 15);
+    shape.closeSubpath();
+    // One antialiased pass: filling and stroking the same edge in the same
+    // colour can round a boundary pixel a shade off at some angles.
+    painter.fillPath(shape, painter.pen().color());
+}
 }
 
 void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side, const QColor &colour)
@@ -201,6 +215,7 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::rotate: rotate(painter); break;
     case Tool::scale: scale(painter); break;
     case Tool::gradient: gradient(painter); break;
+    case Tool::width: width(painter); break;
     case Tool::eyedropper: eyedropper(painter); break;
     case Tool::hand: hand(painter); break;
     case Tool::zoom: zoom(painter); break;

@@ -150,6 +150,8 @@ private:
     NumberField *m_strokeWidth = nullptr;
     QComboBox *m_cap = nullptr;
     QComboBox *m_join = nullptr;
+    // Width tool (P2-7): the profile a preset or a hand-dragged point set makes.
+    QComboBox *m_widthProfile = nullptr;
     QLineEdit *m_dashes = nullptr;
     QComboBox *m_alignTarget = nullptr;
     std::vector<std::pair<QToolButton *, PanelIcon>> m_iconButtons;
