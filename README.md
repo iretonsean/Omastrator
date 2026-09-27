@@ -39,7 +39,11 @@ More in [Screenshots](#screenshots).
 ## AI, with the agent you already use
 
 Omastrator bundles no model. It hands work to your Omarchy default agent, such
-as Claude Code, Codex or opencode. Anything the agent changes shows as a
+as Claude Code, Codex, opencode or Gemini, and runs it in the background: no
+terminal window and no permission prompts. The agent may only read what it's
+given and call Omastrator, and the panel shows it working ("Claude is
+roasting… 12 s") with Cancel. If it stops without an answer, the panel says so
+and **Show log** opens what it printed. Anything the agent changes shows as a
 preview: Enter keeps it as one undo step, and Esc throws it away.
 
 - **Object ▸ Generate…**: describe what you want and choose how many
@@ -55,7 +59,8 @@ preview: Enter keeps it as one undo step, and Esc throws it away.
   variations from that feedback.
 - **Help ▸ Connect an Agent…**: drive Omastrator from any agent. Use
   `omastrator agent <method>` from a shell, or register the MCP server with
-  `claude mcp add omastrator -- omastrator --mcp`.
+  `claude mcp add omastrator -- omastrator --mcp`. To watch the agent work,
+  tick "Open the agent in a terminal while it works".
 
 Choose your agent in Omarchy → Setup → Default → Agent. How it works:
 [docs/AI-DESIGN.md](docs/AI-DESIGN.md). The rest of the app's personality is
