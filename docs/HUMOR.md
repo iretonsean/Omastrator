@@ -75,16 +75,30 @@ someone sees it.
 
 ## Roast My Design
 
-The one place the humor goes loud. It's a button at the bottom of the tool rail,
+The one place the humor goes loud, updated 2026-09-26 after the first live roasts read as too polite and too long. It's a button at the bottom of the tool rail,
 and it's the only playful button label in the app.
 
-1. **The roast (savage).** Full comedy-roast energy, aimed only at the design and
-   never at the person: layout, type, colour, alignment, the fourth drop shadow.
-2. **Then sincere feedback,** immediately after and clearly separated: specific,
-   actionable fixes in order of impact, pointing at the actual objects.
-3. **Then one click to generate.** "Make variations from this feedback" goes
-   straight into the generation flow in docs/AI-ROADMAP.md: choose how many
-   variations, preview, accept.
+The panel has three pages, which the user steps through with Back and Next or
+the arrow keys:
+
+1. **The roast.** Two to four one-line burns, 60 words at most, with no
+   softeners, no compliments and no explaining the joke.
+   - *Target:* the design and the habits it gives away (the workflow, the
+     tools, the trend-chasing), in second person. Never who someone is, how
+     they look, or anything outside design work.
+   - *Voice:* taken from the people who use this app: designers who lean on AI,
+     Omarchy and Linux ricers, Figma and UI/UX people, the habits of each tool,
+     and the design profession itself. Each burn is tied to something actually
+     on the artboard. The full voice guide is in the agent instructions
+     (`src/Agent/AgentLauncher+Prompts.cpp`).
+2. **The fixes.** Exactly three, highest impact first, each a title of five
+   words and one sentence with the concrete value to use. Clicking one selects
+   the objects it's about.
+3. **What next.** The brief, then "Make variations from this feedback", which
+   goes straight into the generation flow in docs/AI-ROADMAP.md.
+
+The app enforces the lengths: `show_roast` sends back a roast over about 70
+words, or more than four fixes, for the agent to shorten.
 
 It works on the selection, or on the whole artboard when nothing is selected. The
 agent is sent a rendered PNG and the document JSON, as in AI-ROADMAP.md. It runs
