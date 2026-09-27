@@ -1,5 +1,7 @@
 #include "Agent/AgentLauncher.h"
 #include "Agent/AgentProtocol.h"
+#include "Agent/Setup.h"
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QSettings>
 #include <array>
@@ -9,13 +11,20 @@ namespace {
 // Past this a picked SVG is summarised; the agent can read the document instead.
 constexpr qsizetype maximumInlineSvg = 48 * 1024;
 
+// The CLI as the agent must type it: headless runs allow exactly this command.
+QString cli()
+{
+    return Setup::shellQuote(QCoreApplication::applicationFilePath()) + QStringLiteral(" agent");
+}
+
 QString header(const QString &task, const QString &requestId)
 {
     return QStringLiteral("Omastrator task: %1 (request %2).\n"
                           "You are driving the Omastrator vector editor that is open on the user's desktop. First read AGENTS.md "
-                          "in the working directory: it explains how to call Omastrator with \"$OMASTRATOR_BIN\" agent <method> "
-                          "'<json>' (or the omastrator MCP tools) and lists every method.\n\n")
-        .arg(task, requestId);
+                          "in the working directory: it explains how to call Omastrator with %3 <method> '<json>' and lists "
+                          "every method. Run that command exactly as written, starting with that path, one call per command "
+                          "(no pipes, no variables): nothing else is allowed.\n\n")
+        .arg(task, requestId, cli());
 }
 
 QString size(const QRectF &box)
@@ -35,16 +44,17 @@ QString instructions(const QString &binary)
         "## How to call it\n\n"
         "From a shell, with one JSON object as the params:\n\n"
         "```sh\n"
-        "\"$OMASTRATOR_BIN\" agent document_get\n"
-        "\"$OMASTRATOR_BIN\" agent set_style '{\"fill\": \"#1e66f5\"}'\n"
-        "\"$OMASTRATOR_BIN\" agent insert_svg - <<'JSON'\n"
+        "%1 agent document_get\n"
+        "%1 agent set_style '{\"fill\": \"#1e66f5\"}'\n"
+        "%1 agent insert_svg - <<'JSON'\n"
         "{\"svg\": \"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='#e64553'/></svg>\"}\n"
         "JSON\n"
-        "\"$OMASTRATOR_BIN\" agent <method> --help   # one method's parameters\n"
+        "%1 agent <method> --help   # one method's parameters\n"
         "```\n\n"
-        "`$OMASTRATOR_BIN` is `%1`. Pass `-` to read the params from stdin, which suits long SVG. The result prints as "
-        "JSON; on an error the message goes to stderr and the exit code is 1. If the `omastrator` MCP server is "
-        "connected (see `.mcp.json`), its tools have the same names and parameters.\n\n"
+        "Always start the command with that path, as written: `$OMASTRATOR_BIN` holds it too, but Omastrator's "
+        "background runs allow only the literal path. Pass `-` to read the params from stdin, which suits long SVG. "
+        "The result prints as JSON; on an error the message goes to stderr and the exit code is 1. If you connected "
+        "the `omastrator` MCP server yourself, its tools have the same names and parameters.\n\n"
         "## Rules\n\n"
         "- **Preview, then accept.** Every edit goes into one proposal the user sees live on the canvas. Your further "
         "edits add to it. When you are done, call `proposal_finish` with a short `title` and a one or two sentence "
@@ -109,7 +119,7 @@ QString instructions(const QString &binary)
         "3. **Then `suggestedPrompt`:** one sentence, a brief for variations that apply the fixes.\n\n"
         "The app refuses a longer roast or more than 4 fixes; shorten and call again.\n\n"
         "## Methods\n")
-                       .arg(binary);
+                       .arg(Setup::shellQuote(binary));
     QString group;
     for (const AgentProtocol::Method &method : AgentProtocol::methods()) {
         if (method.group != group) {

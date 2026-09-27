@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 16> toolInfo{{
+const std::array<ToolInfo, 17> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -22,6 +22,7 @@ const std::array<ToolInfo, 16> toolInfo{{
     {Tool::ellipse, "ellipse", "Ellipse"},
     {Tool::polygon, "polygon", "Polygon"},
     {Tool::star, "star", "Star"},
+    {Tool::shapeBuilder, "shapeBuilder", "Shape Builder"},
     {Tool::rotate, "rotate", "Rotate"},
     {Tool::scale, "scale", "Scale"},
     {Tool::eyedropper, "eyedropper", "Eyedropper"},
@@ -592,6 +593,35 @@ void EditorSession::previewDocument(const VectorDocument &document, const std::v
     m_selection = selection;
     pruneSelection();
     notify();
+}
+
+bool EditorSession::previewShapeBuild(const ShapeBuilder::Arrangement &arrangement, const ShapeBuilder::Gesture &gesture)
+{
+    if (!m_document || !m_interaction)
+        return false;
+    VectorDocument document = m_interaction->base;
+    std::vector<QUuid> created;
+    if (!ShapeBuilder::build(document, arrangement, gesture, shapeBuilder, m_defaultFill, m_defaultStroke, &created)) {
+        previewDocument(m_interaction->base, m_interaction->selection);
+        return false;
+    }
+    // Illustrator keeps the built shapes selected, so the next drag works on them too.
+    std::vector<QUuid> selection;
+    std::vector<std::optional<QUuid>> parents;
+    for (const QUuid &id : m_interaction->selection) {
+        if (const VectorObject *object = m_interaction->base.find(id))
+            parents.push_back(object->parentID);
+        if (document.find(id))
+            selection.push_back(id);
+    }
+    for (const QUuid &id : created) {
+        const VectorObject *object = document.find(id);
+        const VectorObject *parent = object && object->parentID ? document.find(*object->parentID) : nullptr;
+        if (parent && (parent->kind == ObjectKind::layer || std::find(parents.begin(), parents.end(), object->parentID) != parents.end()))
+            selection.push_back(id);
+    }
+    previewDocument(document, selection);
+    return true;
 }
 
 std::optional<QUuid> EditorSession::selectedImage() const

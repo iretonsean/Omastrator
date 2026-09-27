@@ -1,5 +1,6 @@
 #pragma once
 #include <QImage>
+#include <QPointer>
 #include <QString>
 #include <QWidget>
 
@@ -27,6 +28,7 @@ private:
     QLabel *const m_status;
     QPushButton *const m_cancel;
     QLabel *const m_message;
+    QPushButton *const m_showLog;
     QVBoxLayout *m_rounds = nullptr;
     QLineEdit *const m_refine;
     QPushButton *const m_refineButton;
@@ -50,6 +52,7 @@ private:
 
     AgentBridge &m_bridge;
     QVBoxLayout *const m_column;
+    QPointer<QLabel> m_status;
     int m_page = 0;
 };
 
@@ -72,4 +75,6 @@ private:
     QPushButton *const m_keep;
     QPushButton *const m_discard;
     QPushButton *const m_cancel;
+    QPushButton *const m_showLog;
+    QPushButton *const m_dismiss;
 };

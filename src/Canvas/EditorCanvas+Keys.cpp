@@ -56,7 +56,7 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         restartCaret();
         return result != InlineTextEditor::Result::ignored || InlineTextEditor::claims(*event);
     }
-    // Alt alone shows or hides the measurements.
+    // Alt alone shows the measurements, or turns Shape Builder's highlight to erasing.
     if (event->key() == Qt::Key_Alt) {
         // Some platforms report a modifier key's press without its own flag.
         modifiers |= Qt::AltModifier;
@@ -114,6 +114,11 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         return nudge(event);
     default:
         break;
+    }
+    // Shift-M: Shape Builder, as in Illustrator.
+    if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_M) {
+        session.selectTool(Tool::shapeBuilder);
+        return true;
     }
     if (plain && !shift && !event->isAutoRepeat()) {
         if (const std::optional<Tool> tool = toolForKey(key)) {
@@ -185,6 +190,7 @@ void EditorCanvas::State::finishOpacity()
 
 bool EditorCanvas::State::keyRelease(QKeyEvent *event)
 {
+    // Alt's release ends the measurements and Shape Builder's erase highlight.
     if (event->key() == Qt::Key_Alt) {
         modifiers &= ~Qt::AltModifier;
         canvas.update();

@@ -5,6 +5,7 @@
 #include "Agent/StatusStream.h"
 #include "FakeAgentHost.h"
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalSocket>
 #include <QSignalSpy>
@@ -256,6 +257,64 @@ private slots:
         onBackend([&] { m_backend->host.failure = QStringLiteral("Choose an agent in Omarchy → Setup → Default → Agent."); });
         QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("roast")}, &out, &err), 1);
         QCOMPARE(Island::read().activity, QStringLiteral("Choose an agent in Omarchy → Setup → Default → Agent."));
+        onBackend([&] { m_backend->host.failure.clear(); });
+    }
+
+    void islandLiveDeploysAndShowsHistory()
+    {
+        QString out, err;
+        QCOMPARE(island({"live", "deploy"}), 0);
+        onBackend([&] {
+            QCOMPARE(m_backend->host.liveAction, QStringLiteral("deploy"));
+            QVERIFY(!m_backend->host.liveParams["confirm"].toBool());
+            QVERIFY(!m_backend->host.liveParams.contains("github"));
+        });
+        QCOMPARE(island({"live", "deploy", "--confirm", "--remember", "--github", "my-site", "--folder", "/tmp/site"}), 0);
+        onBackend([&] {
+            const QJsonObject &params = m_backend->host.liveParams;
+            QVERIFY(params["confirm"].toBool() && params["remember"].toBool());
+            QCOMPARE(params["github"].toString(), QStringLiteral("my-site"));
+            QCOMPARE(params["folder"].toString(), QStringLiteral("/tmp/site"));
+        });
+        QCOMPARE(island({"live", "save", "--no-github"}), 0);
+        onBackend([&] {
+            QCOMPARE(m_backend->host.liveAction, QStringLiteral("save"));
+            QVERIFY(m_backend->host.liveParams.contains("github") && m_backend->host.liveParams["github"].toString().isEmpty());
+        });
+        QCOMPARE(island({"live", "deploy", "--github"}, &out, &err), 1);
+        QCOMPARE(island({"live", "deploy", "--prod"}, &out, &err), 1);
+        // The first deploy asks in the app; the island says where.
+        onBackend([&] { m_backend->host.liveResult = {{"sheet", true}}; });
+        QCOMPARE(island({"live", "deploy"}), 0);
+        QCOMPARE(Island::read().activity, QStringLiteral("Confirm the deploy in Omastrator"));
+        onBackend([&] {
+            m_backend->host.liveResult = {{"commits", QJsonArray{QJsonObject{{"sha", "0123456789abcdef"}, {"subject", "Bigger buttons"}, {"time", "2026-09-26T10:00:00"},
+                                                                            {"deployed", true}, {"url", "https://site.example.test"}}}}};
+        });
+        QCOMPARE(island({"live", "history", "--list"}, &out), 0);
+        QVERIFY(out.contains(QLatin1String("0123456  2026-09-26T10:00:00  Bigger buttons  [deployed https://site.example.test]")));
+        onBackend([&] {
+            QCOMPARE(m_backend->host.liveAction, QStringLiteral("history"));
+            QVERIFY(m_backend->host.liveParams["list"].toBool());
+            m_backend->host.liveResult = {};
+        });
+        QCOMPARE(island({"live", "restore"}, &out, &err), 1);
+        QCOMPARE(island({"live", "restore", "abc1234"}), 0);
+        onBackend([&] { QCOMPARE(m_backend->host.liveParams["id"].toString(), QStringLiteral("abc1234")); });
+        QCOMPARE(island({"live", "changes"}), 0);
+        onBackend([&] { QCOMPARE(m_backend->host.liveAction, QStringLiteral("review")); });
+        for (const char *action : {"details", "remember", "cancel"}) {
+            QCOMPARE(island({"live", action}), 0);
+            onBackend([&] { QCOMPARE(m_backend->host.liveAction, QLatin1String(action)); });
+        }
+        QCOMPARE(island({"live", "github", "connect"}, &out), 0);
+        onBackend([&] { QVERIFY(m_backend->host.liveParams["connect"].toBool()); });
+        QCOMPARE(island({"live", "publish"}, &out, &err), 1);
+        QVERIFY(err.contains(QLatin1String("deploy")));
+        // A refusal is said on the island.
+        onBackend([&] { m_backend->host.failure = QStringLiteral("A deploy is already running. Wait for it, or cancel it."); });
+        QCOMPARE(island({"live", "deploy"}, &out, &err), 1);
+        QCOMPARE(Island::read().activity, QStringLiteral("A deploy is already running. Wait for it, or cancel it."));
         onBackend([&] { m_backend->host.failure.clear(); });
     }
 

@@ -22,9 +22,11 @@ is one case among many.
    behaviour (always on top, never tiled, no stolen focus) and the theme for
    free. Setup follows Omarchy's pattern: one command that installs, and menu
    entries.
-3. **Preview, then accept, everywhere.** Voice commands show what was heard
-   before acting. Agent edits to a document are proposals. Code edits are a
-   diff you keep or discard. Nothing deploys on its own.
+3. **Preview, then accept, where it's cheap; undo where it isn't.** Voice
+   commands show what was heard before acting. Agent edits to a document are
+   proposals. Live's code edits are written at once and recorded as a diff
+   that Review changes shows and Discard takes out. Nothing deploys until the
+   user presses Deploy.
 4. **Opt-in for anything that widens access.** Browser remote debugging runs
    only in a dedicated profile, only for the session the user starts, and only
    on localhost. Setup never edits the user's Hyprland or shell config without
@@ -49,7 +51,7 @@ is one case among many.
   - **Normal:** the computer as usual. The island rests, and no keys are
     intercepted.
   - **Draw:** Figma-like tools that drive the Omastrator canvas: move, direct
-    select, pen, pencil, rectangle, ellipse, polygon, star, line, text,
+    select, pen, pencil, rectangle, ellipse, polygon, star, shape builder, line, text,
     eyedropper, hand, zoom. They mirror `Tool` in EditorSession, and a new
     `select_tool` agent method keeps the island and the app in sync both
     ways. If Omastrator isn't running, choosing Draw starts it.
@@ -164,18 +166,49 @@ the user's other entries.
   - **Agent path, for everything else.** Launch the default agent with the
     project folder as its working directory. The prompt carries the selected
     element's HTML, its computed styles, a screenshot, the change requested and
-    the URL. Work on a separate git branch or a stash-safe checkout. Refuse to
-    start if the files involved have uncommitted changes the user hasn't
-    confirmed.
-  - **Review.** Every write-back, deterministic or agent, is shown as a diff in
-    a Live review panel with Keep and Discard. Discard restores exactly the
-    files that changed.
-- **Save and publish.**
-  - *Save* commits the kept changes with a generated message.
-  - *Publish* is a separate, explicit action. It offers only what the repo
-    supports (git push to its upstream; the Vercel, Netlify or Cloudflare CLI
-    if configured) and says what it will do first. It never force-pushes and
-    never publishes to production on save.
+    the URL. Work on a separate git branch or a stash-safe checkout, and merge
+    the result around the user's uncommitted changes.
+  - **The record.** Every write-back, deterministic or agent, keeps the bytes
+    it changed. It is a background record, not a step: Review changes shows
+    it as a diff when asked, with Discard. Nothing opens on its own.
+- **Deploy is the primary action.** One Deploy (the island's Live row, the
+  Live panel, `omastrator island live deploy`) writes back the pending edits,
+  commits them, pushes, and deploys. There is no review gate in between.
+  - *Uncommitted work stays the user's.* Omastrator commits only its own
+    change to each file (merged with `git merge-file` around the user's edits
+    in the same file); it stops only when the two truly clash.
+  - *The deploy command* is the project's own: `omastrator.json`'s
+    `"deploy": {"command", "cwd"}`, then package.json's `deploy` or
+    `deploy:prod` script, then a host CLI whose config is there and which is
+    installed (`vercel deploy --prod`, `netlify deploy --prod`,
+    `wrangler deploy` or `wrangler pages deploy`, `fly deploy`), a Makefile
+    `deploy` target or a `deploy.sh`. Otherwise **Deploy with agent**: the
+    default agent deploys the pushed commit from the project's checkout with
+    its existing setup, reports the live URL with `live_deployed`, and
+    suggests the command it used, which the user can keep ("Remember this
+    command" writes it to `omastrator.json`).
+  - *The environment* is the project's `.env`, `.env.local`,
+    `.env.production` and `.env.production.local`, loaded into the deploy's
+    process (later files win; the files win over Omastrator's own environment
+    except `PATH` and `HOME`). Values never appear in a prompt, log, status
+    line or the UI; only key names do.
+  - *Production is allowed.* The first deploy of a project asks once, "Deploy
+    to production with `<command>`?", with "Don't ask again for this project".
+  - *Progress* shows on the island's activity line and in the Live panel:
+    Writing…, Committing…, Pushing…, Deploying…, then "Live at <url>" (the
+    first https URL the deploy printed) or "Deploy failed: <one line>" with
+    Details, the redacted log in `$XDG_STATE_HOME/omastrator/deploys/`.
+  - *Save* is the same without the deploy: write back, commit, push.
+- **GitHub for version history.** Through the `gh` CLI the user is logged
+  into; "Connect GitHub" opens a terminal running `gh auth login`, and
+  Omastrator never handles a token. A project with no remote is offered a
+  private repository on its first save or deploy (`gh repo create <name>
+  --private --source . --push`), confirmed once. Every save pushes.
+- **History** (the Live panel, the island, `omastrator island live history`)
+  lists the project's commits with their message, time, author, files, GitHub
+  link and which were deployed where. Restore brings a version's files back
+  as a new commit and offers Deploy; Discard after a deploy is a new commit
+  that reverts those files, with Deploy offered again.
 - **Guardrails.**
   - Live editing of any site works in the browser as a mock-up.
   - Write-back is only offered when the page maps to a registered local
@@ -407,7 +440,8 @@ Choices the spec left open, made while building it, in build order.
   status stream (`live: {state, url, project, mockup, edits, selection,
   message, server}`), and one process owns the browser, the dev server and the
   recorded edits. The island's Live row opens the Live sheet (a page, and which
-  folder its code is in), toggles selecting, and stops.
+  folder its code is in), toggles selecting, and stops; since Deploy-first Live
+  it also holds Deploy, Review changes and History.
 - **The browser.** Chromium (else Chrome) with
   `--user-data-dir=$XDG_DATA_HOME/omastrator/browser`,
   `--remote-debugging-port=0` and `--remote-debugging-address=127.0.0.1`; the
@@ -455,6 +489,9 @@ Choices the spec left open, made while building it, in build order.
   URL discovery and snapping without installing packages.
 
 ### Phase 6: write-back and review
+
+(Review as a gate, Keep, and Publish were replaced by Deploy-first Live,
+below. The write-back paths still stand.)
 
 - **Write Back is a step, not a side effect.** Edits apply to the page at
   once; the code changes when the user presses Write Back (the island's Live
@@ -573,8 +610,9 @@ Choices the spec left open, made while building it, in build order.
   - *Hand to Agent* (File ▸ Hand to Agent…, the AI row, the menu) sends the
     document in front as a PNG and an SVG, with the app's source folder, to
     the default agent. It works as Live's agent path does: a git worktree on
-    its own branch, `agentDone`, then a diff to keep or discard, and Save
-    commits in that project. Reviews now carry their project, so Save commits
+    its own branch, `agentDone`, then its change is written and recorded
+    (Review changes shows the diff), and Save or Deploy commits in that
+    project. Reviews now carry their project, so Save commits
     each project's kept files there.
 - **What a real GTK or Qt write-back would need** (not built):
   - GTK: GTK Inspector (`GTK_DEBUG=interactive`, GTK 3 and 4) can pick
@@ -595,3 +633,82 @@ Choices the spec left open, made while building it, in build order.
 - **Children die with the app.** Live's browser (and an Electron app it
   relaunched) and dev servers get `PR_SET_PDEATHSIG`, so a crash of
   Omastrator can't leave them running.
+
+### Deploy-first Live
+
+Decided 2026-09-27 with the user: "the diff should be a background review
+that is revealed with a button and shouldn't be the focus", deploys use the
+user's own setup and `.env`, and GitHub keeps the history.
+
+- **One press.** Deploy (`AgentBridge::liveDeploy`) runs Writing… (the
+  deterministic path, then the agent for the rest; it waits for the agent's
+  `agentDone`), Committing…, then hands the slow part to `DeployJob`:
+  Creating the GitHub repository… when one was chosen, Pushing…, Deploying….
+  Save is the same pipeline without the deploy. Neither opens a panel.
+- **Commits hold only Omastrator's change.** `WriteBack::commit` builds the
+  commit in a separate index (`read-tree HEAD`, `hash-object`,
+  `update-index --cacheinfo`, `write-tree`, `commit-tree`, `update-ref`). For
+  each file the content is HEAD plus the difference between the file before
+  Omastrator's first write since the last commit and the file now, through
+  `git merge-file`; a clash stops the commit and names the file. The user's
+  own uncommitted edits stay on disk, and what they staged stays staged.
+  Commit hooks don't run, as with any plumbing commit.
+- **The agent's work merges.** The agent's worktree change is merged with the
+  file as it is when the agent finishes (the user's edits, or Omastrator's
+  own), against the commit the agent started from. The old "Go Ahead Anyway"
+  confirmation is gone: only a real clash stops it.
+- **The record.** Every write-back is a `WriteBack::Review` with the exact
+  bytes and, once saved, its commit. Review changes (the Live panel's button,
+  the island, `island live changes`) shows the diffs newest first. Discard of
+  an uncommitted one puts the files back (merged around later edits); of a
+  committed one, it writes the reverse, records it ("Discard: …") and saves
+  it as a new commit, then offers Deploy.
+- **Resolving the command** (`Deploy::resolve`): `omastrator.json` `deploy`,
+  package.json `deploy`/`deploy:prod` via the lockfile's package manager,
+  `.vercel/project.json` or `vercel.json` with `vercel`, `netlify.toml` or
+  `.netlify/state.json` with `netlify`, `wrangler.toml`/`.json`/`.jsonc` with
+  `wrangler` (`pages deploy` when the config names
+  `pages_build_output_dir`), `fly.toml` with `fly` or `flyctl`, a Makefile
+  `deploy:` target with `make`, `deploy.sh`; otherwise the agent. Commands run
+  with `/bin/sh -c` in the project folder (or the configured `cwd`), in their
+  own process group so Cancel stops everything, stdin closed, at most 30
+  minutes.
+- **The environment.** `Deploy::parseEnv` follows dotenv: `KEY=value`,
+  `export `, comments, single, double (with escapes, across lines) and
+  backtick quotes, and inline ` #` comments on unquoted values. `.env`,
+  `.env.local`, `.env.production`, `.env.production.local`, later winning, in
+  the project folder and then the command's `cwd`. They override Omastrator's
+  environment except `PATH` and `HOME`. Output is redacted line by line
+  (every value of four characters or more becomes `[KEY]`) before it reaches
+  the log, the status line or the failure message. The agent's prompt names
+  the files and keys only. A command the agent suggests is offered to
+  remember only when no value is in it.
+- **The first deploy asks once.** The Deploy sheet says "Deploy to production
+  with `<command>`?" (or "with Claude?"), lists the `.env` key names, and has
+  "Don't ask again for this project". The answer is kept in
+  `$XDG_CONFIG_HOME/omastrator/deploy.json` beside the registry, not in the
+  project, so it never lands in a commit. The same sheet offers the GitHub
+  repository; saying no is remembered too.
+- **GitHub** is `gh` (`$OMASTRATOR_GH` in tests): `gh auth status` for the
+  account (checked at most once a minute), `xdg-terminal-exec gh auth login`
+  to connect (`$OMASTRATOR_TERMINAL` in tests), and `gh repo create <name>
+  --private --source . --push`. Pushes go to the upstream, else `origin` (or
+  the only remote) with `-u`, never forced, with `GIT_TERMINAL_PROMPT=0`. A
+  project with no remote and no `gh` login still deploys; the panel says
+  "GitHub isn't connected" with Connect GitHub.
+- **Deploy records** are `$XDG_STATE_HOME/omastrator/deploys/index.json`
+  (project, commit, URL, command, log, time, ok), beside one log per run.
+  History marks a commit deployed from them. The live URL is the first
+  `https://` URL the deploy command printed (trailing punctuation dropped),
+  or what the agent reported.
+- **The island.** The Live row is Deploy (with its label, on the accent
+  colour), Review changes and History, plus Select and Stop while Live runs;
+  they show whenever there's a project, Live running or not. Each stage is
+  the activity line until the next; clicking it during a deploy puts the
+  tools back, and clicking a failure opens Details. A failure reads "Deploy
+  failed: <line>" and may carry one dry line after it, each at most once per
+  install (`$XDG_STATE_HOME/omastrator/lines-seen.json`).
+- **Removed:** Keep, Publish (and its preview-only rule), the Publish sheet,
+  `WriteBack::publishOptions`, and the `live` actions `keep` and `publish`.
+  New `live` actions: `deploy`, `cancel`, `history`, `restore`, `details`,
+  `remember`, `github`; new method `live_deployed`.

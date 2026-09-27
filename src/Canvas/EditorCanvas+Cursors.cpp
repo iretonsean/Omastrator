@@ -9,6 +9,8 @@ namespace {
 enum class CursorKind {
     arrow,
     whiteArrow,
+    builderMerge,
+    builderErase,
     duplicate,
     pen,
     penStart,
@@ -76,6 +78,29 @@ QCursor arrowCursor(bool white, double ratio)
         painter.setPen(QPen(Qt::black, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawPath(arrow);
     }
+    return QCursor(pixmap, 3, 2);
+}
+
+// Shape Builder: the arrow with a plus that merges, or a minus that erases.
+QCursor builderCursor(bool erase, double ratio)
+{
+    QPixmap pixmap = cursorPixmap(QSize(28, 30), ratio);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QPainterPath arrow = arrowPath().translated(3, 2);
+    painter.setPen(QPen(Qt::white, 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(arrow);
+    painter.fillPath(arrow, Qt::black);
+    const QPointF badge(20, 22);
+    QPainterPath mark;
+    mark.moveTo(badge - QPointF(3.5, 0));
+    mark.lineTo(badge + QPointF(3.5, 0));
+    if (!erase) {
+        mark.moveTo(badge - QPointF(0, 3.5));
+        mark.lineTo(badge + QPointF(0, 3.5));
+    }
+    strokeHaloed(painter, mark, 1.5);
     return QCursor(pixmap, 3, 2);
 }
 
@@ -246,6 +271,9 @@ QCursor build(CursorKind kind, double ratio)
         return arrowCursor(false, ratio);
     case CursorKind::whiteArrow:
         return arrowCursor(true, ratio);
+    case CursorKind::builderMerge:
+    case CursorKind::builderErase:
+        return builderCursor(kind == CursorKind::builderErase, ratio);
     case CursorKind::duplicate:
         return duplicateCursor(ratio);
     case CursorKind::pen:
@@ -363,6 +391,9 @@ void EditorCanvas::State::updateCursor()
                     break;
                 }
             }
+            break;
+        case Tool::shapeBuilder:
+            kind = alt ? CursorKind::builderErase : CursorKind::builderMerge;
             break;
         case Tool::pencil:
             kind = CursorKind::pencil;

@@ -88,10 +88,15 @@ ShortcutDefinition entry(const QString &title, const QString &key, int modifiers
 }
 
 // Illustrator's tool keys; the other tools have none.
-const std::array<std::pair<Tool, const char *>, 13> toolKeys{{
+struct ToolKey {
+    Tool tool;
+    const char *key;
+    int modifiers = 0;
+};
+const std::array<ToolKey, 14> toolKeys{{
     {Tool::select, "v"}, {Tool::directSelect, "a"}, {Tool::pen, "p"}, {Tool::pencil, "n"}, {Tool::text, "t"}, {Tool::line, "\\"},
     {Tool::rectangle, "m"}, {Tool::ellipse, "l"}, {Tool::rotate, "r"}, {Tool::scale, "s"}, {Tool::eyedropper, "i"}, {Tool::hand, "h"},
-    {Tool::zoom, "z"},
+    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8},
 }};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)
@@ -150,8 +155,8 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Create Outlines", "o", 9, true), entry("Zoom In", "=", 1, true), entry("Zoom Out", "-", 1, true),
             entry("Fit Artboard in Window", "0", 1, true), entry("Actual Size", "1", 1, true), entry("Outline", "y", 1, true),
             entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true)};
-        for (const auto &[tool, key] : toolKeys)
-            result.push_back(entry(::title(tool) + QStringLiteral(" tool"), QString::fromLatin1(key), 0, false));
+        for (const auto &[tool, key, modifiers] : toolKeys)
+            result.push_back(entry(::title(tool) + QStringLiteral(" tool"), QString::fromLatin1(key), modifiers, false));
         const std::vector<std::pair<const char *, QString>> keys{
             {"Swap fill and stroke", "x"}, {"Default fill and stroke", "d"}, {"Temporary Hand tool (hold)", " "},
             {"Apply / finish current operation", "\r"}, {"Cancel current operation", "\x1b"}};
@@ -170,8 +175,8 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
 
 std::optional<Tool> ShortcutDefinition::tool(const ShortcutChord &chord)
 {
-    for (const auto &[tool, key] : toolKeys) {
-        if (chord == ShortcutChord(QString::fromLatin1(key)))
+    for (const auto &[tool, key, modifiers] : toolKeys) {
+        if (chord == ShortcutChord(QString::fromLatin1(key), modifiers))
             return tool;
     }
     return std::nullopt;
@@ -282,8 +287,10 @@ std::unique_ptr<QKeyEvent> ShortcutSettings::canvasEvent(const QKeyEvent &event)
     // Tool letters also take Shift, unless Shift has its own.
     if (input.modifiers == 8) {
         const ShortcutChord plain(input.key);
+        // Shift-M is Shape Builder's own, so a remapped M doesn't carry Shift along.
+        auto shiftTaken = [](const QString &key) { return ShortcutDefinition::tool(ShortcutChord(key, 8)).has_value(); };
         for (const ShortcutDefinition &definition : all) {
-            if (!definition.isMenu() && definition.original.modifiers == 0 && chord(definition) == plain)
+            if (!definition.isMenu() && definition.original.modifiers == 0 && chord(definition) == plain && !shiftTaken(definition.original.key))
                 return ShortcutChord(definition.original.key, 8).event(event);
         }
         for (const ShortcutDefinition &definition : all) {

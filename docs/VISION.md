@@ -24,9 +24,11 @@ and the customer they're designing for.
 
 ## Principles
 
-1. **Draw it and it's there.** Direct manipulation comes first. A rough gesture
-   should become the thing you meant (a circle becomes a circle, a scribbled
-   face becomes a clean one) without a detour through dialogs.
+1. **Nothing between intent and result.** The shortest path from what the
+   designer means to what the customer sees wins: direct manipulation first,
+   with no detours through dialogs or setup. (The smiley face above is a
+   metaphor for how simple the exchange should feel. It is not a
+   sketch-recognition feature.)
 2. **Power one step away, never in the way.** Every Illustrator-grade control
    exists, but only the essentials are on screen. The rest sits behind a
    disclosure, a context menu, the command palette or a shortcut, and appears
