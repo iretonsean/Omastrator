@@ -100,7 +100,8 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
         // The bottom child is the clip; it draws nothing itself.
         const VectorObject *clip = document.find(children.front());
         if (clip) {
-            painter.setClipPath(clip->outline(), Qt::IntersectClip);
+            // A group clips with every outline in it.
+            painter.setClipPath(document.outline(clip->id), Qt::IntersectClip);
             if (options.outlineMode)
                 drawLeaf(painter, *clip, options);
         }

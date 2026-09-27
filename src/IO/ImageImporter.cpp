@@ -1,0 +1,81 @@
+#include "IO/ImageImporter.h"
+#include "Logging.h"
+#include <QColorSpace>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QSet>
+
+namespace {
+constexpr int maximumSide = 30'000;
+// Qt's default of 256 MB refuses big photos; a 30,000 px square at 8 bytes a pixel fits.
+constexpr int allocationLimitMB = 8 * 1024;
+
+QString fileName(const QString &path)
+{
+    const QString name = QFileInfo(path).fileName();
+    return name.isEmpty() ? path : name;
+}
+}
+
+namespace ImageImporter {
+QImage read(const QString &path)
+{
+    static const bool raised = (QImageReader::setAllocationLimit(allocationLimitMB), true);
+    Q_UNUSED(raised)
+    if (isVector(path))
+        throw FileError(QStringLiteral("“%1” is an SVG: it is placed as paths, not pixels.").arg(fileName(path)));
+    QImageReader reader(path);
+    // EXIF orientation: photos come in upright.
+    reader.setAutoTransform(true);
+    if (!reader.canRead()) {
+        qCWarning(lcIO).noquote() << "cannot read" << path + ":" << reader.errorString();
+        throw FileError(QStringLiteral("“%1” is not an image this app can read.").arg(fileName(path)));
+    }
+    const QSize size = reader.size();
+    if (size.isValid() && (size.width() > maximumSide || size.height() > maximumSide))
+        throw FileError(QStringLiteral("“%1” is %2 × %3 pixels; images up to %4 pixels a side can be placed.")
+                            .arg(fileName(path)).arg(size.width()).arg(size.height()).arg(maximumSide));
+    QImage image;
+    if (!reader.read(&image) || image.isNull()) {
+        qCWarning(lcIO).noquote() << "cannot decode" << path + ":" << reader.errorString();
+        throw FileError(QStringLiteral("“%1” could not be read: %2").arg(fileName(path), reader.errorString()));
+    }
+    if (image.colorSpace().isValid() && image.colorSpace() != QColorSpace::SRgb)
+        image.convertToColorSpace(QColorSpace::SRgb);
+    // The codec and renderer keep placed images premultiplied.
+    image = std::move(image).convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull())
+        throw FileError(QStringLiteral("There was not enough memory to place “%1”.").arg(fileName(path)));
+    qCInfo(lcIO).noquote() << "placed" << path << image.width() << "x" << image.height();
+    return image;
+}
+
+QStringList nameFilters()
+{
+    // Formats this Qt build can read, in the order users look for them.
+    const QList<QByteArray> supported = QImageReader::supportedImageFormats();
+    const QList<std::pair<QString, QStringList>> known{
+        {QStringLiteral("SVG"), {QStringLiteral("*.svg")}},
+        {QStringLiteral("PNG"), {QStringLiteral("*.png")}},
+        {QStringLiteral("JPEG"), {QStringLiteral("*.jpg"), QStringLiteral("*.jpeg")}},
+        {QStringLiteral("TIFF"), {QStringLiteral("*.tif"), QStringLiteral("*.tiff")}},
+        {QStringLiteral("WebP"), {QStringLiteral("*.webp")}},
+        {QStringLiteral("GIF"), {QStringLiteral("*.gif")}},
+        {QStringLiteral("BMP"), {QStringLiteral("*.bmp")}},
+    };
+    QStringList all, each;
+    for (const auto &[name, patterns] : known) {
+        const QByteArray format = patterns.front().mid(2).toLatin1();
+        if (format != "svg" && !supported.contains(format))
+            continue;
+        all << patterns;
+        each << QStringLiteral("%1 (%2)").arg(name, patterns.join(QLatin1Char(' ')));
+    }
+    return QStringList{QStringLiteral("Images (%1)").arg(all.join(QLatin1Char(' ')))} + each + QStringList{QStringLiteral("All files (*)")};
+}
+
+bool isVector(const QString &path)
+{
+    return QFileInfo(path).suffix().compare(QLatin1String("svg"), Qt::CaseInsensitive) == 0;
+}
+}
