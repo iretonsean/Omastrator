@@ -699,6 +699,16 @@ Sources:
 Taken from `hero.png`, `type-on-canvas.png`, `pathfinder-before.png`,
 `swatches.png` and `selection-smart-guides.png`.
 
+> **Done: 1–8 and 11**, as below. Differences: Align shows with any selection
+> (one object aligns to the artboard); sizes are set in the Properties panel,
+> not the whole theme; Swatches stays a floating panel that opens beside the
+> dock, not over it, without the hex tooltips, recent colours or Add button;
+> Selection colors and the edge-distribute buttons stay P1. Not in this
+> round: 9 (status bar), 10 (tool rail groups) and 12 (hover and focus states).
+> Tests: `tests/UI/PropertiesPanelTests.cpp`, `tests/UI/ContentViewTests.cpp`,
+> `tests/UI/FloatingPanelTests.cpp`, `tests/UI/ColorPaletteControlsTests.cpp`,
+> `tests/Canvas/EditorCanvasTests.cpp`.
+
 1. **Properties and Layers fight for one column** (`hero.png`,
    `swatches.png`). Properties is cut off after Blend, and the "Stroke"
    heading shows half-hidden above the splitter grip. Change:
@@ -776,12 +786,12 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Capability | Illustrator | Figma | Omastrator | Priority |
 |---|---|---|---|---|
 | Canvas and Layers right-click menus | ✓ | ✓ | ✓ done | **P0** |
-| Tracking, leading and kerning UI + shortcuts | ✓ | ✓ | model only (tracking, leading) | **P0** |
-| Font style/weight picker | ✓ | ✓ | bold flag only | **P0** |
-| Case, underline and strikethrough, baseline shift, scale | ✓ | ✓ | ✗ | **P0** (per object) |
-| Area type (fixed width, wrapping, justify) | ✓ | ✓ | ✗ | **P0** |
-| Math and units in number fields, scrubbing | ✓ | ✓ | ✗ | **P0** |
-| Reference point and constrain proportions | ✓ | ✓ (link) | ✗ | **P0** |
+| Tracking, leading and kerning UI + shortcuts | ✓ | ✓ | ✓ done | **P0** |
+| Font style/weight picker | ✓ | ✓ | ✓ done | **P0** |
+| Case, underline and strikethrough, baseline shift, scale | ✓ | ✓ | ✓ done (per object) | **P0** |
+| Area type (fixed width, wrapping, justify) | ✓ | ✓ | ✓ done | **P0** |
+| Math and units in number fields, scrubbing | ✓ | ✓ | ✓ done | **P0** |
+| Reference point and constrain proportions | ✓ | ✓ (link) | ✓ done | **P0** |
 | Paste in Front/Back, Transform Again (Ctrl+D) | ✓ | (Ctrl+D smart duplicate) | ✓ done | **P0** |
 | Select menu: Same ▸, Inverse, Next Above/Below | ✓ | select matching | ✓ done | **P0** |
 | Alt-hover distance measuring | (smart guides) | ✓ | ✓ done | **P0** |
@@ -801,7 +811,7 @@ has Qt Test coverage in `tests/<Folder>/`.
 | Copy/Paste properties | (eyedropper) | ✓ | eyedropper only | P1 |
 | Command palette | Discover | ✓ Ctrl+K | ✗ | P1 |
 | History panel | ✓ | version history | ✗ | P1 |
-| Collapsible Properties sections, contextual task bar | ✓ | ✓ | ✗ | P1 |
+| Collapsible Properties sections, contextual task bar | ✓ | ✓ | sections done; task bar ✗ | P1 |
 | Multiple artboards | ✓ | frames | ✗ | P2 |
 | Shape Builder | ✓ | ✗ | ✗ | P2 |
 | Type on a path, text wrap, threads, hyphenation | ✓ | partial | ✗ | P2 |
@@ -886,6 +896,19 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 **P0-2. A Character section in Properties, with tracking, kerning, leading and more**
 
+> **Done.** `src/UI/CharacterSection.cpp`, `Document/TextContent.cpp`,
+> `Document/TextLayout.cpp`. Family, the family's real styles, size, leading
+> (Auto shows its value), tracking in 1/1000 em and five alignments are always
+> there; kerning, baseline shift, horizontal and vertical scale, case,
+> underline, strikethrough and point/area type sit behind a remembered **Show
+> more**. `.omai` is version 2: old files' bold/italic become a style, tracking
+> in pt becomes 1/1000 em, and a leading multiple becomes pt (1.2 is Auto).
+> Canvas, SVG and PDF draw from one layout. Differences: kerning is Auto
+> (the font's pairs) or None, as planned, with manual pairs from Alt+←/→ at a
+> caret; there's no Optical and no Language. Tests:
+> `tests/Document/TypographyTests.cpp`, `tests/UI/PropertiesPanelTests.cpp`,
+> `tests/IO/SvgRoundTripTests.cpp`, `tests/IO/DocumentExporterTests.cpp`.
+
 - **Spec:**
   - When the selection holds text (or the Type tool is active), Properties
     shows a **Character** section:
@@ -948,6 +971,16 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 **P0-3. Type keyboard shortcuts (Illustrator defaults)**
 
+> **Done** for tracking (Alt+←/→, ×5 with Ctrl), leading (Alt+↑/↓), baseline
+> shift (Alt+Shift+↑/↓), size (Ctrl+Shift+. / ,) and Reset Tracking
+> (Ctrl+Alt+Q, which also clears manual kerns). They're Type menu entries,
+> remappable under Type in the Keyboard Shortcuts sheet. They work when only
+> type is selected or while typing; otherwise Alt+arrows duplicate and nudge,
+> as in Illustrator. At a caret with nothing selected, Alt+←/→ kern that pair.
+> Held keys make one undo step. Not done: the Ctrl+Shift alignment, All Caps
+> and Underline keys, and step sizes as preferences (they're 20/1000 em and
+> 2 pt). Tests: `tests/UI/MenusTests.cpp`, `tests/UI/KeyboardShortcutsTests.cpp`.
+
 - **Spec:** these work with text objects selected under the Selection tool and
   while editing inline:
   - **Alt+← / →:** tracking ∓20 (or ∓100 with Ctrl+Alt). When editing with a
@@ -976,6 +1009,14 @@ has Qt Test coverage in `tests/<Folder>/`.
   - The Keyboard Shortcuts sheet lists them under Type.
 
 **P0-4. Area type (fixed width, wrapping, justify)**
+
+> **Done.** Drag with the Type tool for a box; a click is still point type.
+> Justified lines meet both edges exactly. A fixed height hides the rest behind
+> a red ⊞ port. Handles and Properties' W/H resize the box and rewrap; the
+> Scale tool still scales the glyphs. Type ▸ Convert to Area/Point Type (and
+> the context menu and Character's Kind menu) keep every glyph where it was.
+> SVG writes a `<tspan>` per line. Tests: `tests/Document/TypographyTests.cpp`,
+> `tests/Canvas/EditorCanvasTests.cpp`, `tests/IO/SvgRoundTripTests.cpp`.
 
 - **Spec:**
   - Dragging with the Type tool makes an area text box; clicking still makes
@@ -1006,6 +1047,9 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 **P0-5. Precise number fields: math, units, scrubbing, "Mixed"**
 
+> **Done.** `src/UI/NumberField.cpp`. Also: Alt+arrow steps a tenth, and px is
+> a point. Tests: `tests/UI/NumberFieldTests.cpp`, `tests/UI/PropertiesPanelTests.cpp`.
+
 - **Spec:**
   - Fields accept arithmetic (`+ - * / ( )`) and `%`, relative to the current
     value.
@@ -1024,6 +1068,14 @@ has Qt Test coverage in `tests/<Folder>/`.
   - `+10` on three objects moves each by 10.
 
 **P0-6. Reference point, constrain proportions, Scale Strokes & Corners**
+
+> **Done, except Scale Corners.** `src/UI/PropertiesPanel+Transform.cpp`,
+> `ReferencePointPicker` in `src/UI/PanelSection.cpp`. The reference point
+> starts at top left, as Figma's X and Y read, and is remembered. Scale Strokes
+> & Effects is in the Transform section's options and applies to handle drags,
+> the Scale tool and dialog too. Scale Corners waits for live corners (P1-9):
+> until then no corner radius survives drawing, so there's nothing for it to
+> keep. Tests: `tests/UI/PropertiesPanelTests.cpp`, `tests/Document/TypographyTests.cpp`.
 
 - **Spec:**
   - The Transform section gets a 9-point locator. X/Y show that point, and
