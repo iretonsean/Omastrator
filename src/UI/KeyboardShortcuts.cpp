@@ -7,6 +7,7 @@
 #include <QSettings>
 #include <QShortcut>
 #include <array>
+#include <tuple>
 
 namespace {
 // Swift's special keys, their Qt keys and their names.
@@ -57,7 +58,8 @@ QString keyText(int key)
                                                    {QStringLiteral("+"), QStringLiteral("=")}, {QStringLiteral("_"), QStringLiteral("-")},
                                                    {QStringLiteral("\""), QStringLiteral("'")}, {QStringLiteral("!"), QStringLiteral("1")},
                                                    {QStringLiteral("@"), QStringLiteral("2")}, {QStringLiteral("#"), QStringLiteral("3")},
-                                                   {QStringLiteral("&"), QStringLiteral("7")}, {QStringLiteral("*"), QStringLiteral("8")}};
+                                                   {QStringLiteral("&"), QStringLiteral("7")}, {QStringLiteral("*"), QStringLiteral("8")},
+                                                   {QStringLiteral(">"), QStringLiteral(".")}, {QStringLiteral("<"), QStringLiteral(",")}};
     return unshifted.value(typed, typed);
 }
 
@@ -68,7 +70,8 @@ QString shiftedText(const QString &key, bool shifted)
                                                 {QStringLiteral("="), QStringLiteral("+")}, {QStringLiteral("-"), QStringLiteral("_")},
                                                 {QStringLiteral("'"), QStringLiteral("\"")}, {QStringLiteral("1"), QStringLiteral("!")},
                                                 {QStringLiteral("2"), QStringLiteral("@")}, {QStringLiteral("3"), QStringLiteral("#")},
-                                                {QStringLiteral("7"), QStringLiteral("&")}, {QStringLiteral("8"), QStringLiteral("*")}};
+                                                {QStringLiteral("7"), QStringLiteral("&")}, {QStringLiteral("8"), QStringLiteral("*")},
+                                                {QStringLiteral("."), QStringLiteral(">")}, {QStringLiteral(","), QStringLiteral("<")}};
     return shifted ? shifts.value(key, key) : key;
 }
 
@@ -155,6 +158,14 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Create Outlines", "o", 9, true), entry("Zoom In", "=", 1, true), entry("Zoom Out", "-", 1, true),
             entry("Fit Artboard in Window", "0", 1, true), entry("Actual Size", "1", 1, true), entry("Outline", "y", 1, true),
             entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true)};
+        // Illustrator's type keys: they work on selected type and while typing, and rest otherwise.
+        const QString left(QChar(0xf702)), right(QChar(0xf703)), up(QChar(0xf700)), down(QChar(0xf701));
+        for (const auto &[title, key, modifiers] : std::vector<std::tuple<const char *, QString, int>>{
+                 {"Increase Font Size", QStringLiteral("."), 9}, {"Decrease Font Size", QStringLiteral(","), 9},
+                 {"Tighten Tracking", left, 2}, {"Loosen Tracking", right, 2}, {"Tighten Tracking ×5", left, 3}, {"Loosen Tracking ×5", right, 3},
+                 {"Decrease Leading", up, 2}, {"Increase Leading", down, 2}, {"Raise Baseline", up, 10}, {"Lower Baseline", down, 10},
+                 {"Reset Tracking", QStringLiteral("q"), 3}})
+            result.push_back({QString::fromUtf8(title), QStringLiteral("Type"), ShortcutChord(key, modifiers)});
         for (const auto &[tool, key, modifiers] : toolKeys)
             result.push_back(entry(::title(tool) + QStringLiteral(" tool"), QString::fromLatin1(key), modifiers, false));
         const std::vector<std::pair<const char *, QString>> keys{

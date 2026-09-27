@@ -143,7 +143,7 @@ public:
     // The open interaction's undo name, empty when none is open.
     QString interactionName() const { return m_interaction ? m_interaction->name : QString(); }
     // The selection transformed from where the interaction began.
-    void previewTransform(const QTransform &transform);
+    void previewTransform(const QTransform &transform, bool reflowAreaText = false);
     // Replaces one object wholesale, for path point drags.
     void previewObject(const VectorObject &object);
     // The object as the interaction found it.
@@ -187,8 +187,12 @@ public:
     void align(AlignEdge edge, AlignTarget target = AlignTarget::selection);
     void distribute(DistributeAxis axis);
     void moveSelection(QPointF delta);
-    void transformSelection(const QTransform &transform, const QString &editName);
-    void rotateSelection(double degrees);
+    // `reflowAreaText`: an upright scale resizes area type's box, as its handles do.
+    void transformSelection(const QTransform &transform, const QString &editName, bool reflowAreaText = false);
+    // Each selected object by its own transform, from its bounds; one undo step.
+    void transformEach(const std::function<QTransform(const QRectF &bounds)> &transform, const QString &editName, bool reflowAreaText = false);
+    // About `pivot`, else the selection's centre.
+    void rotateSelection(double degrees, std::optional<QPointF> pivot = std::nullopt);
     void flipSelection(Qt::Orientation orientation);
     void scaleSelection(double sx, double sy);
     // Pathfinder on the selected leaves; the result takes the bottom one's style.
@@ -216,6 +220,28 @@ public:
     void deletePickedNodes();
     // Pen tool: joins the picked end anchors of one open contour.
     void closePath(const QUuid &id, int contour);
+
+    // Type -------------------------------------------------------------------
+    // Text objects among the selected leaves.
+    std::vector<QUuid> selectedTexts() const;
+    // The selected texts' style, else the next text's.
+    TextContent shownText() const;
+    // Restyles the selected texts and the next text in one undo step named `name`;
+    // `coalesce` folds a held key's repeats into the step before.
+    void updateText(const std::function<void(TextContent &)> &change, const QString &name, bool coalesce = false);
+    enum class TextStep { tracking, leading, baselineShift, size };
+    // Illustrator's type keys: tracking in 1/1000 em, the rest in pt.
+    void stepText(TextStep step, double amount);
+    // Manual kerning before the character at `index` of the text being edited.
+    void kernText(const QUuid &id, int index, double amount);
+    // Type ▸ Convert to Area Type / Point Type, keeping the text where it is.
+    void convertTextType(bool toArea);
+    // Area type's box, in its own units; resizing leaves the glyphs alone.
+    void setTextArea(const QUuid &id, std::optional<QSizeF> area);
+    // Scale Strokes & Effects: scaling multiplies stroke widths too.
+    bool scaleStrokes = false;
+    // Scale Corners: kept for live corners; paths always scale their curves.
+    bool scaleCorners = true;
 
     // Layers panel -----------------------------------------------------------
     QUuid addLayer();
@@ -295,6 +321,7 @@ private:
     std::vector<QUuid> selectionInOrder() const;
     std::optional<QUuid> insertionParent() const;
     std::vector<QUuid> duplicateInto(VectorDocument &document, QPointF offset) const;
+    void commitTextEdit(VectorDocument next, const QString &name, bool coalesce);
     void runSelect(const std::function<void()> &command);
 
     std::optional<VectorDocument> m_document;
@@ -317,6 +344,8 @@ private:
     };
     std::optional<Interaction> m_interaction;
     mutable int m_pasteCount = 0;
+    // When the last coalescing text step ran.
+    qint64 m_lastTextStep = 0;
     // What Transform Again repeats. With a centre, it pivots on the selection's centre as it did there.
     struct RepeatTransform {
         QTransform transform;

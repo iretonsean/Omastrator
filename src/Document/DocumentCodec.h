@@ -13,7 +13,8 @@ struct CodecError : std::runtime_error {
 // The JSON the project format and the clipboard share. Placed images travel
 // as base64 PNG inside the object that shows them.
 namespace DocumentCodec {
-constexpr int version = 1;
+// 2: text styles by face name, tracking in 1/1000 em, leading in pt, area type.
+constexpr int version = 2;
 constexpr const char *clipboardMimeType = "application/x-omastrator-objects";
 
 QJsonObject encode(const VectorDocument &document);
@@ -24,6 +25,9 @@ VectorObject decodeObject(const QJsonObject &json);
 QJsonArray encode(const std::vector<VectorObject> &objects);
 std::vector<VectorObject> decodeObjects(const QJsonArray &json);
 
+QJsonObject encode(const TextContent &text);
+// Reads version 1 text too.
+TextContent decodeText(const QJsonObject &json);
 QJsonObject encode(const Paint &paint);
 Paint decodePaint(const QJsonObject &json);
 QJsonObject encode(const StrokeStyle &stroke);

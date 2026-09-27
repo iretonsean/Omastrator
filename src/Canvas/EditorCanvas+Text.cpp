@@ -3,6 +3,17 @@
 #include <QGuiApplication>
 #include <QInputMethod>
 
+namespace {
+// A text layer's own name: its first line, trimmed.
+QString autoName(const QString &text)
+{
+    QString line = text.section(QLatin1Char('\n'), 0, 0).simplified();
+    if (line.size() > 30)
+        line = line.left(29).trimmed() + QChar(0x2026);
+    return line;
+}
+}
+
 void EditorCanvas::State::textPress(QPointF view)
 {
     const QPointF document = toDocument(view);
@@ -13,9 +24,25 @@ void EditorCanvas::State::textPress(QPointF view)
             return;
         }
     }
-    // Point type: the click is the first baseline's start.
-    beginTextEditing(session.textObject(snapPoint(guidesExcluding({}), document), QString()), false, std::nullopt);
+    Drag &made = beginDrag(DragKind::textArea, view);
+    made.pressDocument = made.grabbed = snapPoint(guidesExcluding({}), document);
+}
+
+void EditorCanvas::State::finishTextArea()
+{
+    const QPointF from = drag->pressDocument;
+    const QRectF box = QRectF(from, drag->grabbed).normalized();
+    const bool area = drag->started && box.width() >= 4;
+    drag.reset();
     clearGuides();
+    // Point type: the click is the first baseline's start.
+    VectorObject object = session.textObject(from, QString());
+    if (area) {
+        // Area type: the box's top-left is the origin, and text wraps inside it.
+        object.text.area = QSizeF(box.width(), box.height() >= 4 ? box.height() : 0);
+        object.transform = QTransform::fromTranslate(box.left(), box.top());
+    }
+    beginTextEditing(object, false, std::nullopt);
 }
 
 void EditorCanvas::State::beginTextEditing(const VectorObject &object, bool inDocument, std::optional<QPointF> caretAt)
@@ -56,12 +83,16 @@ void EditorCanvas::State::applyText()
     if (!session.isInteracting())
         session.beginInteraction(textCreated ? QStringLiteral("Type") : QStringLiteral("Edit Type"));
     if (!text->inDocument) {
-        text->object.name.clear();
+        text->object.name = autoName(text->text());
         session.previewAddObject(text->object);
         text->inDocument = true;
     } else if (const VectorObject *current = session.document()->find(text->object.id)) {
         VectorObject object = *current;
+        // Type named after itself keeps following what it says, as Illustrator's does.
+        if (textCreated || current->name == autoName(current->text.text) || current->name == autoName(textAtStart))
+            object.name = autoName(text->text());
         object.text.text = text->text();
+        object.text.kerns = text->object.text.kerns;
         session.previewObject(object);
     }
     applyingText = false;
@@ -80,8 +111,8 @@ void EditorCanvas::State::finishText()
     const VectorObject *current = editor->inDocument && session.document() ? session.document()->find(editor->object.id) : nullptr;
     applyingText = true;
     if (current) {
-        const QString firstLine = current->text.text.section(QLatin1Char('\n'), 0, 0).left(40);
-        const bool autoNamed = textCreated || current->name == textAtStart.section(QLatin1Char('\n'), 0, 0).left(40);
+        const QString firstLine = autoName(current->text.text);
+        const bool autoNamed = textCreated || current->name == autoName(textAtStart);
         if (current->text.text.isEmpty()) {
             // Empty type is no object.
             if (!session.isInteracting())
@@ -107,8 +138,7 @@ QRectF EditorCanvas::State::textBox() const
     if (!text)
         return {};
     const QRectF caret = text->caretRect();
-    const QRectF glyphs = text->object.outline().boundingRect();
     // An empty line still has height: the caret's.
-    const QRectF local = text->object.text.outline().boundingRect().united(QRectF(0, caret.top(), 1, caret.height()));
-    return text->object.transform.mapRect(local).united(glyphs);
+    const QRectF local = text->object.text.frame().united(QRectF(caret.left(), caret.top(), 1, caret.height()));
+    return text->object.transform.mapRect(local);
 }

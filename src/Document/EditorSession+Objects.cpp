@@ -425,7 +425,7 @@ void EditorSession::moveSelection(QPointF delta)
     transformSelection(QTransform::fromTranslate(delta.x(), delta.y()), QStringLiteral("Move"));
 }
 
-void EditorSession::transformSelection(const QTransform &transform, const QString &editName)
+void EditorSession::transformSelection(const QTransform &transform, const QString &editName, bool reflowAreaText)
 {
     if (!m_document || m_selection.empty() || transform.isIdentity())
         return;
@@ -434,14 +434,34 @@ void EditorSession::transformSelection(const QTransform &transform, const QStrin
     edit(editName, [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {
             if (!document.isEffectivelyLocked(id))
-                document.transform(id, transform);
+                document.transform(id, transform, scaleStrokes, reflowAreaText);
         }
     });
 }
 
-void EditorSession::rotateSelection(double degrees)
+void EditorSession::transformEach(const std::function<QTransform(const QRectF &bounds)> &transform, const QString &editName, bool reflowAreaText)
 {
-    const QPointF c = selectionBounds().center();
+    if (!m_document || m_selection.empty())
+        return;
+    std::vector<std::pair<QUuid, QTransform>> moves;
+    for (const QUuid &id : m_selection) {
+        if (m_document->isEffectivelyLocked(id))
+            continue;
+        const QTransform each = transform(m_document->bounds(id, false));
+        if (!each.isIdentity())
+            moves.push_back({id, each});
+    }
+    if (moves.empty())
+        return;
+    edit(editName, [&](VectorDocument &document) {
+        for (const auto &[id, each] : moves)
+            document.transform(id, each, scaleStrokes, reflowAreaText);
+    });
+}
+
+void EditorSession::rotateSelection(double degrees, std::optional<QPointF> pivot)
+{
+    const QPointF c = pivot.value_or(selectionBounds().center());
     QTransform transform;
     transform.translate(c.x(), c.y());
     transform.rotate(degrees);

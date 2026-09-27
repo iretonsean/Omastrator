@@ -30,13 +30,26 @@ Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Fig
 - Paste in Front, Back and in Place; Ctrl+D repeats the last transform, so an
   Alt-drag copy followed by Ctrl+D, Ctrl+D is step-and-repeat. Duplicate is
   Ctrl+Alt+D.
-- Arrow keys nudge by a keyboard increment you set in Preferences (Shift for
-  ten times it, Alt to nudge a copy). Number keys set opacity: 5 is 50 %, 0 is
+- Arrow keys nudge by a keyboard increment you set in Preferences or in
+  Properties with nothing selected (Shift for ten times it, Alt to nudge a
+  copy; with only type selected, Alt+arrows adjust the type instead). Number keys set opacity: 5 is 50 %, 0 is
   100 %, and two quick digits make an exact value.
 - Zoom to Selection (Shift+2) and Fit Artboard (Shift+1).
 - Pen, pencil, line, rectangle, rounded rectangle, ellipse, polygon and star
   tools, all producing editable Bézier paths.
-- Point type, edited in place on the canvas, with Create Outlines.
+- Type, edited in place on the canvas: click for point type, drag a box for
+  area type that wraps and justifies, and convert between them. A Character
+  section in Properties holds font, the font's real styles, size, leading,
+  tracking and alignment, with kerning, baseline shift, scale, case, underline
+  and strikethrough under Show more. Illustrator's keys work too: Alt+←/→
+  tracking (with Ctrl, five times as much; at a caret, kerning), Alt+↑/↓
+  leading, Alt+Shift+↑/↓ baseline shift and Ctrl+Shift+. / , size. Create
+  Outlines turns it into paths.
+- A Properties panel in Figma's order, whose sections fold away and show only
+  when they apply. Number fields take arithmetic and units (`2*(3+1)`,
+  `25mm`, `50%`), `+10` or `*2` applied to each object, arrow steps, and a
+  drag on the label to scrub. Transform has a 9-point reference point, a
+  proportions link and Scale Strokes & Effects. Different values read Mixed.
 - Fills and strokes: solid colours and linear or radial gradients, stroke
   weight, caps, corners and dashes, opacity and blend modes.
 - Layers and groups with visibility, locking and drag-to-reorder, clipping masks

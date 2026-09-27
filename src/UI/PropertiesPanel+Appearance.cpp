@@ -3,6 +3,7 @@
 #include "UI/LayerAppearanceControls.h"
 #include "UI/NumberField.h"
 #include "UI/PropertiesPanel.h"
+#include "UI/ToolHeaderStyle.h"
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -18,16 +19,6 @@ QLabel *caption(const QString &text, QWidget *parent)
     label->setFont(font);
     label->setForegroundRole(QPalette::PlaceholderText);
     label->setFixedWidth(46);
-    return label;
-}
-
-QLabel *heading(const QString &words, QWidget *parent)
-{
-    auto *label = new QLabel(words, parent);
-    QFont font = label->font();
-    font.setPixelSize(12);
-    font.setWeight(QFont::DemiBold);
-    label->setFont(font);
     return label;
 }
 
@@ -117,34 +108,40 @@ void PaintRow::pickStop(bool last)
 void PaintRow::synchronize()
 {
     const Paint paint = shown();
-    m_kind->setCurrentIndex(int(std::find(kinds.begin(), kinds.end(), paint.kind) - kinds.begin()));
-    m_end->setVisible(paint.stops.size() >= 2);
+    const bool mixed = m_stroke ? ShownStyle::strokeMixed(m_session) : ShownStyle::fillMixed(m_session);
+    m_well->setMixed(mixed);
+    m_kind->setPlaceholderText(QStringLiteral("Mixed"));
+    m_kind->setCurrentIndex(mixed ? -1 : int(std::find(kinds.begin(), kinds.end(), paint.kind) - kinds.begin()));
+    m_well->setToolTip((m_stroke ? QStringLiteral("Stroke color") : QStringLiteral("Fill color")) + (mixed ? QStringLiteral(": mixed") : QString()));
+    m_end->setVisible(!mixed && paint.stops.size() >= 2);
     m_well->update();
     m_end->update();
 }
 
-QWidget *PropertiesPanel::appearanceSection()
+PanelSection *PropertiesPanel::appearanceSection()
 {
-    auto *block = new QWidget(this);
-    block->setObjectName(QStringLiteral("appearanceSection"));
-    auto *body = new QVBoxLayout(block);
-    body->setContentsMargins(16, 12, 16, 14);
-    body->setSpacing(8);
-    auto *title = new QHBoxLayout;
-    title->addWidget(heading(QStringLiteral("Appearance"), block));
-    title->addStretch(1);
-    auto *swap = new QPushButton(QStringLiteral("⇄"), block);
+    m_appearance = new PanelSection(QStringLiteral("Appearance"), QStringLiteral("appearance"), this);
+    PanelSection *block = m_appearance;
+    QVBoxLayout *body = block->body;
+    auto *swap = new QToolButton(block);
     swap->setObjectName(QStringLiteral("swapFillStrokeButton"));
+    swap->setText(QStringLiteral("⇄"));
+    swap->setAutoRaise(true);
     swap->setToolTip(QStringLiteral("Swap fill and stroke (X)"));
-    swap->setFixedWidth(30);
-    connect(swap, &QPushButton::clicked, this, [this] { m_session.swapFillAndStroke(); });
-    auto *reset = new QPushButton(QStringLiteral("Default"), block);
+    swap->setAccessibleName(QStringLiteral("Swap fill and stroke"));
+    swap->setFixedSize(24, 22);
+    connect(swap, &QToolButton::clicked, this, [this] { m_session.swapFillAndStroke(); });
+    auto *reset = new QToolButton(block);
     reset->setObjectName(QStringLiteral("defaultFillStrokeButton"));
+    reset->setText(QStringLiteral("Default"));
+    reset->setAutoRaise(true);
     reset->setToolTip(QStringLiteral("Default fill and stroke (D)"));
-    connect(reset, &QPushButton::clicked, this, [this] { m_session.resetDefaultColors(); });
-    title->addWidget(swap);
-    title->addWidget(reset);
-    body->addLayout(title);
+    reset->setFixedHeight(22);
+    for (QToolButton *button : {swap, reset})
+        button->setFont(ToolHeaderStyle::controlFont());
+    connect(reset, &QToolButton::clicked, this, [this] { m_session.resetDefaultColors(); });
+    block->trailing->addWidget(swap);
+    block->trailing->addWidget(reset);
     m_fill = new PaintRow(m_session, false, m_picker, block);
     m_strokePaint = new PaintRow(m_session, true, m_picker, block);
     body->addWidget(m_fill);
@@ -153,17 +150,34 @@ QWidget *PropertiesPanel::appearanceSection()
     return block;
 }
 
-QWidget *PropertiesPanel::strokeSection()
+PanelSection *PropertiesPanel::strokeSection()
 {
-    auto *block = new QWidget(this);
-    block->setObjectName(QStringLiteral("strokeSection"));
-    auto *body = new QVBoxLayout(block);
-    body->setContentsMargins(16, 12, 16, 14);
-    body->setSpacing(8);
-    body->addWidget(heading(QStringLiteral("Stroke"), block));
+    m_stroke = new PanelSection(QStringLiteral("Stroke"), QStringLiteral("stroke"), this);
+    PanelSection *block = m_stroke;
+    QVBoxLayout *body = block->body;
     m_strokeWidth = new NumberField(QString(), QStringLiteral("pt"), [this](double width) { setStrokeWidth(width); }, block);
     m_strokeWidth->field->setObjectName(QStringLiteral("strokeWidth"));
     m_strokeWidth->step = 0.5;
+    m_strokeWidth->minimum = 0;
+    m_strokeWidth->setToolTip(QStringLiteral("Stroke weight"));
+    m_strokeWidth->changeEach = [this](const std::function<double(double)> &change) {
+        m_session.beginEdit(QStringLiteral("Stroke"));
+        for (const QUuid &id : m_session.selectedLeaves()) {
+            const VectorObject *object = m_session.document()->find(id);
+            if (!object || !object->hasPaint() || m_session.document()->isEffectivelyLocked(id))
+                continue;
+            VectorObject changed = *object;
+            changed.stroke.width = std::max(0.0, change(object->stroke.width));
+            m_session.updateObject(changed, QStringLiteral("Stroke"));
+        }
+        m_session.endEdit();
+    };
+    m_strokeWidth->gesture = [this](bool starting) {
+        if (starting)
+            m_session.beginEdit(QStringLiteral("Stroke"));
+        else
+            m_session.endEdit();
+    };
     m_cap = new QComboBox(block);
     m_cap->setObjectName(QStringLiteral("strokeCap"));
     m_cap->addItems({QStringLiteral("Butt"), QStringLiteral("Round"), QStringLiteral("Projecting")});
@@ -185,6 +199,7 @@ QWidget *PropertiesPanel::strokeSection()
     grid->addWidget(m_join, 2, 1);
     grid->addWidget(caption(QStringLiteral("Dashes"), block), 3, 0);
     grid->addWidget(m_dashes, 3, 1);
+    grid->setColumnStretch(1, 1);
     body->addLayout(grid);
     connect(m_cap, &QComboBox::activated, this, [this](int index) {
         StrokeStyle stroke = ShownStyle::stroke(m_session);

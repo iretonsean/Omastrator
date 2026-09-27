@@ -1,6 +1,7 @@
 #pragma once
 #include "Document/EditorSession.h"
 #include "UI/ToolHeaderStyle.h"
+#include <QComboBox>
 #include <QFontComboBox>
 #include <QToolButton>
 #include <array>
@@ -36,7 +37,7 @@ private:
     NumberField *const m_inner;
 };
 
-// Type: family, size, bold, italic and alignment.
+// Type: family, style, size and alignment; Properties holds the rest.
 class TypeControls : public ToolHeaderBar {
     Q_OBJECT
 public:
@@ -44,7 +45,7 @@ public:
     // The selected text's style, else the next text's.
     TextContent shownText() const;
     // Applies to selected texts and to the next one.
-    void change(const std::function<void(TextContent &)> &edit);
+    void change(const std::function<void(TextContent &)> &edit, const QString &name = QStringLiteral("Character"));
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -57,9 +58,8 @@ private:
     EditorSession &m_session;
     QFontComboBox *const m_family;
     NumberField *const m_size;
-    QToolButton *const m_bold;
-    QToolButton *const m_italic;
-    std::array<QToolButton *, 3> m_alignments;
+    QComboBox *const m_style;
+    std::array<QToolButton *, 4> m_alignments;
 };
 
 // Shape Builder: Illustrator's tool options, in the bar instead of a dialog.

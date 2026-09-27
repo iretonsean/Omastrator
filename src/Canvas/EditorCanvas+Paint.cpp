@@ -147,6 +147,29 @@ void EditorCanvas::State::drawOverlay(QPainter &painter) const
         painter.setPen(cosmetic(accent(), 1.5));
         painter.drawPolyline(line);
     }
+    if (drag && drag->kind == DragKind::textArea && drag->started) {
+        painter.setPen(cosmetic(accent(), 1));
+        painter.drawRect(QRectF(toView(drag->pressDocument), toView(drag->grabbed)).normalized());
+    }
+    // Area type shows its box while edited or selected; a red port marks hidden text.
+    for (const QUuid &id : text ? std::vector<QUuid>{text->object.id} : session.selectedTexts()) {
+        const VectorObject *object = text && text->object.id == id ? &text->object : document.find(id);
+        if (!object || !object->text.area)
+            continue;
+        const QPolygonF box = (object->transform * toViewTransform).map(QPolygonF(object->text.frame()));
+        painter.setPen(cosmetic(layerColor(id), 1));
+        painter.drawPolygon(box);
+        if (object->text.overflows()) {
+            const QPointF port = box.at(2) + QPointF(-8, -8);
+            const QRectF square(port - QPointF(5, 5), QSizeF(10, 10));
+            painter.setPen(cosmetic(QColor(0xe5, 0x39, 0x35), 1.2));
+            painter.setBrush(Qt::white);
+            painter.drawRect(square);
+            painter.drawLine(square.center() - QPointF(3, 0), square.center() + QPointF(3, 0));
+            painter.drawLine(square.center() - QPointF(0, 3), square.center() + QPointF(0, 3));
+            painter.setBrush(Qt::NoBrush);
+        }
+    }
     if (drag && (drag->kind == DragKind::marquee || drag->kind == DragKind::zoomRect) && drag->started) {
         const QRectF area = QRectF(drag->pressView, drag->lastView).normalized();
         painter.setRenderHint(QPainter::Antialiasing, false);

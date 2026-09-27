@@ -2,6 +2,7 @@
 #include "UI/ColorPickerSheet.h"
 #include <QPainter>
 #include <QPainterPath>
+#include <cmath>
 
 namespace {
 constexpr double swatchSize = 24;
@@ -82,12 +83,47 @@ StrokeStyle ShownStyle::stroke(const EditorSession &session)
     return source ? source->stroke : session.defaultStroke();
 }
 
+namespace {
+// Whether any two painted leaves of the selection differ by `key`.
+template <typename Key> bool differs(const EditorSession &session, Key key)
+{
+    if (!session.document())
+        return false;
+    const VectorObject *first = nullptr;
+    for (const QUuid &id : session.selectedLeaves()) {
+        const VectorObject *object = session.document()->find(id);
+        if (!object || !object->hasPaint())
+            continue;
+        if (!first)
+            first = object;
+        else if (!key(*first, *object))
+            return true;
+    }
+    return false;
+}
+}
+
+bool ShownStyle::fillMixed(const EditorSession &session)
+{
+    return differs(session, [](const VectorObject &a, const VectorObject &b) { return a.fill == b.fill; });
+}
+
+bool ShownStyle::strokeMixed(const EditorSession &session)
+{
+    return differs(session, [](const VectorObject &a, const VectorObject &b) { return a.stroke.paint == b.stroke.paint; });
+}
+
+bool ShownStyle::strokeWidthMixed(const EditorSession &session)
+{
+    return differs(session, [](const VectorObject &a, const VectorObject &b) { return std::abs(a.stroke.width - b.stroke.width) < 1e-9; });
+}
+
 PaintSwatch::PaintSwatch(std::function<Paint()> paint, bool stroke, QWidget *parent)
     : QAbstractButton(parent), m_paint(std::move(paint)), m_stroke(stroke)
 {
 }
 
-void PaintSwatch::draw(QPainter &painter, const QRectF &rect, const Paint &paint, bool stroke)
+void PaintSwatch::draw(QPainter &painter, const QRectF &rect, const Paint &paint, bool stroke, bool mixed)
 {
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
@@ -100,8 +136,19 @@ void PaintSwatch::draw(QPainter &painter, const QRectF &rect, const Paint &paint
         hole.addRect(rect.adjusted(ring, ring, -ring, -ring));
         shape = shape.subtracted(hole);
     }
-    painter.fillPath(shape, paint.isVisible() ? paint.brush(rect) : QBrush(Qt::white));
-    if (!paint.isVisible()) {
+    if (mixed) {
+        // Hatching, as Illustrator and Figma show a mixed paint.
+        painter.fillPath(shape, QColor(236, 236, 236));
+        painter.save();
+        painter.setClipPath(shape);
+        painter.setPen(QPen(QColor(120, 120, 120), 1));
+        for (double x = rect.left() - rect.height(); x < rect.right(); x += 4)
+            painter.drawLine(QPointF(x, rect.bottom()), QPointF(x + rect.height(), rect.top()));
+        painter.restore();
+    } else {
+        painter.fillPath(shape, paint.isVisible() ? paint.brush(rect) : QBrush(Qt::white));
+    }
+    if (!mixed && !paint.isVisible()) {
         painter.setClipPath(shape);
         painter.setPen(QPen(QColor(220, 30, 30), 2));
         painter.drawLine(rect.bottomLeft(), rect.topRight());
@@ -116,7 +163,15 @@ void PaintSwatch::draw(QPainter &painter, const QRectF &rect, const Paint &paint
 void PaintSwatch::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    draw(painter, QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), m_paint(), m_stroke);
+    draw(painter, QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), m_paint(), m_stroke, m_mixed);
+}
+
+void PaintSwatch::setMixed(bool mixed)
+{
+    if (mixed == m_mixed)
+        return;
+    m_mixed = mixed;
+    update();
 }
 
 ColorPaletteControls::ColorPaletteControls(EditorSession &session, QWidget *parent)
@@ -173,6 +228,8 @@ void ColorPaletteControls::pickStroke()
 
 void ColorPaletteControls::synchronize()
 {
+    m_fill->setMixed(ShownStyle::fillMixed(m_session));
+    m_stroke->setMixed(ShownStyle::strokeMixed(m_session));
     m_fill->update();
     m_stroke->update();
 }

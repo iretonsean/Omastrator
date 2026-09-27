@@ -159,6 +159,91 @@ VectorPath decodePath(const QJsonObject &json)
     return path;
 }
 
+QJsonObject encode(const TextContent &text)
+{
+    QJsonObject json{{"string", text.text}, {"family", text.family}, {"style", text.style}, {"size", text.size},
+                     {"alignment", rawValue(text.alignment)}, {"trackingEm", text.tracking}};
+    if (text.leading)
+        json["leadingPt"] = *text.leading;
+    if (text.kerning != TextKerning::metrics)
+        json["kerning"] = rawValue(text.kerning);
+    if (!text.kerns.empty()) {
+        QJsonObject kerns;
+        for (const auto &[at, kern] : text.kerns)
+            kerns[QString::number(at)] = kern;
+        json["kerns"] = kerns;
+    }
+    const auto optional = [&json](const char *key, double value, double otherwise) {
+        if (value != otherwise)
+            json[QLatin1String(key)] = value;
+    };
+    optional("horizontalScale", text.horizontalScale, 100);
+    optional("verticalScale", text.verticalScale, 100);
+    optional("baselineShift", text.baselineShift, 0);
+    optional("leftIndent", text.leftIndent, 0);
+    optional("rightIndent", text.rightIndent, 0);
+    optional("firstLineIndent", text.firstLineIndent, 0);
+    optional("spaceBefore", text.spaceBefore, 0);
+    optional("spaceAfter", text.spaceAfter, 0);
+    if (text.textCase != TextCase::normal)
+        json["case"] = rawValue(text.textCase);
+    if (text.underline)
+        json["underline"] = true;
+    if (text.strikethrough)
+        json["strikethrough"] = true;
+    if (text.area)
+        json["area"] = QJsonArray{text.area->width(), text.area->height()};
+    return json;
+}
+
+TextContent decodeText(const QJsonObject &json)
+{
+    TextContent text;
+    text.text = json["string"].toString();
+    text.family = json["family"].toString(text.family);
+    text.size = std::max(0.1, json["size"].toDouble(text.size));
+    text.alignment = textAlignment(json["alignment"].toString()).value_or(TextAlignment::left);
+    // Version 1 kept bold and italic flags, tracking in pt and leading as a multiple of the size.
+    if (json.contains("style"))
+        text.style = json["style"].toString(text.style);
+    else
+        text.style = TextContent::styleFor(text.family, json["bold"].toBool() ? 700 : 400, json["italic"].toBool());
+    if (json.contains("trackingEm"))
+        text.tracking = json["trackingEm"].toDouble();
+    else
+        text.tracking = json["tracking"].toDouble() / text.size * 1000;
+    if (json.contains("leadingPt")) {
+        text.leading = std::max(0.0, json["leadingPt"].toDouble());
+    } else if (json.contains("leading")) {
+        const double multiple = json["leading"].toDouble(1.2);
+        if (std::abs(multiple - 1.2) > 1e-9)
+            text.leading = multiple * text.size;
+    }
+    text.kerning = textKerning(json["kerning"].toString()).value_or(TextKerning::metrics);
+    const QJsonObject kerns = json["kerns"].toObject();
+    for (auto kern = kerns.begin(); kern != kerns.end(); ++kern) {
+        bool number = false;
+        const int at = kern.key().toInt(&number);
+        if (number && at >= 0 && kern.value().isDouble())
+            text.kerns[at] = kern.value().toDouble();
+    }
+    text.horizontalScale = std::clamp(json["horizontalScale"].toDouble(100), 1.0, 10000.0);
+    text.verticalScale = std::clamp(json["verticalScale"].toDouble(100), 1.0, 10000.0);
+    text.baselineShift = json["baselineShift"].toDouble();
+    text.leftIndent = json["leftIndent"].toDouble();
+    text.rightIndent = json["rightIndent"].toDouble();
+    text.firstLineIndent = json["firstLineIndent"].toDouble();
+    text.spaceBefore = json["spaceBefore"].toDouble();
+    text.spaceAfter = json["spaceAfter"].toDouble();
+    text.textCase = textCase(json["case"].toString()).value_or(TextCase::normal);
+    text.underline = json["underline"].toBool();
+    text.strikethrough = json["strikethrough"].toBool();
+    const QJsonArray area = json["area"].toArray();
+    if (area.size() == 2 && area[0].toDouble() > 0)
+        text.area = QSizeF(area[0].toDouble(), std::max(0.0, area[1].toDouble()));
+    return text;
+}
+
 QJsonObject encode(const VectorObject &object)
 {
     QJsonObject json{{"id", object.id.toString(QUuid::WithoutBraces)}, {"kind", rawValue(object.kind)}, {"name", object.name}};
@@ -183,10 +268,7 @@ QJsonObject encode(const VectorObject &object)
         json["path"] = encode(object.path);
         break;
     case ObjectKind::text:
-        json["text"] = QJsonObject{{"string", object.text.text}, {"family", object.text.family}, {"size", object.text.size},
-                                   {"bold", object.text.bold}, {"italic", object.text.italic},
-                                   {"alignment", rawValue(object.text.alignment)}, {"leading", object.text.leading},
-                                   {"tracking", object.text.tracking}};
+        json["text"] = encode(object.text);
         json["transform"] = transform(object.transform);
         break;
     case ObjectKind::image:
@@ -232,15 +314,7 @@ VectorObject decodeObject(const QJsonObject &json)
     if (object.kind == ObjectKind::path)
         object.path = decodePath(json["path"].toObject());
     if (object.kind == ObjectKind::text) {
-        const QJsonObject text = json["text"].toObject();
-        object.text.text = text["string"].toString();
-        object.text.family = text["family"].toString(object.text.family);
-        object.text.size = std::max(0.1, text["size"].toDouble(object.text.size));
-        object.text.bold = text["bold"].toBool();
-        object.text.italic = text["italic"].toBool();
-        object.text.alignment = textAlignment(text["alignment"].toString()).value_or(TextAlignment::left);
-        object.text.leading = text["leading"].toDouble(object.text.leading);
-        object.text.tracking = text["tracking"].toDouble();
+        object.text = decodeText(json["text"].toObject());
     }
     if (object.kind == ObjectKind::image) {
         object.image = readPng(json["image"]);

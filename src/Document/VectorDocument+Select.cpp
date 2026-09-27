@@ -70,7 +70,8 @@ std::vector<QUuid> VectorDocument::hitTestAll(QPointF point, double tolerance, s
                 hit = object.path.painterPath().contains(point);
         } else if (object.kind == ObjectKind::text) {
             // Glyph gaps would be hard to click; the text's box counts.
-            hit = object.outline().boundingRect().adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(point);
+            const QRectF box = object.text.area ? object.transform.mapRect(object.text.frame()) : object.outline().boundingRect();
+            hit = box.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(point);
         } else {
             hit = object.outline().contains(point);
         }

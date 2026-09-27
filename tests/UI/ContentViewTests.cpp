@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QSplitter>
 #include <QStandardPaths>
 #include <QtTest>
 
@@ -55,6 +56,7 @@ private slots:
     void canvasKeysPickToolsAndSwapColours();
     void remappedKeysReachTheCanvasAsTheirOriginals();
     void theDockFollowsItsSettings();
+    void theDockSplitIsRememberedAndResets();
 };
 
 void ContentViewTests::initTestCase()
@@ -192,14 +194,17 @@ void ContentViewTests::typeBarsStyleSelectedTextInOneStep()
     const VectorDocument &document = editor.session.document().value();
     QCOMPARE(document.find(first)->text.size, 34.0);
     QCOMPARE(document.find(second)->text.size, 34.0);
-    QCOMPARE(editor.session.undoName(), QString("Character"));
-    // Bold and alignment follow; the next text takes them too.
-    find<QToolButton>(bar, "typeBold").click();
+    QCOMPARE(editor.session.undoName(), QString("Font Size"));
+    // Style and alignment follow; the next text takes them too.
+    auto &style = find<QComboBox>(bar, "typeStyle");
+    QVERIFY(style.count() >= 1);
+    QCOMPARE(style.currentText(), editor.session.shownText().style);
     find<QToolButton>(bar, "typeAlignCenter").click();
-    QVERIFY(editor.session.document().value().find(second)->text.bold);
+    QCOMPARE(editor.session.document().value().find(second)->text.alignment, TextAlignment::center);
     QCOMPARE(editor.session.document().value().find(first)->text.alignment, TextAlignment::center);
-    QVERIFY(editor.session.defaultText.bold);
+    QCOMPARE(editor.session.defaultText.alignment, TextAlignment::center);
     QVERIFY(find<QToolButton>(bar, "typeAlignCenter").isChecked());
+    find<QToolButton>(bar, "typeAlignJustify").click();
     // One undo takes the size back from both.
     editor.session.undo();
     editor.session.undo();
@@ -304,6 +309,39 @@ void ContentViewTests::theDockFollowsItsSettings()
     QCOMPARE(ContentView::panelWidth(), ContentView::defaultPanelWidth);
     ContentView::setPanelWidth(300);
     QCOMPARE(ContentView::panelWidth(), 300.0);
+}
+
+void ContentViewTests::theDockSplitIsRememberedAndResets()
+{
+    int moved = 0;
+    {
+        Editor editor;
+        auto &split = find<QSplitter>(editor.view, "panelSplit");
+        QSplitterHandle *handle = split.handle(1);
+        QVERIFY(handle && handle->isVisible() && handle->height() >= 8);
+        QVERIFY(!handle->toolTip().isEmpty());
+        const int before = split.sizes().at(0);
+        // Properties opens with three fifths of the column.
+        QVERIFY(std::abs(before - (before + split.sizes().at(1)) * 3 / 5) <= 2);
+        // A drag on the grip moves it, and the place is saved.
+        const QPoint middle = handle->rect().center();
+        QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, middle);
+        QMouseEvent drag(QEvent::MouseMove, middle + QPoint(0, -120), handle->mapToGlobal(middle + QPoint(0, -120)), Qt::NoButton, Qt::LeftButton,
+                         Qt::NoModifier);
+        QCoreApplication::sendEvent(handle, &drag);
+        QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, middle + QPoint(0, -120));
+        moved = split.sizes().at(0);
+        QVERIFY(moved < before - 60);
+        QVERIFY(QSettings().contains("panelSplitState"));
+    }
+    Editor again;
+    auto &split = find<QSplitter>(again.view, "panelSplit");
+    QTRY_VERIFY(std::abs(split.sizes().at(0) - moved) <= 2);
+    // A double-click puts it back and forgets the place.
+    QTest::mouseDClick(split.handle(1), Qt::LeftButton);
+    const int total = split.sizes().at(0) + split.sizes().at(1);
+    QCOMPARE(split.sizes().at(0), total * 3 / 5);
+    QVERIFY(!QSettings().contains("panelSplitState"));
 }
 
 QTEST_MAIN(ContentViewTests)

@@ -5,6 +5,7 @@
 #include <QDialog>
 #include <QHash>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace {
 // Top-left corners by panel, for this run of the app.
@@ -84,6 +85,13 @@ void FloatingPanel::show(const QString &title, QWidget *content)
             m_panel->move(positions().value(m_name));
         else if (canvas)
             m_panel->move(canvas->mapToGlobal(canvas->rect().center()) - QPoint(m_panel->width() / 2, m_panel->height() / 2));
+        // Never over the Properties and Layers dock: it sits just left of it instead.
+        const QWidget *dock = m_owner.window()->findChild<QWidget *>(QStringLiteral("panelDock"));
+        if (dock && dock->isVisible()) {
+            const QRect docked(dock->mapToGlobal(QPoint(0, 0)), dock->size());
+            if (QRect(m_panel->pos(), m_panel->frameSize()).intersects(docked))
+                m_panel->move(docked.left() - m_panel->frameSize().width() - 8, std::max(docked.top() + 8, m_panel->pos().y()));
+        }
     }
     m_panel->show();
     m_panel->raise();

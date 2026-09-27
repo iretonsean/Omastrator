@@ -30,6 +30,7 @@ private:
     void buildEdit(QMenuBar &bar);
     void buildObject(QMenuBar &bar);
     void buildSelect(QMenuBar &bar);
+    void buildTypeKeys(QMenu &type);
     void buildViewAndWindow(QMenuBar &bar);
     void synchronize();
     void focusMoved(QWidget *from, QWidget *to);

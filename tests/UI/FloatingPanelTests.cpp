@@ -52,6 +52,7 @@ private slots:
     void aPanelOpensOverTheCanvasThenWhereItWasLeft();
     void itsCloseButtonAndEscapeCancel();
     void aPanelRemembersWhereItIsMovedAndCentresWithoutACanvas();
+    void aPanelNeverOpensOverTheDock();
 };
 
 void FloatingPanelTests::colorPickerPanelAppliesOnOKAndNotOnCancel()
@@ -221,6 +222,24 @@ void FloatingPanelTests::aPanelRemembersWhereItIsMovedAndCentresWithoutACanvas()
     const QPoint middle = plain.geometry().center();
     QVERIFY(std::abs(window->pos().x() + window->width() / 2 - middle.x()) <= 1);
     QVERIFY(std::abs(window->pos().y() + window->height() / 2 - middle.y()) <= 1);
+}
+
+void FloatingPanelTests::aPanelNeverOpensOverTheDock()
+{
+    // A dock covering the canvas's middle, where a panel would open.
+    Shown shown;
+    auto *dock = new QWidget(&shown.window);
+    dock->setObjectName(QStringLiteral("panelDock"));
+    dock->setGeometry(QRect(100, 0, 300, 300));
+    dock->show();
+    FloatingPanel panel(QStringLiteral("swatchesPanel"), shown.window);
+    panel.show(QStringLiteral("Swatches"), new QLabel(QStringLiteral("Swatches")));
+    QWidget *opened = visiblePanel(QStringLiteral("swatchesPanel"));
+    QVERIFY(opened);
+    const QRect docked(dock->mapToGlobal(QPoint(0, 0)), dock->size());
+    QVERIFY(!QRect(opened->pos(), opened->frameSize()).intersects(docked));
+    QVERIFY(opened->frameGeometry().right() < docked.left());
+    panel.close();
 }
 
 QTEST_MAIN(FloatingPanelTests)

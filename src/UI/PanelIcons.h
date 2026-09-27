@@ -7,7 +7,7 @@
 enum class PanelIcon {
     eye, eyeSlash, lock, unlock, chevronRight, chevronDown, layer, group, path, text, image, newLayer, trash, layers,
     alignLeft, alignHorizontalCenter, alignRight, alignTop, alignVerticalCenter, alignBottom,
-    distributeHorizontal, distributeVertical, unite, minusFront, intersect, exclude,
+    distributeHorizontal, distributeVertical, unite, minusFront, intersect, exclude, rotate, link, unlink, more, leading, tracking,
 };
 
 namespace PanelIcons {

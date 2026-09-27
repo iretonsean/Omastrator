@@ -32,6 +32,8 @@ public:
 
     void begin(const QString &name, const std::optional<VectorDocument> &document, const std::vector<QUuid> &selection);
     void end(const std::optional<VectorDocument> &document, const std::vector<QUuid> &selection);
+    // Folds a further change into the last step, as a held key's repeats are one step.
+    bool amend(const QString &name, const std::optional<VectorDocument> &document, const std::vector<QUuid> &selection);
     std::optional<Snapshot> undo();
     std::optional<Snapshot> redo();
     qint64 retainedBytes(const std::optional<VectorDocument> &current) const;
