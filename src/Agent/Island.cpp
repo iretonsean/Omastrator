@@ -176,6 +176,9 @@ QString helpText()
         "  activity <text> [--seconds N]\n"
         "                     Show a line briefly, then go back.\n"
         "  seen <mode>        Stop showing the mode's first-use label.\n"
+        "  new                Bring Omastrator forward on a new document.\n"
+        "  show <swatches|variations|roast|connect-agent>\n"
+        "                     Bring Omastrator forward on a panel.\n"
         "  capture color [fill|stroke|swatch]\n"
         "                     Pick a colour anywhere on screen (hyprpicker).\n"
         "  capture screenshot Choose a region (slurp, grim), open it and trace it.\n"
@@ -244,6 +247,23 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         }
         const QString failure = setActivity(words.join(QLatin1Char(' ')).trimmed(), seconds);
         return failure.isEmpty() ? 0 : failed(failure);
+    }
+    if (verb == QLatin1String("new") || verb == QLatin1String("show")) {
+        if (verb == QLatin1String("show") && args.size() != 2)
+            return failed(QStringLiteral("Name a panel: swatches, variations, roast or connect-agent."));
+        if (const QString failure = ensureAppRunning(); !failure.isEmpty())
+            return failed(failure);
+        try {
+            AgentClient::Connection connection;
+            if (verb == QLatin1String("new"))
+                connection.call(QStringLiteral("new_document"), {});
+            else
+                connection.call(QStringLiteral("show_panel"),
+                                {{"panel", args[1] == QLatin1String("connect-agent") ? QStringLiteral("connectAgent") : args[1]}});
+            return 0;
+        } catch (const AgentProtocol::Error &failure) {
+            return failed(failure.message());
+        }
     }
     if (verb == QLatin1String("capture"))
         return Capture::runCli(args.mid(1), out, err);

@@ -172,3 +172,19 @@ QJsonObject AgentTools::pasteSvg(const QJsonObject &params)
     commit(editing, QStringLiteral("Paste SVG"), edited, {id});
     return {{"id", idString(id)}, {"paths", int(AgentEdits::leaves(edited, {id}).size())}};
 }
+
+QJsonObject AgentTools::newDocument(const QJsonObject &)
+{
+    if (const QString failure = m_host.showNewDocument(); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return {{"shown", true}};
+}
+
+QJsonObject AgentTools::showPanel(const QJsonObject &params)
+{
+    static const QStringList panels{QStringLiteral("swatches"), QStringLiteral("variations"), QStringLiteral("roast"), QStringLiteral("connectAgent")};
+    const QString panel = panels.value(*choice(params, QStringLiteral("panel"), panels, true));
+    if (const QString failure = m_host.showPanel(panel); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return {{"shown", panel}};
+}

@@ -88,6 +88,8 @@ private:
     QJsonObject swatchesAdd(const QJsonObject &params);
     QJsonObject openCapture(const QJsonObject &params);
     QJsonObject pasteSvg(const QJsonObject &params);
+    QJsonObject newDocument(const QJsonObject &params);
+    QJsonObject showPanel(const QJsonObject &params);
     // The session to act on for the user; refused while a drag or proposal is open.
     EditorSession &idleSession();
     // Commits `document` as one undo step named `name`.

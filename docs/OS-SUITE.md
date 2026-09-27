@@ -326,3 +326,51 @@ Choices the spec left open, made while building it, in build order.
   that group is in the front document. The AI mode (Phase 4) acts on it.
 - **Paste SVG** reads `image/svg+xml` from `wl-paste`, else plain text that
   contains `<svg`. With no document open, it makes one the SVG's size.
+
+### Phase 3: tray light, menu, setup
+
+- **Tray light** (`shell/omastrator.ai`, kind `bar-widget`, default section
+  right) builds on the shell's `BarWidget` and `BarIconButton`. Idle is the
+  sparkle in the bar's text colour; working breathes in the accent colour;
+  ready is the accent with a dot; error is the urgent colour. The tooltip is
+  the plain status line; a click runs `omastrator island mode ai`.
+- **Hyprland is Lua on Omarchy 4.** Omarchy 4's Hyprland 0.56 reads
+  `~/.config/hypr/hyprland.lua`, so setup writes
+  `~/.config/omastrator/hyprland.lua` there (with `hl.define_submap` and
+  `hl.dsp.submap`), and `hyprland.conf` only where the user's config is still
+  hyprlang. `--apply` appends one guarded line,
+  `pcall(dofile, …/omastrator/hyprland.lua)`, or `source = …` for hyprlang.
+  Both generated files pass `Hyprland --verify-config`, which the tests run
+  when Hyprland is installed.
+- **Keys.** Super+Alt+D, C, A and L were free in Omarchy's defaults. Draw's
+  submap takes Illustrator's letters (V, A, P, N, M, L, \, I, H, Z); T chooses
+  Type and hands the keyboard back, since typing needs the letters. Capture's
+  keys (F, S, W, R, V, T) each run one action and hand the keyboard back.
+  Escape returns to Normal. Clicking a mode on the island does not enter a
+  submap, so no keys are ever taken by surprise.
+- **shell.json is edited with jq** (an Omarchy dependency), which keeps the
+  key order and layout the shell itself writes, so the diff shows only
+  Omastrator's lines. The island is added to `plugins[]`; the tray light, if
+  accepted, goes first in `bar.layout.right`. JSON edits are recomputed from
+  the file as it is when applied, so declining one doesn't undo another.
+  After a change, setup runs `omarchy-shell shell rescanPlugins` and
+  `reloadConfig`.
+- **Menu entries** go between `// BEGIN omastrator setup` and
+  `// END omastrator setup` markers in the user's JSONC, the same pattern the
+  user's own tools use. A comma is added after the user's last entry when it
+  has none, and taken away again on removal.
+- **Exactly what it added.** `~/.config/omastrator/setup.json` records the
+  files and folders setup created, the shell.json entries, the menu block and
+  comma, and the appended source line. `--remove` undoes only those, and a
+  folder only once it is empty. The tests check a temporary HOME is
+  byte-for-byte the same after setup and remove, and that each command run
+  twice changes nothing the second time.
+- **Asking.** Each step is shown (plugin files by name, everything else as a
+  unified diff) and asked about; `--yes` accepts all, `--dry-run` changes
+  nothing, and a closed input answers no. Setup never installs packages: it
+  names each missing program with its install command (voxtype's is
+  `omarchy voxtype install`).
+- **Where the plugins come from:** `$OMASTRATOR_SHELL_DIR`, else
+  `<prefix>/share/omastrator/shell` (CMake installs `shell/` there), else the
+  source tree the binary was built from. The vocabulary is written once and
+  then left to the user.

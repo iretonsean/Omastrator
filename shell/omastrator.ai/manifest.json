@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "omastrator.ai",
+  "name": "Omastrator AI",
+  "version": "0.1.0",
+  "author": "Omastrator",
+  "license": "MIT",
+  "description": "A light for Omastrator's agent work: idle, working, results ready or error. Click it to open the island in AI mode.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "TrayLight.qml"
+  },
+  "barWidget": {
+    "displayName": "Omastrator AI",
+    "description": "Idle, working, results ready or error for Omastrator's agent tasks. Click for the island's AI mode.",
+    "category": "AI",
+    "aliases": ["omastrator"],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

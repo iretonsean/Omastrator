@@ -87,6 +87,8 @@ public:
     QJsonObject statusExtras() override;
     Swatches *swatches() override { return &m_swatches; }
     QString newDocument(QSizeF size) override;
+    QString showNewDocument() override;
+    QString showPanel(const QString &panel) override;
 
     // Window ▸ Swatches.
     void showSwatchesPanel();

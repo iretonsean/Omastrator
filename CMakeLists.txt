@@ -41,6 +41,8 @@ target_link_libraries(oma_canvas PUBLIC oma_core)
 # The bridge an agent drives the app through: socket, CLI and MCP.
 oma_library(oma_agent src/Agent/*.cpp)
 target_link_libraries(oma_agent PUBLIC oma_core oma_io Qt6::Network)
+# `omastrator setup` run from a build finds the plugins here; packages install them under share/.
+target_compile_definitions(oma_agent PRIVATE OMASTRATOR_SHELL_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/shell")
 
 oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
 target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas oma_agent)
@@ -51,6 +53,7 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
     target_link_libraries(omastrator PRIVATE oma_ui)
     install(TARGETS omastrator RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
+install(DIRECTORY shell/ DESTINATION ${CMAKE_INSTALL_DATADIR}/omastrator/shell)
 install(FILES packaging/io.github.iretonsean.Omastrator.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/io.github.iretonsean.Omastrator.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
 foreach(size 16 32 64 128 256 512)

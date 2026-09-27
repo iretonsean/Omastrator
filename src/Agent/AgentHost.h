@@ -51,4 +51,7 @@ public:
     virtual Swatches *swatches() { return nullptr; }
     // A new blank document in front, for a capture or a paste with none open. Returns why it failed, or empty.
     virtual QString newDocument(QSizeF size) = 0;
+    // Brings the window forward; the first on the New Document sheet, the second on a panel.
+    virtual QString showNewDocument() { return QStringLiteral("This Omastrator has no window."); }
+    virtual QString showPanel(const QString &) { return QStringLiteral("This Omastrator has no window."); }
 };

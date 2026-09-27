@@ -22,7 +22,14 @@ Each folder builds as its own static library:
   (docs/AI-DESIGN.md), plus the desktop-wide commands in docs/OS-SUITE.md:
   `Cli` dispatches every GUI-less command, `Island` keeps the island's mode
   file and `omastrator island …`, `StatusStream` is `omastrator status
-  --follow`.
+  --follow`, `Capture` runs hyprpicker, slurp, grim and wl-paste, `Setup` is
+  `omastrator setup`, and `Vocabulary` is dictation's word list.
+- `shell/` → the omarchy-shell plugins, QML: `omastrator.island` (the island),
+  `omastrator.ai` (the tray light) and `omastrator-ui` (what they share).
+  Setup copies them to `~/.config/omarchy/plugins/`. To try a change without
+  touching the user's shell, run a throwaway `quickshell -p` config that loads
+  the plugin, with `OMASTRATOR_SOCKET` and `OMASTRATOR_RUNTIME_DIR` pointed at a
+  temporary folder.
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides` and
   `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,
@@ -43,6 +50,11 @@ Each folder builds as its own static library:
 - **Humor:** follow `docs/HUMOR.md`. Menu items, buttons, data-loss prompts and
   accessibility text are never jokes.
 - **AI features:** follow `docs/AI-ROADMAP.md`.
+- **The user's desktop:** tests never touch the real shell, Hyprland or menu
+  config. Setup tests run in a temporary `HOME`; outside programs are replaced
+  through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
+  `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL` and
+  `OMASTRATOR_APP`.
 - **Commits:** public repo. Commit as the GitHub no-reply address, and never add
   personal data.
 

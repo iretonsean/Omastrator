@@ -170,6 +170,13 @@ constexpr const char *methodTable = R"json([
    "path": {"type": "string"},
    "trace": {"type": "boolean", "description": "Default true."},
    "colors": {"type": "integer", "minimum": 2, "maximum": 16, "description": "Default 6."}}}},
+{"name": "new_document", "group": "desktop", "mcp": false,
+ "description": "Brings Omastrator forward on a new tab's New Document sheet, as File ▸ New does.",
+ "inputSchema": {"type": "object", "properties": {}}},
+{"name": "show_panel", "group": "desktop", "mcp": false,
+ "description": "Brings Omastrator forward showing one panel or sheet.",
+ "inputSchema": {"type": "object", "required": ["panel"], "properties": {
+   "panel": {"type": "string", "enum": ["swatches", "variations", "roast", "connectAgent"]}}}},
 {"name": "paste_svg", "group": "desktop", "mcp": false,
  "description": "The user's paste of SVG from the clipboard: editable paths, grouped and centred, as one undo step. A new document is made when none is open.",
  "inputSchema": {"type": "object", "required": ["svg"], "properties": {

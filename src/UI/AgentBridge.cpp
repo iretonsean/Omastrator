@@ -2,6 +2,7 @@
 #include "Agent/AgentProtocol.h"
 #include "Logging.h"
 #include "UI/AgentPanels.h"
+#include "UI/AgentSheets.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/SwatchesPanel.h"
 #include <QJsonArray>
@@ -315,6 +316,34 @@ QString AgentBridge::newDocument(QSizeF size)
     if (m_workspace.isManaging())
         return QStringLiteral("Omastrator is showing a dialog. Try again when it's answered.");
     m_workspace.createDocument(size);
+    return {};
+}
+
+QString AgentBridge::showNewDocument()
+{
+    if (m_workspace.isManaging())
+        return QStringLiteral("Omastrator is showing a dialog. Try again when it's answered.");
+    m_workspace.newTab();
+    m_window.raise();
+    m_window.activateWindow();
+    return {};
+}
+
+QString AgentBridge::showPanel(const QString &panel)
+{
+    m_window.raise();
+    m_window.activateWindow();
+    if (panel == QLatin1String("swatches"))
+        showSwatchesPanel();
+    else if (panel == QLatin1String("variations"))
+        showVariationsPanel();
+    else if (panel == QLatin1String("roast"))
+        showRoastPanel();
+    else if (panel == QLatin1String("connectAgent"))
+        // A sheet has its own event loop; open it after this call returns.
+        QMetaObject::invokeMethod(this, [this] { AgentSheets::connectAgent(*this, &m_window); }, Qt::QueuedConnection);
+    else
+        return QStringLiteral("There is no panel “%1”.").arg(panel);
     return {};
 }
 

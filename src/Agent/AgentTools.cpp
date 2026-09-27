@@ -76,6 +76,8 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("swatches_add"), &AgentTools::swatchesAdd},
         {QStringLiteral("open_capture"), &AgentTools::openCapture},
         {QStringLiteral("paste_svg"), &AgentTools::pasteSvg},
+        {QStringLiteral("new_document"), &AgentTools::newDocument},
+        {QStringLiteral("show_panel"), &AgentTools::showPanel},
     };
     try {
         if (method == QLatin1String("selection_get"))

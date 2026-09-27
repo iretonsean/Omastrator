@@ -57,6 +57,30 @@ Choose your agent in Omarchy → Setup → Default → Agent. How it works:
 [docs/AI-DESIGN.md](docs/AI-DESIGN.md). The rest of the app's personality is
 described in [docs/HUMOR.md](docs/HUMOR.md).
 
+## Across Omarchy
+
+Omastrator also works outside its window, through Omarchy's own shell
+([docs/OS-SUITE.md](docs/OS-SUITE.md)):
+
+- **The island**: a pill under the bar with modes. *Draw* holds the canvas
+  tools; *Capture* picks a colour anywhere on screen, traces a screenshot
+  region, pastes clipboard SVG as paths, or loads your theme's colours as
+  swatches.
+- **The tray light**: one glyph in the bar that shows when your agent is
+  working, when results are ready, or when something went wrong. Click it for
+  the island's AI mode.
+- **Keys**: Super+Alt+D, C, A or L opens a mode, with Illustrator's tool letters
+  inside Draw. Escape goes back.
+- **Menu**: an Omastrator group in the Omarchy menu.
+
+Set it up with:
+
+```sh
+omastrator setup            # shows each change as a diff and asks first
+omastrator setup --apply    # also loads the keys from your Hyprland config
+omastrator setup --remove   # takes out exactly what setup added
+```
+
 ## Build
 
 You need C++20, Qt 6.4 or later (Widgets, Concurrent and Network), and CMake.
