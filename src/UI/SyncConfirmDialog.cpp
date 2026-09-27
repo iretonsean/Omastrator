@@ -75,8 +75,20 @@ SyncConfirmDialog::SyncConfirmDialog(const SyncPlan &plan, QWidget *parent) : QD
     } else if (plan.direction == SyncPlan::Direction::push) {
         section(QStringLiteral("Commits to"), QStringLiteral("No repository."));
     }
-    if (!plan.command.isEmpty())
-        section(QStringLiteral("Then runs"), plan.command.join(QLatin1Char(' ')));
+    if (const std::vector<QStringList> commands = plan.allCommands(); !commands.empty()) {
+        QStringList lines;
+        for (const QStringList &command : commands) {
+            QStringList quoted;
+            for (const QString &word : command)
+                quoted.append(word.contains(QLatin1Char(' ')) || word.isEmpty() ? QLatin1Char('"') + word + QLatin1Char('"') : word);
+            lines.append(quoted.join(QLatin1Char(' ')));
+        }
+        section(QStringLiteral("Then runs"), lines.join(QLatin1Char('\n')));
+    }
+    if (!plan.backupFolder.isEmpty())
+        section(QStringLiteral("Backs up"), QStringLiteral("Every file above, as it is now, to %1 first. Revert puts them back exactly.").arg(plan.backupFolder));
+    if (!plan.note.isEmpty())
+        section(QStringLiteral("Note"), plan.note);
     if (!plan.inApp.isEmpty())
         section(QStringLiteral("In Omastrator"), plan.inApp);
 
@@ -102,7 +114,8 @@ SyncConfirmDialog::SyncConfirmDialog(const SyncPlan &plan, QWidget *parent) : QD
     auto *buttons = new QDialogButtonBox(this);
     buttons->addButton(QDialogButtonBox::Cancel);
     if (plan.problem.isEmpty()) {
-        const QString label = !plan.command.isEmpty()                       ? QStringLiteral("Save and Apply")
+        const QString label = !plan.confirmLabel.isEmpty()                  ? plan.confirmLabel
+            : !plan.allCommands().empty()                                     ? QStringLiteral("Save and Apply")
             : plan.direction == SyncPlan::Direction::pull                     ? QStringLiteral("Bring In")
             : plan.git && plan.git->commit                                    ? QStringLiteral("Write and Commit")
                                                                               : QStringLiteral("Write Files");
