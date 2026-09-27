@@ -29,6 +29,7 @@ private:
     void buildFile(QMenuBar &bar);
     void buildEdit(QMenuBar &bar);
     void buildObject(QMenuBar &bar);
+    void buildSelect(QMenuBar &bar);
     void buildViewAndWindow(QMenuBar &bar);
     void synchronize();
     void focusMoved(QWidget *from, QWidget *to);
@@ -37,6 +38,8 @@ private:
     QAction *add(QMenu *menu, const QString &name, const QString &text, const QKeySequence &shortcut, const std::function<void()> &run);
     // Each entry's own key, remapped from ShortcutSettings.
     void remap();
+    // A second, fixed key beside the remappable one.
+    void alias(QAction *entry, const QKeySequence &second);
 
     ProjectWorkspace &m_workspace;
     QWidget &m_window;
@@ -45,6 +48,7 @@ private:
     FloatingPanel m_shortcutsPanel{QStringLiteral("keyboardShortcuts"), m_window};
     QMetaObject::Connection m_sessionWatch;
     QMetaObject::Connection m_canvasWatch;
+    QMetaObject::Connection m_menuWatch;
     // The field whose undo the Edit entries drive.
     QPointer<QLineEdit> m_field;
     QPointer<EditorCanvas> m_canvas;

@@ -1,5 +1,8 @@
 #include "UI/NativeLayerList.h"
+#include "UI/ContextMenus.h"
 #include "UI/KeyboardShortcuts.h"
+#include "UI/Menus.h"
+#include <QContextMenuEvent>
 #include <QEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -180,6 +183,22 @@ void NativeLayerList::keyPressEvent(QKeyEvent *event)
     } else {
         QScrollArea::keyPressEvent(event);
     }
+}
+
+void NativeLayerList::contextMenuEvent(QContextMenuEvent *event)
+{
+    const int row = rowAt(mapFromGlobal(event->globalPos()));
+    if (row < 0 || !m_session.hasDocument())
+        return;
+    // The row a right-click lands on becomes the target, as a click would make it.
+    const LayerCell &cell = *m_cells[size_t(row)];
+    if (cell.isLayer() || !m_session.isSelected(cell.objectID()))
+        clickRow(cell, Qt::NoModifier);
+    Menus *menus = window() ? window()->findChild<Menus *>() : nullptr;
+    QMenu *menu = ContextMenus::forLayerRow(menus, m_session, *this, cell.objectID(), this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->popup(event->globalPos());
+    event->accept();
 }
 
 // A new palette: icons redraw once the widgets have it.

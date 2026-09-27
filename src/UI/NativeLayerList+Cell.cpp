@@ -53,13 +53,24 @@ LayerCell::LayerCell(NativeLayerList &list)
     m_editor->setFont(name);
     m_editor->hide();
     m_editor->installEventFilter(this);
+    m_eye->installEventFilter(this);
+    m_lock->installEventFilter(this);
+    // Alt-click, as in Illustrator: the eye or lock of every other row, as one step.
     connect(m_eye, &QToolButton::clicked, this, [this] {
-        const VectorObject *object = m_list.session().document()->find(m_id);
-        m_list.session().setVisible(m_id, !object->isVisible);
+        EditorSession &session = m_list.session();
+        if (m_controlModifiers.testFlag(Qt::AltModifier)) {
+            session.setOthersVisible(m_id, !session.anyOtherVisible(m_id));
+            return;
+        }
+        session.setVisible(m_id, !session.document()->find(m_id)->isVisible);
     });
     connect(m_lock, &QToolButton::clicked, this, [this] {
-        const VectorObject *object = m_list.session().document()->find(m_id);
-        m_list.session().setLocked(m_id, !object->isLocked);
+        EditorSession &session = m_list.session();
+        if (m_controlModifiers.testFlag(Qt::AltModifier)) {
+            session.setOthersLocked(m_id, session.anyOtherUnlocked(m_id));
+            return;
+        }
+        session.setLocked(m_id, !session.document()->find(m_id)->isLocked);
     });
     connect(m_disclosure, &QToolButton::clicked, this, [this] {
         const VectorObject *object = m_list.session().document()->find(m_id);
@@ -195,6 +206,10 @@ void LayerCell::endRenaming(bool keeping)
 
 bool LayerCell::eventFilter(QObject *watched, QEvent *event)
 {
+    if ((watched == m_eye || watched == m_lock) && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease)) {
+        m_controlModifiers = static_cast<QMouseEvent *>(event)->modifiers();
+        return false;
+    }
     if (watched != m_editor || !m_renaming)
         return QWidget::eventFilter(watched, event);
     if (event->type() == QEvent::FocusOut) {

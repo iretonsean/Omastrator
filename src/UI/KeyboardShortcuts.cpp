@@ -137,7 +137,10 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("New", "n", 1, true), entry("Open", "o", 1, true), entry("Close", "w", 1, true), entry("Save", "s", 1, true),
             entry("Save As", "s", 9, true), entry("Place", "p", 9, true), entry("Export PNG", "e", 3, true), entry("Quit", "q", 1, true),
             entry("Undo", "z", 1, true), entry("Redo", "z", 9, true), entry("Cut", "x", 1, true), entry("Copy", "c", 1, true),
-            entry("Paste", "v", 1, true), entry("Paste in Place", "v", 9, true), entry("Duplicate", "j", 1, true),
+            entry("Paste", "v", 1, true), entry("Paste in Place", "v", 9, true), entry("Duplicate", "d", 3, true),
+            entry("Paste in Front", "f", 1, true), entry("Paste in Back", "b", 1, true), entry("Transform Again", "d", 1, true),
+            entry("Reselect", "6", 1, true), entry("Next Object Above", "]", 3, true), entry("Next Object Below", "[", 3, true),
+            entry("Zoom to Selection", "0", 3, true),
             entry("Select All", "a", 1, true), entry("Deselect", "a", 9, true), entry("Move", "m", 9, true),
             entry("Bring to Front", "]", 9, true), entry("Bring Forward", "]", 1, true), entry("Send Backward", "[", 1, true),
             entry("Send to Back", "[", 9, true), entry("Group", "g", 1, true), entry("Ungroup", "g", 9, true),
@@ -156,8 +159,9 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             result.push_back(entry(title, key, 0, false));
         for (const auto &[direction, key] : std::vector<std::pair<QString, QString>>{
                  {"Left", QString(QChar(0xf702))}, {"Right", QString(QChar(0xf703))}, {"Up", QString(QChar(0xf700))}, {"Down", QString(QChar(0xf701))}}) {
-            result.push_back(entry(QStringLiteral("Nudge %1 1 pt").arg(direction), key, 0, false));
-            result.push_back(entry(QStringLiteral("Nudge %1 10 pt").arg(direction), key, 8, false));
+            // The step is the keyboard increment in Preferences.
+            result.push_back(entry(QStringLiteral("Nudge %1").arg(direction), key, 0, false));
+            result.push_back(entry(QStringLiteral("Nudge %1 ×10").arg(direction), key, 8, false));
         }
         return result;
     }();
@@ -193,7 +197,11 @@ void ShortcutSettings::reload()
         const QJsonObject object = QJsonDocument::fromJson(data).object();
         for (auto value = object.constBegin(); value != object.constEnd(); ++value) {
             const QJsonObject chord = value->toObject();
-            saved.insert(value.key(), ShortcutChord(chord.value(QLatin1String("key")).toString(), chord.value(QLatin1String("modifiers")).toInt(-1)));
+            // Nudges were named for fixed steps before the increment became a preference.
+            QString id = value.key();
+            if (id.startsWith(QLatin1String("Canvas & Layers:Nudge ")))
+                id.replace(QLatin1String(" 10 pt"), QStringLiteral(" ×10")).remove(QLatin1String(" 1 pt"));
+            saved.insert(id,ShortcutChord(chord.value(QLatin1String("key")).toString(), chord.value(QLatin1String("modifiers")).toInt(-1)));
         }
         // Swift keeps stored overrides only while they hold together.
         if (const std::optional<QString> wrong = problem(saved))

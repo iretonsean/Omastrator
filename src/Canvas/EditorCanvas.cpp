@@ -117,9 +117,14 @@ bool EditorCanvas::State::pastDragDistance(QPointF view) const
 bool EditorCanvas::event(QEvent *event)
 {
     // Open type takes its editing keys ahead of the menus.
-    if (event->type() == QEvent::ShortcutOverride && m_state->text && InlineTextEditor::claims(*static_cast<QKeyEvent *>(event))) {
-        event->accept();
-        return true;
+    if (event->type() == QEvent::ShortcutOverride && m_state->text) {
+        // Typed characters are text, never a menu's plain-key alias (Shift+1, Shift+2).
+        const auto *key = static_cast<QKeyEvent *>(event);
+        const bool typed = !key->text().isEmpty() && key->text().at(0).isPrint() && !(key->modifiers() & (Qt::ControlModifier | Qt::MetaModifier));
+        if (typed || InlineTextEditor::claims(*key)) {
+            event->accept();
+            return true;
+        }
     }
     // Tab would move focus away mid-drawing.
     if (event->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key() == Qt::Key_Tab && m_state->text)
