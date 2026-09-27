@@ -88,6 +88,23 @@ std::vector<Window> parseClients(const QJsonValue &json)
     return windows;
 }
 
+std::vector<Layer> parseLayers(const QJsonValue &json)
+{
+    std::vector<Layer> layers;
+    const QJsonObject monitors = json.toObject();
+    for (auto monitor = monitors.begin(); monitor != monitors.end(); ++monitor) {
+        const QJsonObject levels = monitor.value().toObject()["levels"].toObject();
+        for (const QJsonValue &level : levels) {
+            for (const QJsonValue &value : level.toArray()) {
+                const QJsonObject layer = value.toObject();
+                layers.push_back({layer["namespace"].toString(),
+                                  QRect(layer["x"].toInt(), layer["y"].toInt(), layer["w"].toInt(), layer["h"].toInt()), monitor.key()});
+            }
+        }
+    }
+    return layers;
+}
+
 std::vector<Monitor> parseMonitors(const QJsonValue &json)
 {
     std::vector<Monitor> monitors;

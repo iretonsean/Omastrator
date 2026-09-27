@@ -65,7 +65,12 @@ Each folder builds as its own static library:
 - `src/System` → `oma_system`. Design systems (docs/DESIGN-SYSTEMS.md):
   `TokenFiles` (W3C tokens.json, Tailwind v4 and v3, CSS variables),
   `ProjectCode`, `Library` (the global library), `SiteExtract`,
-  `OmarchyThemes` and `SyncPlan`. Every push or pull is a `SyncPlan` that only
+  `OmarchyThemes` and `SyncPlan`; phase 4's `DesktopLook` (Omarchy's gaps,
+  borders, bar, font, wallpaper and colours), `AppStyle` (GTK CSS, qt6ct and
+  Qt stylesheets) and `ConfigBackup` (backups and Revert), with the app side in
+  `UI/DesignController+Look.cpp` and `UI/DesktopLookPanel`; their tests build a
+  fake Omarchy desktop in a temporary HOME (`tests/System/DesktopFixtures.h`).
+  Every push or pull, and every write to the desktop's config, is a `SyncPlan` that only
   `UI/SyncConfirmDialog` can confirm; tests answer it with
   `SyncConfirmDialog::setResponder`. The model is `Document/DesignTokens`,
   `Document/Components` and `EditorSession+System.cpp`.

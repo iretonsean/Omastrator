@@ -39,7 +39,16 @@ struct Monitor {
     QString specialName;
 };
 
+// A layer surface: the bar, the background, the island.
+struct Layer {
+    QString name;
+    QRect rect;
+    QString monitor;
+};
+
 std::vector<Window> parseClients(const QJsonValue &json);
+// `hyprctl layers -j`: every monitor's levels.
+std::vector<Layer> parseLayers(const QJsonValue &json);
 std::vector<Monitor> parseMonitors(const QJsonValue &json);
 std::optional<QPoint> parseCursor(const QJsonValue &json);
 
