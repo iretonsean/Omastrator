@@ -11,8 +11,10 @@
 #include "Live/WriteBack.h"
 #include "UI/FloatingPanel.h"
 #include <QObject>
+#include <QDateTime>
 #include <QPointer>
 #include <QRectF>
+#include <QTimer>
 #include <map>
 #include <optional>
 #include <vector>
@@ -54,13 +56,22 @@ public:
         QString requestId;
         Task task;
         QString agent;
+        qint64 started = QDateTime::currentMSecsSinceEpoch();
     };
     const std::optional<Waiting> &waiting() const { return m_waiting; }
-    // "Waiting for Claude…", in the agent's own name.
+    // "Claude is roasting… 12 s", in the agent's own name.
     QString waitingText() const;
-    // Cancel: the app stops waiting; an answer that still comes lands as usual.
+    // Cancel: stops the agent's background run; an agent in a terminal may still answer, which lands as usual.
     void stopWaiting();
     static QString displayName(const QString &agent);
+    // The run in the background, or null when the agent is in a terminal or done.
+    AgentRun *run() const { return m_run; }
+    // The log of the last run that stopped without an answer; Show log opens it.
+    QString logPath() const { return m_logPath; }
+    QString showLog();
+    // An edit or trace that stopped without an answer, which the proposal bar shows until dismissed.
+    QString barMessage() const { return m_barMessage; }
+    void dismissBarMessage();
 
     struct Round {
         QString requestId;
@@ -191,6 +202,8 @@ signals:
     // A proposal opened, grew, was renamed or ended.
     void proposalChanged();
     void waitingChanged();
+    // Once a second while waiting, for the elapsed time.
+    void waitingTick();
     void variationsChanged();
     void roastChanged();
     // Reviews, kept files, the Live message.
@@ -199,6 +212,8 @@ signals:
 private:
     // Checks for an agent, then launches; `task` starts waiting on success.
     QString launch(const QString &requestId, Task task, const QString &prompt);
+    // A background run ended; if its answer never came, say so.
+    void runFinished(const QString &requestId, AgentRun &run);
     QString quietly(const std::function<bool()> &run);
     // Follows the front tab's session, so its tool and document reach status followers.
     void watchFront();
@@ -210,6 +225,10 @@ private:
     QString m_serverError;
     QString m_summary;
     std::optional<Waiting> m_waiting;
+    QPointer<AgentRun> m_run;
+    QTimer m_tick;
+    QString m_logPath;
+    QString m_barMessage;
     std::vector<Round> m_rounds;
     std::optional<std::pair<int, int>> m_chosen;
     // The open proposal is a picked variation: picking another replaces it.

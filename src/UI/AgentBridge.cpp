@@ -5,13 +5,40 @@
 #include "UI/AgentSheets.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/SwatchesPanel.h"
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 
 namespace {
 QString newRequestId()
 {
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
+}
+
+// What the agent is doing, for "Claude is roasting…".
+const char *verb(AgentBridge::Task task)
+{
+    switch (task) {
+    case AgentBridge::Task::generate:
+        return "generating";
+    case AgentBridge::Task::edit:
+        return "editing";
+    case AgentBridge::Task::vectorize:
+        return "tracing";
+    case AgentBridge::Task::roast:
+        return "roasting";
+    case AgentBridge::Task::live:
+        break;
+    }
+    return "working";
+}
+
+// The task as the status and the log name call it.
+QString taskName(AgentBridge::Task task)
+{
+    static const QStringList names{"generate", "edit", "vectorize", "roast", "live", "deploy"};
+    return names.value(int(task));
 }
 }
 
@@ -47,6 +74,15 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
     });
     connect(&m_workspace, &ProjectWorkspace::changed, this, &AgentBridge::watchFront);
     watchFront();
+    // The elapsed time ticks only while something is waited on, whoever started it.
+    m_tick.setInterval(1000);
+    connect(&m_tick, &QTimer::timeout, this, &AgentBridge::waitingTick);
+    connect(this, &AgentBridge::waitingChanged, this, [this] {
+        if (!m_waiting)
+            m_tick.stop();
+        else if (!m_tick.isActive())
+            m_tick.start();
+    });
 }
 
 void AgentBridge::watchFront()
@@ -58,9 +94,10 @@ void AgentBridge::watchFront()
 
 QJsonObject AgentBridge::statusExtras()
 {
-    static const QStringList tasks{"generate", "edit", "vectorize", "roast", "live", "deploy"};
-    QJsonObject extras{{"summary", proposalSummary()}, {"waiting", waitingText()}, {"error", m_panelMessage},
-                       {"task", m_waiting ? tasks.value(int(m_waiting->task)) : QString()},
+    QJsonObject extras{{"summary", proposalSummary()}, {"waiting", waitingText()},
+                       {"error", m_panelMessage.isEmpty() ? m_barMessage : m_panelMessage},
+                       {"log", m_logPath},
+                       {"task", m_waiting ? taskName(m_waiting->task) : QString()},
                        {"agent", m_waiting ? displayName(m_waiting->agent) : QString()},
                        {"ready", m_tools.hasProposal() || m_resultsUnseen},
                        {"roastId", m_roast ? m_roast->requestId : QString()},
@@ -145,30 +182,107 @@ QString AgentBridge::displayName(const QString &agent)
 
 QString AgentBridge::waitingText() const
 {
-    return m_waiting ? QStringLiteral("Waiting for %1…").arg(displayName(m_waiting->agent)) : QString();
+    if (!m_waiting)
+        return {};
+    const QString text = QStringLiteral("%1 is %2…").arg(displayName(m_waiting->agent), QLatin1String(verb(m_waiting->task)));
+    const qint64 seconds = (QDateTime::currentMSecsSinceEpoch() - m_waiting->started) / 1000;
+    return seconds > 0 ? QStringLiteral("%1 %2 s").arg(text).arg(seconds) : text;
 }
 
 void AgentBridge::stopWaiting()
 {
+    if (m_run)
+        m_run->cancel();
+    m_run = nullptr;
     if (!m_waiting)
         return;
     m_waiting.reset();
     emit waitingChanged();
 }
 
+QString AgentBridge::showLog()
+{
+    if (m_logPath.isEmpty() || !QFileInfo::exists(m_logPath))
+        return QStringLiteral("The log is gone.");
+    const QString opener = qEnvironmentVariable("OMASTRATOR_XDG_OPEN", QStringLiteral("xdg-open"));
+    if (!QProcess::startDetached(opener, {m_logPath}))
+        return QStringLiteral("Could not open %1.").arg(m_logPath);
+    return {};
+}
+
+void AgentBridge::dismissBarMessage()
+{
+    m_barMessage.clear();
+    emit proposalChanged();
+}
+
 QString AgentBridge::launch(const QString &requestId, Task task, const QString &prompt)
 {
+    // An older run's log goes with its message.
+    m_logPath.clear();
     QString error;
     const QString agent = AgentLauncher::defaultAgent(&error);
     if (agent.isEmpty())
         return error;
-    error = AgentLauncher::launch(prompt, m_server.isListening() ? m_server.path() : QString());
+    AgentLauncher::LaunchOptions options;
+    options.task = taskName(task);
+    options.finished = [bridge = QPointer<AgentBridge>(this), requestId](AgentRun &run) {
+        if (bridge)
+            bridge->runFinished(requestId, run);
+    };
+    QPointer<AgentRun> run;
+    error = AgentLauncher::launch(prompt, m_server.isListening() ? m_server.path() : QString(), options, &run);
     if (!error.isEmpty())
         return error;
+    m_run = run;
     m_waiting = Waiting{requestId, task, agent};
     m_panelMessage.clear();
+    m_barMessage.clear();
+    m_logPath.clear();
     emit waitingChanged();
     return {};
+}
+
+void AgentBridge::runFinished(const QString &requestId, AgentRun &run)
+{
+    if (m_run == &run)
+        m_run = nullptr;
+    // Answered, cancelled, or replaced by a newer task: nothing to say.
+    if (!m_waiting || m_waiting->requestId != requestId || run.end() == AgentRun::End::cancelled)
+        return;
+    const Task task = m_waiting->task;
+    const QString name = displayName(run.agent());
+    QString message;
+    if (run.end() == AgentRun::End::timedOut) {
+        const int limit = run.timeoutSeconds();
+        const bool minutes = limit % 60 == 0;
+        const int count = minutes ? limit / 60 : limit;
+        const QString unit = minutes ? QStringLiteral("minute") : QStringLiteral("second");
+        message = QStringLiteral("%1 ran out of time after %2 %3%4 and was stopped.")
+                      .arg(name)
+                      .arg(count)
+                      .arg(unit, count == 1 ? QString() : QStringLiteral("s"));
+    } else {
+        const QString line = run.lastLine();
+        message = line.isEmpty() ? QStringLiteral("%1 stopped without an answer.").arg(name)
+                                 : QStringLiteral("%1 stopped without an answer: %2").arg(name, line);
+    }
+    m_logPath = run.logPath();
+    m_waiting.reset();
+    if (task == Task::edit || task == Task::vectorize)
+        m_barMessage = message;
+    else
+        m_panelMessage = message;
+    emit waitingChanged();
+    if (task == Task::roast) {
+        showRoastPanel();
+        emit roastChanged();
+    } else if (task == Task::generate) {
+        emit variationsChanged();
+        showVariationsPanel();
+    } else {
+        emit proposalChanged();
+    }
 }
 
 QString AgentBridge::generate(const QString &brief, int count, bool fitToSelection)
@@ -258,6 +372,7 @@ QString AgentBridge::roast()
     QString error;
     if (AgentLauncher::defaultAgent(&error).isEmpty()) {
         m_panelMessage = error;
+        m_logPath.clear();
         showRoastPanel();
         emit roastChanged();
         return error;

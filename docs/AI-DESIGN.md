@@ -8,13 +8,13 @@ document to that agent.
 
 ```
 Omastrator (GUI)                            the agent (claude, codex, opencode, pi…)
-┌──────────────────────────────┐            launched by `omarchy agent prompt "<prompt>"`
+┌──────────────────────────────┐            run headless by AgentLauncher, no terminal
 │ AgentServer (QLocalServer)   │◀─ JSON-RPC ─ `omastrator agent <method> [json]`   (any agent: shell)
 │   $XDG_RUNTIME_DIR/          │◀─ JSON-RPC ─ `omastrator --mcp`                    (MCP stdio bridge)
 │   omastrator.sock            │
 │ AgentTools ─▶ EditorSession  │
 │ AgentProposal (preview)      │
-│ AgentLauncher ─▶ omarchy     │
+│ AgentLauncher ─▶ the agent   │
 └──────────────────────────────┘
 ```
 
@@ -33,13 +33,64 @@ Omastrator (GUI)                            the agent (claude, codex, opencode, 
   `claude mcp add omastrator -- omastrator --mcp`, and Help ▸ Connect an Agent…
   shows that line.
 - **AgentLauncher.** Runs `omarchy default agent`. If nothing is set, it says:
-  "Choose an agent in Omarchy → Setup → Default → Agent". It then runs
-  `omarchy agent prompt "<prompt>"` with arguments passed directly (never
-  through a shell), and sets `OMASTRATOR_BIN` and `OMASTRATOR_SOCKET` in the
-  environment. The working directory is `~/.local/share/omastrator/agent/`,
-  which contains `AGENTS.md` and `CLAUDE.md` (how to drive Omastrator with the
-  CLI) and `.mcp.json` (the MCP bridge), written fresh on every launch. Each
-  prompt names the task and the id of the request it answers.
+  "Choose an agent in Omarchy → Setup → Default → Agent". It then runs the
+  agent itself, headless, in the background (see [Headless runs](#headless-runs)),
+  with arguments passed directly (never through a shell), and sets
+  `OMASTRATOR_BIN` and `OMASTRATOR_SOCKET` in the environment. An agent it
+  doesn't know how to run headless, or any agent when the setting
+  `agent/showTerminal` is on (Help ▸ Connect an Agent ▸ "Open the agent in a
+  terminal while it works"), goes through `omarchy agent prompt "<prompt>"`
+  instead, in a terminal. The working directory is
+  `~/.local/share/omastrator/agent/`, which contains `AGENTS.md` and
+  `CLAUDE.md` (how to drive Omastrator with the CLI), written fresh on every
+  launch. It holds no `.mcp.json`: an MCP server there made Claude Code ask for
+  approval on every run, so an old one is removed. Each prompt names the task,
+  the id of the request it answers, and the CLI by its absolute path.
+
+## Headless runs
+
+The user sees Omastrator doing the work, not a terminal. `AgentLauncher::launch`
+starts the agent as a background `QProcess` in its own process group, with
+stdin closed and no MCP servers. What it may do without asking depends on the
+**access level**:
+
+- `AgentAccess::omastrator` (Generate, Refine, Edit with Instruction,
+  Vectorize with AI, Roast My Design): read the files it is given and run the
+  Omastrator CLI, nothing else.
+- `AgentAccess::project` (Live's write-back and Hand to Agent, through
+  `launchIn` or `LaunchOptions{AgentAccess::project, worktree, "live", …}`):
+  read, edit and write files and run shell commands, starting in the project's
+  worktree.
+
+The commands (`<cli>` is `<absolute path to omastrator> agent`):
+
+| Agent | Omastrator access | Project access |
+|---|---|---|
+| `claude` | `claude -p <prompt> --output-format text --no-session-persistence --strict-mcp-config --mcp-config '{"mcpServers":{}}' --permission-mode acceptEdits --tools Bash,Read --allowedTools "Bash(<cli> *)" Read` | the same with `--tools Bash,Read,Edit,Write,Glob,Grep --allowedTools Bash Read Edit Write Glob Grep` |
+| `codex` | `codex exec --skip-git-repo-check --ephemeral --color never -c approval_policy="never" --sandbox workspace-write -c sandbox_workspace_write.network_access=true -- <prompt>` (the read-only sandbox refuses the Unix socket the CLI needs; writes stay in the working folder) | the same |
+| `opencode` | `opencode run <prompt>`, with `OPENCODE_CONFIG_CONTENT` denying edits, web fetches and every command but `<cli> *` | edits and commands allowed |
+| `gemini` | `gemini -p <prompt> --output-format text --skip-trust --approval-mode default --allowed-tools read_file "run_shell_command(<cli>)"` | `--approval-mode auto_edit --allowed-tools run_shell_command` |
+
+Nothing is ever run with `--dangerously-skip-permissions` or its equivalents.
+Anything outside the allowlist is refused without a prompt, and the agent
+carries on or stops.
+
+- **Logs.** Each run's stdout and stderr go to
+  `$XDG_STATE_HOME/omastrator/agent-runs/<timestamp>-<task>.log` (by default
+  `~/.local/state/…`), and the newest 30 are kept. The log names the agent, the
+  folder and the command, with the task itself left out; the environment is
+  never written.
+- **Timeout.** A run is stopped (SIGTERM to its group, then SIGKILL) after 5
+  minutes, or 20 for project tasks; the setting `agent/timeoutSeconds`
+  changes both.
+- **In the app.** While a run works, the panel or the proposal bar shows
+  "Claude is roasting… 12 s" (generating, editing, tracing) with Cancel, which
+  stops the run. If the run ends before its answer (`show_roast`,
+  `show_variations`, `proposal_finish`) arrives, the same place shows one plain
+  line, "Claude stopped without an answer." (with the last meaningful line of
+  its stderr after a colon, when there is one) or "Claude ran out of time after
+  5 minutes and was stopped.", and **Show log** opens the log with `xdg-open`.
+  `status_get` carries that line as `error` and the log as `log`.
 
 ## Preview, then accept
 

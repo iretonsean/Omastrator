@@ -38,6 +38,18 @@ QFrame *separator(QWidget *parent, const QString &name)
     return line;
 }
 
+// Opens the failed run's log; if it can't, says so in `message`.
+QPushButton *showLogButton(AgentBridge &bridge, QWidget *parent, const QString &name, QLabel *message)
+{
+    auto *button = new QPushButton(QStringLiteral("Show log"), parent);
+    button->setObjectName(name);
+    QObject::connect(button, &QPushButton::clicked, parent, [&bridge, message] {
+        if (const QString failure = bridge.showLog(); !failure.isEmpty() && message)
+            message->setText(message->text() + QLatin1Char(' ') + failure);
+    });
+    return button;
+}
+
 void clear(QLayout *layout)
 {
     while (QLayoutItem *item = layout->takeAt(0)) {
@@ -57,7 +69,8 @@ void clear(QLayout *layout)
 
 VariationsPanel::VariationsPanel(AgentBridge &bridge, QWidget *parent)
     : QWidget(parent), m_bridge(bridge), m_status(new QLabel(this)), m_cancel(new QPushButton(QStringLiteral("Cancel"), this)),
-      m_message(wrapped(QString(), this, QStringLiteral("variationsMessage"))), m_refine(new QLineEdit(this)),
+      m_message(wrapped(QString(), this, QStringLiteral("variationsMessage"))),
+      m_showLog(showLogButton(bridge, this, QStringLiteral("variationsShowLog"), m_message)), m_refine(new QLineEdit(this)),
       m_refineButton(new QPushButton(QStringLiteral("Refine"), this))
 {
     setObjectName(QStringLiteral("variations"));
@@ -71,7 +84,10 @@ VariationsPanel::VariationsPanel(AgentBridge &bridge, QWidget *parent)
     waiting->addWidget(m_status, 1);
     waiting->addWidget(m_cancel);
     column->addLayout(waiting);
-    column->addWidget(m_message);
+    auto *failure = new QHBoxLayout;
+    failure->addWidget(m_message, 1);
+    failure->addWidget(m_showLog, 0, Qt::AlignTop);
+    column->addLayout(failure);
 
     auto *roundsHolder = new QWidget(this);
     m_rounds = new QVBoxLayout(roundsHolder);
@@ -107,6 +123,7 @@ VariationsPanel::VariationsPanel(AgentBridge &bridge, QWidget *parent)
     connect(m_refine, &QLineEdit::textChanged, this, &VariationsPanel::synchronizeWaiting);
     connect(&m_bridge, &AgentBridge::variationsChanged, this, &VariationsPanel::rebuild);
     connect(&m_bridge, &AgentBridge::waitingChanged, this, &VariationsPanel::synchronizeWaiting);
+    connect(&m_bridge, &AgentBridge::waitingTick, this, &VariationsPanel::synchronizeWaiting);
     rebuild();
 }
 
@@ -178,6 +195,7 @@ void VariationsPanel::rebuild()
     const QString message = m_bridge.panelMessage();
     m_message->setText(message);
     m_message->setVisible(!message.isEmpty());
+    m_showLog->setVisible(!message.isEmpty() && !m_bridge.logPath().isEmpty());
     synchronizeWaiting();
 }
 
@@ -196,6 +214,11 @@ RoastPanel::RoastPanel(AgentBridge &bridge, QWidget *parent) : QWidget(parent), 
         rebuild();
     });
     connect(&m_bridge, &AgentBridge::waitingChanged, this, &RoastPanel::rebuild);
+    // Only the elapsed time changes: a rebuild would close an open heat menu.
+    connect(&m_bridge, &AgentBridge::waitingTick, this, [this] {
+        if (m_status)
+            m_status->setText(m_bridge.waitingText());
+    });
     rebuild();
 }
 
@@ -219,6 +242,7 @@ void RoastPanel::buildBody(QWidget &body, QVBoxLayout &column)
         auto *row = new QHBoxLayout;
         auto *status = new QLabel(m_bridge.waitingText(), &body);
         status->setObjectName(QStringLiteral("roastStatus"));
+        m_status = status;
         auto *cancel = new QPushButton(QStringLiteral("Cancel"), &body);
         cancel->setObjectName(QStringLiteral("roastCancel"));
         connect(cancel, &QPushButton::clicked, &m_bridge, &AgentBridge::stopWaiting);
@@ -251,7 +275,14 @@ void RoastPanel::buildBody(QWidget &body, QVBoxLayout &column)
     column.addLayout(heatRow);
     auto *message = wrapped(m_bridge.panelMessage(), &body, QStringLiteral("roastMessage"));
     message->setVisible(!m_bridge.panelMessage().isEmpty());
-    column.addWidget(message);
+    if (!m_bridge.panelMessage().isEmpty() && !m_bridge.logPath().isEmpty()) {
+        auto *row = new QHBoxLayout;
+        row->addWidget(message, 1);
+        row->addWidget(showLogButton(m_bridge, &body, QStringLiteral("roastShowLog"), message), 0, Qt::AlignTop);
+        column.addLayout(row);
+    } else {
+        column.addWidget(message);
+    }
     const std::optional<AgentRoast> &roast = m_bridge.roastResult();
     if (!roast) {
         if (!waiting && m_bridge.panelMessage().isEmpty())
@@ -357,7 +388,9 @@ void RoastPanel::keyPressEvent(QKeyEvent *event)
 ProposalBar::ProposalBar(AgentBridge &bridge, EditorSession &session, QWidget *parent)
     : QWidget(parent), m_bridge(bridge), m_session(session), m_text(new QLabel(this)), m_summary(new QLabel(this)),
       m_keep(new QPushButton(QStringLiteral("Keep"), this)), m_discard(new QPushButton(QStringLiteral("Discard"), this)),
-      m_cancel(new QPushButton(QStringLiteral("Cancel"), this))
+      m_cancel(new QPushButton(QStringLiteral("Cancel"), this)),
+      m_showLog(showLogButton(bridge, this, QStringLiteral("proposalShowLog"), nullptr)),
+      m_dismiss(new QPushButton(QStringLiteral("Dismiss"), this))
 {
     setObjectName(QStringLiteral("proposalBar"));
     setFocusPolicy(Qt::StrongFocus);
@@ -370,6 +403,7 @@ ProposalBar::ProposalBar(AgentBridge &bridge, EditorSession &session, QWidget *p
     m_keep->setObjectName(QStringLiteral("proposalKeep"));
     m_discard->setObjectName(QStringLiteral("proposalDiscard"));
     m_cancel->setObjectName(QStringLiteral("proposalCancel"));
+    m_dismiss->setObjectName(QStringLiteral("proposalDismiss"));
     m_keep->setDefault(true);
     auto *row = new QHBoxLayout(this);
     row->setContentsMargins(14, 6, 10, 6);
@@ -377,11 +411,15 @@ ProposalBar::ProposalBar(AgentBridge &bridge, EditorSession &session, QWidget *p
     row->addWidget(m_text);
     row->addWidget(m_summary, 1);
     row->addWidget(m_cancel);
+    row->addWidget(m_showLog);
+    row->addWidget(m_dismiss);
     row->addWidget(m_discard);
     row->addWidget(m_keep);
     connect(m_keep, &QPushButton::clicked, &m_bridge, &AgentBridge::keepProposal);
     connect(m_discard, &QPushButton::clicked, &m_bridge, &AgentBridge::discardProposal);
     connect(m_cancel, &QPushButton::clicked, &m_bridge, &AgentBridge::stopWaiting);
+    connect(m_dismiss, &QPushButton::clicked, &m_bridge, &AgentBridge::dismissBarMessage);
+    connect(&m_bridge, &AgentBridge::waitingTick, this, &ProposalBar::synchronize);
     connect(&m_bridge, &AgentBridge::proposalChanged, this, &ProposalBar::synchronize);
     connect(&m_bridge, &AgentBridge::waitingChanged, this, &ProposalBar::synchronize);
     connect(&m_session, &EditorSession::changed, this, &ProposalBar::synchronize);
@@ -393,17 +431,29 @@ void ProposalBar::synchronize()
     const bool proposal = m_bridge.hasProposalIn(m_session);
     const auto &waiting = m_bridge.waiting();
     const bool working = waiting && (waiting->task == AgentBridge::Task::edit || waiting->task == AgentBridge::Task::vectorize);
+    // An edit or trace that stopped without an answer, on the canvas it was meant for.
+    const bool failed = !working && !m_bridge.barMessage().isEmpty() && (proposal || &m_session == m_bridge.session());
     if (proposal)
         m_text->setText(QStringLiteral("<b>%1</b>: Enter keeps it, Esc discards it.").arg(m_bridge.proposalTitle().toHtmlEscaped()));
     else if (working)
         m_text->setText(m_bridge.waitingText());
-    m_summary->setText(proposal ? m_bridge.proposalSummary() : QString());
+    else if (failed)
+        m_text->setText(m_bridge.barMessage().toHtmlEscaped());
+    // With a proposal on show, the progress and the failure go where its summary would.
+    if (proposal && working)
+        m_summary->setText(m_bridge.waitingText());
+    else if (proposal && failed)
+        m_summary->setText(m_bridge.barMessage());
+    else
+        m_summary->setText(proposal ? m_bridge.proposalSummary() : QString());
     m_summary->setToolTip(m_summary->text());
     m_keep->setVisible(proposal);
     m_discard->setVisible(proposal);
     // Still working with a proposal on show: the agent may add to it.
     m_cancel->setVisible(working);
-    setVisible(proposal || working);
+    m_showLog->setVisible(failed && !m_bridge.logPath().isEmpty());
+    m_dismiss->setVisible(failed && !proposal);
+    setVisible(proposal || working || failed);
 }
 
 void ProposalBar::keyPressEvent(QKeyEvent *event)
