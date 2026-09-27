@@ -1,7 +1,7 @@
 # Humor in Omastrator
 
 Decided with the user on 2026-09-26. The model is the dry, specific humor of
-the web design time machine on seanireton.com. The goal is that nobody ever
+a web design time-machine game the author made before this project. The goal is that nobody ever
 wants to turn it off.
 
 ## Rules
