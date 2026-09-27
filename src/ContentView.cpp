@@ -27,7 +27,7 @@
 
 const std::vector<std::vector<std::vector<Tool>>> ContentView::toolSlotGroups{
     {{Tool::select, Tool::directSelect}, {Tool::artboard}},
-    {{Tool::pen, Tool::pencil, Tool::scissors}, {Tool::text},
+    {{Tool::pen, Tool::pencil, Tool::scissors}, {Tool::text}, {Tool::typeOnPath},
      {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::line}, {Tool::shapeBuilder}},
     {{Tool::rotate, Tool::scale}, {Tool::gradient, Tool::eyedropper}, {Tool::width}},
     {{Tool::hand, Tool::zoom}},

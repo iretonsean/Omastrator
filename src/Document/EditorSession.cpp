@@ -10,12 +10,13 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 21> toolInfo{{
+const std::array<ToolInfo, 22> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
     {Tool::pencil, "pencil", "Pencil"},
     {Tool::text, "text", "Type"},
+    {Tool::typeOnPath, "typeOnPath", "Type on a Path"},
     {Tool::line, "line", "Line Segment"},
     {Tool::rectangle, "rectangle", "Rectangle"},
     {Tool::roundedRectangle, "roundedRectangle", "Rounded Rectangle"},
@@ -79,6 +80,9 @@ void EditorSession::notify(bool documentToo)
     // A drag previews its instances too.
     if (documentToo && m_interaction)
         settle();
+    // Wrap and thread previews follow a drag live, same as the committed edit.
+    if (documentToo && m_document)
+        m_document->reflowText();
     // Artboard 1's size double as the viewport's reference point; keep the document
     // origin still on screen when it changes (a drag on the Artboard tool, or undo).
     if (documentToo && m_document && m_document->size != m_viewportDocumentSize) {
@@ -397,6 +401,7 @@ void EditorSession::pruneSelection()
     }
     // An edited anchor ends a live shape.
     m_document->expandEditedShapes();
+    m_document->reflowText();
     std::erase_if(m_selection, [&](const QUuid &id) { return !m_document->find(id); });
     if (m_keyObject && (m_selection.size() < 2 || !isSelected(*m_keyObject)))
         m_keyObject.reset();

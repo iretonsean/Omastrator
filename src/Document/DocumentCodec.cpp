@@ -146,6 +146,15 @@ void writeParagraph(QJsonObject &json, const ParagraphFormat &format, const Para
     number("spaceAfter", format.spaceAfter, against.spaceAfter);
     if (format.paragraphStyle != against.paragraphStyle)
         json["paragraphStyle"] = id(format.paragraphStyle);
+    if (format.hyphenate != against.hyphenate)
+        json["hyphenate"] = format.hyphenate;
+    const auto integer = [&json](const char *key, int value, int otherwise) {
+        if (value != otherwise)
+            json[QLatin1String(key)] = value;
+    };
+    integer("hyphenMinWord", format.hyphenMinWord, against.hyphenMinWord);
+    integer("hyphenMinBefore", format.hyphenMinBefore, against.hyphenMinBefore);
+    integer("hyphenMinAfter", format.hyphenMinAfter, against.hyphenMinAfter);
 }
 
 ParagraphFormat readParagraph(const QJsonObject &json, ParagraphFormat format)
@@ -161,6 +170,13 @@ ParagraphFormat readParagraph(const QJsonObject &json, ParagraphFormat format)
     format.spaceAfter = json["spaceAfter"].toDouble(format.spaceAfter);
     if (json.contains("paragraphStyle"))
         format.paragraphStyle = QUuid::fromString(json["paragraphStyle"].toString());
+    format.hyphenate = json["hyphenate"].toBool(format.hyphenate);
+    if (json.contains("hyphenMinWord"))
+        format.hyphenMinWord = std::max(2, json["hyphenMinWord"].toInt(format.hyphenMinWord));
+    if (json.contains("hyphenMinBefore"))
+        format.hyphenMinBefore = std::max(1, json["hyphenMinBefore"].toInt(format.hyphenMinBefore));
+    if (json.contains("hyphenMinAfter"))
+        format.hyphenMinAfter = std::max(1, json["hyphenMinAfter"].toInt(format.hyphenMinAfter));
     return format;
 }
 
@@ -374,6 +390,12 @@ QJsonObject encode(const TextContent &text)
         }
         json["paragraphs"] = paragraphs;
     }
+    // Additive, optional keys (no version bump): Type on a Path and threaded area type.
+    if (text.onPath) {
+        json["onPath"] = QJsonObject{{"path", encode(text.onPath->path)}, {"start", text.onPath->start}, {"flipped", text.onPath->flipped}};
+    }
+    if (!text.threadNext.isNull())
+        json["threadNext"] = id(text.threadNext);
     return json;
 }
 
@@ -416,6 +438,13 @@ TextContent decodeText(const QJsonObject &json)
     text.firstLineIndent = json["firstLineIndent"].toDouble();
     text.spaceBefore = json["spaceBefore"].toDouble();
     text.spaceAfter = json["spaceAfter"].toDouble();
+    text.hyphenate = json["hyphenate"].toBool();
+    if (json.contains("hyphenMinWord"))
+        text.hyphenMinWord = std::max(2, json["hyphenMinWord"].toInt(text.hyphenMinWord));
+    if (json.contains("hyphenMinBefore"))
+        text.hyphenMinBefore = std::max(1, json["hyphenMinBefore"].toInt(text.hyphenMinBefore));
+    if (json.contains("hyphenMinAfter"))
+        text.hyphenMinAfter = std::max(1, json["hyphenMinAfter"].toInt(text.hyphenMinAfter));
     text.textCase = textCase(json["case"].toString()).value_or(TextCase::normal);
     text.underline = json["underline"].toBool();
     text.strikethrough = json["strikethrough"].toBool();
@@ -439,6 +468,13 @@ TextContent decodeText(const QJsonObject &json)
         const QJsonObject entry = value.toObject();
         text.paragraphFormats[entry["index"].toInt(-1)] = readParagraph(entry, text.paragraph());
     }
+    // Additive, optional keys: files without them read exactly as before.
+    if (json.contains("onPath")) {
+        const QJsonObject onPath = json["onPath"].toObject();
+        text.onPath = TextPath{decodePath(onPath["path"].toObject()), std::clamp(onPath["start"].toDouble(), 0.0, 1.0), onPath["flipped"].toBool()};
+    }
+    if (json.contains("threadNext"))
+        text.threadNext = QUuid::fromString(json["threadNext"].toString());
     text.normalize();
     return text;
 }
@@ -466,6 +502,9 @@ QJsonObject encode(const VectorObject &object)
         json["mask"] = QJsonObject{{"clip", object.mask->clip}, {"inverted", object.mask->inverted}};
     if (!object.liftedFrom.isEmpty())
         json["liftedFrom"] = object.liftedFrom;
+    // Additive, optional key (no version bump): Object ▸ Text Wrap ▸ Make.
+    if (object.textWrap)
+        json["textWrap"] = *object.textWrap;
     switch (object.kind) {
     case ObjectKind::path:
         json["path"] = encode(object.path);
@@ -541,6 +580,8 @@ VectorObject decodeObject(const QJsonObject &json)
         object.mask = OpacityMask{mask["clip"].toBool(true), mask["inverted"].toBool()};
     }
     object.liftedFrom = json["liftedFrom"].toString();
+    if (json.contains("textWrap"))
+        object.textWrap = std::max(0.0, json["textWrap"].toDouble());
     object.transform = readTransform(json["transform"]);
     if (object.kind == ObjectKind::path) {
         object.path = decodePath(json["path"].toObject());
@@ -742,6 +783,7 @@ VectorDocument decode(const QJsonObject &json)
     }
     if (document.layers().empty())
         document = VectorDocument::blank(document.size);
+    document.reflowText();
     return document;
 }
 }

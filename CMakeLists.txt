@@ -30,6 +30,13 @@ endfunction()
 
 oma_library(oma_core src/Logging.cpp src/Document/*.cpp src/Rendering/*.cpp)
 target_link_libraries(oma_core PUBLIC Qt6::Widgets Qt6::Concurrent)
+# Automatic hyphenation's patterns, vendored from hyph-utf8 (third_party/hyph-utf8), compiled in.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/hyph-utf8/hyph-en-us.pat.txt ${CMAKE_CURRENT_SOURCE_DIR}/third_party/hyph-utf8/hyph-en-us.hyp.txt)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/third_party/hyph-utf8/hyph-en-us.pat.txt HYPHEN_PATTERNS)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/third_party/hyph-utf8/hyph-en-us.hyp.txt HYPHEN_EXCEPTIONS)
+configure_file(cmake/HyphenPatterns.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/Document/HyphenPatterns.h @ONLY)
+target_include_directories(oma_core PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 oma_library(oma_io src/IO/*.cpp)
 target_include_directories(oma_io PRIVATE third_party)
@@ -83,6 +90,7 @@ foreach(size 16 32 64 128 256 512)
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps RENAME io.github.iretonsean.Omastrator.png)
 endforeach()
 install(FILES LICENSE third_party/nanosvg/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL)
+install(FILES third_party/hyph-utf8/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL RENAME LICENSE-hyph-utf8.txt)
 # A direct install registers the document type; packages use hooks.
 install(CODE "
     if(\"\$ENV{DESTDIR}\" STREQUAL \"\")

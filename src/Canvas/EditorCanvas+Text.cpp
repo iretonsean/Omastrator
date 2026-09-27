@@ -2,6 +2,8 @@
 #include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QInputMethod>
+#include <QLineF>
+#include <limits>
 
 namespace {
 // A text layer's own name: its first line, trimmed.
@@ -11,6 +13,35 @@ QString autoName(const QString &text)
     if (line.size() > 30)
         line = line.left(29).trimmed() + QChar(0x2026);
     return line;
+}
+
+// The path percent nearest `point`: a coarse scan, then a few rounds of local refinement.
+double nearestPercent(const QPainterPath &geometry, QPointF point)
+{
+    if (geometry.length() <= 1e-6)
+        return 0;
+    constexpr int coarse = 200;
+    double bestT = 0, bestDistance = std::numeric_limits<double>::infinity();
+    for (int i = 0; i <= coarse; ++i) {
+        const double t = double(i) / coarse;
+        const double d = QLineF(geometry.pointAtPercent(t), point).length();
+        if (d < bestDistance) {
+            bestDistance = d;
+            bestT = t;
+        }
+    }
+    double span = 1.0 / coarse;
+    for (int refine = 0; refine < 20; ++refine) {
+        span /= 2;
+        for (const double t : {std::clamp(bestT - span, 0.0, 1.0), std::clamp(bestT + span, 0.0, 1.0)}) {
+            const double d = QLineF(geometry.pointAtPercent(t), point).length();
+            if (d < bestDistance) {
+                bestDistance = d;
+                bestT = t;
+            }
+        }
+    }
+    return bestT;
 }
 }
 
@@ -150,4 +181,132 @@ QRectF EditorCanvas::State::textBox() const
     // An empty line still has height: the caret's.
     const QRectF local = text->object.text.frame().united(QRectF(caret.left(), caret.top(), 1, caret.height()));
     return text->object.transform.mapRect(local);
+}
+
+// Type on a Path -------------------------------------------------------------------
+
+void EditorCanvas::State::typeOnPathPress(QPointF view)
+{
+    const QPointF document = toDocument(view);
+    const std::optional<QUuid> leaf = hitLeaf(document);
+    if (!leaf)
+        return;
+    const VectorObject *object = session.document()->find(*leaf);
+    if (!object)
+        return;
+    if (object->kind == ObjectKind::text) {
+        const VectorObject copy = *object;
+        session.selectTool(Tool::text);
+        beginTextEditing(copy, true, document);
+        return;
+    }
+    if (object->kind != ObjectKind::path)
+        return;
+    const QUuid created = session.convertPathToTypeOnPath(*leaf);
+    if (created.isNull())
+        return;
+    const VectorObject *made = session.document()->find(created);
+    if (!made)
+        return;
+    session.selectTool(Tool::text);
+    beginTextEditing(*made, true, std::nullopt);
+}
+
+std::optional<std::pair<QPointF, QPointF>> EditorCanvas::State::pathBracketPoint(const VectorObject &object) const
+{
+    if (!object.text.onPath)
+        return std::nullopt;
+    const TextPath &onPath = *object.text.onPath;
+    const QPainterPath geometry = onPath.flipped ? reversed(onPath.path).painterPath() : onPath.path.painterPath();
+    if (geometry.length() <= 1e-6)
+        return std::nullopt;
+    const double t = std::clamp(onPath.flipped ? 1 - onPath.start : onPath.start, 0.0, 1.0);
+    const QPointF point = geometry.pointAtPercent(t);
+    constexpr double eps = 0.001;
+    QPointF tangent = geometry.pointAtPercent(std::clamp(t + eps, 0.0, 1.0)) - geometry.pointAtPercent(std::clamp(t - eps, 0.0, 1.0));
+    const double length = std::hypot(tangent.x(), tangent.y());
+    tangent = length > 1e-9 ? tangent / length : QPointF(1, 0);
+    return std::pair(point, tangent);
+}
+
+std::optional<QUuid> EditorCanvas::State::pathBracketAt(QPointF view) const
+{
+    if (!session.document())
+        return std::nullopt;
+    for (const QUuid &id : session.selectedTexts()) {
+        const VectorObject *object = text && text->object.id == id ? &text->object : session.document()->find(id);
+        if (!object)
+            continue;
+        const auto bracket = pathBracketPoint(*object);
+        if (!bracket)
+            continue;
+        if (QLineF(view, toView(object->transform.map(bracket->first))).length() <= 7)
+            return id;
+    }
+    return std::nullopt;
+}
+
+void EditorCanvas::State::dragPathBracket(QPointF view)
+{
+    if (!drag->started)
+        return;
+    if (!drag->interacting) {
+        session.beginInteraction(QStringLiteral("Move Type on a Path"));
+        drag->interacting = true;
+    }
+    const VectorObject *original = session.originalObject(drag->object);
+    if (!original || !original->text.onPath)
+        return;
+    const QPointF local = original->transform.inverted().map(toDocument(view));
+    const bool flipped = original->text.onPath->flipped;
+    const QPainterPath geometry = flipped ? reversed(original->text.onPath->path).painterPath() : original->text.onPath->path.painterPath();
+    const double t = nearestPercent(geometry, local);
+    VectorObject changed = *original;
+    changed.text.onPath->start = flipped ? 1 - t : t;
+    session.previewObject(changed);
+}
+
+// Threaded text: in/out ports -------------------------------------------------------
+
+QPointF EditorCanvas::State::outPortAt(const VectorObject &object) const
+{
+    return object.transform.map(QPointF(object.text.frame().right(), object.text.frame().bottom()));
+}
+
+QPointF EditorCanvas::State::inPortAt(const VectorObject &object) const
+{
+    return object.transform.map(QPointF(object.text.frame().left(), object.text.frame().top()));
+}
+
+std::optional<QUuid> EditorCanvas::State::outPortHitAt(QPointF view) const
+{
+    if (!session.document())
+        return std::nullopt;
+    for (const QUuid &id : session.selectedTexts()) {
+        const VectorObject *object = session.document()->find(id);
+        if (!object || !object->text.area)
+            continue;
+        if (QLineF(view, toView(outPortAt(*object))).length() <= 7)
+            return id;
+    }
+    return std::nullopt;
+}
+
+bool EditorCanvas::State::threadLinkPress(QPointF view)
+{
+    if (!linkArmedFrom || !session.document())
+        return false;
+    const QUuid from = *linkArmedFrom;
+    linkArmedFrom.reset();
+    const QPointF document = toDocument(view);
+    if (const std::optional<QUuid> leaf = hitLeaf(document)) {
+        const VectorObject *target = session.document()->find(*leaf);
+        if (target && target->kind == ObjectKind::text && target->text.area && *leaf != from)
+            session.linkThread(from, *leaf);
+        return true;
+    }
+    const VectorObject *source = session.document()->find(from);
+    if (source && source->text.area)
+        session.linkNewThread(from, document, *source->text.area);
+    return true;
 }

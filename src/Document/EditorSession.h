@@ -20,6 +20,7 @@ enum class Tool {
     pen,             // P
     pencil,          // N
     text,            // T
+    typeOnPath,      // Shift-T
     line,            // backslash
     rectangle,       // M
     roundedRectangle,
@@ -37,10 +38,10 @@ enum class Tool {
     zoom,            // Z
     artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
 };
-inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::artboard, Tool::pen, Tool::pencil, Tool::text, Tool::line,
+inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::typeOnPath, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
-                                     Tool::eyedropper, Tool::hand, Tool::zoom};
+                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -383,6 +384,23 @@ public:
     void convertTextType(bool toArea);
     // Area type's box, in its own units; resizing leaves the glyphs alone.
     void setTextArea(const QUuid &id, std::optional<QSizeF> area);
+
+    // Type on a Path (P2-3) ---------------------------------------------------
+    // Converts a path into text following it, one undo step; nullopt if `id` isn't a path.
+    QUuid convertPathToTypeOnPath(const QUuid &id);
+    void flipTypeOnPath(const QUuid &id);
+
+    // Object ▸ Text Wrap (P2-4) ------------------------------------------------
+    void setTextWrap(const QUuid &id, std::optional<double> offset);
+
+    // Threaded text (P2-4) -----------------------------------------------------
+    // Links `from`'s overflow into `to`, an existing area-type box; `to`'s own text, if
+    // any, joins the story as a new paragraph. One undo step, "Thread Text".
+    void linkThread(const QUuid &from, const QUuid &to);
+    // The same, but `to` is a fresh box of `size` at `origin`.
+    QUuid linkNewThread(const QUuid &from, QPointF origin, QSizeF size);
+    // Splits `id`'s chain so every box keeps just the story it currently shows.
+    void removeThreading(const QUuid &id);
     // Scale Strokes & Effects: scaling multiplies stroke widths too.
     bool scaleStrokes = false;
     // Scale Corners: off keeps a live rectangle's radii (clamped to the new rect) as it scales.

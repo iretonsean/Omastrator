@@ -132,6 +132,12 @@ Each folder builds as its own static library:
   `SmartGuides`, ported from Rust.
 - **nanosvg** (memononen/nanosvg, zlib): SVG parsing, with one patch marked
   "OmaIllustrator patch".
+- **hyph-utf8's hyph-en-us** (hyphenation/tex-hyphen, `third_party/hyph-utf8`;
+  Copyright © 1990, 2004, 2005 Gerard D.C. Kuiken, itself Frank Liang's
+  patterns and the TeX hyphenation exception log; licence in
+  `third_party/hyph-utf8/LICENSE`, permitting copying and modification with
+  the notice kept): automatic hyphenation's patterns and exceptions, compiled
+  in by `cmake/HyphenPatterns.h.in` and read by `Hyphenator.cpp`.
 - **Dictation test recordings** (`tests/Agent/fixtures/dictation/*.wav`):
   synthesised with Piper's `en_US-ljspeech-medium` voice, trained on the
   public-domain LJ Speech dataset, then resampled to 16 kHz mono.

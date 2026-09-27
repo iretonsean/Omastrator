@@ -321,6 +321,21 @@ void Menus::buildObject(QMenuBar &bar)
         if (m_agent)
             AgentSheets::editWithInstruction(*m_agent, &m_window);
     });
+    // Object ▸ Text Wrap ▸ Make/Release (P2-4): the selected non-text objects become,
+    // or stop being, exclusions area type above them in paint order wraps around.
+    QMenu *wrap = object->addMenu(QStringLiteral("Text Wrap"));
+    wrap->menuAction()->setObjectName(QStringLiteral("textWrapMenu"));
+    add(wrap, QStringLiteral("makeTextWrap"), QStringLiteral("Make"), QKeySequence(), [this] {
+        for (const QUuid &id : session().selection()) {
+            const VectorObject *found = session().document()->find(id);
+            if (found && found->kind != ObjectKind::text)
+                session().setTextWrap(id, 6.0);
+        }
+    });
+    add(wrap, QStringLiteral("releaseTextWrap"), QStringLiteral("Release"), QKeySequence(), [this] {
+        for (const QUuid &id : session().selection())
+            session().setTextWrap(id, std::nullopt);
+    });
     object->addSeparator();
     add(object, QStringLiteral("artboardSize"), QStringLiteral("Artboard Size…"), QKeySequence(), [this] { ObjectDialogs::artboardSize(session(), &m_window); });
     QMenu *artboards = object->addMenu(QStringLiteral("Artboards"));
@@ -349,6 +364,20 @@ void Menus::buildObject(QMenuBar &bar)
         [this] { session().convertTextToPaths(); });
     add(type, QStringLiteral("convertToAreaType"), QStringLiteral("Convert to Area Type"), QKeySequence(), [this] { session().convertTextType(true); });
     add(type, QStringLiteral("convertToPointType"), QStringLiteral("Convert to Point Type"), QKeySequence(), [this] { session().convertTextType(false); });
+    // Type on a Path (P2-3): Flip reads the path the other way, keeping the visible start put.
+    QMenu *onPath = type->addMenu(QStringLiteral("Type on a Path"));
+    onPath->menuAction()->setObjectName(QStringLiteral("typeOnPathMenu"));
+    add(onPath, QStringLiteral("flipTypeOnPath"), QStringLiteral("Flip"), QKeySequence(), [this] {
+        for (const QUuid &id : session().selectedTexts())
+            session().flipTypeOnPath(id);
+    });
+    // Threaded text (P2-4): Remove Threading splits the story so each box keeps what it shows.
+    QMenu *threaded = type->addMenu(QStringLiteral("Threaded Text"));
+    threaded->menuAction()->setObjectName(QStringLiteral("threadedTextMenu"));
+    add(threaded, QStringLiteral("removeThreading"), QStringLiteral("Remove Threading"), QKeySequence(), [this] {
+        for (const QUuid &id : session().selectedTexts())
+            session().removeThreading(id);
+    });
     add(type, QStringLiteral("findFont"), QStringLiteral("Find/Replace Font…"), QKeySequence(), [this] { ObjectDialogs::findFont(session(), &m_window); });
     type->addSeparator();
     buildTypeKeys(*type);

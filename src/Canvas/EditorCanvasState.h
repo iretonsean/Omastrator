@@ -55,6 +55,8 @@ struct EditorCanvas::State {
         guide,
         // Direct Selection: a live corner's widget.
         corner,
+        // A selected path text's start bracket.
+        pathBracket,
         // The Artboard tool: drawing a new one, moving or resizing one, or
         // moving the fresh copy an Alt-drag made.
         artboard,
@@ -281,6 +283,25 @@ struct EditorCanvas::State {
     // The edited text's box in document coordinates, for clicks inside it.
     QRectF textBox() const;
     void restartCaret();
+
+    // Type on a Path (Shift-T) -------------------------------------------------
+    // A click on a path converts it; a click on existing type edits it.
+    void typeOnPathPress(QPointF view);
+    // Where its start bracket sits, and the path's tangent there, in the text's own coordinates.
+    std::optional<std::pair<QPointF, QPointF>> pathBracketPoint(const VectorObject &object) const;
+    // The selected path text whose bracket is under `view`, within a few pixels.
+    std::optional<QUuid> pathBracketAt(QPointF view) const;
+    void dragPathBracket(QPointF view);
+
+    // Threaded text: in/out ports on selected area-type boxes ------------------
+    // The out port arms link mode; the next click on another area box, or empty
+    // canvas, links it. Cleared by Escape or picking a different tool.
+    std::optional<QUuid> linkArmedFrom;
+    QPointF outPortAt(const VectorObject &object) const;
+    QPointF inPortAt(const VectorObject &object) const;
+    std::optional<QUuid> outPortHitAt(QPointF view) const;
+    // Handles a click while link mode is armed; returns true if it did.
+    bool threadLinkPress(QPointF view);
 
     // Navigation --------------------------------------------------------------
     // View ▸ Rulers, over the canvas's top and left edges.

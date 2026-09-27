@@ -520,6 +520,105 @@ private:
             xml.writeAttribute(QStringLiteral("style"), css.join(QLatin1Char(';')));
     }
 
+    // `words` with U+00AD stripped, a hyphen appended if `hyphenated`, and trailing spaces
+    // chopped when `trimTrailing`; `originalIndex` keeps each kept character's absolute
+    // index into `source.text` (-1 for the hyphen, which has none).
+    static void buildRun(const TextContent &source, int start, int length, bool hyphenated, bool trimTrailing, QString &words,
+                         std::vector<int> &originalIndex)
+    {
+        for (int index = 0; index < length; ++index) {
+            const int absolute = start + index;
+            const QChar ch = source.text.at(absolute);
+            if (ch == QChar(0x00AD) || ch == QLatin1Char('\n'))
+                continue;
+            words += ch;
+            originalIndex.push_back(absolute);
+        }
+        if (hyphenated) {
+            words += QLatin1Char('-');
+            originalIndex.push_back(-1);
+        }
+        while (trimTrailing && !words.isEmpty() && words.back() == QLatin1Char(' ')) {
+            words.chop(1);
+            originalIndex.pop_back();
+        }
+    }
+
+    // The kern before each kept character, and every run's tspan, against `source`'s own format.
+    void writeRuns(const TextContent &source, const QString &words, const std::vector<int> &originalIndex, double h, double v)
+    {
+        QStringList shifts;
+        bool kerned = false;
+        for (int k = 0; k < words.size(); ++k) {
+            double shift = 0;
+            if (k > 0 && originalIndex[size_t(k)] >= 0) {
+                const auto kern = source.kerns.find(originalIndex[size_t(k)]);
+                if (kern != source.kerns.end())
+                    shift = kern->second / 1000 * source.formatAt(originalIndex[size_t(k)] - 1).size / h;
+            }
+            kerned = kerned || shift != 0;
+            shifts << number(shift);
+        }
+        if (kerned)
+            xml.writeAttribute(QStringLiteral("dx"), shifts.join(QLatin1Char(' ')));
+        const bool indented = xml.autoFormatting();
+        const auto formatOf = [&](int k, const CharacterFormat &fallback) {
+            return originalIndex[size_t(k)] >= 0 ? source.formatAt(originalIndex[size_t(k)]) : fallback;
+        };
+        for (int from = 0; from < words.size();) {
+            xml.setAutoFormatting(false);
+            const CharacterFormat format = formatOf(from, source.character());
+            int to = from + 1;
+            while (to < words.size() && formatOf(to, format) == format)
+                ++to;
+            if (format == source.character()) {
+                xml.writeCharacters(words.mid(from, to - from));
+            } else {
+                xml.writeStartElement(QStringLiteral("tspan"));
+                writeFont(format, &source.character());
+                if (format.baselineShift != source.baselineShift)
+                    xml.writeAttribute(QStringLiteral("baseline-shift"), number((format.baselineShift - source.baselineShift) / v));
+                xml.writeCharacters(words.mid(from, to - from));
+                xml.writeEndElement();
+            }
+            from = to;
+        }
+        xml.setAutoFormatting(indented);
+    }
+
+    void writePathText(const VectorObject &object, const Paints &paints, const TextContent &source, const TextLayout &layout)
+    {
+        const TextPath &onPath = *object.text.onPath;
+        const VectorPath directed = onPath.flipped ? reversed(onPath.path) : onPath.path;
+        xml.writeStartElement(QStringLiteral("defs"));
+        xml.writeEmptyElement(QStringLiteral("path"));
+        const QString id = definitionID("textPath");
+        xml.writeAttribute(QStringLiteral("id"), id);
+        xml.writeAttribute(QStringLiteral("d"), pathData(directed));
+        xml.writeEndElement();
+        xml.writeStartElement(QStringLiteral("text"));
+        writeCommon(object);
+        xml.writeAttribute(QStringLiteral("transform"), matrix(object.transform));
+        writeFont(source.character(), nullptr);
+        writePaint(object, paints);
+        xml.writeStartElement(QStringLiteral("textPath"));
+        xml.writeAttribute(QStringLiteral("href"), QStringLiteral("#%1").arg(id));
+        // A closed path wraps once on the canvas; plain SVG textPath doesn't run past
+        // the end of even a closed one, a known, documented gap in this export.
+        const double effectiveStart = onPath.flipped ? 1 - onPath.start : onPath.start;
+        xml.writeAttribute(QStringLiteral("startOffset"), number(std::clamp(effectiveStart, 0.0, 1.0) * 100) + QStringLiteral("%"));
+        QString words;
+        std::vector<int> originalIndex;
+        for (const TextLayout::Line &line : layout.lines()) {
+            if (line.hidden)
+                continue;
+            buildRun(source, line.start, line.length, line.hyphenated, false, words, originalIndex);
+        }
+        writeRuns(source, words, originalIndex, 1, 1);
+        xml.writeEndElement();
+        xml.writeEndElement();
+    }
+
     void writeText(const VectorObject &object)
     {
         const TextContent &text = object.text;
@@ -555,36 +654,41 @@ private:
                 xml.writeEndElement();
             return;
         }
+        const TextLayout layout(text);
+        if (text.onPath) {
+            writePathText(object, paints, layout.source(), layout);
+            return;
+        }
         xml.writeStartElement(QStringLiteral("text"));
         writeCommon(object);
         xml.writeAttribute(QStringLiteral("xml:space"), QStringLiteral("preserve"));
-        // Indenting a run's span would put spaces in text that keeps them.
-        const bool indented = xml.autoFormatting();
         // Horizontal and vertical scale stretch the glyphs; lines keep their places.
         const double h = text.horizontalScale / 100, v = text.verticalScale / 100;
         xml.writeAttribute(QStringLiteral("transform"), matrix(QTransform::fromScale(h, v) * object.transform));
-        writeFont(text.character(), nullptr);
+        const TextContent &source = layout.source();
+        writeFont(source.character(), nullptr);
         if (text.kerning == TextKerning::none)
             xml.writeAttribute(QStringLiteral("font-kerning"), QStringLiteral("none"));
-        const bool area = text.area.has_value();
-        if (!area && text.alignment == TextAlignment::center)
+        const bool area = source.area.has_value();
+        if (!area && source.alignment == TextAlignment::center)
             xml.writeAttribute(QStringLiteral("text-anchor"), QStringLiteral("middle"));
-        else if (!area && text.alignment == TextAlignment::right)
+        else if (!area && source.alignment == TextAlignment::right)
             xml.writeAttribute(QStringLiteral("text-anchor"), QStringLiteral("end"));
         writePaint(object, paints);
         const auto anchor = [](TextAlignment alignment) {
             return alignment == TextAlignment::center ? QStringLiteral("middle") : alignment == TextAlignment::right ? QStringLiteral("end") : QStringLiteral("start");
         };
-        // One span per laid-out line, so area type wraps as it does on the canvas; runs are spans within it.
-        const TextLayout layout(text);
+        // One span per laid-out line (or thread frame), so wrap and threads read as on the canvas.
         for (const TextLayout::Line &line : layout.lines()) {
             if (line.hidden)
-                break;
-            const TextAlignment alignment = text.paragraphAt(line.paragraph).alignment;
-            QString words = text.text.mid(line.start, line.length);
+                continue;
+            if (line.frame != text.flow.frame)
+                continue;
+            const TextAlignment alignment = source.paragraphAt(line.paragraph).alignment;
+            QString words;
+            std::vector<int> originalIndex;
             // A wrapped line's trailing space would push centred and right-aligned lines.
-            while (area && !line.lastInParagraph && words.endsWith(QLatin1Char(' ')))
-                words.chop(1);
+            buildRun(source, line.start, line.length, line.hyphenated, area && !line.lastInParagraph, words, originalIndex);
             xml.writeStartElement(QStringLiteral("tspan"));
             double x = 0;
             const bool justified = area && (alignment == TextAlignment::justifyAll || (isJustified(alignment) && !line.lastInParagraph));
@@ -592,7 +696,7 @@ private:
                 x = alignment == TextAlignment::center ? (line.left + line.right) / 2 : alignment == TextAlignment::right ? line.right : line.left;
                 if (alignment == TextAlignment::center || alignment == TextAlignment::right)
                     xml.writeAttribute(QStringLiteral("text-anchor"), anchor(alignment));
-            } else if (alignment != text.alignment) {
+            } else if (alignment != source.alignment) {
                 // A paragraph aligned apart from the rest.
                 xml.writeAttribute(QStringLiteral("text-anchor"), anchor(alignment));
             }
@@ -602,39 +706,10 @@ private:
                 xml.writeAttribute(QStringLiteral("textLength"), number((line.right - line.left) / h));
                 xml.writeAttribute(QStringLiteral("lengthAdjust"), QStringLiteral("spacing"));
             }
-            if (text.baselineShift != 0)
-                xml.writeAttribute(QStringLiteral("baseline-shift"), number(text.baselineShift / v));
-            QStringList shifts;
-            bool kerned = false;
-            for (int index = 0; index < words.size(); ++index) {
-                const auto kern = text.kerns.find(line.start + index);
-                const double shift = kern == text.kerns.end() || index == 0 ? 0 : kern->second / 1000 * text.formatAt(line.start + index - 1).size / h;
-                kerned = kerned || shift != 0;
-                shifts << number(shift);
-            }
-            if (kerned)
-                xml.writeAttribute(QStringLiteral("dx"), shifts.join(QLatin1Char(' ')));
-            for (int from = 0; from < words.size();) {
-                xml.setAutoFormatting(false);
-                const CharacterFormat format = text.formatAt(line.start + from);
-                int to = from + 1;
-                while (to < words.size() && text.formatAt(line.start + to) == format)
-                    ++to;
-                if (format == text.character()) {
-                    xml.writeCharacters(words.mid(from, to - from));
-                } else {
-                    xml.writeStartElement(QStringLiteral("tspan"));
-                    writeFont(format, &text.character());
-                    // Shifts add up: a run's is relative to its line's.
-                    if (format.baselineShift != text.baselineShift)
-                        xml.writeAttribute(QStringLiteral("baseline-shift"), number((format.baselineShift - text.baselineShift) / v));
-                    xml.writeCharacters(words.mid(from, to - from));
-                    xml.writeEndElement();
-                }
-                from = to;
-            }
+            if (source.baselineShift != 0)
+                xml.writeAttribute(QStringLiteral("baseline-shift"), number(source.baselineShift / v));
+            writeRuns(source, words, originalIndex, h, v);
             xml.writeEndElement();
-            xml.setAutoFormatting(indented);
         }
         xml.writeEndElement();
     }

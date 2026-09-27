@@ -405,6 +405,7 @@ void EditorCanvas::State::updateCursor()
             kind = CursorKind::pencil;
             break;
         case Tool::text:
+        case Tool::typeOnPath:
             kind = CursorKind::ibeam;
             break;
         case Tool::eyedropper:

@@ -1133,6 +1133,13 @@ void EditorSession::paste(PastePosition position)
             renamed.emplace_back(object.id, fresh);
             object.id = fresh;
         }
+        // A thread stays within what's pasted together; one that leaves it is dropped.
+        for (VectorObject &object : objects) {
+            if (object.text.threadNext.isNull())
+                continue;
+            const auto found = std::find_if(renamed.begin(), renamed.end(), [&](const auto &pair) { return pair.first == object.text.threadNext; });
+            object.text.threadNext = found == renamed.end() ? QUuid() : found->second;
+        }
         const std::optional<QUuid> layer = neighbour ? document.find(*neighbour)->parentID : isolatedGroup() ? isolatedGroup() : activeLayer();
         if (!layer)
             return;

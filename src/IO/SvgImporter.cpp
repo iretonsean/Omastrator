@@ -471,6 +471,19 @@ VectorDocument import(const QByteArray &svg, const QString &folder, const QStrin
 }
 }
 
+namespace SvgImport {
+// A path's own `d`, parsed alone: wrapped in a bare <svg> so nanosvg reads just it.
+VectorPath parsePathData(const QString &d)
+{
+    QByteArray svg = (QStringLiteral("<svg><path d='") + d + QStringLiteral("'/></svg>")).toUtf8();
+    svg.detach();
+    const std::unique_ptr<NSVGimage, void (*)(NSVGimage *)> image(nsvgParse(svg.data(), "px", 96), nsvgDelete);
+    if (!image || !image->shapes)
+        return {};
+    return pathGeometry(image->shapes);
+}
+}
+
 namespace SvgImporter {
 VectorDocument parse(const QByteArray &svg, QStringList *warnings)
 {

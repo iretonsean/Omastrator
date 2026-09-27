@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QImageReader>
 #include <QUrl>
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -178,6 +179,9 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
     std::vector<double> baselines;
     int style = -1;
     bool started = false;
+    QString pathHref;
+    double startOffsetValue = 0;
+    bool startPercent = true;
     // Spans that set y or dy start a line; the rest run on.
     std::function<void(int)> collect = [&](int parent) {
         for (int child : source.at(parent).children) {
@@ -211,7 +215,19 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
                 }
                 baseline = at;
                 collect(child);
-            } else if (node.tag == QLatin1String("textPath") || node.tag == QLatin1String("a")) {
+            } else if (node.tag == QLatin1String("textPath")) {
+                QString href = source.attribute(child, QStringLiteral("href"));
+                if (href.isEmpty())
+                    href = source.attribute(child, QStringLiteral("xlink:href"));
+                // Kept as "#id": SvgSource::reference() wants the leading '#'.
+                if (!href.isEmpty()) {
+                    pathHref = href;
+                    const QString offset = source.attribute(child, QStringLiteral("startOffset"));
+                    startOffsetValue = first(offset).value_or(0);
+                    startPercent = offset.trimmed().endsWith(QLatin1Char('%'));
+                }
+                collect(child);
+            } else if (node.tag == QLatin1String("a")) {
                 collect(child);
             }
         }
@@ -285,6 +301,9 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
             content.leading = leading;
     }
     run.origin = QPointF(originX.value_or(0), baselines.empty() ? baseline : baselines.front());
+    run.pathHref = pathHref;
+    run.startOffsetValue = startOffsetValue;
+    run.startPercent = startPercent;
     return run;
 }
 
@@ -298,6 +317,25 @@ VectorObject textObject(const SvgSource &source, int element, const TextRun &run
     object.stroke.paint = Paint::none();
     bool invertible = false;
     const QTransform toLocal = object.transform.inverted(&invertible);
+    if (!run.pathHref.isEmpty() && invertible) {
+        const int pathElement = source.reference(run.pathHref);
+        const QString d = pathElement >= 0 ? source.attribute(pathElement, QStringLiteral("d")) : QString();
+        if (pathElement >= 0 && !d.isEmpty()) {
+            // The path's own d, in the text's local coordinates: its element's transform,
+            // then the document's, then out of the text's.
+            const VectorPath geometry = SvgImport::parsePathData(d).transformed(source.transform(pathElement) * parentCTM * toLocal);
+            if (!geometry.isEmpty()) {
+                double start = run.startOffsetValue;
+                if (run.startPercent) {
+                    start /= 100;
+                } else {
+                    const double length = geometry.painterPath().length();
+                    start = length > 1e-6 ? start / length : 0;
+                }
+                object.text.onPath = TextPath{geometry, std::clamp(start, 0.0, 1.0), false};
+            }
+        }
+    }
     if (probe && invertible) {
         const double scale = averageScale(object.transform);
         applyPaint(object, probe, run.content.outline().boundingRect(), toLocal, scale > 1e-9 ? scale : 1);

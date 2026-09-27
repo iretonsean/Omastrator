@@ -298,6 +298,14 @@ Contour reversed(const Contour &contour)
     return result;
 }
 
+VectorPath reversed(const VectorPath &path)
+{
+    VectorPath result = path;
+    for (Contour &contour : result.contours)
+        contour = reversed(contour);
+    return result;
+}
+
 void moveHandle(PathNode &node, NodePart part, QPointF to, bool breakSmooth)
 {
     if (part == NodePart::anchor) {

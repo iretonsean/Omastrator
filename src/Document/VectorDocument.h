@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -80,6 +81,14 @@ struct ParagraphFormat {
     double spaceAfter = 0;
     // The paragraph style these paragraphs were given, if any.
     QUuid paragraphStyle;
+    // Automatic hyphenation (Hyphenator), and its margins: a word shorter than
+    // hyphenMinWord, or a break within hyphenMinBefore/hyphenMinAfter letters of
+    // either end, is left whole. A soft hyphen the designer typed always works,
+    // whether or not this is on.
+    bool hyphenate = false;
+    int hyphenMinWord = 6;
+    int hyphenMinBefore = 2;
+    int hyphenMinAfter = 3;
     friend bool operator==(const ParagraphFormat &, const ParagraphFormat &) = default;
 };
 
@@ -105,6 +114,42 @@ struct TextStyle {
     friend bool operator==(const TextStyle &, const TextStyle &) = default;
 };
 
+struct TextContent;
+
+// Type on a Path: `path` is in the text's own (local) coordinates. `start` is 0..1
+// along the path's own direction; flipping reverses the path and keeps the visible
+// start in place by reading the other way (effective start 1 - start).
+struct TextPath {
+    VectorPath path;
+    double start = 0;
+    bool flipped = false;
+    friend bool operator==(const TextPath &, const TextPath &) = default;
+};
+
+// One area-type box the flow lays rows into, in the order text reaches it.
+struct TextFrame {
+    QSizeF size;
+    // Wrap objects' bounds grown by their offset, in this frame's own coordinates.
+    std::vector<QRectF> exclusions;
+    // Frame-local to document.
+    QTransform transform;
+    friend bool operator==(const TextFrame &, const TextFrame &) = default;
+};
+
+// Derived by VectorDocument::reflowText(), never saved: what a threaded or
+// wrap-avoiding text object lays out into. Every box in one thread shares `story`
+// (the head's own content) and `frames`; each keeps its own `frame` index, the
+// slice of the story it shows.
+struct TextFlow {
+    std::shared_ptr<const TextContent> story;
+    QUuid head;
+    std::vector<TextFrame> frames;
+    int frame = 0;
+    // The story compares by value: two flows over equal text are equal. Defined after
+    // TextContent, below, since comparing *story needs its complete type.
+    friend bool operator==(const TextFlow &a, const TextFlow &b);
+};
+
 // Point type: lines start at the object's origin, the first baseline at y 0.
 // Area type: text wraps inside `area`, whose top-left is the origin.
 // The object's own character and paragraph formats cover whatever `runs` and
@@ -123,6 +168,12 @@ struct TextContent : CharacterFormat, ParagraphFormat {
     std::vector<TextRun> runs;
     // Paragraphs formatted apart from the object's own format, by paragraph index.
     std::map<int, ParagraphFormat> paragraphFormats;
+    // Type on a Path (P2-3): set by the Type on a Path tool, converting a path.
+    std::optional<TextPath> onPath;
+    // Threaded text (P2-4): the area-type box this one's overflow continues into.
+    QUuid threadNext;
+    // Set by VectorDocument::reflowText(); not part of the saved document.
+    TextFlow flow;
 
     CharacterFormat &character() { return *this; }
     const CharacterFormat &character() const { return *this; }
@@ -167,6 +218,12 @@ struct TextContent : CharacterFormat, ParagraphFormat {
     QStringList families() const;
     friend bool operator==(const TextContent &, const TextContent &) = default;
 };
+
+inline bool operator==(const TextFlow &a, const TextFlow &b)
+{
+    const bool sameStory = (a.story == b.story) || (a.story && b.story && *a.story == *b.story);
+    return sameStory && a.head == b.head && a.frames == b.frames && a.frame == b.frame;
+}
 
 // Live Corners: how a rectangle's corner turns.
 enum class CornerStyle { round, inverted, chamfer };
@@ -257,6 +314,9 @@ struct VectorObject {
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
     // applying changes back to the source.
     QString liftedFrom;
+    // Object ▸ Text Wrap ▸ Make: area type below this in paint order flows around its
+    // bounds grown by this offset (pt), when it sits above the text's own layer stack.
+    std::optional<double> textWrap;
     // Scalar properties bound to design tokens, by TokenRef key: {"radius": id}.
     std::map<QString, QString> tokenRefs;
     // Groups: a main component, or an instance of one.
@@ -356,6 +416,10 @@ struct VectorDocument {
     QString uniqueName(const QString &base) const;
     // Rectangles whose anchors were edited become plain paths.
     void expandEditedShapes();
+    // Fills every text's `flow` (P2-4): wrap objects above area type in paint order
+    // become exclusions, and threadNext chains become frames sharing one story. A
+    // no-op, clearing any stale flow, when nothing wraps or threads.
+    void reflowText();
 
     // Artboards (VectorDocument+Artboards.cpp) ----------------------------------
     // The artboards as listed, or the one `size` makes, named "Artboard 1".

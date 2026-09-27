@@ -12,6 +12,10 @@ struct NSVGshape;
 namespace SvgImport {
 // Geometry and paint only; names, opacity and visibility come from the XML.
 VectorObject pathObject(const NSVGshape *shape);
+// Just the geometry, nanosvg's cubics read back into contours.
+VectorPath pathGeometry(const NSVGshape *shape);
+// A path's own `d`, parsed alone through nanosvg: SvgImport::parsePathData(const QString&).
+VectorPath parsePathData(const QString &d);
 // Fill and stroke. `toLocal` takes document space into the object's own,
 // where `bounds` are and where `scale` shrinks nanosvg's stroke widths.
 void applyPaint(VectorObject &object, const NSVGshape *shape, const QRectF &bounds, const QTransform &toLocal = {}, double scale = 1);
@@ -22,6 +26,11 @@ struct TextRun {
     QPointF origin;
     // The element whose paint the glyphs take: the first span with characters.
     int style = -1;
+    // Type on a Path (P2-3): a <textPath>'s href ("#id", for SvgSource::reference())
+    // and its startOffset, a percent of the path's length unless `startPercent` is false.
+    QString pathHref;
+    double startOffsetValue = 0;
+    bool startPercent = true;
 };
 std::optional<TextRun> readText(const SvgSource &source, int element);
 // `probe` is the rectangle nanosvg painted as the text would be.

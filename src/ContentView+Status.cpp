@@ -59,6 +59,7 @@ QString ContentView::hint(Tool tool)
     case Tool::pen: return QStringLiteral("Click for corners · Drag for curves · Close on the first anchor · Return or Escape ends");
     case Tool::pencil: return QStringLiteral("Drag to draw · Finish near the start to close");
     case Tool::text: return QStringLiteral("Click to type · Click text to edit · Escape finishes");
+    case Tool::typeOnPath: return QStringLiteral("Click a path to type along it · Drag the bracket to slide the start · Escape finishes");
     case Tool::line: return QStringLiteral("Drag to draw a line · Shift 45°");
     case Tool::rectangle:
     case Tool::roundedRectangle: return QStringLiteral("Drag to draw · Shift square · Alt from center");

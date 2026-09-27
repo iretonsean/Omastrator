@@ -72,6 +72,8 @@ struct VectorPath {
 
 // The same contour drawn the other way: nodes reversed, each node's handles swapped.
 Contour reversed(const Contour &contour);
+// The same path, every contour reversed: type on a path flips this way.
+VectorPath reversed(const VectorPath &path);
 
 // Moves a handle; a smooth node turns its other handle to stay collinear.
 void moveHandle(PathNode &node, NodePart part, QPointF to, bool breakSmooth = false);

@@ -1486,9 +1486,9 @@ has Qt Test coverage in `tests/<Folder>/`.
 |---|---|---|---|---|
 | P2-1 ✓ | **Multiple artboards** (done: see below) | `VectorDocument::artboards` (name, rect, background), the Artboard tool (Shift+O) with the documented context menu (New, Duplicate, Rename, Delete, Fit to Artwork Bounds, Switch Orientation), an Artboards list, and export per artboard. | `VectorDocument`, `EditorSession`, a new tool, `ExportSheet`, `DocumentExporter` | Two artboards export to two PNGs named after them; Fit to Artwork Bounds hugs the art |
 | P2-2 | **Shape Builder** (Shift+M) | Drag across the regions of overlapping selected shapes to merge them; Alt-drag removes them. The regions are computed from a planar arrangement of the outlines. | New `PathOperations::regions()`, a new tool in `EditorCanvas` | Merging two regions of three overlapping circles gives one path plus the rest untouched; one undo step |
-| P2-3 | **Type on a path** | Type on a Path tool: glyphs placed along a path with `QPainterPath::pointAtPercent`/`angleAtPercent`, a start bracket to slide, and flip. | `TextContent::onPath`, `VectorDocument::outline` | Outlines follow a circle; the text stays editable; SVG export uses `<textPath>` |
-| P2-4 | **Text wrap and threads** | Area type flows around objects marked "text wrap" (with an offset), and threads overflow into a linked box. | `TextContent`, the layout in `VectorDocument.cpp` | Text avoids a wrap object's bounds + offset; overflow continues in the next box |
-| P2-5 | **Hyphenation** | Optional, using hyphen patterns (TeX patterns, `hyphen` data) for area type. Honour soft hyphens (U+00AD) first. | The area-type layout | Soft hyphens break with a visible hyphen at a line end and are hidden otherwise |
+| P2-3 ✓ | **Type on a path** (done: see below) | Type on a Path tool: glyphs placed along a path with `QPainterPath::pointAtPercent`/`angleAtPercent`, a start bracket to slide, and flip. | `TextContent::onPath`, `VectorDocument::outline` | Outlines follow a circle; the text stays editable; SVG export uses `<textPath>` |
+| P2-4 ✓ | **Text wrap and threads** (done: see below) | Area type flows around objects marked "text wrap" (with an offset), and threads overflow into a linked box. | `TextContent`, the layout in `VectorDocument.cpp` | Text avoids a wrap object's bounds + offset; overflow continues in the next box |
+| P2-5 ✓ | **Hyphenation** (done: see below) | Optional, using hyphen patterns (TeX patterns, `hyphen` data) for area type. Honour soft hyphens (U+00AD) first. | The area-type layout | Soft hyphens break with a visible hyphen at a line end and are hidden otherwise |
 | P2-6 ✓ | **Symbols** (done as components: docs/DESIGN-SYSTEMS.md) | A symbol definition stored in the document plus instances (a transform plus an id). Editing the master updates every instance; Break Link expands one. | `VectorDocument`, `VectorRenderer`, a Symbols panel | Recolouring a master updates 10 instances in one undo step |
 | P2-7 ✓ | **Width tool / variable strokes** (done: see below) | Width points along a stroke, and profiles, rendered as an outline. | `StrokeStyle::widthProfile`, `StrokeGeometry`, `PathOperations` | Uniform, tapered and bulge profiles render and export as filled outlines |
 | P2-8 ✓ | **On-canvas gradient annotator** (done: see below) | With the Gradient tool (G), drag the start and end on the object and drag the stops. | `EditorCanvas`, `Paint` | Dragging the end point changes the gradient angle live; one undo step |
@@ -1506,6 +1506,25 @@ has Qt Test coverage in `tests/<Folder>/`.
 > length, or a stop to slide it along. Everything previews live and ends in one
 > "Gradient" step. A click on another object selects it. Radial gradients use
 > the same bar: centre and radius.
+
+> **P2-3/4/5 done.** `src/Document/TextLayout.cpp`, `EditorSession+TextFlow.cpp`,
+> `Hyphenator.{h,cpp}`, `Canvas/EditorCanvas+Text.cpp`. Type on a Path (Shift+T)
+> converts a clicked path into text that runs along it, glyph by glyph, via an
+> arc-length walk (`pointAtPercent` and a finite-difference tangent, not
+> `angleAtPercent`, for closed-path wrapping); a bracket drag slides the start,
+> and Type ▸ Type on a Path ▸ Flip reads the path the other way without moving
+> it. Object ▸ Text Wrap ▸ Make marks an object (with an offset) that area type
+> above it in paint order flows around; `VectorDocument::reflowText()` turns
+> that, and `threadNext` chains of area boxes (in/out ports on selected boxes,
+> or Type ▸ Threaded Text ▸ Remove Threading to split one back apart), into
+> `TextContent::flow`, a shared story and frame list `TextLayout` lays rows and
+> exclusions into. A row picks the widest exclusion-free interval in its band
+> rather than wrapping around both sides of one, a deliberate simplification.
+> Hyphenation vendors hyph-utf8's `hyph-en-us` patterns (`third_party/hyph-utf8`,
+> AGENTS.md has the provenance) and runs Liang's algorithm to place soft hyphens
+> Qt's own line breaking then uses; the Paragraph section's Hyphenate checkbox
+> and its margins apply to every paragraph of the selected texts. SVG round
+> trips through `<textPath>`; hyphens strip to a plain `-` at a line's end.
 
 > **P2-1 done.** `.omai` version 5 (additive; a v3 or v4 file gives one implicit
 > artboard named "Artboard 1"). `VectorDocument::artboards`; `size`/`background`
