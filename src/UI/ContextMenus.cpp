@@ -143,25 +143,10 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
     QMenu *transform = submenu(menu, QStringLiteral("contextTransform"), QStringLiteral("Transform"));
     for (const char *name : {"transformAgain", "flipHorizontal", "flipVertical", "moveDialog", "rotateDialog", "reflectDialog", "scaleDialog"})
         share(transform, &menus, name);
-    if (selected.size() >= 2) {
-        QMenu *align = submenu(menu, QStringLiteral("contextAlign"), QStringLiteral("Align"));
-        const std::vector<std::pair<const char *, AlignEdge>> edges{
-            {"Left", AlignEdge::left}, {"Horizontal Center", AlignEdge::horizontalCenter}, {"Right", AlignEdge::right},
-            {"Top", AlignEdge::top},   {"Vertical Center", AlignEdge::verticalCenter},     {"Bottom", AlignEdge::bottom}};
-        for (const auto &[text, edge] : edges)
-            local(align, QStringLiteral("contextAlign%1").arg(QString::fromLatin1(text).remove(QLatin1Char(' '))), QString::fromLatin1(text),
-                  [&session, edge] { session.align(edge); });
-    }
-    if (session.canCombine()) {
-        QMenu *pathfinder = submenu(menu, QStringLiteral("contextPathfinder"), QStringLiteral("Pathfinder"));
-        const std::vector<std::pair<const char *, BooleanOperation>> operations{
-            {"Unite", BooleanOperation::unite}, {"Minus Front", BooleanOperation::minusFront},
-            {"Intersect", BooleanOperation::intersect}, {"Exclude", BooleanOperation::exclude}};
-        for (const auto &[text, operation] : operations)
-            local(pathfinder, QStringLiteral("contextPathfinder%1").arg(QString::fromLatin1(text).remove(QLatin1Char(' '))), QString::fromLatin1(text),
-                  [&session, operation] { session.combineSelection(operation); });
-        share(pathfinder, &menus, "makeCompoundPath");
-    }
+    if (selected.size() >= 2)
+        addAlign(submenu(menu, QStringLiteral("contextAlign"), QStringLiteral("Align")), session);
+    if (session.canCombine())
+        addPathfinder(submenu(menu, QStringLiteral("contextPathfinder"), QStringLiteral("Pathfinder")), menus, session);
     if (selectionHas(session, ObjectKind::path)) {
         QMenu *path = submenu(menu, QStringLiteral("contextPath"), QStringLiteral("Path"));
         for (const char *name : {"outlineStroke", "offsetPath", "simplify", "releaseCompoundPath"})
@@ -176,6 +161,31 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
         share(menu, &menus, name);
     dropEmpty(menu);
     return menu;
+}
+
+void ContextMenus::addAlign(QMenu *menu, EditorSession &session)
+{
+    if (session.selection().size() < 2)
+        return;
+    const std::vector<std::pair<const char *, AlignEdge>> edges{
+        {"Left", AlignEdge::left}, {"Horizontal Center", AlignEdge::horizontalCenter}, {"Right", AlignEdge::right},
+        {"Top", AlignEdge::top},   {"Vertical Center", AlignEdge::verticalCenter},     {"Bottom", AlignEdge::bottom}};
+    for (const auto &[text, edge] : edges)
+        local(menu, QStringLiteral("contextAlign%1").arg(QString::fromLatin1(text).remove(QLatin1Char(' '))), QString::fromLatin1(text),
+              [&session, edge] { session.align(edge); });
+}
+
+void ContextMenus::addPathfinder(QMenu *menu, Menus &menus, EditorSession &session)
+{
+    if (!session.canCombine())
+        return;
+    const std::vector<std::pair<const char *, BooleanOperation>> operations{
+        {"Unite", BooleanOperation::unite}, {"Minus Front", BooleanOperation::minusFront},
+        {"Intersect", BooleanOperation::intersect}, {"Exclude", BooleanOperation::exclude}};
+    for (const auto &[text, operation] : operations)
+        local(menu, QStringLiteral("contextPathfinder%1").arg(QString::fromLatin1(text).remove(QLatin1Char(' '))), QString::fromLatin1(text),
+              [&session, operation] { session.combineSelection(operation); });
+    share(menu, &menus, "makeCompoundPath");
 }
 
 QMenu *ContextMenus::forLayerRow(Menus *menus, EditorSession &session, NativeLayerList &list, const QUuid &row, QWidget *parent)

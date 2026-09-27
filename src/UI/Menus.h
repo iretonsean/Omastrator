@@ -8,6 +8,7 @@
 #include <QPointer>
 
 class AgentBridge;
+class CommandPalette;
 
 // The menu bar: Illustrator's commands whose session functions exist.
 class Menus : public QObject {
@@ -20,6 +21,12 @@ public:
     QAction *action(const QString &name) const;
     // A new front editor: follow its session and canvas.
     void watchFront(EditorCanvas *canvas);
+    EditorCanvas *canvas() const { return m_canvas; }
+    AgentBridge *agent() const { return m_agent; }
+    ProjectWorkspace &workspace() const { return m_workspace; }
+    QWidget &window() const { return m_window; }
+    // Help ▸ Command Palette (Ctrl+K), made on first use.
+    CommandPalette *commandPalette();
 
 signals:
     void layersToggled(bool shown);
@@ -53,4 +60,5 @@ private:
     // The field whose undo the Edit entries drive.
     QPointer<QLineEdit> m_field;
     QPointer<EditorCanvas> m_canvas;
+    QPointer<CommandPalette> m_palette;
 };

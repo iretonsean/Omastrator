@@ -34,6 +34,12 @@ public:
     std::vector<QLineF> measurements() const;
     // The Δx/Δy, W × H or angle label beside a drag; empty when none shows.
     QString dragReadout() const;
+    // The selection's bounds in view coordinates; nullopt with nothing selected or while type is edited.
+    std::optional<QRectF> selectionViewRect() const;
+    // The Selection tool's handles, in view coordinates, where they show.
+    std::vector<QPointF> selectionHandles() const;
+    // A drag past the click distance, or a pen path, is under way.
+    bool isGesturing() const;
     // In-place type's right-click menu: clipboard, case and special characters.
     QMenu *textEditingMenu(QWidget *parent);
     // Arrow keys move this many points, ten times as far with Shift.
@@ -46,6 +52,8 @@ signals:
     void textEditingChanged(bool editing);
     // A right-click, once it picked its target: the leaves under the pointer, topmost first.
     void contextMenuRequested(QPoint globalPosition, const QList<QUuid> &underPointer);
+    // A gesture began or ended, or the canvas paused or resumed.
+    void gestureChanged();
 
 protected:
     bool event(QEvent *event) override;
@@ -65,8 +73,12 @@ protected:
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 
 private:
+    // Says so when a press, move, release or key started or ended a gesture.
+    void noteGesture();
+
     EditorSession &m_session;
     struct State;
     std::unique_ptr<State> m_state;
     bool m_paused = false;
+    bool m_gesturing = false;
 };

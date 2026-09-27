@@ -157,7 +157,7 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Make Compound Path", "8", 1, true), entry("Release Compound Path", "8", 11, true),
             entry("Create Outlines", "o", 9, true), entry("Zoom In", "=", 1, true), entry("Zoom Out", "-", 1, true),
             entry("Fit Artboard in Window", "0", 1, true), entry("Actual Size", "1", 1, true), entry("Outline", "y", 1, true),
-            entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true)};
+            entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true), entry("Command Palette", "k", 1, true)};
         // Illustrator's type keys: they work on selected type and while typing, and rest otherwise.
         const QString left(QChar(0xf702)), right(QChar(0xf703)), up(QChar(0xf700)), down(QChar(0xf701));
         for (const auto &[title, key, modifiers] : std::vector<std::tuple<const char *, QString, int>>{

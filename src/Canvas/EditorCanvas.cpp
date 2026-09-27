@@ -38,6 +38,7 @@ EditorCanvas::EditorCanvas(EditorSession &session, QWidget *parent)
     connect(&m_session, &EditorSession::changed, this, [this] {
         m_state->toolChanged();
         update();
+        noteGesture();
     });
     m_state->updateCursor();
 }
@@ -75,6 +76,40 @@ void EditorCanvas::setPaused(bool paused)
         m_state->cancelDrag();
     m_state->updateCursor();
     update();
+    noteGesture();
+    emit gestureChanged();
+}
+
+std::optional<QRectF> EditorCanvas::selectionViewRect() const
+{
+    if (!m_session.hasDocument() || !m_session.hasSelection() || m_state->text)
+        return std::nullopt;
+    return m_state->documentToView().mapRect(m_session.selectionBounds(true));
+}
+
+std::vector<QPointF> EditorCanvas::selectionHandles() const
+{
+    std::vector<QPointF> points;
+    if (const std::optional<QRectF> box = m_state->selectionBox()) {
+        for (int index = 0; index < 8; ++index) {
+            if (m_state->handleShown(*box, index))
+                points.push_back(m_state->handlePoint(*box, index));
+        }
+    }
+    return points;
+}
+
+bool EditorCanvas::isGesturing() const
+{
+    return (m_state->drag && m_state->drag->started && m_state->drag->kind != State::DragKind::pan) || m_state->pen.has_value();
+}
+
+void EditorCanvas::noteGesture()
+{
+    if (isGesturing() == m_gesturing)
+        return;
+    m_gesturing = !m_gesturing;
+    emit gestureChanged();
 }
 
 // Geometry ---------------------------------------------------------------------
@@ -196,6 +231,7 @@ void EditorCanvas::mousePressEvent(QMouseEvent *event)
     m_state->press(event->position(), event->modifiers());
     m_state->updateCursor();
     update();
+    noteGesture();
 }
 
 void EditorCanvas::mouseMoveEvent(QMouseEvent *event)
@@ -205,6 +241,7 @@ void EditorCanvas::mouseMoveEvent(QMouseEvent *event)
     const bool held = event->buttons() & (Qt::LeftButton | Qt::MiddleButton);
     m_state->move(event->position(), event->modifiers(), held);
     m_state->updateCursor();
+    noteGesture();
     if (m_session.hasDocument())
         emit pointerMoved(QRectF(QPointF(0, 0), m_state->documentSize()).contains(m_state->toDocument(event->position()))
                               ? std::optional(m_state->toDocument(event->position()))
@@ -221,6 +258,7 @@ void EditorCanvas::mouseReleaseEvent(QMouseEvent *event)
     m_state->release(event->position(), event->modifiers());
     m_state->updateCursor();
     update();
+    noteGesture();
 }
 
 void EditorCanvas::mouseDoubleClickEvent(QMouseEvent *event)
@@ -243,6 +281,7 @@ void EditorCanvas::keyPressEvent(QKeyEvent *event)
     if (!m_state->keyPress(event))
         QWidget::keyPressEvent(event);
     m_state->updateCursor();
+    noteGesture();
 }
 
 void EditorCanvas::keyReleaseEvent(QKeyEvent *event)
@@ -267,6 +306,7 @@ void EditorCanvas::focusOutEvent(QFocusEvent *event)
     m_state->caretShown = false;
     m_state->updateCursor();
     update();
+    noteGesture();
     QWidget::focusOutEvent(event);
 }
 

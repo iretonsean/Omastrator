@@ -93,9 +93,9 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Forty-seven menu entries, eleven type keys, fourteen tools, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 85);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 58);
+    // Forty-eight menu entries, eleven type keys, fourteen tools, five keys, eight nudges.
+    QCOMPARE(int(all.size()), 86);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 59);
     QSet<QString> ids;
     for (const ShortcutDefinition &definition : all)
         ids.insert(definition.id());
@@ -104,6 +104,7 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
     QCOMPARE(named("Release Compound Path").original, ShortcutChord("8", 11));
     QCOMPARE(named("Show Grid").original, ShortcutChord("'", 1));
     QCOMPARE(named("Outline").original, ShortcutChord("y", 1));
+    QCOMPARE(named("Command Palette").original, ShortcutChord("k", 1));
     QVERIFY(named("Export PNG").isMenu());
     QCOMPARE(named("Line Segment tool").original, ShortcutChord("\\"));
     QCOMPARE(named("Temporary Hand tool (hold)").original, ShortcutChord(" "));

@@ -1,6 +1,7 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/Menus.h"
+#include "Canvas/TaskBar.h"
 
 namespace {
 bool selectionHas(const EditorSession &session, ObjectKind kind)
@@ -103,6 +104,7 @@ void Menus::synchronize()
         action(QString::fromLatin1(name))->setEnabled(drawn);
     action(QStringLiteral("reselect"))->setEnabled(editing && drawn && s.canReselect());
     action(QStringLiteral("zoomToSelection"))->setEnabled(drawn && selected && !typing);
+    action(QStringLiteral("contextualTaskBar"))->setChecked(TaskBar::isTurnedOn());
     action(QStringLiteral("showLayers"))->setChecked(ContentView::showsPanel(ContentView::layersKey));
     action(QStringLiteral("showProperties"))->setChecked(ContentView::showsPanel(ContentView::propertiesKey));
 }

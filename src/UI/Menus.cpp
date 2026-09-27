@@ -2,9 +2,11 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
+#include "UI/CommandPalette.h"
 #include "UI/ContextMenus.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
+#include "UI/TaskBarActions.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QFileInfo>
@@ -321,6 +323,11 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     add(view, QStringLiteral("snapToGrid"), QStringLiteral("Snap to Grid"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Apostrophe),
         [this] { session().setSnapsToGrid(!session().snapsToGrid); })
         ->setCheckable(true);
+    view->addSeparator();
+    add(view, QStringLiteral("contextualTaskBar"), QStringLiteral("Contextual Task Bar"), QKeySequence(), [this] {
+        TaskBar::setTurnedOn(!TaskBar::isTurnedOn());
+        synchronize();
+    })->setCheckable(true);
     QMenu *window = bar.addMenu(QStringLiteral("&Window"));
     // F7 is Illustrator's; no remap covers function keys.
     QAction *layers = add(window, QStringLiteral("showLayers"), QStringLiteral("Layers"), QKeySequence(Qt::Key_F7), [this] {
@@ -340,6 +347,11 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
             m_agent->showSwatchesPanel();
     })->setEnabled(m_agent != nullptr);
     QMenu *help = bar.addMenu(QStringLiteral("&Help"));
+    // Figma's Actions menu keys: Ctrl+K, and Ctrl+/ beside it.
+    alias(add(help, QStringLiteral("commandPalette"), QStringLiteral("Command Palette…"), QKeySequence(Qt::CTRL | Qt::Key_K),
+              [this] { commandPalette()->open(); }),
+          QKeySequence(Qt::CTRL | Qt::Key_Slash));
+    help->addSeparator();
     add(help, QStringLiteral("connectAgent"), QStringLiteral("Connect an Agent…"), QKeySequence(), [this] {
         if (m_agent)
             AgentSheets::connectAgent(*m_agent, &m_window);
@@ -361,6 +373,8 @@ void Menus::watchFront(EditorCanvas *canvas)
     m_canvas = canvas;
     disconnect(m_menuWatch);
     if (m_canvas) {
+        if (!m_canvas->findChild<TaskBar *>())
+            TaskBarActions::attach(*this, m_agent, *m_canvas);
         m_canvasWatch = connect(m_canvas, &EditorCanvas::textEditingChanged, this, &Menus::synchronize);
         m_menuWatch = connect(m_canvas, &EditorCanvas::contextMenuRequested, this, [this](QPoint at, const QList<QUuid> &hits) {
             if (!m_canvas)
@@ -373,6 +387,13 @@ void Menus::watchFront(EditorCanvas *canvas)
     synchronize();
 }
 
+CommandPalette *Menus::commandPalette()
+{
+    if (!m_palette)
+        m_palette = new CommandPalette(*this, &m_window);
+    return m_palette;
+}
+
 void Menus::alias(QAction *entry, const QKeySequence &second)
 {
     entry->setProperty("aliasShortcut", second);
@@ -381,7 +402,9 @@ void Menus::alias(QAction *entry, const QKeySequence &second)
 
 void Menus::focusMoved(QWidget *, QWidget *to)
 {
-    // The menu bar borrows focus; the field keeps Undo.
+    // The menu bar borrows focus, and so does the command palette's search: the field keeps Undo.
+    if (to && to->objectName() == QLatin1String("commandSearch"))
+        return;
     if (qobject_cast<QMenuBar *>(to) == nullptr)
         m_field = qobject_cast<QLineEdit *>(to);
     synchronize();
