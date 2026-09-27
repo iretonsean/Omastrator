@@ -20,6 +20,15 @@ public:
     virtual std::optional<QColor> pixel(QPoint point) = 0;
     // A screenshot of `rect`, for Capture to Desk; null with `error` set when it can't.
     virtual QImage grab(const QRect &rect, QString *error) = 0;
+    // The window's whole accessibility tree (Lift::accessibleTree's answer); nullopt with `error` when it has none.
+    virtual std::optional<QJsonObject> accessibleTree(const Hyprland::Window &window, int maxNodes, QString *error)
+    {
+        Q_UNUSED(window)
+        Q_UNUSED(maxNodes)
+        if (error)
+            *error = QStringLiteral("This app has no accessibility tree.");
+        return std::nullopt;
+    }
 };
 
 class SystemSource final : public DesktopSource {
@@ -30,4 +39,5 @@ public:
     std::optional<QJsonObject> accessible(const Hyprland::Window &window, QPoint windowPoint) override;
     std::optional<QColor> pixel(QPoint point) override;
     QImage grab(const QRect &rect, QString *error) override;
+    std::optional<QJsonObject> accessibleTree(const Hyprland::Window &window, int maxNodes, QString *error) override;
 };

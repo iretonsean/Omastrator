@@ -288,6 +288,8 @@ QJsonObject DesignController::status()
     if (m_bridge.designTarget() == &overlay && m_bridge.waiting())
         status["waiting"] = m_bridge.waitingText();
     status["canUndo"] = overlay.canUndo();
+    if (m_lift && m_lift->isRunning())
+        status["lift"] = m_lift->status();
 
     // The floating bar: next to the selected art, else what's pinned, else what's hovered.
     std::optional<Target> shown;
@@ -325,12 +327,20 @@ QJsonObject DesignController::status()
             }
             destinations.append(entry);
         }
+        QJsonArray actions = Bar::actions(kind);
+        // A traced lift can be handed to the agent to redraw cleanly.
+        if (!shown->inspection && overlay.selection().size() == 1) {
+            const VectorObject *picked = overlay.document()->find(overlay.selection().front());
+            if (picked && picked->liftedFrom == QLatin1String("trace"))
+                actions.insert(0, QJsonObject{{"id", "cleanUp"}, {"label", "Ask Agent to Clean Up"},
+                                              {"tip", "The agent redraws the traced shapes as clean vectors, as a preview to keep or discard"}});
+        }
         status["bar"] = QJsonObject{{"kind", kind},
                                     {"target", shown->inspection ? shown->inspection->id : 0},
                                     {"surface", key},
                                     {"label", label},
                                     {"bounds", rectArray(bounds)},
-                                    {"actions", Bar::actions(kind)},
+                                    {"actions", actions},
                                     {"suggestions", Bar::suggestions(kind, answers)},
                                     {"placeholder", Bar::askPlaceholder(kind)},
                                     {"destination", AnywhereSettings::destinations().contains(chosen) ? chosen : QStringLiteral("overlay")},

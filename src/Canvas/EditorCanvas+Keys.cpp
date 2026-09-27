@@ -108,6 +108,11 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             return false;
         if (pen)
             finishPen();
+        if (session.tool() == Tool::artboard) {
+            if (session.document()->artboardCount() > 1)
+                session.deleteArtboard(session.activeArtboard());
+            return true;
+        }
         session.deleteSelection();
         return true;
     case Qt::Key_Left:
@@ -121,6 +126,11 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
     // Shift-M: Shape Builder, as in Illustrator.
     if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_M) {
         session.selectTool(Tool::shapeBuilder);
+        return true;
+    }
+    // Shift-O: the Artboard tool.
+    if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_O) {
+        session.selectTool(Tool::artboard);
         return true;
     }
     if (plain && !shift && !event->isAutoRepeat()) {

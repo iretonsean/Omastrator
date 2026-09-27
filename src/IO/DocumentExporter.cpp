@@ -30,10 +30,12 @@ QImage render(const VectorDocument &document, double scale, bool transparent)
 {
     if (!(scale > 0) || !std::isfinite(scale))
         throw FileError(QStringLiteral("The export scale must be above zero."));
-    const double width = std::ceil(document.size.width() * scale), height = std::ceil(document.size.height() * scale);
+    // Several artboards: this call exports the first one alone.
+    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    const double width = std::ceil(page.size.width() * scale), height = std::ceil(page.size.height() * scale);
     if (width > maximumSide || height > maximumSide || width * height > double(maximumPixels))
         throw FileError(QStringLiteral("%1 × %2 pixels is too large to export. Choose a smaller scale.").arg(width).arg(height));
-    QImage image = VectorRenderer::render(document, scale, transparent);
+    QImage image = VectorRenderer::render(page, scale, transparent);
     if (image.isNull())
         throw FileError(QStringLiteral("There was not enough memory to render the artboard."));
     return image;
@@ -74,6 +76,8 @@ Format format(const QString &path)
 
 void writePdf(const VectorDocument &document, const QString &path)
 {
+    // Several artboards: this call exports the first one alone.
+    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);
@@ -83,12 +87,12 @@ void writePdf(const VectorDocument &document, const QString &path)
         writer.setTitle(QFileInfo(path).completeBaseName());
         // One device unit per point: document coordinates draw as they are.
         writer.setResolution(72);
-        writer.setPageSize(QPageSize(document.size, QPageSize::Point, QString(), QPageSize::ExactMatch));
+        writer.setPageSize(QPageSize(page.size, QPageSize::Point, QString(), QPageSize::ExactMatch));
         writer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout::Point);
         QPainter painter;
         if (!painter.begin(&writer))
             throw FileError(QStringLiteral("The PDF could not be started."));
-        VectorRenderer::draw(painter, document, {});
+        VectorRenderer::draw(painter, page, {});
         painter.end();
     }
     save(bytes, path);

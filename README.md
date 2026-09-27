@@ -179,6 +179,23 @@ Copy Again. There's no dialog.
 The list lives in `~/.config/omastrator/shares.json`, never in the `.omai`.
 More in [docs/SHARE.md](docs/SHARE.md).
 
+## Design systems
+
+Window ▸ Design System holds the document's **tokens** (colour, type, spacing,
+radius, shadow, with light and dark modes) and **components** with variants.
+Fills, strokes, corners, stroke weights, group gaps and text styles can follow
+a token, and changing it changes every use in one undo step. Make Component
+(Ctrl+Alt+K) turns the selection into a component; instances keep their own
+text, colours and visibility, swap variants from the panel or Ctrl+K, and
+follow every edit to the component.
+
+A system syncs with the project's code (tokens.json, Tailwind v4 and v3, CSS
+variables), a global library, any site (extracted in Omastrator's browser) and
+Omarchy themes (read, edited, saved as a new theme and applied). Every push or
+pull first shows where it publishes, each file it writes, the repository and
+branch it commits to, and a preview, and waits for you to confirm. More in
+[docs/DESIGN-SYSTEMS.md](docs/DESIGN-SYSTEMS.md).
+
 ## AI, with the agent you already use
 
 Omastrator bundles no model. It hands work to your Omarchy default agent, such
@@ -277,6 +294,15 @@ Clicks go straight through it to your apps.
   answers with a preview on the overlay that you keep or discard. Up to three
   suggestions are tuned by a short, skippable questionnaire on the first run.
   Captures stay on this machine, and nothing goes to an agent unless you ask.
+- **Lift** turns what you point at into editable shapes and text, laid exactly
+  over the original. A page element in Omastrator's browser (any site) comes
+  from its DOM: boxes with their fills, gradients, borders and per-corner
+  radii, text with its real font, size, weight, spacing and colours (mixed
+  styles as runs), images, inline SVG as vectors, transforms, opacity and
+  overflow clipping, grouped as the page nests them. Other apps come from the
+  accessibility tree over a screenshot; an app with no tree is traced, and the
+  bar then offers Ask Agent to Clean Up. Progress shows on the bar with Cancel,
+  and each lift is one undo step.
 - **Where work goes** is your choice each time, and it's remembered per
   surface: keep it on the overlay, send it to the Desk, open it as a document,
   or hand it to the agent. Pages with their code on this machine can also take
@@ -288,6 +314,7 @@ Clicks go straight through it to your apps.
 
 ```sh
 omastrator design on | off | status     # design mode from a script
+omastrator design lift --region X,Y,W,H [--to desk]   # lift a region of the screen
 omastrator desk [show|window]           # the Desk
 omastrator daemon [start|stop|status]   # the background app
 ```

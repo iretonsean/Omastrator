@@ -1,6 +1,7 @@
 #pragma once
 #include "Anywhere/DesignMode.h"
 #include "Anywhere/Desk.h"
+#include "Anywhere/Lift.h"
 #include "Anywhere/Overlays.h"
 #include <QJsonArray>
 #include <QJsonObject>
@@ -45,6 +46,8 @@ public:
 
     // The last line said about design mode, shown on the bar.
     QString message() const { return m_message; }
+    // The lift under way, if any.
+    LiftJob *liftJob() const { return m_lift.get(); }
 
 signals:
     void changed();
@@ -70,6 +73,9 @@ private:
     // The surface as a frame: its screenshot, where it can be taken, with its art (or the selected part) over it.
     Desk::Frame frameFor(const Target &target, bool screenshot, QString *error);
     QString onboarding(const QJsonObject &params, QJsonObject &result);
+    // Lift into vectors: what's pointed at (or `params.region` on screen) becomes shapes where the user chose.
+    QString startLift(const QJsonObject &params, QJsonObject &result);
+    void landLift();
     // Where each surface with art sits on screen now; web pages are read for their scroll.
     void updatePlacements();
     // The surface's screen rectangle now, if it's shown.
@@ -96,4 +102,7 @@ private:
     bool m_started = false;
     // anywhere.json as last read or written.
     QJsonObject m_settings;
+    std::unique_ptr<LiftJob> m_lift;
+    Surface m_liftSurface;
+    QString m_liftDestination;
 };

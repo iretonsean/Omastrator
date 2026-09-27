@@ -4,6 +4,7 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
@@ -145,6 +146,21 @@ QDialog *ObjectDialogs::artboardSize(EditorSession &session, QWidget *window)
     form->addRow(QStringLiteral("Width:"), width);
     form->addRow(QStringLiteral("Height:"), height);
     finish(dialog, form, [&session, width, height] { session.setArtboardSize(QSizeF(width->value(), height->value())); });
+    return dialog;
+}
+
+QDialog *ObjectDialogs::renameArtboard(EditorSession &session, int index, QWidget *window)
+{
+    QFormLayout *form = nullptr;
+    QDialog *dialog = sheet(window, QStringLiteral("renameArtboardDialog"), QStringLiteral("Rename Artboard"), form);
+    auto *name = new QLineEdit(session.document() ? session.document()->artboard(index).name : QString(), dialog);
+    name->setObjectName(QStringLiteral("artboardName"));
+    name->selectAll();
+    form->addRow(QStringLiteral("Name:"), name);
+    finish(dialog, form, [&session, index, name] {
+        if (!name->text().trimmed().isEmpty())
+            session.renameArtboard(index, name->text().trimmed());
+    });
     return dialog;
 }
 

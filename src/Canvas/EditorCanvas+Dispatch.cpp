@@ -102,6 +102,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
         break;
     case Tool::hand:
         break;
+    case Tool::artboard:
+        artboardPress(view, modifiers);
+        break;
     }
 }
 
@@ -174,6 +177,9 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::corner:
         dragCorner(view, modifiers);
         break;
+    case DragKind::artboard:
+        dragArtboard(view, modifiers);
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -241,6 +247,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
         break;
     case DragKind::textArea:
         finishTextArea();
+        break;
+    case DragKind::artboard:
+        finishArtboard();
         break;
     case DragKind::pan:
     case DragKind::textSelect:

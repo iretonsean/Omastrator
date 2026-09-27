@@ -57,6 +57,15 @@ ToolHeaderBar *ToolHeaders::make(EditorSession &session, Tool tool, QWidget *par
     case Tool::gradient: return plainBar(tool, QStringLiteral("Drag across the selection to set its gradient; drag the ends or the stops to adjust"), parent);
     case Tool::hand:
     case Tool::zoom: return new NavigationToolHeader(session, parent);
+    case Tool::artboard: {
+        ToolHeaderBar *bar = plainBar(tool, QStringLiteral("Drag to draw · Drag to move or resize · Alt-drag duplicates · Delete removes it"), parent);
+        auto *moveArt = new QCheckBox(QStringLiteral("Move art with artboard"), bar);
+        moveArt->setObjectName(QStringLiteral("artboardMovesArt"));
+        moveArt->setChecked(session.artboardMovesArt);
+        QObject::connect(moveArt, &QCheckBox::toggled, bar, [&session](bool on) { session.artboardMovesArt = on; });
+        bar->row->addWidget(moveArt);
+        return bar;
+    }
     }
     return new ToolHeaderBar(title(tool), parent);
 }

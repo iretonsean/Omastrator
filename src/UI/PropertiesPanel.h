@@ -17,6 +17,8 @@ class NumberField;
 class PaintStack;
 class PaintSwatch;
 class SelectionColors;
+class QListWidget;
+class QListWidgetItem;
 
 // A fill or stroke: kind, colour, gradient end. Several different paints read Mixed.
 class PaintRow : public QWidget {
@@ -62,6 +64,9 @@ private:
     // Live rectangles' corners and compound paths' fill rule.
     PanelSection *shapeSection();
     void synchronizeShape();
+    // An instance's variant properties, Detach and Reset; a component's name and instances.
+    PanelSection *componentSection();
+    void synchronizeComponent();
     QToolButton *iconButton(const QString &name, const QString &tip, PanelIcon icon, const std::function<void()> &run);
     // The reference point of the selection's bounds.
     QPointF reference() const;
@@ -80,6 +85,9 @@ private:
     // contextual rows (alignment for closed paths, arrowheads for open ones).
     void synchronizePaint();
     void synchronize();
+    // Properties ▸ Document's Artboards list: rows, selection and the right-click menu.
+    void synchronizeArtboards();
+    void artboardsMenu(int index, QPoint at);
     void applyIcons();
     // One height and one font for the section's fields and menus.
     void evenControls();
@@ -101,6 +109,8 @@ private:
     PanelSection *m_align = nullptr;
     PanelSection *m_pathfinder = nullptr;
     PanelSection *m_shape = nullptr;
+    PanelSection *m_component = nullptr;
+    QWidget *m_componentRows = nullptr;
     NumberField *m_radius = nullptr;
     QToolButton *m_cornersLinked = nullptr;
     QWidget *m_corners = nullptr;
@@ -124,6 +134,7 @@ private:
     NumberField *m_artboardWidth = nullptr;
     NumberField *m_artboardHeight = nullptr;
     PaintSwatch *m_background = nullptr;
+    QListWidget *m_artboards = nullptr;
     QCheckBox *m_grid = nullptr;
     QCheckBox *m_snap = nullptr;
     QCheckBox *m_outline = nullptr;

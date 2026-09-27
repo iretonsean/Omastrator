@@ -53,6 +53,9 @@ struct EditorCanvas::State {
         guide,
         // Direct Selection: a live corner's widget.
         corner,
+        // The Artboard tool: drawing a new one, moving or resizing one, or
+        // moving the fresh copy an Alt-drag made.
+        artboard,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -158,6 +161,18 @@ struct EditorCanvas::State {
     void dragCorner(QPointF view, Qt::KeyboardModifiers modifiers);
     // A click without a drag: Alt cycles round, inverted and chamfer.
     void finishCorner(Qt::KeyboardModifiers modifiers);
+
+    // Artboard (Shift-O) --------------------------------------------------------
+    // The active artboard's rect in document coordinates, while there's a document.
+    std::optional<QRectF> activeArtboardBox() const;
+    // A resize handle of the active artboard under `view`, only under the Artboard tool.
+    std::optional<int> artboardHandleAt(QPointF view) const;
+    void artboardPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragArtboard(QPointF view, Qt::KeyboardModifiers modifiers);
+    void finishArtboard();
+    void drawArtboardTool(QPainter &painter) const;
+    // Every artboard's name, drawn above its top-left corner.
+    void drawArtboardLabels(QPainter &painter) const;
 
     // Scissors (C) ------------------------------------------------------------------
     void scissorsPress(QPointF view);

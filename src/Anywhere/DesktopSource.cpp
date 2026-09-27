@@ -1,6 +1,7 @@
 #include "Anywhere/DesktopSource.h"
 #include "Agent/Capture.h"
 #include "Anywhere/Inspect.h"
+#include "Anywhere/Lift.h"
 
 namespace {
 QString geometry(const QRect &rect)
@@ -53,4 +54,9 @@ QImage SystemSource::grab(const QRect &rect, QString *error)
     if (image.isNull() && error)
         *error = QStringLiteral("grim's picture couldn't be read.");
     return image;
+}
+
+std::optional<QJsonObject> SystemSource::accessibleTree(const Hyprland::Window &window, int maxNodes, QString *error)
+{
+    return Lift::accessibleTree(window.pid, maxNodes, error);
 }

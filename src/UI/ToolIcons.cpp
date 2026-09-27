@@ -2,6 +2,7 @@
 #include <QPainterPath>
 #include <cmath>
 #include <numbers>
+#include <tuple>
 
 namespace {
 // The Selection tool's arrow; Direct Selection draws it hollow.
@@ -172,6 +173,17 @@ void zoom(QPainter &painter)
     painter.drawEllipse(QRectF(2, 2, 10.5, 10.5));
     painter.drawLine(QPointF(11.2, 11.2), QPointF(16, 16));
 }
+
+// Four crop marks at a page's corners, as print marks show an artboard's edge.
+void artboard(QPainter &painter)
+{
+    constexpr double inset = 3, arm = 4;
+    for (const auto &[x, y, dx, dy] : {std::tuple(inset, inset, 1, 1), std::tuple(18 - inset, inset, -1, 1),
+                                       std::tuple(inset, 18 - inset, 1, -1), std::tuple(18 - inset, 18 - inset, -1, -1)}) {
+        painter.drawLine(QPointF(x, y), QPointF(x + arm * dx, y));
+        painter.drawLine(QPointF(x, y), QPointF(x, y + arm * dy));
+    }
+}
 }
 
 void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side, const QColor &colour)
@@ -204,6 +216,7 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::eyedropper: eyedropper(painter); break;
     case Tool::hand: hand(painter); break;
     case Tool::zoom: zoom(painter); break;
+    case Tool::artboard: artboard(painter); break;
     }
     painter.restore();
 }

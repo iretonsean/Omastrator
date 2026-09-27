@@ -73,6 +73,7 @@ QString ContentView::hint(Tool tool)
     case Tool::gradient: return QStringLiteral("Drag across the selection to set its gradient; drag the ends or the stops to adjust");
     case Tool::hand: return QStringLiteral("Drag to pan · Space pans from any tool");
     case Tool::zoom: return QStringLiteral("Click to zoom in · Alt-click to zoom out");
+    case Tool::artboard: return QStringLiteral("Drag to draw an artboard · Drag to move or resize · Alt-drag duplicates · Delete removes it");
     }
     return QString();
 }

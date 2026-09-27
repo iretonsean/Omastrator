@@ -360,7 +360,7 @@ void EditorSession::align(AlignEdge edge, AlignTarget target)
     // A key object, once clicked, is what the selection aligns to.
     const bool toKey = m_keyObject && target != AlignTarget::artboard;
     const QRectF reference = toKey ? m_document->bounds(*m_keyObject)
-        : target == AlignTarget::artboard || m_selection.size() == 1 ? QRectF(QPointF(0, 0), m_document->size)
+        : target == AlignTarget::artboard || m_selection.size() == 1 ? m_document->artboard(activeArtboard()).rect
                                                                      : selectionBounds();
     edit(QStringLiteral("Align"), [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {

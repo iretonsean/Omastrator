@@ -4,6 +4,7 @@
 #include "UI/ColorPaletteControls.h"
 #include "UI/ColorPickerSheet.h"
 #include "UI/NumberField.h"
+#include "UI/ObjectDialogs.h"
 #include "UI/PaintStack.h"
 #include "UI/ParagraphSection.h"
 #include "UI/ToolHeaderStyle.h"
@@ -12,6 +13,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -49,7 +51,7 @@ PropertiesPanel::PropertiesPanel(EditorSession &session, QWidget *parent) : QScr
     m_character = new CharacterSection(m_session, content);
     m_paragraph = new ParagraphSection(m_session, content);
     bool first = true;
-    for (PanelSection *block : {documentSection(), transformSection(), shapeSection(), static_cast<PanelSection *>(m_character),
+    for (PanelSection *block : {documentSection(), componentSection(), transformSection(), shapeSection(), static_cast<PanelSection *>(m_character),
                                 static_cast<PanelSection *>(m_paragraph), appearanceSection(), strokeSection(), alignSection(), pathfinderSection()}) {
         if (!first) {
             // A section's rule hides with it.
@@ -139,12 +141,12 @@ PanelSection *PropertiesPanel::documentSection()
     QVBoxLayout *body = m_document->body;
     m_artboardWidth = new NumberField(QStringLiteral("W"), QStringLiteral("pt"), [this](double width) {
         if (m_session.document() && width > 0)
-            m_session.setArtboardSize(QSizeF(width, m_session.document()->size.height()));
+            m_session.setArtboardSize(QSizeF(width, m_session.document()->artboard(m_session.activeArtboard()).rect.height()));
     }, m_document);
     m_artboardWidth->field->setObjectName(QStringLiteral("artboardWidth"));
     m_artboardHeight = new NumberField(QStringLiteral("H"), QStringLiteral("pt"), [this](double height) {
         if (m_session.document() && height > 0)
-            m_session.setArtboardSize(QSizeF(m_session.document()->size.width(), height));
+            m_session.setArtboardSize(QSizeF(m_session.document()->artboard(m_session.activeArtboard()).rect.width(), height));
     }, m_document);
     m_artboardHeight->field->setObjectName(QStringLiteral("artboardHeight"));
     for (NumberField *side : {m_artboardWidth, m_artboardHeight}) {
@@ -163,7 +165,7 @@ PanelSection *PropertiesPanel::documentSection()
     size->addWidget(m_artboardHeight);
     body->addLayout(size);
     m_background = new PaintSwatch([this] {
-        return Paint::solid(m_session.document() ? m_session.document()->background : QColor(Qt::white));
+        return Paint::solid(m_session.document() ? m_session.document()->artboard(m_session.activeArtboard()).background : QColor(Qt::white));
     }, false, m_document);
     m_background->setObjectName(QStringLiteral("artboardBackground"));
     m_background->setFixedSize(36, 22);
@@ -172,7 +174,7 @@ PanelSection *PropertiesPanel::documentSection()
     connect(m_background, &QAbstractButton::clicked, this, [this] {
         if (!m_session.document())
             return;
-        ColorPickerSheet::showIn(m_picker, QStringLiteral("Artboard Background"), m_session.document()->background,
+        ColorPickerSheet::showIn(m_picker, QStringLiteral("Artboard Background"), m_session.document()->artboard(m_session.activeArtboard()).background,
                                  [this](const QColor &color) { m_session.setArtboardBackground(color); });
     });
     auto *background = new QHBoxLayout;
@@ -181,6 +183,34 @@ PanelSection *PropertiesPanel::documentSection()
     background->addWidget(m_background);
     background->addStretch(1);
     body->addLayout(background);
+    // The Artboards list: the active row selected, double-click renames, right-click for the
+    // Artboards menu, and a + button to add one.
+    auto *artboardsHeader = new QHBoxLayout;
+    artboardsHeader->addWidget(caption(QStringLiteral("Artboards"), m_document));
+    artboardsHeader->addStretch(1);
+    auto *addArtboard = new QToolButton(m_document);
+    addArtboard->setObjectName(QStringLiteral("artboardAdd"));
+    addArtboard->setText(QStringLiteral("+"));
+    addArtboard->setToolTip(QStringLiteral("New Artboard"));
+    connect(addArtboard, &QToolButton::clicked, this, [this] { m_session.addArtboard(); });
+    artboardsHeader->addWidget(addArtboard);
+    body->addLayout(artboardsHeader);
+    m_artboards = new QListWidget(m_document);
+    m_artboards->setObjectName(QStringLiteral("artboardsList"));
+    m_artboards->setMaximumHeight(120);
+    m_artboards->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_artboards, &QListWidget::currentRowChanged, this, [this](int row) {
+        if (row >= 0)
+            m_session.setActiveArtboard(row);
+    });
+    connect(m_artboards, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
+        ObjectDialogs::renameArtboard(m_session, m_artboards->row(item), window());
+    });
+    connect(m_artboards, &QListWidget::customContextMenuRequested, this, [this](QPoint at) {
+        if (QListWidgetItem *item = m_artboards->itemAt(at))
+            artboardsMenu(m_artboards->row(item), m_artboards->mapToGlobal(at));
+    });
+    body->addWidget(m_artboards);
     const auto check = [this](const QString &name, const QString &text, const std::function<void(bool)> &set) {
         auto *box = new QCheckBox(text, m_document);
         box->setObjectName(name);
@@ -229,6 +259,36 @@ PanelSection *PropertiesPanel::documentSection()
     return m_document;
 }
 
+void PropertiesPanel::synchronizeArtboards()
+{
+    const std::vector<Artboard> boards = m_session.document() ? m_session.document()->allArtboards() : std::vector<Artboard>();
+    if (int(boards.size()) != m_artboards->count()) {
+        m_artboards->clear();
+        for (const Artboard &board : boards)
+            m_artboards->addItem(board.name);
+    } else {
+        for (int row = 0; row < int(boards.size()); ++row) {
+            if (m_artboards->item(row)->text() != boards[size_t(row)].name)
+                m_artboards->item(row)->setText(boards[size_t(row)].name);
+        }
+    }
+    const QSignalBlocker quiet(m_artboards);
+    m_artboards->setCurrentRow(m_session.activeArtboard());
+}
+
+void PropertiesPanel::artboardsMenu(int index, QPoint at)
+{
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("Rename…"), this, [this, index] { ObjectDialogs::renameArtboard(m_session, index, window()); });
+    menu.addAction(QStringLiteral("Duplicate"), this, [this, index] { m_session.duplicateArtboard(index); });
+    QAction *deleteOne = menu.addAction(QStringLiteral("Delete"), this, [this, index] { m_session.deleteArtboard(index); });
+    deleteOne->setEnabled(m_session.document() && m_session.document()->artboardCount() > 1);
+    menu.addSeparator();
+    menu.addAction(QStringLiteral("Fit to Artwork Bounds"), this, [this, index] { m_session.fitArtboardToArtwork(index); });
+    menu.addAction(QStringLiteral("Switch Orientation"), this, [this, index] { m_session.switchArtboardOrientation(index); });
+    menu.exec(at);
+}
+
 void PropertiesPanel::synchronize()
 {
     const bool drawn = m_session.document().has_value();
@@ -253,6 +313,9 @@ void PropertiesPanel::synchronize()
         m_paragraph->synchronize();
     show(m_align, selected);
     show(m_pathfinder, m_session.canCombine());
+    show(m_component, drawn && selected && (!m_session.selectedInstances().empty() || m_session.selectedMaster().has_value()));
+    if (!m_component->isHidden())
+        synchronizeComponent();
     show(m_shape, drawn && selected && (!m_session.selectedShapes().empty() || !m_session.selectedCompoundPaths().empty()));
     if (!m_shape->isHidden())
         synchronizeShape();
@@ -269,10 +332,12 @@ void PropertiesPanel::synchronize()
         m_rotation->sync(0);
     m_session.scaleStrokes = m_scaleStrokes->isChecked();
 
-    const QSizeF size = drawn ? m_session.document()->size : QSizeF(0, 0);
+    const QSizeF size = drawn ? m_session.document()->artboard(m_session.activeArtboard()).rect.size() : QSizeF(0, 0);
     m_artboardWidth->sync(size.width());
     m_artboardHeight->sync(size.height());
     m_background->update();
+    if (!m_document->isHidden())
+        synchronizeArtboards();
     for (const auto &[box, on] : {std::pair{m_grid, m_session.showsGrid}, std::pair{m_snap, m_session.snapsToGrid},
                                   std::pair{m_outline, m_session.showsOutline}}) {
         const QSignalBlocker quiet(box);

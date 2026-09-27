@@ -142,6 +142,7 @@ void EditorSession::commitTextEdit(VectorDocument next, const QString &name, boo
     if (coalesce && now - m_lastTextStep < coalesceWindow) {
         VectorDocument before = std::move(*m_document);
         m_document = std::move(next);
+        settle();
         if (m_history.amend(name, m_document, m_selection)) {
             m_lastTextStep = now;
             notify();

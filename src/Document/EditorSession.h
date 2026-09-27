@@ -34,8 +34,9 @@ enum class Tool {
     eyedropper,      // I
     hand,            // H
     zoom,            // Z
+    artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
 };
-inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::line,
+inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::artboard, Tool::pen, Tool::pencil, Tool::text, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::eyedropper, Tool::hand, Tool::zoom};
 QString rawValue(Tool tool);
@@ -70,6 +71,33 @@ public:
     void closeDocument();
     void setArtboardSize(QSizeF size);
     void setArtboardBackground(const QColor &color);
+
+    // Artboards (EditorSession+Artboards.cpp) ---------------------------------
+    // The Artboard tool, the list, next/previous and select() all set this.
+    int activeArtboard() const;
+    void setActiveArtboard(int index);
+    // Placed to the right of the active one with a 20 pt gap unless `rect` is given.
+    QUuid addArtboard(QRectF rect = {});
+    // To the right of `index` with a 20 pt gap, copying its art.
+    QUuid duplicateArtboard(int index);
+    void renameArtboard(int index, const QString &name);
+    // Never the last artboard; its art is untouched.
+    void deleteArtboard(int index);
+    // A drag: beginInteraction("Move Artboard" or "Resize Artboard"), a preview per
+    // move, then commitInteraction. Art whose centre was on it moves too when `artboardMovesArt`.
+    void previewArtboardRect(int index, QRectF rect);
+    // Object ▸ Artboards ▸ Fit to Artwork Bounds: the art overlapping it, or every
+    // visible object when none does, strokes included.
+    void fitArtboardToArtwork(int index);
+    void switchArtboardOrientation(int index);
+    // Activates and zooms to the next or previous artboard, wrapping around.
+    void showArtboard(bool next);
+    void fitAllArtboards();
+    // Export for Screens' asset list.
+    void collectForExport(const std::vector<QUuid> &ids);
+    void removeFromExport(const std::vector<QUuid> &ids);
+    // The Artboard tool's "Move art with artboard" option.
+    bool artboardMovesArt = true;
 
     // Tools and default style ------------------------------------------------
     Tool tool() const { return m_tool; }
@@ -347,6 +375,53 @@ public:
     // Scale Corners: kept for live corners; paths always scale their curves.
     bool scaleCorners = true;
 
+    // Design system: tokens (docs/DESIGN-SYSTEMS.md) ---------------------------
+    const DesignToken *token(const QString &id) const;
+    // Adds a token (its name made unique) and returns its id.
+    QString addToken(DesignToken token);
+    // A token's value in `mode` (empty: its own value), and every use of it, in one undo step.
+    void setTokenValue(const QString &id, const TokenValue &value, const QString &mode = {});
+    void renameToken(const QString &id, const QString &name);
+    // What used it keeps its look and loses the link.
+    void deleteToken(const QString &id);
+    // A pull: tokens merged in by name, their uses updated, in one step named `editName`. Returns how many changed.
+    int mergeTokens(const std::vector<DesignToken> &tokens, const QString &editName, const QStringList &modes = {});
+    // Modes: every token gets a value for a new one (a copy of its own), and switching restyles every use.
+    void addTokenMode(const QString &mode);
+    void setTokenMode(const QString &mode);
+    // Links the selection to a token and applies it: "fill", "stroke", or a TokenRef key. An empty
+    // target picks by kind: fill for a colour, the gap of a group for spacing, corners for a radius,
+    // type for type. Returns why it couldn't, or empty.
+    QString applyToken(const QString &id, const QString &target = {});
+    void unlinkToken(const QString &target);
+    // The token the selection's `target` follows, if every selected leaf shares one.
+    QString linkedToken(const QString &target) const;
+    void linkTextStyle(const QUuid &style, const QString &token);
+
+    // Design system: components ------------------------------------------------
+    // The selection, grouped if it's more than one group, becomes a main component.
+    std::optional<QUuid> makeComponent(const QString &name = {});
+    // An instance of `master`, centred on `center` (else beside the component), selected.
+    QUuid placeInstance(const QUuid &master, std::optional<QPointF> center = std::nullopt);
+    // Components from a library, each subtree's root a component: variants of a set already in the
+    // document are reused, the rest go on a "Components" layer beside the artboard. Then an instance of
+    // the best match for `variant` in `set`, centred on `center`. One undo step.
+    QUuid placeFromLibrary(const std::vector<VectorObject> &objects, const QString &set, const std::map<QString, QString> &variant,
+                           std::optional<QPointF> center = std::nullopt);
+    // A copy of `master` beside it as another variant of its set, with `property` set to `value`.
+    std::optional<QUuid> addVariant(const QUuid &master, const QString &property, const QString &value);
+    void setVariantProperty(const QUuid &master, const QString &property, const QString &value);
+    void renameComponent(const QString &set, const QString &name);
+    // The selected instances switch to the variant with `property` = `value`, overrides kept.
+    QString swapVariant(const QString &property, const QString &value);
+    void detachInstances();
+    void resetOverrides();
+    std::vector<QUuid> selectedInstances() const;
+    // The component selected, or the one the first selected instance uses.
+    std::optional<QUuid> selectedMaster() const;
+    // Instances rebuilt from their components and stale token links dropped; every edit ends with it.
+    void settle();
+
     // Layers panel -----------------------------------------------------------
     QUuid addLayer();
     void deleteObjects(const std::vector<QUuid> &ids);
@@ -464,6 +539,10 @@ private:
     std::vector<QUuid> m_selection;
     std::vector<PickedNode> m_pickedNodes;
     std::optional<QUuid> m_activeLayer;
+    // Not saved; clamped to range whenever it's read.
+    int m_activeArtboard = 0;
+    // Artboard 1's size the last time notify() ran, to compensate the viewport when it changes.
+    QSizeF m_viewportDocumentSize;
     std::optional<QUuid> m_keyObject;
     std::vector<QUuid> m_isolation;
     struct Interaction {

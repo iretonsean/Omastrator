@@ -119,3 +119,12 @@ function sendArgs(bar, destination, prompt) {
   }
   return args
 }
+
+// A lift's progress on the bar: "Lifting div.card: Fetching pictures… 3 of 8".
+function liftText(lift) {
+  if (!lift) return ""
+  var text = "Lifting " + lift.label + ": " + lift.stage
+  if (lift.total > 0)
+    text += " " + lift.done + " of " + lift.total
+  return text
+}

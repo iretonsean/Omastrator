@@ -294,6 +294,8 @@ QJsonObject AgentTools::render(const QJsonObject &params)
         for (const QUuid &layer : copy.layers())
             copy.transform(layer, QTransform::fromTranslate(-area.x(), -area.y()));
         copy.size = QSizeF(std::max(1.0, area.width()), std::max(1.0, area.height()));
+        copy.artboards.clear();
+        copy.exportAssets.clear();
     }
     if (copy.size.width() * scale > maximumRenderSide || copy.size.height() * scale > maximumRenderSide)
         fail(QStringLiteral("%1 × %2 pixels is too large; use a smaller “scale”.")

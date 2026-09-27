@@ -1,4 +1,6 @@
 #pragma once
+#include "Document/Components.h"
+#include "Document/DesignTokens.h"
 #include "Document/LayerAppearance.h"
 #include "Document/Paint.h"
 #include "Document/VectorPath.h"
@@ -98,6 +100,8 @@ struct TextStyle {
     TextStyleKind kind = TextStyleKind::character;
     CharacterFormat character;
     ParagraphFormat paragraph;
+    // A type token the style follows, if any.
+    QString typeToken;
     friend bool operator==(const TextStyle &, const TextStyle &) = default;
 };
 
@@ -240,6 +244,14 @@ struct VectorObject {
     bool isClipGroup = false;
     // Rectangles: the live shape, while the path is still what it makes.
     std::optional<LiveRectangle> shape;
+    // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
+    // applying changes back to the source.
+    QString liftedFrom;
+    // Scalar properties bound to design tokens, by TokenRef key: {"radius": id}.
+    std::map<QString, QString> tokenRefs;
+    // Groups: a main component, or an instance of one.
+    std::optional<ComponentInfo> component;
+    std::optional<InstanceInfo> instance;
 
     bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group; }
     bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text; }
@@ -276,6 +288,11 @@ struct VectorDocument {
     std::vector<Artboard> artboards;
     // Export for Screens: objects collected as assets, in the order they were added.
     std::vector<QUuid> exportAssets;
+    // The design system's tokens, its modes ("light", "dark"; the first is each token's
+    // own value) and the mode shown. No modes: empty.
+    std::vector<DesignToken> tokens;
+    QStringList tokenModes;
+    QString tokenMode;
 
     // A document with one empty layer.
     static VectorDocument blank(QSizeF size);
@@ -322,6 +339,9 @@ struct VectorDocument {
     void transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText = false);
     // A copy of an object's subtree with new ids.
     std::vector<VectorObject> copySubtree(const QUuid &id) const;
+    // `ids`, their descendants, and the layers, groups and clip masks above them, moved so
+    // their bounds' corner is the origin; background cleared, artboards and export assets too.
+    VectorDocument croppedTo(const std::vector<QUuid> &ids) const;
     QString uniqueName(const QString &base) const;
     // Rectangles whose anchors were edited become plain paths.
     void expandEditedShapes();
@@ -352,6 +372,9 @@ private:
     int subtreeEnd(int index) const;
     bool moveUnder(const QUuid &id, const std::optional<QUuid> &parent, int index);
 };
+
+// A text style redefined: characters and paragraphs that still match `old` take `fresh`.
+void restyleText(TextContent &text, const TextStyle &old, const TextStyle &fresh);
 
 // The colour each new layer takes in turn.
 QColor nextLayerColor(int index);

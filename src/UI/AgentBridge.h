@@ -228,6 +228,9 @@ signals:
     void roastChanged();
     // Reviews, kept files, the Live message.
     void liveReviewChanged();
+    // The floating bar asks for the Design System panel: on `session` (an overlay; null is the front tab),
+    // with a site's scan to offer when it isn't empty.
+    void designSystemRequested(EditorSession *session, const QJsonObject &siteScan, const QString &source);
 
 private:
     // Checks for an agent, then launches; `task` starts waiting on success.

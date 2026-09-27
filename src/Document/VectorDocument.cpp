@@ -379,6 +379,11 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform)
         }
     } else if (object->kind == ObjectKind::text || object->kind == ObjectKind::image)
         object->transform = object->transform * transform;
+    // A component's frame and an instance's placement move with them.
+    if (object->component)
+        object->component->placement = object->component->placement * transform;
+    if (object->instance)
+        object->instance->placement = object->instance->placement * transform;
     for (const QUuid &child : children(id))
         this->transform(child, transform);
 }
@@ -446,6 +451,13 @@ std::vector<VectorObject> VectorDocument::copySubtree(const QUuid &id) const
             if (copy.parentID == old)
                 copy.parentID = fresh;
         }
+        // A copy of a component inside it is a plain copy; the copy itself becomes an instance.
+        if (&copy != &copies.front())
+            copy.component.reset();
+    }
+    if (!copies.empty() && copies.front().component) {
+        copies.front().instance = InstanceInfo{objects[size_t(from)].id, copies.front().component->placement, {}, {}};
+        copies.front().component.reset();
     }
     return copies;
 }

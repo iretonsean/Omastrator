@@ -1,3 +1,4 @@
+#include "System/SiteExtract.h"
 #include "Agent/AgentLauncher.h"
 #include "Agent/Capture.h"
 #include "Agent/Island.h"
@@ -159,6 +160,8 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
         return onboarding(params, result);
     if (action == QLatin1String("desk"))
         return desk(params["how"].toString(QStringLiteral("show")));
+    if (action == QLatin1String("lift"))
+        return startLift(params, result);
 
     QString error;
     const std::optional<Target> chosen = target(params, &error);
@@ -225,7 +228,7 @@ QString DesignController::action(const QString &id, const Target &target, QJsonO
         return {};
     }
     if (id == QLatin1String("lift"))
-        return QStringLiteral("Lift into vectors comes in the next build.");
+        return startLift(QJsonObject{{"target", inspection.id}}, result);
     if (id == QLatin1String("mockup")) {
         m_mode->setTool(QStringLiteral("rectangle"));
         m_mode->select(inspection.id);
@@ -245,6 +248,19 @@ QString DesignController::action(const QString &id, const Target &target, QJsonO
         return send(QStringLiteral("desk"), target, QString(), result);
     if (id == QLatin1String("openInBrowser"))
         return m_bridge.live(QStringLiteral("start"), {}, result);
+    if (id == QLatin1String("extractSystem")) {
+        LiveSession &live = m_bridge.liveSession();
+        if (live.state() != LiveSession::State::running || live.pageSession().isEmpty())
+            return QStringLiteral("Open the page in Omastrator's browser to extract its design system.");
+        QString error;
+        const QJsonObject scan = SiteExtract::scan(live.browser(), live.pageSession(), &error);
+        if (!error.isEmpty())
+            return error;
+        m_bridge.showWindow({}, true);
+        // The proposal waits for confirmation in the Design System panel.
+        emit m_bridge.designSystemRequested(nullptr, scan, inspection.surface.url.toString());
+        return {};
+    }
     return QStringLiteral("There is no bar action “%1”.").arg(id);
 }
 
@@ -282,6 +298,19 @@ QString DesignController::artAction(const QString &id, const QString &surface)
         if (!overlay.canUndo())
             return QStringLiteral("There's nothing on the overlay to undo.");
         overlay.undo();
+    } else if (id == QLatin1String("cleanUp")) {
+        // A traced lift is rough: the agent redraws it as a preview to keep or discard.
+        QJsonObject ignored;
+        return ask(QStringLiteral("This selected group was traced from a screenshot of an app, so its shapes are rough. Redraw it as clean "
+                                  "UI vectors in the same place: straight edges, true rectangles with consistent corner radii, real text "
+                                  "objects for any words you can read, and flat colours matching the originals. Replace the traced group."),
+                   Target{std::nullopt, surface}, ignored);
+    } else if (id == QLatin1String("makeComponent")) {
+        if (!overlay.makeComponent())
+            return QStringLiteral("Select the art to make a component of.");
+    } else if (id == QLatin1String("designSystem")) {
+        m_bridge.showWindow({}, true);
+        emit m_bridge.designSystemRequested(&overlay, {}, {});
     } else if (id == QLatin1String("sendDesk")) {
         QJsonObject ignored;
         return send(QStringLiteral("desk"), Target{std::nullopt, surface}, QString(), ignored);

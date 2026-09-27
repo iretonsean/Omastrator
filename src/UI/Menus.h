@@ -11,6 +11,7 @@ class AgentBridge;
 class CommandPalette;
 class ShareController;
 class TextStylesPanel;
+class DesignSystemPanel;
 
 // The menu bar: Illustrator's commands whose session functions exist.
 class Menus : public QObject {
@@ -31,6 +32,9 @@ public:
     QWidget &window() const { return m_window; }
     // Help ▸ Command Palette (Ctrl+K), made on first use.
     CommandPalette *commandPalette();
+    // Window ▸ Design System; `session` points it at another session (an overlay) instead of the front tab.
+    DesignSystemPanel *showDesignSystem(std::function<EditorSession *()> session = {});
+    DesignSystemPanel *designSystem() const;
 
 signals:
     void layersToggled(bool shown);
@@ -65,6 +69,8 @@ private:
     // Window ▸ Type Styles, following the front tab.
     FloatingPanel m_typeStylesPanel{QStringLiteral("typeStylesPanel"), m_window};
     QPointer<TextStylesPanel> m_typeStyles;
+    FloatingPanel m_designSystemPanel{QStringLiteral("designSystemPanel"), m_window};
+    QPointer<DesignSystemPanel> m_designSystem;
     QMetaObject::Connection m_sessionWatch;
     QMetaObject::Connection m_canvasWatch;
     QMetaObject::Connection m_menuWatch;

@@ -254,23 +254,27 @@ void drawObject(QPainter &painter, const VectorDocument &document, const QUuid &
 void draw(QPainter &painter, const VectorDocument &document, const Options &options)
 {
     painter.setRenderHint(QPainter::Antialiasing);
-    if (options.drawBackground && !options.outlineMode)
-        painter.fillRect(QRectF(QPointF(0, 0), document.size), document.background);
+    if (options.drawBackground && !options.outlineMode) {
+        for (const Artboard &board : document.allArtboards())
+            painter.fillRect(board.rect, board.background);
+    }
     for (const QUuid &layer : document.layers())
         drawObject(painter, document, layer, options);
 }
 
 QImage render(const VectorDocument &document, double scale, bool transparent)
 {
-    const QSize size(std::max(1, int(std::ceil(document.size.width() * scale))),
-                     std::max(1, int(std::ceil(document.size.height() * scale))));
+    // Several artboards: render the first one alone, moved to the origin.
+    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    const QSize size(std::max(1, int(std::ceil(page.size.width() * scale))),
+                     std::max(1, int(std::ceil(page.size.height() * scale))));
     QImage image(size, QImage::Format_RGBA8888_Premultiplied);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.scale(scale, scale);
     Options options;
     options.drawBackground = !transparent;
-    draw(painter, document, options);
+    draw(painter, page, options);
     painter.end();
     return image;
 }

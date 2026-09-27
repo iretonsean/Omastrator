@@ -92,6 +92,10 @@ QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error)
 
     const QUuid layer = next.layers().back();
     const QString title = label(frame.source, frame.time);
+    // Its own artboard, named after the frame; the first frame materialises the Desk's as [0].
+    std::vector<Artboard> boards = next.allArtboards();
+    boards.push_back({QUuid::createUuid(), title, QRectF(at, size), Qt::white});
+    next.setArtboards(boards);
     VectorObject group;
     group.kind = ObjectKind::group;
     group.name = title;
@@ -143,7 +147,7 @@ QUuid addFrame(EditorSession &desk, const Frame &frame, QString *error)
     const QRectF all = next.bounds(groupId, true);
     next.size = QSizeF(std::max(next.size.width(), all.right() + margin), std::max(next.size.height(), all.bottom() + margin));
 
-    desk.beginInteraction(QStringLiteral("Send to Desk"));
+    desk.beginInteraction(frame.step.isEmpty() ? QStringLiteral("Send to Desk") : frame.step);
     desk.previewDocument(next, {groupId});
     desk.commitInteraction();
     return groupId;
