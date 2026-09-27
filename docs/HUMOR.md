@@ -81,16 +81,26 @@ and it's the only playful button label in the app.
 The panel has three pages, which the user steps through with Back and Next or
 the arrow keys:
 
-1. **The roast.** Two to four one-line burns, 60 words at most, with no
-   softeners, no compliments and no explaining the joke.
-   - *Target:* the design and the habits it gives away (the workflow, the
-     tools, the trend-chasing), in second person. Never who someone is, how
-     they look, or anything outside design work.
-   - *Voice:* taken from the people who use this app: designers who lean on AI,
-     Omarchy and Linux ricers, Figma and UI/UX people, the habits of each tool,
-     and the design profession itself. Each burn is tied to something actually
-     on the artboard. The full voice guide is in the agent instructions
-     (`src/Agent/AgentLauncher+Prompts.cpp`).
+1. **The roast.** Two to four one-line burns, 60 words at most. It should hit
+   like a Comedy Central or Netflix roast (the Roast of Tom Brady, Jeff Ross,
+   Nikki Glaser, Greg Giraldo, Don Rickles), not like a critique with jokes in
+   it. A polite roast is a failed roast.
+   - *How it's built:* the roast mechanics are the humiliating comparison,
+     fake praise then the knife, consequences instead of flaws, a tiny fact
+     blown up, and a short setup with a hard turn.
+   - *How hard it hits:* at least as hard as "Violet-to-cyan on near-black.
+     Congratulations, you designed every crypto startup that rugged its users in
+     2022." A line that only describes the flaw fails. The agent instructions
+     carry a few benchmark lines like that one, which the agent must never reuse.
+   - *Swearing:* allowed where it lands harder: fuck and its variants, shit,
+     ass, damn, hell. At most one fuck and two swears per roast.
+   - *Target:* the design and the taste, skill, habits, career and ambitions it
+     reveals, in second person, drawing on the people who use this app:
+     AI-leaning designers, Omarchy and Linux ricers, Figma and UI/UX people,
+     the habits of each tool, and the profession. Always about what the user
+     pointed at.
+   - *Never:* slurs, sexual content, bodies or looks, race, religion, gender,
+     sexuality, disability, age, family tragedy, self-harm, or who someone is.
 2. **The fixes.** Exactly three, highest impact first, each a title of five
    words and one sentence with the concrete value to use. Clicking one selects
    the objects it's about.
