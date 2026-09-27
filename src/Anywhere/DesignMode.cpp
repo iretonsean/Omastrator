@@ -237,6 +237,16 @@ Inspection DesignMode::inspect(QPoint point, bool deep)
         plain.bounds = surface.rect;
         plain.role = window ? QStringLiteral("window") : QStringLiteral("desktop");
         plain.name = window ? window->title : surface.label();
+        // Omarchy's bar is a layer over the desktop: it gets its own actions (docs/ANYWHERE.md, phase 4).
+        if (!window) {
+            for (const Hyprland::Layer &layer : m_source.layers()) {
+                if (layer.name == QLatin1String("omarchy-bar") && layer.rect.contains(point)) {
+                    plain.role = QStringLiteral("bar");
+                    plain.name = QStringLiteral("The bar");
+                    plain.bounds = layer.rect;
+                }
+            }
+        }
         found = plain;
     }
     if (deep) {

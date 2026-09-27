@@ -232,6 +232,9 @@ QString DesignController::kindOf(const Target &target) const
         const QString art = TaskBarActions::kind(m_overlays.session());
         return QStringLiteral("art:") + (art.isEmpty() ? QStringLiteral("objects") : art);
     }
+    // Omarchy's bar is a layer over the desktop, with its own actions.
+    if (target.inspection->surface.kind == Surface::Kind::desktop && target.inspection->role == QLatin1String("bar"))
+        return QStringLiteral("shellBar");
     return Bar::kindOf(Surface::kindName(target.inspection->surface.kind), target.inspection->surface.otherBrowser);
 }
 
@@ -288,6 +291,7 @@ QJsonObject DesignController::status()
     if (m_bridge.designTarget() == &overlay && m_bridge.waiting())
         status["waiting"] = m_bridge.waitingText();
     status["canUndo"] = overlay.canUndo();
+    status["look"] = lookStatus();
     if (m_lift && m_lift->isRunning())
         status["lift"] = m_lift->status();
 

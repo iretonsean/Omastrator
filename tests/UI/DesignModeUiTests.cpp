@@ -139,7 +139,7 @@ private slots:
         status = app.status();
         QJsonObject bar = status["bar"].toObject();
         QCOMPARE(bar["kind"].toString(), QStringLiteral("window"));
-        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"capture", "lift", "measure"}));
+        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"capture", "lift", "measure", "gapsAndBorders", "restyleApp"}));
         QCOMPARE(bar["surface"].toString(), QStringLiteral("window:foot"));
         QVERIFY(!bar["placeholder"].toString().isEmpty());
 

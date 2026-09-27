@@ -162,6 +162,10 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
         return desk(params["how"].toString(QStringLiteral("show")));
     if (action == QLatin1String("lift"))
         return startLift(params, result);
+    if (action == QLatin1String("look"))
+        return look(params, result);
+    if (action == QLatin1String("restyle"))
+        return restyle(params, result);
 
     QString error;
     const std::optional<Target> chosen = target(params, &error);
@@ -244,6 +248,13 @@ QString DesignController::action(const QString &id, const Target &target, QJsonO
     }
     if (id == QLatin1String("capture"))
         return captureToDesk(target, result);
+    // Changing the real thing: Omarchy's look, and the app's toolkit.
+    if (id == QLatin1String("desktopLook") || id == QLatin1String("gapsAndBorders") || id == QLatin1String("barLook")
+        || id == QLatin1String("restyleApp")) {
+        static const QHash<QString, QString> sections{{"desktopLook", "windows"}, {"gapsAndBorders", "windows"}, {"barLook", "bar"}, {"restyleApp", "app"}};
+        openLookPanel(sections.value(id), inspection);
+        return {};
+    }
     if (id == QLatin1String("sendDesk"))
         return send(QStringLiteral("desk"), target, QString(), result);
     if (id == QLatin1String("openInBrowser"))

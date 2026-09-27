@@ -114,7 +114,7 @@ private slots:
         int parts = 0;
         for (auto match = part.globalMatch(mask); match.hasNext(); match.next())
             ++parts;
-        QCOMPARE(parts, 4);
+        QCOMPARE(parts, 5);
         // The keyboard stays with the apps unless something is being typed.
         QVERIFY(window.contains(QStringLiteral("WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None")));
         QVERIFY(!overlay.contains(QStringLiteral("WlrKeyboardFocus.Exclusive")));
@@ -189,6 +189,19 @@ private slots:
                  (QStringList{"Pull", "its", "palette"}));
         QCOMPARE(call("sizeLabel", {QVariantMap{{"bounds", QVariantList{0, 0, 120, 40}}, {"source", "dom"}, {"name", "button.buy"}}}).toString(),
                  QStringLiteral("button.buy  120 × 40"));
+        // Desktop Look's gap handle: the outer gap at the monitor's edge, twice the inner gap between windows.
+        const QVariantMap look{{"handles", true}, {"gapsIn", 4}, {"gapsOut", 10}, {"borderSize", 1}};
+        QVariantMap gap = call("gapHandle", {look, QVariantList{1920 + 10, 40, 1920 - 21, 1030}, screen}).toMap();
+        QCOMPARE(gap["key"].toString(), QStringLiteral("gapsOut"));
+        QCOMPARE(gap["x"].toInt(), 1909);
+        QCOMPARE(gap["width"].toInt(), 10);
+        gap = call("gapHandle", {look, QVariantList{1920 + 10, 40, 900, 1030}, screen}).toMap();
+        QCOMPARE(gap["key"].toString(), QStringLiteral("gapsIn"));
+        QCOMPARE(gap["width"].toInt(), 8);
+        QCOMPARE(call("gapAfterDrag", {gap, 12}).toInt(), 10);
+        QCOMPARE(call("gapAfterDrag", {gap, -40}).toInt(), 0);
+        QCOMPARE(call("gapArgs", {gap, 10}).toStringList(), (QStringList{"design", "look", "gapsIn=10"}));
+        QVERIFY(call("gapHandle", {QVariantMap{{"handles", false}}, QVariantList{0, 0, 10, 10}, screen}).isNull());
 #endif
     }
 

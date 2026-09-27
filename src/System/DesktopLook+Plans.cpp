@@ -134,11 +134,14 @@ QStringList applyTheme(const QByteArray &colors, const QByteArray &shell)
             QString::fromLatin1(shell.toBase64())};
 }
 
-bool temporary(const QString &path)
+// A picture that won't last: made in a runtime or temporary folder (an artboard's), not one of the user's own.
+bool temporary(const QString &path, const QString &home)
 {
-    const QString canonical = QFileInfo(path).absoluteFilePath();
-    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
-    return canonical.startsWith(QDir::tempPath() + QLatin1Char('/')) || (!runtime.isEmpty() && canonical.startsWith(runtime + QLatin1Char('/')));
+    const QString absolute = QFileInfo(path).absoluteFilePath();
+    const auto under = [&](const QString &folder) { return !folder.isEmpty() && absolute.startsWith(QDir(folder).absolutePath() + QLatin1Char('/')); };
+    if (under(qEnvironmentVariable("OMASTRATOR_RUNTIME_DIR")) || under(qEnvironmentVariable("XDG_RUNTIME_DIR")))
+        return true;
+    return under(QDir::tempPath()) && !under(home);
 }
 
 // Keys of the user's shell.toml that an edit sets, which a preview through the theme can't override.
@@ -360,7 +363,7 @@ SyncPlan savePlan(const QJsonObject &edits, const Look &now, const Paths &paths)
     // The wallpaper: Omarchy's link to it. A picture made from an artboard is kept first.
     if (edits.contains(QLatin1String("wallpaper"))) {
         QString image = QFileInfo(edits["wallpaper"].toString()).absoluteFilePath();
-        if (temporary(image)) {
+        if (temporary(image, paths.home)) {
             const QString kept = QDir(paths.wallpapers()).filePath(QFileInfo(image).fileName());
             plan.writes.emplace_back(kept, contents(kept), QByteArray(), image);
             image = kept;

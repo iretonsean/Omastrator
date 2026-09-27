@@ -37,7 +37,9 @@ QJsonArray actions(const QString &kind)
     if (kind == QLatin1String("window") || kind == QLatin1String("browser")) {
         QJsonArray list{action("capture", "Capture to Desk", "A screenshot of this window as a frame on the Desk"),
                         action("lift", "Lift", "Turn what's pointed at into editable shapes and text, in place"),
-                        action("measure", "Measure", "Distances from this to the next thing you point at")};
+                        action("measure", "Measure", "Distances from this to the next thing you point at"),
+                        action("gapsAndBorders", "Gaps and Borders", "Hyprland's gaps, borders and corners, changed on screen and saved to your config"),
+                        action("restyleApp", "Restyle App", "This app's colours, font and corners through its toolkit: gtk.css for GTK, a stylesheet or qt6ct for Qt")};
         if (kind == QLatin1String("browser"))
             list.append(action("openInBrowser", "Open in Omastrator's Browser",
                                "This browser's pages can't be read. Open the page in Omastrator's own browser to inspect it."));
@@ -45,6 +47,12 @@ QJsonArray actions(const QString &kind)
     }
     if (kind == QLatin1String("desktop"))
         return {action("capture", "Capture to Desk", "A screenshot of this monitor as a frame on the Desk"),
+                action("measure", "Measure", "Distances from this to the next thing you point at"),
+                action("desktopLook", "Desktop Look", "Gaps, borders, the bar, the font, the wallpaper and the theme's colours, changed on screen and saved to Omarchy's config")};
+    if (kind == QLatin1String("shellBar"))
+        return {action("barLook", "Edit Bar", "The bar's position, height, colours and widget order, changed on screen and saved to Omarchy's config"),
+                action("desktopLook", "Desktop Look", "Gaps, borders, the bar, the font, the wallpaper and the theme's colours"),
+                action("capture", "Capture to Desk", "A screenshot of this monitor as a frame on the Desk"),
                 action("measure", "Measure", "Distances from this to the next thing you point at")};
     if (!kind.startsWith(QLatin1String("art:")))
         return {};

@@ -38,9 +38,10 @@ private slots:
         const QJsonObject lift = Bar::actions(QStringLiteral("web"))[1].toObject();
         QCOMPARE(lift["enabled"].toBool(true), true);
         QCOMPARE(lift["label"].toString(), QStringLiteral("Lift"));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("window"))), (QStringList{"capture", "lift", "measure"}));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("browser"))), (QStringList{"capture", "lift", "measure", "openInBrowser"}));
-        QCOMPARE(ids(Bar::actions(QStringLiteral("desktop"))), (QStringList{"capture", "measure"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("window"))), (QStringList{"capture", "lift", "measure", "gapsAndBorders", "restyleApp"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("browser"))), (QStringList{"capture", "lift", "measure", "gapsAndBorders", "restyleApp", "openInBrowser"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("desktop"))), (QStringList{"capture", "measure", "desktopLook"}));
+        QCOMPARE(ids(Bar::actions(QStringLiteral("shellBar"))), (QStringList{"barLook", "desktopLook", "capture", "measure"}));
         // Art on the overlay: the in-app task bar's actions for that kind of selection.
         QCOMPARE(ids(Bar::actions(QStringLiteral("art:paths"))), (QStringList{"unite", "group", "makeComponent", "designSystem", "duplicate", "delete", "undo"}));
         QCOMPARE(ids(Bar::actions(QStringLiteral("art:group"))), (QStringList{"ungroup", "makeComponent", "designSystem", "duplicate", "delete", "undo"}));

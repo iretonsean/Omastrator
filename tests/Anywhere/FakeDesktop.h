@@ -76,6 +76,9 @@ public:
         ++pixelCalls;
         return screenColor;
     }
+    // The shell's layers: Omarchy's bar, when a test puts one there.
+    std::vector<Hyprland::Layer> shellLayers;
+    std::vector<Hyprland::Layer> layers() override { return shellLayers; }
     QImage grab(const QRect &rect, QString *error) override
     {
         ++grabs;

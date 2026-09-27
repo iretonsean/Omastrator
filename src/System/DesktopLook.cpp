@@ -222,7 +222,7 @@ QStringList fontFamilies()
     return families;
 }
 
-Look read(const Paths &paths, bool askHyprland)
+Look read(const Paths &paths, bool live)
 {
     Look look;
     // Files first: Omarchy's defaults, the theme, then the user's own, as Hyprland loads them.
@@ -241,7 +241,7 @@ Look read(const Paths &paths, bool askHyprland)
     }
     // Hyprland's live values win: they are what's on screen.
     const bool running = !qEnvironmentVariable("OMASTRATOR_HYPRCTL").isEmpty() || !qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE").isEmpty();
-    if (askHyprland && running) {
+    if (live && running) {
         auto option = [](const QString &name) { return Hyprland::query(QStringLiteral("getoption ") + name).toObject(); };
         auto number = [&](const QString &name, int &into) {
             const QJsonObject answer = option(name);
@@ -295,7 +295,7 @@ Look read(const Paths &paths, bool askHyprland)
     static const QRegularExpression prepend(QStringLiteral(R"re(mode="prepend_first"[^>]*>\s*<string>([^<]+)</string>)re"));
     if (const auto match = prepend.match(fonts); match.hasMatch()) {
         look.font = match.captured(1).trimmed();
-    } else {
+    } else if (live) {
         QProcess fcMatch;
         fcMatch.start(QStringLiteral("fc-match"), {QStringLiteral("monospace"), QStringLiteral("-f"), QStringLiteral("%{family}")});
         if (fcMatch.waitForStarted(2000) && fcMatch.waitForFinished(3000))

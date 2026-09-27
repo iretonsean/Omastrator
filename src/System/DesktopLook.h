@@ -75,8 +75,8 @@ struct Look {
     QJsonObject toJson() const;
 };
 
-// The desktop as it is: Hyprland's live values when it answers (`askHyprland`), else the config files.
-Look read(const Paths &paths, bool askHyprland = true);
+// The desktop as it is: with `live`, Hyprland's values when it answers and fontconfig's font; else only the files.
+Look read(const Paths &paths, bool live = true);
 // The monospace families fontconfig knows (fc-list), sorted; empty without fc-list.
 QStringList fontFamilies();
 
