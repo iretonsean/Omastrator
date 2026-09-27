@@ -84,7 +84,9 @@ the arrow keys:
 1. **The roast.** Two to four one-line burns, 60 words at most. It should hit
    like a Comedy Central or Netflix roast (the Roast of Tom Brady, Jeff Ross,
    Nikki Glaser, Greg Giraldo, Don Rickles), not like a critique with jokes in
-   it. A polite roast is a failed roast.
+   it. It's the meanest set of the night (Hinchcliffe, Jeselnik, Giraldo, Ross
+   with the gloves off), with no warmth on this page. A polite roast is a
+   failed roast.
    - *How it's built:* the roast mechanics are the humiliating comparison,
      fake praise then the knife, consequences instead of flaws, a tiny fact
      blown up, and a short setup with a hard turn.
@@ -92,8 +94,15 @@ the arrow keys:
      Congratulations, you designed every crypto startup that rugged its users in
      2022." A line that only describes the flaw fails. The agent instructions
      carry a few benchmark lines like that one, which the agent must never reuse.
-   - *Swearing:* allowed where it lands harder: fuck and its variants, shit,
-     ass, damn, hell. At most one fuck and two swears per roast.
+   - *Dark humour:* morbid turns (death, funerals, obituaries, crime scenes,
+     hospice, last rites) aimed at the work and the career. Never suicide,
+     self-harm, real tragedies or the person's illness.
+   - *Disbelief:* one line may open like a friend seeing the file ("Holy shit
+     dude, are you fucking drunk? Wtf is this?"), followed at once by the worst
+     specifics.
+   - *Swearing:* welcome wherever it makes a line hit harder: fuck and its
+     variants, wtf, holy shit, shit, ass, damn, hell. Up to two fucks and four
+     swears per roast, with at least one clean line.
    - *Target:* the design and the taste, skill, habits, career and ambitions it
      reveals, in second person, drawing on the people who use this app:
      AI-leaning designers, Omarchy and Linux ricers, Figma and UI/UX people,
