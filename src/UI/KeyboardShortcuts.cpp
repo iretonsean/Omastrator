@@ -7,6 +7,7 @@
 #include <QSettings>
 #include <QShortcut>
 #include <array>
+#include <tuple>
 
 namespace {
 // Swift's special keys, their Qt keys and their names.
@@ -57,7 +58,8 @@ QString keyText(int key)
                                                    {QStringLiteral("+"), QStringLiteral("=")}, {QStringLiteral("_"), QStringLiteral("-")},
                                                    {QStringLiteral("\""), QStringLiteral("'")}, {QStringLiteral("!"), QStringLiteral("1")},
                                                    {QStringLiteral("@"), QStringLiteral("2")}, {QStringLiteral("#"), QStringLiteral("3")},
-                                                   {QStringLiteral("&"), QStringLiteral("7")}, {QStringLiteral("*"), QStringLiteral("8")}};
+                                                   {QStringLiteral("&"), QStringLiteral("7")}, {QStringLiteral("*"), QStringLiteral("8")},
+                                                   {QStringLiteral(">"), QStringLiteral(".")}, {QStringLiteral("<"), QStringLiteral(",")}};
     return unshifted.value(typed, typed);
 }
 
@@ -68,7 +70,8 @@ QString shiftedText(const QString &key, bool shifted)
                                                 {QStringLiteral("="), QStringLiteral("+")}, {QStringLiteral("-"), QStringLiteral("_")},
                                                 {QStringLiteral("'"), QStringLiteral("\"")}, {QStringLiteral("1"), QStringLiteral("!")},
                                                 {QStringLiteral("2"), QStringLiteral("@")}, {QStringLiteral("3"), QStringLiteral("#")},
-                                                {QStringLiteral("7"), QStringLiteral("&")}, {QStringLiteral("8"), QStringLiteral("*")}};
+                                                {QStringLiteral("7"), QStringLiteral("&")}, {QStringLiteral("8"), QStringLiteral("*")},
+                                                {QStringLiteral("."), QStringLiteral(">")}, {QStringLiteral(","), QStringLiteral("<")}};
     return shifted ? shifts.value(key, key) : key;
 }
 
@@ -88,10 +91,15 @@ ShortcutDefinition entry(const QString &title, const QString &key, int modifiers
 }
 
 // Illustrator's tool keys; the other tools have none.
-const std::array<std::pair<Tool, const char *>, 13> toolKeys{{
+struct ToolKey {
+    Tool tool;
+    const char *key;
+    int modifiers = 0;
+};
+const std::array<ToolKey, 14> toolKeys{{
     {Tool::select, "v"}, {Tool::directSelect, "a"}, {Tool::pen, "p"}, {Tool::pencil, "n"}, {Tool::text, "t"}, {Tool::line, "\\"},
     {Tool::rectangle, "m"}, {Tool::ellipse, "l"}, {Tool::rotate, "r"}, {Tool::scale, "s"}, {Tool::eyedropper, "i"}, {Tool::hand, "h"},
-    {Tool::zoom, "z"},
+    {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8},
 }};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)
@@ -137,7 +145,10 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("New", "n", 1, true), entry("Open", "o", 1, true), entry("Close", "w", 1, true), entry("Save", "s", 1, true),
             entry("Save As", "s", 9, true), entry("Place", "p", 9, true), entry("Export PNG", "e", 3, true), entry("Quit", "q", 1, true),
             entry("Undo", "z", 1, true), entry("Redo", "z", 9, true), entry("Cut", "x", 1, true), entry("Copy", "c", 1, true),
-            entry("Paste", "v", 1, true), entry("Paste in Place", "v", 9, true), entry("Duplicate", "j", 1, true),
+            entry("Paste", "v", 1, true), entry("Paste in Place", "v", 9, true), entry("Duplicate", "d", 3, true),
+            entry("Paste in Front", "f", 1, true), entry("Paste in Back", "b", 1, true), entry("Transform Again", "d", 1, true),
+            entry("Reselect", "6", 1, true), entry("Next Object Above", "]", 3, true), entry("Next Object Below", "[", 3, true),
+            entry("Zoom to Selection", "0", 3, true),
             entry("Select All", "a", 1, true), entry("Deselect", "a", 9, true), entry("Move", "m", 9, true),
             entry("Bring to Front", "]", 9, true), entry("Bring Forward", "]", 1, true), entry("Send Backward", "[", 1, true),
             entry("Send to Back", "[", 9, true), entry("Group", "g", 1, true), entry("Ungroup", "g", 9, true),
@@ -147,8 +158,16 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Create Outlines", "o", 9, true), entry("Zoom In", "=", 1, true), entry("Zoom Out", "-", 1, true),
             entry("Fit Artboard in Window", "0", 1, true), entry("Actual Size", "1", 1, true), entry("Outline", "y", 1, true),
             entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true)};
-        for (const auto &[tool, key] : toolKeys)
-            result.push_back(entry(::title(tool) + QStringLiteral(" tool"), QString::fromLatin1(key), 0, false));
+        // Illustrator's type keys: they work on selected type and while typing, and rest otherwise.
+        const QString left(QChar(0xf702)), right(QChar(0xf703)), up(QChar(0xf700)), down(QChar(0xf701));
+        for (const auto &[title, key, modifiers] : std::vector<std::tuple<const char *, QString, int>>{
+                 {"Increase Font Size", QStringLiteral("."), 9}, {"Decrease Font Size", QStringLiteral(","), 9},
+                 {"Tighten Tracking", left, 2}, {"Loosen Tracking", right, 2}, {"Tighten Tracking ×5", left, 3}, {"Loosen Tracking ×5", right, 3},
+                 {"Decrease Leading", up, 2}, {"Increase Leading", down, 2}, {"Raise Baseline", up, 10}, {"Lower Baseline", down, 10},
+                 {"Reset Tracking", QStringLiteral("q"), 3}})
+            result.push_back({QString::fromUtf8(title), QStringLiteral("Type"), ShortcutChord(key, modifiers)});
+        for (const auto &[tool, key, modifiers] : toolKeys)
+            result.push_back(entry(::title(tool) + QStringLiteral(" tool"), QString::fromLatin1(key), modifiers, false));
         const std::vector<std::pair<const char *, QString>> keys{
             {"Swap fill and stroke", "x"}, {"Default fill and stroke", "d"}, {"Temporary Hand tool (hold)", " "},
             {"Apply / finish current operation", "\r"}, {"Cancel current operation", "\x1b"}};
@@ -156,8 +175,9 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             result.push_back(entry(title, key, 0, false));
         for (const auto &[direction, key] : std::vector<std::pair<QString, QString>>{
                  {"Left", QString(QChar(0xf702))}, {"Right", QString(QChar(0xf703))}, {"Up", QString(QChar(0xf700))}, {"Down", QString(QChar(0xf701))}}) {
-            result.push_back(entry(QStringLiteral("Nudge %1 1 pt").arg(direction), key, 0, false));
-            result.push_back(entry(QStringLiteral("Nudge %1 10 pt").arg(direction), key, 8, false));
+            // The step is the keyboard increment in Preferences.
+            result.push_back(entry(QStringLiteral("Nudge %1").arg(direction), key, 0, false));
+            result.push_back(entry(QStringLiteral("Nudge %1 ×10").arg(direction), key, 8, false));
         }
         return result;
     }();
@@ -166,8 +186,8 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
 
 std::optional<Tool> ShortcutDefinition::tool(const ShortcutChord &chord)
 {
-    for (const auto &[tool, key] : toolKeys) {
-        if (chord == ShortcutChord(QString::fromLatin1(key)))
+    for (const auto &[tool, key, modifiers] : toolKeys) {
+        if (chord == ShortcutChord(QString::fromLatin1(key), modifiers))
             return tool;
     }
     return std::nullopt;
@@ -193,7 +213,11 @@ void ShortcutSettings::reload()
         const QJsonObject object = QJsonDocument::fromJson(data).object();
         for (auto value = object.constBegin(); value != object.constEnd(); ++value) {
             const QJsonObject chord = value->toObject();
-            saved.insert(value.key(), ShortcutChord(chord.value(QLatin1String("key")).toString(), chord.value(QLatin1String("modifiers")).toInt(-1)));
+            // Nudges were named for fixed steps before the increment became a preference.
+            QString id = value.key();
+            if (id.startsWith(QLatin1String("Canvas & Layers:Nudge ")))
+                id.replace(QLatin1String(" 10 pt"), QStringLiteral(" ×10")).remove(QLatin1String(" 1 pt"));
+            saved.insert(id,ShortcutChord(chord.value(QLatin1String("key")).toString(), chord.value(QLatin1String("modifiers")).toInt(-1)));
         }
         // Swift keeps stored overrides only while they hold together.
         if (const std::optional<QString> wrong = problem(saved))
@@ -274,8 +298,10 @@ std::unique_ptr<QKeyEvent> ShortcutSettings::canvasEvent(const QKeyEvent &event)
     // Tool letters also take Shift, unless Shift has its own.
     if (input.modifiers == 8) {
         const ShortcutChord plain(input.key);
+        // Shift-M is Shape Builder's own, so a remapped M doesn't carry Shift along.
+        auto shiftTaken = [](const QString &key) { return ShortcutDefinition::tool(ShortcutChord(key, 8)).has_value(); };
         for (const ShortcutDefinition &definition : all) {
-            if (!definition.isMenu() && definition.original.modifiers == 0 && chord(definition) == plain)
+            if (!definition.isMenu() && definition.original.modifiers == 0 && chord(definition) == plain && !shiftTaken(definition.original.key))
                 return ShortcutChord(definition.original.key, 8).event(event);
         }
         for (const ShortcutDefinition &definition : all) {

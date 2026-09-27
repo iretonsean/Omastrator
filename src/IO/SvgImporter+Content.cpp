@@ -180,16 +180,37 @@ std::optional<TextRun> readText(const SvgSource &source, int element)
     if (!(content.size > 0))
         content.size = 16;
     const QString weight = source.inherited(run.style, QStringLiteral("font-weight"));
-    content.bold = weight == QLatin1String("bold") || weight == QLatin1String("bolder") || weight.toInt() >= 600;
+    const int weightValue = weight == QLatin1String("bold") || weight == QLatin1String("bolder") ? 700
+        : weight == QLatin1String("lighter")                                                    ? 300
+        : weight.toInt() > 0                                                                    ? weight.toInt()
+                                                                                                : 400;
     const QString fontStyle = source.inherited(run.style, QStringLiteral("font-style"));
-    content.italic = fontStyle == QLatin1String("italic") || fontStyle == QLatin1String("oblique");
-    content.tracking = SvgSyntax::length(source.inherited(run.style, QStringLiteral("letter-spacing")), 0, content.size);
+    const bool slanted = fontStyle == QLatin1String("italic") || fontStyle == QLatin1String("oblique");
+    // Plain text keeps the default face name, which renders as the family's regular.
+    if (weightValue != 400 || slanted)
+        content.style = TextContent::styleFor(content.family, weightValue, slanted);
+    // Letter spacing reads in pt; tracking is in 1/1000 em.
+    content.tracking = std::round(SvgSyntax::length(source.inherited(run.style, QStringLiteral("letter-spacing")), 0, content.size) / content.size * 1e6) / 1000;
+    const QString kerning = source.inherited(run.style, QStringLiteral("font-kerning"));
+    if (kerning == QLatin1String("none") || source.inherited(run.style, QStringLiteral("kerning")) == QLatin1String("0"))
+        content.kerning = TextKerning::none;
+    if (source.inherited(run.style, QStringLiteral("font-variant")) == QLatin1String("small-caps"))
+        content.textCase = TextCase::smallCaps;
+    else if (source.inherited(run.style, QStringLiteral("text-transform")) == QLatin1String("uppercase"))
+        content.textCase = TextCase::allCaps;
+    const QString decoration = source.inherited(run.style, QStringLiteral("text-decoration"));
+    content.underline = decoration.contains(QLatin1String("underline"));
+    content.strikethrough = decoration.contains(QLatin1String("line-through"));
+    content.baselineShift = SvgSyntax::length(source.property(run.style, QStringLiteral("baseline-shift")), 0, content.size);
     const QString anchor = source.inherited(run.style, QStringLiteral("text-anchor"));
     content.alignment = anchor == QLatin1String("middle") ? TextAlignment::center
                         : anchor == QLatin1String("end")  ? TextAlignment::right
                                                            : TextAlignment::left;
-    if (baselines.size() > 1 && baselines[1] > baselines[0])
-        content.leading = std::round((baselines[1] - baselines[0]) / content.size * 10000) / 10000;
+    if (baselines.size() > 1 && baselines[1] > baselines[0]) {
+        const double leading = std::round((baselines[1] - baselines[0]) * 10000) / 10000;
+        if (std::abs(leading - content.size * 1.2) > 1e-3)
+            content.leading = leading;
+    }
     run.origin = QPointF(originX.value_or(0), baselines.empty() ? baseline : baselines.front());
     return run;
 }

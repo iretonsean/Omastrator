@@ -53,6 +53,7 @@ Item {
       { id: "ellipse", tip: "Ellipse (L)" },
       { id: "polygon", tip: "Polygon" },
       { id: "star", tip: "Star" },
+      { id: "shapeBuilder", tip: "Shape Builder (Shift+M): drag across overlapping shapes to merge, Alt to delete" },
       { id: "line", tip: "Line Segment (\\)" },
       { id: "text", tip: "Type (T)" },
       { id: "eyedropper", tip: "Eyedropper (I)" },
@@ -79,9 +80,9 @@ Item {
     live: [
       { id: "live", tip: "Open a page or project in Live", idleOnly: true },
       { id: "element", tip: "Select elements: click to select, Shift-click to add (click again to browse the page normally)", runningOnly: true },
-      { id: "review", tip: "Write Back and review: certain edits go straight to the code, the rest to your agent", projectOnly: true },
-      { id: "save", tip: "Save: commit what you kept", unsavedOnly: true },
-      { id: "publish", tip: "Publish…: says what it will do before it does it", projectOnly: true },
+      { id: "deploy", tip: "Deploy: writes your live edits into the code, commits, pushes, and deploys to production with your project's setup", label: "Deploy", primary: true, projectOnly: true },
+      { id: "changes", icon: "review", tip: "Review changes: the diff of every write-back, with Discard", projectOnly: true },
+      { id: "history", tip: "History: commits, what was deployed, and Restore", projectOnly: true },
       { id: "stop", tip: "Stop Live", runningOnly: true }
     ]
   })
@@ -113,6 +114,8 @@ Item {
       flash(next.activity, next.activitySeconds)
     else if (next.error && next.error !== prev.error)
       flash(next.error, 6)
+    else if (liveLine(prev.live || {}, next.live || {}))
+      flash(liveLine(prev.live || {}, next.live || {}), liveSeconds(next.live || {}))
     else if (next.waiting && !prev.waiting)
       flash("Working with " + (next.agent || "the agent") + "…", 3)
     else if (next.variationsId && next.variationsId !== prev.variationsId && next.variations > 0)
@@ -121,13 +124,13 @@ Item {
       flash("Roast ready", 4)
     else if (next.proposal && next.proposal !== prev.proposal)
       flash(next.proposal + " is ready: Enter keeps it, Esc discards it", 4)
-    else if (liveLine(prev.live || {}, next.live || {}))
-      flash(liveLine(prev.live || {}, next.live || {}), 4)
     else if (next.running && !prev.running && root.mode === "draw")
       flash("Omastrator is open", 2)
   }
 
   function liveLine(prev, next) {
+    var before = prev.deploy || {}, after = next.deploy || {}
+    if (after.message && after.message !== before.message) return after.message
     if (next.state === prev.state) return ""
     if (next.state === "starting") return "Live: " + (next.message || "starting…")
     if (next.state === "failed") return next.message || "Live couldn't start"
@@ -135,6 +138,16 @@ Item {
     if (next.state === "off" && prev.state === "running") return next.message || "Live stopped"
     return ""
   }
+
+  // A deploy's steps stay up until the next one; its result stays a little longer than most lines.
+  function liveSeconds(next) {
+    var deploy = next.deploy || {}
+    if (deploy.running) return 600
+    if (deploy.failed) return 10
+    return deploy.message ? 8 : 4
+  }
+
+  readonly property bool deployFailedShown: !!(root.live.deploy && root.live.deploy.failed) && activityText === root.live.deploy.message
 
   // ------------------------------------------------------------ actions
 
@@ -169,9 +182,9 @@ Item {
 
   function liveArgs(id) {
     if (id === "stop") return ["island", "live", "stop"]
-    if (id === "review") return (root.live.edits || 0) > 0 ? ["island", "live", "writeback"] : ["island", "live", "review"]
-    if (id === "save") return ["island", "live", "save"]
-    if (id === "publish") return ["island", "live", "publish"]
+    if (id === "deploy") return ["island", "live", "deploy"]
+    if (id === "changes") return ["island", "live", "changes"]
+    if (id === "history") return ["island", "live", "history"]
     if (id === "element") { root.selecting = !root.selecting; return ["island", "live", "select", root.selecting ? "on" : "off"] }
     return ["island", "live", "start"]
   }
@@ -187,11 +200,11 @@ Item {
   // Buttons that only make sense now: Stop while an agent works, Vectorize after a traced screenshot.
   readonly property var live: status.value("live", {}) || {}
   readonly property string liveState: live.state || "off"
+  readonly property bool deploying: !!(live.deploy && live.deploy.running)
 
   function shows(item) {
     if (item.runningOnly) return root.liveState === "running"
-    if (item.projectOnly) return !!root.live.project && (root.liveState === "running" || (root.live.reviews || 0) > 0)
-    if (item.unsavedOnly) return (root.live.unsaved || 0) > 0
+    if (item.projectOnly) return !!(root.live.project || root.live.deployProject)
     if (item.idleOnly) return root.liveState !== "running" && root.liveState !== "starting"
     if (item.waitingOnly) return status.value("waiting", "") !== ""
     if (item.offerOnly) return status.value("offer", "") === "vectorize"
@@ -255,26 +268,45 @@ Item {
     property string tip: ""
     property bool selected: false
     property bool dim: false
+    // The mode's main action: its name beside the glyph, on the accent colour.
+    property string label: ""
+    property bool primary: false
     signal clicked(var mouse)
     // Press and release, for push-to-talk.
     signal held(bool down)
 
-    width: root.buttonSize
+    width: label !== "" ? labelText.x + labelText.implicitWidth + Style.space(10) : root.buttonSize
     height: root.buttonSize
 
     Rectangle {
       anchors.fill: parent
       radius: height / 2
-      color: button.selected ? Util.alpha(root.accent, 0.28)
+      color: button.primary ? Util.alpha(root.accent, mouse.containsMouse ? 0.42 : 0.28)
+           : button.selected ? Util.alpha(root.accent, 0.28)
            : mouse.containsMouse ? Util.alpha(root.ink, 0.1) : "transparent"
     }
 
     O.Glyph {
-      anchors.centerIn: parent
+      id: buttonGlyph
+      anchors.verticalCenter: parent.verticalCenter
+      x: button.label !== "" ? Style.space(8) : (parent.width - width) / 2
       name: button.glyph
       size: root.glyphSize
-      color: button.selected ? root.accent : root.ink
+      color: button.selected || button.primary ? root.accent : root.ink
       opacity: button.dim ? 0.5 : 1
+    }
+
+    Text {
+      id: labelText
+      visible: button.label !== ""
+      anchors.verticalCenter: parent.verticalCenter
+      x: buttonGlyph.x + buttonGlyph.width + Style.space(5)
+      text: button.label
+      color: root.ink
+      opacity: button.dim ? 0.5 : 1
+      font.family: Style.font.family
+      font.pixelSize: Style.font.body
+      font.weight: Font.DemiBold
     }
 
     MouseArea {
@@ -367,12 +399,17 @@ Item {
             elide: Text.ElideRight
             width: Math.min(implicitWidth, Style.space(420))
 
-            // While "Heard: …" waits, a click on it cancels, as Esc does.
+            // While "Heard: …" waits, a click on it cancels, as Esc does. A failed deploy's line opens its log;
+            // a deploy's progress steps aside for the tools.
             MouseArea {
               anchors.fill: parent
-              enabled: status.value("dictation", "idle") === "heard"
+              enabled: status.value("dictation", "idle") === "heard" || root.deployFailedShown || root.deploying
               cursorShape: Qt.PointingHandCursor
-              onClicked: status.run(["island", "dictate", "cancel"])
+              onClicked: {
+                if (root.deployFailedShown) status.run(["island", "live", "details"])
+                else if (status.value("dictation", "idle") === "heard") status.run(["island", "dictate", "cancel"])
+                else root.activityText = ""
+              }
             }
           }
 
@@ -398,13 +435,17 @@ Item {
               required property var modelData
               visible: root.shows(modelData)
               glyph: modelData.icon || modelData.id
-              tip: modelData.tip
+              label: modelData.label || ""
+              primary: !!modelData.primary
+              tip: modelData.id === "deploy" && root.deploying ? "Deploying: " + (root.live.deploy.message || "")
+                   : modelData.id === "deploy" && root.live.deploy && root.live.deploy.failed ? root.live.deploy.message + " Click the island's message for details."
+                   : modelData.tip
               selected: (root.mode === "draw" && root.running && root.tool === modelData.id)
                         || (root.mode === "live" && modelData.id === "element" && root.selecting)
                         || (modelData.id === "dictate" && status.value("dictation", "idle") === "listening")
               onHeld: function (down) { if (modelData.id === "dictate") status.run(["island", "dictate", down ? "start" : "stop"]) }
-              dim: modelData.enabled === false
-              onClicked: function (mouse) { if (modelData.enabled !== false) root.runAction(modelData, mouse) }
+              dim: modelData.enabled === false || (modelData.id === "deploy" && root.deploying)
+              onClicked: function (mouse) { if (!dim) root.runAction(modelData, mouse) }
             }
           }
         }

@@ -7,6 +7,7 @@
 void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
 {
     const QPointF document = toDocument(view);
+    finishOpacity();
     // A click in the type being edited moves its caret; anywhere else ends it.
     if (text) {
         if (textBox().adjusted(-reach(4), -reach(4), reach(4), reach(4)).contains(document)
@@ -57,6 +58,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     case Tool::polygon:
     case Tool::star:
         shapePress(view);
+        break;
+    case Tool::shapeBuilder:
+        builderPress(view, modifiers);
         break;
     case Tool::rotate:
     case Tool::scale:
@@ -127,6 +131,12 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::convert:
         dragConvert(view, modifiers);
         break;
+    case DragKind::textArea:
+        drag->grabbed = snapPoint(guidesExcluding({}), toDocument(view));
+        break;
+    case DragKind::shapeBuilder:
+        dragBuilder(view, modifiers);
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -163,6 +173,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::pen:
         penRelease();
         break;
+    case DragKind::shapeBuilder:
+        finishBuilder(modifiers);
+        break;
     case DragKind::move:
     case DragKind::scale:
     case DragKind::rotate:
@@ -173,6 +186,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::convert:
         if (drag->interacting && session.isInteracting())
             session.commitInteraction();
+        break;
+    case DragKind::textArea:
+        finishTextArea();
         break;
     case DragKind::pan:
     case DragKind::textSelect:
@@ -253,6 +269,8 @@ void EditorCanvas::State::toolChanged()
         enteredGroup.reset();
     hovered.reset();
     hoverGuides.reset();
+    builderRegion.reset();
+    builderEdge.reset();
     updateHoverGuides(drag ? std::nullopt : hover);
     updateCursor();
 }
@@ -260,6 +278,9 @@ void EditorCanvas::State::toolChanged()
 void EditorCanvas::State::documentChanged()
 {
     hoverGuides.reset();
+    built.reset();
+    builderRegion.reset();
+    builderEdge.reset();
     const std::optional<VectorDocument> &document = session.document();
     if (!document) {
         drag.reset();

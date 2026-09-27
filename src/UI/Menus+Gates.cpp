@@ -60,6 +60,23 @@ void Menus::synchronize()
     action(QStringLiteral("showAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("artboardSize"))->setEnabled(editing && drawn);
     action(QStringLiteral("createOutlines"))->setEnabled(editing && drawn && selectionHas(s, ObjectKind::text));
+    bool hasPoint = false, hasArea = false;
+    for (const QUuid &id : s.selectedTexts()) {
+        const bool area = s.document()->find(id)->text.area.has_value();
+        hasPoint = hasPoint || !area;
+        hasArea = hasArea || area;
+    }
+    action(QStringLiteral("convertToAreaType"))->setEnabled(editing && hasPoint);
+    action(QStringLiteral("convertToPointType"))->setEnabled(editing && hasArea);
+    // The type keys work on selected type, or while typing; otherwise Alt+arrows fall through to duplicate and nudge.
+    const std::vector<QUuid> leaves = s.selectedLeaves();
+    const bool allText = drawn && !leaves.empty() && s.selectedTexts().size() == leaves.size();
+    const bool typeKeys = !field && !proposal && drawn && (typing || allText);
+    for (const char *name : {"increaseFontSize", "decreaseFontSize", "tightenTracking", "loosenTracking", "tightenTrackingMore",
+                             "loosenTrackingMore", "resetTracking", "decreaseLeading", "increaseLeading", "raiseBaseline", "lowerBaseline"})
+        action(QString::fromLatin1(name))->setEnabled(typeKeys);
+    for (const char *name : {"typeSizeMenu", "typeTrackingMenu", "typeLeadingMenu", "typeBaselineMenu"})
+        action(QString::fromLatin1(name))->setEnabled(drawn);
     const bool agent = m_agent != nullptr;
     action(QStringLiteral("imageTraceMenu"))->setEnabled(drawn);
     action(QStringLiteral("imageTraceMake"))->setEnabled(editing && s.selectedImage().has_value());
@@ -72,6 +89,20 @@ void Menus::synchronize()
     action(QStringLiteral("outline"))->setChecked(s.showsOutline);
     action(QStringLiteral("showGrid"))->setChecked(s.showsGrid);
     action(QStringLiteral("snapToGrid"))->setChecked(s.snapsToGrid);
+    for (const char *name : {"pasteInFront", "pasteInBack"})
+        action(QString::fromLatin1(name))->setEnabled(!field && !typing && !proposal && drawn && s.canPaste());
+    action(QStringLiteral("transformAgain"))->setEnabled(editing && s.canTransformAgain());
+    for (const char *name : {"flipHorizontal", "flipVertical", "nextObjectAbove", "nextObjectBelow", "selectSameFillAndStroke", "selectSameFillColor",
+                             "selectSameOpacity", "selectSameStrokeColor", "selectSameStrokeWeight", "selectSameBlendMode", "selectSameLayers"})
+        action(QString::fromLatin1(name))->setEnabled(editing && selected);
+    for (const char *name : {"selectSameFontFamily", "selectSameFontFamilyStyleSize"})
+        action(QString::fromLatin1(name))->setEnabled(editing && selectionHas(s, ObjectKind::text));
+    for (const char *name : {"selectInverse", "selectClippingMasks", "selectStrayPoints", "selectTextObjects", "selectImages", "selectOpenPaths"})
+        action(QString::fromLatin1(name))->setEnabled(editing && drawn);
+    for (const char *name : {"selectSameMenu", "selectObjectMenu"})
+        action(QString::fromLatin1(name))->setEnabled(drawn);
+    action(QStringLiteral("reselect"))->setEnabled(editing && drawn && s.canReselect());
+    action(QStringLiteral("zoomToSelection"))->setEnabled(drawn && selected && !typing);
     action(QStringLiteral("showLayers"))->setChecked(ContentView::showsPanel(ContentView::layersKey));
     action(QStringLiteral("showProperties"))->setChecked(ContentView::showsPanel(ContentView::propertiesKey));
 }

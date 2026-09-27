@@ -212,6 +212,8 @@ void EditorSession::duplicateSelection(QPointF offset)
 {
     if (!m_document || m_selection.empty())
         return;
+    // Set first: the edit's notification is what refreshes Transform Again's entry.
+    m_lastTransform = RepeatTransform{QTransform::fromTranslate(offset.x(), offset.y()), true, std::nullopt};
     edit(QStringLiteral("Duplicate"), [&](VectorDocument &document) { m_selection = duplicateInto(document, offset); });
 }
 
@@ -223,6 +225,7 @@ void EditorSession::previewDuplicateSelection()
     VectorDocument document = m_interaction->base;
     m_selection = duplicateInto(document, QPointF(0, 0));
     m_interaction->base = document;
+    m_interaction->duplicated = true;
     m_document = std::move(document);
     pruneSelection();
     notify();
@@ -422,26 +425,50 @@ void EditorSession::moveSelection(QPointF delta)
     transformSelection(QTransform::fromTranslate(delta.x(), delta.y()), QStringLiteral("Move"));
 }
 
-void EditorSession::transformSelection(const QTransform &transform, const QString &editName)
+void EditorSession::transformSelection(const QTransform &transform, const QString &editName, bool reflowAreaText)
 {
     if (!m_document || m_selection.empty() || transform.isIdentity())
         return;
+    // Set first: the edit's notification is what refreshes Transform Again's entry.
+    m_lastTransform = RepeatTransform{transform, false, std::nullopt};
     edit(editName, [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {
             if (!document.isEffectivelyLocked(id))
-                document.transform(id, transform);
+                document.transform(id, transform, scaleStrokes, reflowAreaText);
         }
     });
 }
 
-void EditorSession::rotateSelection(double degrees)
+void EditorSession::transformEach(const std::function<QTransform(const QRectF &bounds)> &transform, const QString &editName, bool reflowAreaText)
 {
-    const QPointF c = selectionBounds().center();
+    if (!m_document || m_selection.empty())
+        return;
+    std::vector<std::pair<QUuid, QTransform>> moves;
+    for (const QUuid &id : m_selection) {
+        if (m_document->isEffectivelyLocked(id))
+            continue;
+        const QTransform each = transform(m_document->bounds(id, false));
+        if (!each.isIdentity())
+            moves.push_back({id, each});
+    }
+    if (moves.empty())
+        return;
+    edit(editName, [&](VectorDocument &document) {
+        for (const auto &[id, each] : moves)
+            document.transform(id, each, scaleStrokes, reflowAreaText);
+    });
+}
+
+void EditorSession::rotateSelection(double degrees, std::optional<QPointF> pivot)
+{
+    const QPointF c = pivot.value_or(selectionBounds().center());
     QTransform transform;
     transform.translate(c.x(), c.y());
     transform.rotate(degrees);
     transform.translate(-c.x(), -c.y());
     transformSelection(transform, QStringLiteral("Rotate"));
+    if (m_lastTransform && m_lastTransform->transform == transform)
+        m_lastTransform->center = c;
 }
 
 void EditorSession::flipSelection(Qt::Orientation orientation)
@@ -451,6 +478,8 @@ void EditorSession::flipSelection(Qt::Orientation orientation)
     const QTransform transform = QTransform::fromTranslate(-c.x(), -c.y())
         * QTransform::fromScale(horizontal ? -1 : 1, horizontal ? 1 : -1) * QTransform::fromTranslate(c.x(), c.y());
     transformSelection(transform, horizontal ? QStringLiteral("Reflect Horizontal") : QStringLiteral("Reflect Vertical"));
+    if (m_lastTransform && m_lastTransform->transform == transform)
+        m_lastTransform->center = c;
 }
 
 void EditorSession::scaleSelection(double sx, double sy)
@@ -461,6 +490,8 @@ void EditorSession::scaleSelection(double sx, double sy)
     const QTransform transform = QTransform::fromTranslate(-c.x(), -c.y()) * QTransform::fromScale(sx, sy)
         * QTransform::fromTranslate(c.x(), c.y());
     transformSelection(transform, QStringLiteral("Scale"));
+    if (m_lastTransform && m_lastTransform->transform == transform)
+        m_lastTransform->center = c;
 }
 
 void EditorSession::combineSelection(BooleanOperation operation)
@@ -969,6 +1000,11 @@ bool EditorSession::canPaste() const
 
 void EditorSession::paste(bool inPlace)
 {
+    paste(inPlace ? PastePosition::inPlace : PastePosition::offset);
+}
+
+void EditorSession::paste(PastePosition position)
+{
     if (!m_document)
         return;
     const QMimeData *data = QApplication::clipboard()->mimeData();
@@ -988,15 +1024,22 @@ void EditorSession::paste(bool inPlace)
     }
     if (objects.empty())
         return;
-    const double shift = inPlace ? 0 : 10.0 * ++m_pasteCount;
-    edit(QStringLiteral("Paste"), [&](VectorDocument &document) {
+    const double shift = position == PastePosition::offset ? 10.0 * ++m_pasteCount : 0;
+    static const char *names[] = {"Paste", "Paste in Place", "Paste in Front", "Paste in Back"};
+    // Front and back stack against the selection, inside its parent.
+    const std::vector<QUuid> selected = selectionInOrder();
+    const bool stacking = position == PastePosition::front || position == PastePosition::back;
+    const std::optional<QUuid> neighbour = stacking && !selected.empty()
+        ? std::optional(position == PastePosition::front ? selected.back() : selected.front())
+        : std::nullopt;
+    edit(QString::fromLatin1(names[int(position)]), [&](VectorDocument &document) {
         std::vector<std::pair<QUuid, QUuid>> renamed;
         for (VectorObject &object : objects) {
             const QUuid fresh = QUuid::createUuid();
             renamed.emplace_back(object.id, fresh);
             object.id = fresh;
         }
-        const std::optional<QUuid> layer = activeLayer();
+        const std::optional<QUuid> layer = neighbour ? document.find(*neighbour)->parentID : activeLayer();
         if (!layer)
             return;
         std::vector<QUuid> roots;
@@ -1014,6 +1057,18 @@ void EditorSession::paste(bool inPlace)
         }
         for (const QUuid &root : roots)
             document.transform(root, QTransform::fromTranslate(shift, shift));
+        if (position == PastePosition::back || (position == PastePosition::front && neighbour)) {
+            for (size_t index = 0; index < roots.size(); ++index) {
+                std::vector<QUuid> siblings = document.children(*layer);
+                std::erase(siblings, roots[index]);
+                const auto at = neighbour ? std::find(siblings.begin(), siblings.end(), *neighbour) : siblings.end();
+                // `move` counts among the siblings without the moved one; front keeps the copies in order above.
+                int target = neighbour ? int(at - siblings.begin()) : int(index);
+                if (position == PastePosition::front)
+                    target += 1 + int(index);
+                document.move(roots[index], *layer, target >= int(siblings.size()) ? -1 : target);
+            }
+        }
         m_selection = roots;
     });
 }

@@ -38,6 +38,7 @@ private slots:
     void theListIsIllustratorsKeys();
     void toolLettersNameTheirTools();
     void problemsNameWhatIsWrong();
+    void oldNudgeNamesStillLoad();
     void savedOverridesPersistAndBadOnesAreIgnored();
     void menusAndSheetsTakeTheirRemappedKeys();
     void theCanvasTranslatesRemappedKeys();
@@ -92,9 +93,9 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Forty menu entries, thirteen tools, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 66);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 40);
+    // Forty-seven menu entries, eleven type keys, fourteen tools, five keys, eight nudges.
+    QCOMPARE(int(all.size()), 85);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 58);
     QSet<QString> ids;
     for (const ShortcutDefinition &definition : all)
         ids.insert(definition.id());
@@ -106,9 +107,28 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
     QVERIFY(named("Export PNG").isMenu());
     QCOMPARE(named("Line Segment tool").original, ShortcutChord("\\"));
     QCOMPARE(named("Temporary Hand tool (hold)").original, ShortcutChord(" "));
-    QCOMPARE(named("Nudge Down 10 pt").original, ShortcutChord(QString(QChar(0xf701)), 8));
+    QCOMPARE(named("Nudge Down ×10").original, ShortcutChord(QString(QChar(0xf701)), 8));
+    QCOMPARE(named("Nudge Left").original, ShortcutChord(QString(QChar(0xf702))));
+    // Ctrl+D repeats a transform, as in Illustrator; Duplicate moved off Join's Ctrl+J.
+    QCOMPARE(named("Transform Again").original, ShortcutChord("d", 1));
+    QCOMPARE(named("Duplicate").original, ShortcutChord("d", 3));
+    QCOMPARE(named("Paste in Front").original, ShortcutChord("f", 1));
+    QCOMPARE(named("Paste in Back").original, ShortcutChord("b", 1));
+    QCOMPARE(named("Zoom to Selection").original, ShortcutChord("0", 3));
+    QCOMPARE(named("Next Object Above").original, ShortcutChord("]", 3));
     QCOMPARE(named("Swap fill and stroke").group, QString("Canvas & Layers"));
     QCOMPARE(named("Undo").id(), QString("Menus:Undo"));
+    // Illustrator's type keys sit under Type, where the sheet lists them.
+    QCOMPARE(named("Loosen Tracking").original, ShortcutChord(QString(QChar(0xf703)), 2));
+    QCOMPARE(named("Tighten Tracking ×5").original, ShortcutChord(QString(QChar(0xf702)), 3));
+    QCOMPARE(named("Decrease Leading").original, ShortcutChord(QString(QChar(0xf700)), 2));
+    QCOMPARE(named("Raise Baseline").original, ShortcutChord(QString(QChar(0xf700)), 10));
+    QCOMPARE(named("Increase Font Size").original, ShortcutChord(".", 9));
+    QCOMPARE(named("Increase Font Size").id(), QString("Type:Increase Font Size"));
+    QVERIFY(named("Increase Font Size").isMenu());
+    // Shift+. is typed as >, and reads back as the same key.
+    QCOMPARE(ShortcutChord(".", 9).combination(), QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_Greater));
+    QCOMPARE(ShortcutChord(QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_Less)), ShortcutChord(",", 9));
     // The defaults hold together.
     QVERIFY(!ShortcutSettings::problem({}));
 }
@@ -122,6 +142,10 @@ void KeyboardShortcutsTests::toolLettersNameTheirTools()
     // Modifiers and unassigned letters pick nothing.
     QVERIFY(!ShortcutDefinition::tool(ShortcutChord("v", 8)));
     QVERIFY(!ShortcutDefinition::tool(ShortcutChord("q")));
+    // Shape Builder is Illustrator's Shift-M, beside the Rectangle's M.
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("m", 8)).value(), Tool::shapeBuilder);
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("m")).value(), Tool::rectangle);
+    QCOMPARE(named("Shape Builder tool").original, ShortcutChord("m", 8));
     QCOMPARE(named("Pen tool").original, ShortcutChord("p"));
     // A shifted apostrophe and digit are their own keys.
     QCOMPARE(ShortcutChord(press(Qt::Key_QuoteDbl, Qt::ControlModifier | Qt::ShiftModifier)), ShortcutChord("'", 9));
@@ -138,6 +162,17 @@ void KeyboardShortcutsTests::problemsNameWhatIsWrong()
     QCOMPARE(ShortcutSettings::problem({{pen, ShortcutChord("v")}}).value(), QString("V is assigned to both Selection tool and Pen tool."));
     // Moving both apart is fine.
     QVERIFY(!ShortcutSettings::problem({{pen, ShortcutChord("v")}, {named("Selection tool").id(), ShortcutChord("p")}}));
+}
+
+void KeyboardShortcutsTests::oldNudgeNamesStillLoad()
+{
+    // Saved before the step became the keyboard increment preference.
+    QSettings().setValue(QLatin1String(ShortcutSettings::storageKey),
+                         QByteArray(R"({"Canvas & Layers:Nudge Right 1 pt":{"key":"j","modifiers":0},"Canvas & Layers:Nudge Up 10 pt":{"key":"k","modifiers":8}})"));
+    ShortcutSettings &settings = ShortcutSettings::shared();
+    settings.reload();
+    QCOMPARE(settings.chord(named("Nudge Right")), ShortcutChord("j"));
+    QCOMPARE(settings.chord(named("Nudge Up ×10")), ShortcutChord("k", 8));
 }
 
 void KeyboardShortcutsTests::savedOverridesPersistAndBadOnesAreIgnored()

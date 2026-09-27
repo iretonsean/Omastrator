@@ -10,6 +10,8 @@
 #include <QString>
 #include <QTransform>
 #include <QUuid>
+#include <map>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -18,27 +20,74 @@ enum class ObjectKind { layer, group, path, text, image };
 QString rawValue(ObjectKind kind);
 std::optional<ObjectKind> objectKind(const QString &rawValue);
 
-enum class TextAlignment { left, center, right };
+// Justify leaves a paragraph's last line flush left; justifyAll stretches it too.
+enum class TextAlignment { left, center, right, justify, justifyAll };
 QString rawValue(TextAlignment alignment);
 std::optional<TextAlignment> textAlignment(const QString &rawValue);
 
+// Metrics uses the font's kern pairs; none sets every pair to 0.
+enum class TextKerning { metrics, none };
+QString rawValue(TextKerning kerning);
+std::optional<TextKerning> textKerning(const QString &rawValue);
+
+enum class TextCase { normal, allCaps, smallCaps };
+QString rawValue(TextCase textCase);
+std::optional<TextCase> textCase(const QString &rawValue);
+
 // Point type: lines start at the object's origin, the first baseline at y 0.
+// Area type: text wraps inside `area`, whose top-left is the origin.
 struct TextContent {
     QString text;
     QString family = QStringLiteral("Sans Serif");
+    // A face from QFontDatabase::styles(family), such as "Bold Italic".
+    QString style = QStringLiteral("Regular");
     double size = 24;
-    bool bold = false;
-    bool italic = false;
     TextAlignment alignment = TextAlignment::left;
-    // Line spacing as a multiple of the size.
-    double leading = 1.2;
+    // Baseline to baseline in pt; nullopt is Auto, 120 % of the size.
+    std::optional<double> leading;
+    // In 1/1000 em, added after every character.
     double tracking = 0;
+    TextKerning kerning = TextKerning::metrics;
+    // Manual kerning in 1/1000 em, keyed by the index of the character it moves.
+    std::map<int, double> kerns;
+    // Percent.
+    double horizontalScale = 100;
+    double verticalScale = 100;
+    // pt, positive is up.
+    double baselineShift = 0;
+    TextCase textCase = TextCase::normal;
+    bool underline = false;
+    bool strikethrough = false;
+    // Paragraph indents and spacing in pt; a negative first-line indent hangs.
+    double leftIndent = 0;
+    double rightIndent = 0;
+    double firstLineIndent = 0;
+    double spaceBefore = 0;
+    double spaceAfter = 0;
+    // Area type's box; a height of 0 grows with the text.
+    std::optional<QSizeF> area;
 
+    double effectiveLeading() const { return leading.value_or(size * 1.2); }
+    bool isBold() const;
+    bool isItalic() const;
+    // The family's face nearest a weight and slant.
+    static QString styleFor(const QString &family, int weight, bool italic);
     QFont font() const;
     // The glyph outlines, in the text's own coordinates.
     QPainterPath outline() const;
+    // Area type with a fixed height: lines past it are hidden.
+    bool overflows() const;
+    // Area type's box, else the glyphs' bounds.
+    QRectF frame() const;
+    // Keeps manual kerns on their characters when `from`..`to` becomes `length` characters.
+    void replaceKerns(int from, int to, int length);
     friend bool operator==(const TextContent &, const TextContent &) = default;
 };
+
+// Select ▸ Same: what an object must share with the one picked.
+enum class SameAttribute { fillColor, strokeColor, fillAndStroke, strokeWeight, opacity, blendMode, fontFamily, fontFamilyStyleSize };
+// Select ▸ Object: kinds of object picked across the document.
+enum class ObjectFilter { textObjects, images, clippingMasks, openPaths, strayPoints };
 
 struct VectorObject {
     QUuid id = QUuid::createUuid();
@@ -104,6 +153,11 @@ struct VectorDocument {
     QPainterPath outline(const QUuid &id) const;
     // The topmost selectable object under `point` within `tolerance`.
     std::optional<QUuid> hitTest(QPointF point, double tolerance) const;
+    // Every selectable leaf under `point`, topmost first, up to `limit`.
+    std::vector<QUuid> hitTestAll(QPointF point, double tolerance, size_t limit = SIZE_MAX) const;
+    // Visible, unlocked leaves that share `attribute` with `like`, `like` included.
+    std::vector<QUuid> matching(const QUuid &like, SameAttribute attribute) const;
+    std::vector<QUuid> matching(ObjectFilter filter) const;
     // Inserts above `below` within `parent`, or on top of it.
     void insert(VectorObject object, const QUuid &parent, std::optional<QUuid> above = std::nullopt);
     // Removes objects and all their descendants.
@@ -114,6 +168,9 @@ struct VectorDocument {
     bool moveLayer(const QUuid &id, int index);
     // Applies `transform` to an object and its descendants.
     void transform(const QUuid &id, const QTransform &transform);
+    // The same, with stroke widths scaled along (Scale Strokes & Effects) or kept. With
+    // `reflowAreaText`, an upright scale resizes area type's box and leaves its glyphs alone.
+    void transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText = false);
     // A copy of an object's subtree with new ids.
     std::vector<VectorObject> copySubtree(const QUuid &id) const;
     QString uniqueName(const QString &base) const;

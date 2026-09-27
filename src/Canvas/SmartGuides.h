@@ -3,6 +3,7 @@
 #include <QLineF>
 #include <QPointF>
 #include <QRectF>
+#include <QString>
 #include <optional>
 #include <vector>
 
@@ -35,6 +36,11 @@ public:
     Result point(QPointF point, double scale, std::optional<QPointF> anchor = std::nullopt, bool constrained = false) const;
 
     const std::vector<QRectF> &objects() const { return m_objects; }
+
+    // Alt-hover measuring: a line per gap between `from` and `to` on each axis, as long as the gap.
+    static std::vector<QLineF> distances(const QRectF &from, const QRectF &to);
+    // A distance as the labels print it: at most two decimals, no trailing zeros.
+    static QString label(double points);
 
 private:
     std::vector<QRectF> m_objects;

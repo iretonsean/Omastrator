@@ -11,14 +11,45 @@ voice commands and live editing of your websites.
 
 More in [Screenshots](#screenshots).
 
+
+Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Figma and Paper, and puts AI at the core, so a designer spends their time on the customer, not the menus. More in [docs/VISION.md](docs/VISION.md).
+
 ## Features
 
 - Selection and direct selection, with scale and rotate handles, marquee
-  selection, nudging, and smart guides that snap to other objects and the
-  artboard.
+  selection, and smart guides that snap to other objects and the artboard.
+  Drags show Δx/Δy, W × H or the angle as you go.
+- Right-click menus on the canvas and the Layers rows that list only what
+  applies to what you clicked: Ask AI… first, a Select ▸ picker for stacked
+  objects, and the rest one submenu away.
+- A Select menu: Inverse, Next Object Above and Below, Same ▸ (fill, stroke,
+  weight, opacity, blend mode, font), Object ▸ (text, images, clipping masks,
+  open paths, stray points) and Reselect.
+- Hold Alt to measure from the selection to whatever is under the pointer, or
+  to the artboard's edges.
+- Paste in Front, Back and in Place; Ctrl+D repeats the last transform, so an
+  Alt-drag copy followed by Ctrl+D, Ctrl+D is step-and-repeat. Duplicate is
+  Ctrl+Alt+D.
+- Arrow keys nudge by a keyboard increment you set in Preferences or in
+  Properties with nothing selected (Shift for ten times it, Alt to nudge a
+  copy; with only type selected, Alt+arrows adjust the type instead). Number keys set opacity: 5 is 50 %, 0 is
+  100 %, and two quick digits make an exact value.
+- Zoom to Selection (Shift+2) and Fit Artboard (Shift+1).
 - Pen, pencil, line, rectangle, rounded rectangle, ellipse, polygon and star
   tools, all producing editable Bézier paths.
-- Point type, edited in place on the canvas, with Create Outlines.
+- Type, edited in place on the canvas: click for point type, drag a box for
+  area type that wraps and justifies, and convert between them. A Character
+  section in Properties holds font, the font's real styles, size, leading,
+  tracking and alignment, with kerning, baseline shift, scale, case, underline
+  and strikethrough under Show more. Illustrator's keys work too: Alt+←/→
+  tracking (with Ctrl, five times as much; at a caret, kerning), Alt+↑/↓
+  leading, Alt+Shift+↑/↓ baseline shift and Ctrl+Shift+. / , size. Create
+  Outlines turns it into paths.
+- A Properties panel in Figma's order, whose sections fold away and show only
+  when they apply. Number fields take arithmetic and units (`2*(3+1)`,
+  `25mm`, `50%`), `+10` or `*2` applied to each object, arrow steps, and a
+  drag on the label to scrub. Transform has a 9-point reference point, a
+  proportions link and Scale Strokes & Effects. Different values read Mixed.
 - Fills and strokes: solid colours and linear or radial gradients, stroke
   weight, caps, corners and dashes, opacity and blend modes.
 - Layers and groups with visibility, locking and drag-to-reorder, clipping masks
@@ -39,7 +70,11 @@ More in [Screenshots](#screenshots).
 ## AI, with the agent you already use
 
 Omastrator bundles no model. It hands work to your Omarchy default agent, such
-as Claude Code, Codex or opencode. Anything the agent changes shows as a
+as Claude Code, Codex, opencode or Gemini, and runs it in the background: no
+terminal window and no permission prompts. The agent may only read what it's
+given and call Omastrator, and the panel shows it working ("Claude is
+roasting… 12 s") with Cancel. If it stops without an answer, the panel says so
+and **Show log** opens what it printed. Anything the agent changes shows as a
 preview: Enter keeps it as one undo step, and Esc throws it away.
 
 - **Object ▸ Generate…**: describe what you want and choose how many
@@ -55,7 +90,8 @@ preview: Enter keeps it as one undo step, and Esc throws it away.
   variations from that feedback.
 - **Help ▸ Connect an Agent…**: drive Omastrator from any agent. Use
   `omastrator agent <method>` from a shell, or register the MCP server with
-  `claude mcp add omastrator -- omastrator --mcp`.
+  `claude mcp add omastrator -- omastrator --mcp`. To watch the agent work,
+  tick "Open the agent in a terminal while it works".
 
 Choose your agent in Omarchy → Setup → Default → Agent. How it works:
 [docs/AI-DESIGN.md](docs/AI-DESIGN.md). The rest of the app's personality is
@@ -76,16 +112,21 @@ Omastrator also works outside its window, through Omarchy's own shell
   then change its text, colour, spacing, size, type or radius from a bar beside
   it. Values snap to the project's own tokens: its Tailwind theme, its CSS
   custom properties, then your Omarchy colours. Pages whose code isn't on this
-  machine work as mock-ups. **Write Back** puts the changes in the code: the
-  ones it can be sure of directly (a unique text, a Tailwind class swap, a CSS
-  custom property), the rest through your agent on a branch of its own. Each
-  shows as a diff to keep or discard; **Save** commits, and **Publish**
-  (a git push, or a Vercel, Netlify or Cloudflare preview) is its own step.
+  machine work as mock-ups. **Deploy** is the one button: it writes the
+  changes into the code (the ones it can be sure of directly, the rest through
+  your agent on a branch of its own), commits them, pushes, and deploys to
+  production with the project's own setup: a remembered command, a `deploy`
+  script, the Vercel, Netlify, Cloudflare or Fly CLI, a Makefile or
+  `deploy.sh`, or else your agent. The deploy gets the project's `.env` files;
+  their values never show anywhere. The first deploy of a project asks once.
+  **Review changes** shows every write-back as a diff, with Discard, when you
+  want it; **History** lists the commits (on GitHub through `gh`, which it
+  offers to set up) with what was deployed, and restores any version.
 - **Apps**: Live also opens Omarchy web apps as app windows, and Electron apps
   relaunched with their own profile. For GTK and Qt apps, **Capture Window**
   brings the focused app into Omastrator to redesign, and **File ▸ Hand to
   Agent…** gives your agent the mockup and the app's source folder; its change
-  comes back as a diff to keep or discard.
+  is written into the source, with its diff under Review changes.
 - **Dictate**: hold the island's microphone (or Super+Alt+V) and speak. "Select
   the pen tool", "align left", "fill hash F F six six zero zero" run at once;
   anything else goes to your agent as an instruction. The island shows what it
@@ -151,7 +192,7 @@ shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 | | |
 |---|---|
 | ![Island modes](docs/screenshots/island-modes.png) | ![Island activity](docs/screenshots/island-activity.png) |
-| The island resting and expanded: Normal, Draw, Capture, AI and Live. | Activity lines: agent work, results, Live and publishing. |
+| The island resting and expanded: Normal, Draw, Capture, AI and Live. | Activity lines: agent work, results, Live and deploying. |
 | ![Dictation](docs/screenshots/island-dictation.png) | ![Tray light](docs/screenshots/tray-light.png) |
 | Dictation: listening, then what it heard and what it will do. | The tray light: idle, working, results ready, error. |
 | ![Capture colour](docs/screenshots/capture-color-swatch.png) | ![Capture screenshot](docs/screenshots/capture-screenshot-trace.png) |
@@ -159,7 +200,7 @@ shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 | ![Live overlay](docs/screenshots/live-overlay.png) | ![Live spacing](docs/screenshots/live-spacing.png) |
 | Live on a sample site: the contextual bar, the colour snapped to the site's `--accent` token. | Live's spacing handles: blue for padding, amber for margin. |
 | ![Live review](docs/screenshots/live-review-window.png) | ![Setup](docs/screenshots/setup.png) |
-| Write Back: a text change written directly, a colour change by the agent, each as a diff. | `omastrator setup` shows each change and asks first. |
+| Review changes: a text change written directly, a colour change by the agent, each kept as a diff. | `omastrator setup` shows each change and asks first. |
 | ![Menu entries](docs/screenshots/setup-menu-entries.png) | |
 | The Omastrator group setup adds to the Omarchy menu. | |
 

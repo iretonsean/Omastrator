@@ -2,6 +2,7 @@
 #include "UI/ColorPaletteControls.h"
 #include "UI/ColorPickerSheet.h"
 #include <QApplication>
+#include <QPainter>
 #include <QPushButton>
 #include <QtTest>
 
@@ -39,6 +40,7 @@ private slots:
     void wellsShowTheSelectionOrTheDefaults();
     void pickersSetTheSelectionOrTheDefaults();
     void swapAndDefaultsFollowXAndD();
+    void differentPaintsShowAsMixed();
 };
 
 void ColorPaletteControlsTests::wellsShowTheSelectionOrTheDefaults()
@@ -96,6 +98,41 @@ void ColorPaletteControlsTests::swapAndDefaultsFollowXAndD()
     controls.findChild<QAbstractButton *>("defaultFillStroke")->click();
     QCOMPARE(session.defaultFill(), Paint::solid(Qt::white));
     QCOMPARE(session.defaultStroke().paint, Paint::solid(Qt::black));
+}
+
+void ColorPaletteControlsTests::differentPaintsShowAsMixed()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(200, 200));
+    VectorObject box;
+    box.path = Shapes::rectangle(QRectF(10, 10, 20, 20));
+    box.fill = Paint::solid(Qt::red);
+    const QUuid red = session.addObject(box, QStringLiteral("Box"));
+    box.id = QUuid::createUuid();
+    box.fill = Paint::solid(Qt::blue);
+    const QUuid blue = session.addObject(box, QStringLiteral("Box"));
+    ColorPaletteControls controls(session);
+    auto *fill = controls.findChild<PaintSwatch *>("fillSwatch");
+    auto *stroke = controls.findChild<PaintSwatch *>("strokeSwatch");
+    session.select({red});
+    QVERIFY(!fill->isMixed());
+    session.select({red, blue});
+    QVERIFY(ShownStyle::fillMixed(session));
+    QVERIFY(fill->isMixed());
+    // Their strokes match, so the stroke well shows it.
+    QVERIFY(!ShownStyle::strokeMixed(session) && !stroke->isMixed());
+    // A hatched well shows none of the colours.
+    const auto drawn = [](bool mixed) {
+        QImage image(QSize(24, 24), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        PaintSwatch::draw(painter, QRectF(0.5, 0.5, 23, 23), Paint::solid(Qt::red), false, mixed);
+        return image;
+    };
+    const QImage hatched = drawn(true);
+    QVERIFY(hatched != drawn(false));
+    for (int x = 4; x < 20; ++x)
+        QVERIFY(!(qRed(hatched.pixel(x, 12)) > 200 && qGreen(hatched.pixel(x, 12)) < 60));
 }
 
 QTEST_MAIN(ColorPaletteControlsTests)

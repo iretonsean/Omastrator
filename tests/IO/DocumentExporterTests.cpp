@@ -55,6 +55,50 @@ private slots:
         QVERIFY(!bytes.contains("/Subtype /Image"));
     }
 
+    void typeExportsAsItDraws()
+    {
+        // Area type, justified and underlined, with a baseline shift: PDF and PNG draw what the canvas does.
+        VectorDocument document = VectorDocument::blank({300, 200});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.text.text = QStringLiteral("Wrapped justified words across a narrow box");
+        text.text.size = 18;
+        text.text.area = QSizeF(120, 0);
+        text.text.alignment = TextAlignment::justifyAll;
+        text.text.underline = true;
+        text.fill = Paint::solid(Qt::black);
+        text.stroke.paint = Paint::none();
+        text.transform = QTransform::fromTranslate(20, 20);
+        document.insert(text, document.layers().front());
+        QTemporaryDir dir;
+        const QString pdf = dir.filePath(QStringLiteral("type.pdf"));
+        DocumentExporter::writePdf(document, pdf);
+        QFile file(pdf);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(file.readAll().startsWith("%PDF"));
+        const QString png = dir.filePath(QStringLiteral("type.png"));
+        DocumentExporter::writePng(document, png, 1);
+        const QImage image(png);
+        const QRectF box = document.bounds(text.id);
+        QCOMPARE(box.width(), 120.0);
+        // Ink inside the box, none to its right.
+        int inside = 0, outside = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                if (qGray(image.pixel(x, y)) > 128)
+                    continue;
+                (box.adjusted(-2, -2, 2, 2).contains(QPointF(x, y)) ? inside : outside) += 1;
+            }
+        }
+        QVERIFY(inside > 200);
+        QCOMPARE(outside, 0);
+        // The justified lines reach the box's right edge.
+        bool reaches = false;
+        for (int y = int(box.top()); y < int(box.bottom()); ++y)
+            reaches = reaches || qGray(image.pixel(int(box.right()) - 2, y)) < 128;
+        QVERIFY(reaches);
+    }
+
     void pngHasTheArtboardsPixels()
     {
         QTemporaryDir dir;

@@ -62,7 +62,7 @@ void ToolIconsTests::iconsScaleWithTheRatio()
 
 void ToolIconsTests::everyPanelIconHasInk()
 {
-    for (int icon = int(PanelIcon::eye); icon <= int(PanelIcon::exclude); ++icon) {
+    for (int icon = int(PanelIcon::eye); icon <= int(PanelIcon::tracking); ++icon) {
         const QImage image = PanelIcons::pixmap(PanelIcon(icon), 18, Qt::red, 1).toImage().convertToFormat(QImage::Format_ARGB32);
         QVERIFY2(inked(image, qRgb(255, 0, 0)) > 8, qPrintable(QString::number(icon)));
     }

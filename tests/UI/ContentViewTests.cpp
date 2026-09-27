@@ -4,8 +4,11 @@
 #include "UI/NewDocumentSheet.h"
 #include "UI/NumberField.h"
 #include "UI/ToolHeaders.h"
+#include <QCheckBox>
+#include <QComboBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QSplitter>
 #include <QStandardPaths>
 #include <QtTest>
 
@@ -46,12 +49,14 @@ private slots:
     void aRailClickPicksTheTool();
     void eachToolShowsItsBar();
     void shapeBarsEditTheSessionsNumbers();
+    void shapeBuilderFoldsItsOptions();
     void typeBarsStyleSelectedTextInOneStep();
     void theWelcomeShowsWithoutADocument();
     void theStatusBarFollowsTheSession();
     void canvasKeysPickToolsAndSwapColours();
     void remappedKeysReachTheCanvasAsTheirOriginals();
     void theDockFollowsItsSettings();
+    void theDockSplitIsRememberedAndResets();
 };
 
 void ContentViewTests::initTestCase()
@@ -150,6 +155,30 @@ void ContentViewTests::shapeBarsEditTheSessionsNumbers()
     QCOMPARE(editor.session.defaultStroke().width, 1.5);
 }
 
+void ContentViewTests::shapeBuilderFoldsItsOptions()
+{
+    Editor editor;
+    editor.press(Qt::Key_M, Qt::ShiftModifier);
+    QCOMPARE(editor.session.tool(), Tool::shapeBuilder);
+    QVERIFY(editor.status("hintStatus").contains("merge"));
+    auto &bar = find<ShapeBuilderControls>(editor.view, "toolHeader");
+    // Only the colour source shows until Options opens.
+    auto &colour = find<QComboBox>(bar, "shapeBuilderColorFrom");
+    QVERIFY(colour.isVisible());
+    auto &gaps = find<QCheckBox>(bar, "shapeBuilderGapDetection");
+    QVERIFY(!gaps.isVisible());
+    find<QToolButton>(bar, "shapeBuilderOptions").click();
+    QVERIFY(gaps.isVisible());
+    gaps.click();
+    QVERIFY(editor.session.shapeBuilder.gapDetection);
+    QVERIFY(find<NumberField>(bar, "shapeBuilderGap").isEnabled());
+    colour.setCurrentIndex(1);
+    emit colour.activated(1);
+    QVERIFY(!editor.session.shapeBuilder.colorFromArtwork);
+    find<QCheckBox>(bar, "shapeBuilderHighlightFill").click();
+    QVERIFY(!editor.session.shapeBuilder.highlightFill);
+}
+
 void ContentViewTests::typeBarsStyleSelectedTextInOneStep()
 {
     Editor editor;
@@ -165,14 +194,17 @@ void ContentViewTests::typeBarsStyleSelectedTextInOneStep()
     const VectorDocument &document = editor.session.document().value();
     QCOMPARE(document.find(first)->text.size, 34.0);
     QCOMPARE(document.find(second)->text.size, 34.0);
-    QCOMPARE(editor.session.undoName(), QString("Character"));
-    // Bold and alignment follow; the next text takes them too.
-    find<QToolButton>(bar, "typeBold").click();
+    QCOMPARE(editor.session.undoName(), QString("Font Size"));
+    // Style and alignment follow; the next text takes them too.
+    auto &style = find<QComboBox>(bar, "typeStyle");
+    QVERIFY(style.count() >= 1);
+    QCOMPARE(style.currentText(), editor.session.shownText().style);
     find<QToolButton>(bar, "typeAlignCenter").click();
-    QVERIFY(editor.session.document().value().find(second)->text.bold);
+    QCOMPARE(editor.session.document().value().find(second)->text.alignment, TextAlignment::center);
     QCOMPARE(editor.session.document().value().find(first)->text.alignment, TextAlignment::center);
-    QVERIFY(editor.session.defaultText.bold);
+    QCOMPARE(editor.session.defaultText.alignment, TextAlignment::center);
     QVERIFY(find<QToolButton>(bar, "typeAlignCenter").isChecked());
+    find<QToolButton>(bar, "typeAlignJustify").click();
     // One undo takes the size back from both.
     editor.session.undo();
     editor.session.undo();
@@ -242,7 +274,7 @@ void ContentViewTests::remappedKeysReachTheCanvasAsTheirOriginals()
     Editor editor;
     editor.view.canvas().setFocus();
     QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("k")},
-                                             {QStringLiteral("Canvas & Layers:Nudge Right 1 pt"), ShortcutChord("j")}}));
+                                             {QStringLiteral("Canvas & Layers:Nudge Right"), ShortcutChord("j")}}));
     editor.press(Qt::Key_K);
     QCOMPARE(editor.session.tool(), Tool::pen);
     // The old key no longer picks the tool.
@@ -277,6 +309,39 @@ void ContentViewTests::theDockFollowsItsSettings()
     QCOMPARE(ContentView::panelWidth(), ContentView::defaultPanelWidth);
     ContentView::setPanelWidth(300);
     QCOMPARE(ContentView::panelWidth(), 300.0);
+}
+
+void ContentViewTests::theDockSplitIsRememberedAndResets()
+{
+    int moved = 0;
+    {
+        Editor editor;
+        auto &split = find<QSplitter>(editor.view, "panelSplit");
+        QSplitterHandle *handle = split.handle(1);
+        QVERIFY(handle && handle->isVisible() && handle->height() >= 8);
+        QVERIFY(!handle->toolTip().isEmpty());
+        const int before = split.sizes().at(0);
+        // Properties opens with three fifths of the column.
+        QVERIFY(std::abs(before - (before + split.sizes().at(1)) * 3 / 5) <= 2);
+        // A drag on the grip moves it, and the place is saved.
+        const QPoint middle = handle->rect().center();
+        QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, middle);
+        QMouseEvent drag(QEvent::MouseMove, middle + QPoint(0, -120), handle->mapToGlobal(middle + QPoint(0, -120)), Qt::NoButton, Qt::LeftButton,
+                         Qt::NoModifier);
+        QCoreApplication::sendEvent(handle, &drag);
+        QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, middle + QPoint(0, -120));
+        moved = split.sizes().at(0);
+        QVERIFY(moved < before - 60);
+        QVERIFY(QSettings().contains("panelSplitState"));
+    }
+    Editor again;
+    auto &split = find<QSplitter>(again.view, "panelSplit");
+    QTRY_VERIFY(std::abs(split.sizes().at(0) - moved) <= 2);
+    // A double-click puts it back and forgets the place.
+    QTest::mouseDClick(split.handle(1), Qt::LeftButton);
+    const int total = split.sizes().at(0) + split.sizes().at(1);
+    QCOMPARE(split.sizes().at(0), total * 3 / 5);
+    QVERIFY(!QSettings().contains("panelSplitState"));
 }
 
 QTEST_MAIN(ContentViewTests)

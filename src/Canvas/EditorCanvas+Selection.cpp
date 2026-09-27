@@ -173,6 +173,7 @@ void EditorCanvas::State::updateHover(QPointF view)
         canvas.update();
     }
     updateHoverGuides(view);
+    updateBuilderHover(view);
     // The pen's rubber band follows the pointer.
     if (pen)
         canvas.update();
@@ -301,7 +302,7 @@ void EditorCanvas::State::dragScale(QPointF view, Qt::KeyboardModifiers modifier
     }
     // Never quite flat: a zero scale can't come back.
     const auto nonZero = [](double value) { return std::abs(value) < 1e-4 ? std::copysign(1e-4, value) : value; };
-    session.previewTransform(around(fixed, QTransform::fromScale(nonZero(sx), nonZero(sy))));
+    session.previewTransform(around(fixed, QTransform::fromScale(nonZero(sx), nonZero(sy))), true);
 }
 
 void EditorCanvas::State::dragRotate(QPointF view, Qt::KeyboardModifiers modifiers)

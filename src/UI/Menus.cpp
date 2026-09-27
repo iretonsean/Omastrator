@@ -2,9 +2,11 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
+#include "UI/ContextMenus.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
 #include <QApplication>
+#include <QClipboard>
 #include <QFileInfo>
 #include <QMenu>
 #include <QMessageBox>
@@ -15,11 +17,14 @@ Menus::Menus(ProjectWorkspace &workspace, QMenuBar &bar, QWidget &window, AgentB
     buildFile(bar);
     buildEdit(bar);
     buildObject(bar);
+    buildSelect(bar);
     buildViewAndWindow(bar);
     // A field gaining or losing focus changes Undo's meaning.
     connect(qApp, &QApplication::focusChanged, this, &Menus::focusMoved);
     connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &Menus::remap);
     connect(&m_workspace, &ProjectWorkspace::changed, this, &Menus::synchronize);
+    // Copying changes no document, but it's what the Paste entries wait for.
+    connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &Menus::synchronize);
     if (m_agent)
         connect(m_agent, &AgentBridge::proposalChanged, this, &Menus::synchronize);
     watchFront(nullptr);
@@ -39,8 +44,15 @@ void Menus::remap()
 {
     for (QAction *entry : parent()->findChildren<QAction *>()) {
         const QVariant original = entry->property("originalShortcut");
-        if (original.isValid())
-            entry->setShortcut(ShortcutSettings::shared().menu(original.value<QKeySequence>()));
+        if (!original.isValid())
+            continue;
+        // A fixed second key (Figma's Shift+1 and Shift+2) rides along with the remappable one.
+        const QVariant alias = entry->property("aliasShortcut");
+        const QKeySequence mapped = ShortcutSettings::shared().menu(original.value<QKeySequence>());
+        if (alias.isValid())
+            entry->setShortcuts({mapped, alias.value<QKeySequence>()});
+        else
+            entry->setShortcut(mapped);
     }
 }
 
@@ -139,7 +151,13 @@ void Menus::buildEdit(QMenuBar &bar)
     });
     add(edit, QStringLiteral("pasteInPlace"), QStringLiteral("Paste in Place"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V),
         [this] { session().paste(true); });
-    add(edit, QStringLiteral("duplicate"), QStringLiteral("Duplicate"), QKeySequence(Qt::CTRL | Qt::Key_J), [this] { session().duplicateSelection(); });
+    add(edit, QStringLiteral("pasteInFront"), QStringLiteral("Paste in Front"), QKeySequence(Qt::CTRL | Qt::Key_F),
+        [this] { session().paste(PastePosition::front); });
+    add(edit, QStringLiteral("pasteInBack"), QStringLiteral("Paste in Back"), QKeySequence(Qt::CTRL | Qt::Key_B),
+        [this] { session().paste(PastePosition::back); });
+    // Ctrl+J is Illustrator's Join; Ctrl+D is Transform Again.
+    add(edit, QStringLiteral("duplicate"), QStringLiteral("Duplicate"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_D),
+        [this] { session().duplicateSelection(); });
     // The Delete key stays with the canvas and list.
     add(edit, QStringLiteral("delete"), QStringLiteral("Delete"), QKeySequence(), [this] {
         if (session().tool() == Tool::directSelect && !session().pickedNodes().empty())
@@ -148,18 +166,12 @@ void Menus::buildEdit(QMenuBar &bar)
             session().deleteSelection();
     });
     edit->addSeparator();
-    add(edit, QStringLiteral("selectAll"), QStringLiteral("Select All"), QKeySequence(Qt::CTRL | Qt::Key_A), [this] {
-        if (m_field)
-            m_field->selectAll();
-        else
-            session().selectAll();
-    });
-    add(edit, QStringLiteral("deselect"), QStringLiteral("Deselect"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), [this] { session().deselectAll(); });
-    edit->addSeparator();
     add(edit, QStringLiteral("keyboardShortcuts"), QStringLiteral("Keyboard Shortcuts…"), QKeySequence(), [this] {
         m_shortcutsPanel.onClose = [this] { m_shortcutsPanel.close(); };
         m_shortcutsPanel.show(QStringLiteral("Keyboard Shortcuts"), new KeyboardShortcutsSheet([this] { m_shortcutsPanel.close(); }));
     });
+    add(edit, QStringLiteral("preferences"), QStringLiteral("Preferences…"), QKeySequence(), [this] { ObjectDialogs::preferences(&m_window); })
+        ->setMenuRole(QAction::PreferencesRole);
 }
 
 void Menus::buildObject(QMenuBar &bar)
@@ -167,11 +179,17 @@ void Menus::buildObject(QMenuBar &bar)
     QMenu *object = bar.addMenu(QStringLiteral("&Object"));
     QMenu *transform = object->addMenu(QStringLiteral("Transform"));
     transform->menuAction()->setObjectName(QStringLiteral("transformMenu"));
+    add(transform, QStringLiteral("transformAgain"), QStringLiteral("Transform Again"), QKeySequence(Qt::CTRL | Qt::Key_D),
+        [this] { session().transformAgain(); });
+    transform->addSeparator();
     add(transform, QStringLiteral("moveDialog"), QStringLiteral("Move…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M),
         [this] { ObjectDialogs::move(session(), &m_window); });
     add(transform, QStringLiteral("rotateDialog"), QStringLiteral("Rotate…"), QKeySequence(), [this] { ObjectDialogs::rotate(session(), &m_window); });
     add(transform, QStringLiteral("reflectDialog"), QStringLiteral("Reflect…"), QKeySequence(), [this] { ObjectDialogs::reflect(session(), &m_window); });
     add(transform, QStringLiteral("scaleDialog"), QStringLiteral("Scale…"), QKeySequence(), [this] { ObjectDialogs::scale(session(), &m_window); });
+    transform->addSeparator();
+    add(transform, QStringLiteral("flipHorizontal"), QStringLiteral("Flip Horizontal"), QKeySequence(), [this] { session().flipSelection(Qt::Horizontal); });
+    add(transform, QStringLiteral("flipVertical"), QStringLiteral("Flip Vertical"), QKeySequence(), [this] { session().flipSelection(Qt::Vertical); });
     QMenu *arrange = object->addMenu(QStringLiteral("Arrange"));
     arrange->menuAction()->setObjectName(QStringLiteral("arrangeMenu"));
     add(arrange, QStringLiteral("bringToFront"), QStringLiteral("Bring to Front"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketRight),
@@ -227,6 +245,58 @@ void Menus::buildObject(QMenuBar &bar)
     QMenu *type = bar.addMenu(QStringLiteral("&Type"));
     add(type, QStringLiteral("createOutlines"), QStringLiteral("Create Outlines"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O),
         [this] { session().convertTextToPaths(); });
+    add(type, QStringLiteral("convertToAreaType"), QStringLiteral("Convert to Area Type"), QKeySequence(), [this] { session().convertTextType(true); });
+    add(type, QStringLiteral("convertToPointType"), QStringLiteral("Convert to Point Type"), QKeySequence(), [this] { session().convertTextType(false); });
+    type->addSeparator();
+    buildTypeKeys(*type);
+}
+
+// Illustrator's type keys, as entries so they show their keys and can be remapped.
+void Menus::buildTypeKeys(QMenu &type)
+{
+    const auto step = [this](EditorSession::TextStep what, double amount) {
+        return [this, what, amount] { session().stepText(what, amount); };
+    };
+    // At a caret, the tracking keys kern the pair around it instead.
+    const auto track = [this](double amount) {
+        return [this, amount] {
+            if (!(m_canvas && m_canvas->kernAtCaret(amount)))
+                session().stepText(EditorSession::TextStep::tracking, amount);
+        };
+    };
+    QMenu *size = type.addMenu(QStringLiteral("Size"));
+    size->menuAction()->setObjectName(QStringLiteral("typeSizeMenu"));
+    add(size, QStringLiteral("increaseFontSize"), QStringLiteral("Increase Font Size"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Greater),
+        step(EditorSession::TextStep::size, 2));
+    add(size, QStringLiteral("decreaseFontSize"), QStringLiteral("Decrease Font Size"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Less),
+        step(EditorSession::TextStep::size, -2));
+    QMenu *tracking = type.addMenu(QStringLiteral("Tracking"));
+    tracking->menuAction()->setObjectName(QStringLiteral("typeTrackingMenu"));
+    add(tracking, QStringLiteral("tightenTracking"), QStringLiteral("Tighten Tracking"), QKeySequence(Qt::ALT | Qt::Key_Left), track(-20));
+    add(tracking, QStringLiteral("loosenTracking"), QStringLiteral("Loosen Tracking"), QKeySequence(Qt::ALT | Qt::Key_Right), track(20));
+    add(tracking, QStringLiteral("tightenTrackingMore"), QStringLiteral("Tighten Tracking ×5"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Left),
+        track(-100));
+    add(tracking, QStringLiteral("loosenTrackingMore"), QStringLiteral("Loosen Tracking ×5"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Right),
+        track(100));
+    add(tracking, QStringLiteral("resetTracking"), QStringLiteral("Reset Tracking"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Q), [this] {
+        session().updateText([](TextContent &text) {
+            text.tracking = 0;
+            text.kerns.clear();
+        }, QStringLiteral("Reset Tracking"));
+    });
+    // Alt+Up tightens leading, as in Illustrator.
+    QMenu *leading = type.addMenu(QStringLiteral("Leading"));
+    leading->menuAction()->setObjectName(QStringLiteral("typeLeadingMenu"));
+    add(leading, QStringLiteral("decreaseLeading"), QStringLiteral("Decrease Leading"), QKeySequence(Qt::ALT | Qt::Key_Up),
+        step(EditorSession::TextStep::leading, -2));
+    add(leading, QStringLiteral("increaseLeading"), QStringLiteral("Increase Leading"), QKeySequence(Qt::ALT | Qt::Key_Down),
+        step(EditorSession::TextStep::leading, 2));
+    QMenu *baseline = type.addMenu(QStringLiteral("Baseline Shift"));
+    baseline->menuAction()->setObjectName(QStringLiteral("typeBaselineMenu"));
+    add(baseline, QStringLiteral("raiseBaseline"), QStringLiteral("Raise Baseline"), QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_Up),
+        step(EditorSession::TextStep::baselineShift, 2));
+    add(baseline, QStringLiteral("lowerBaseline"), QStringLiteral("Lower Baseline"), QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_Down),
+        step(EditorSession::TextStep::baselineShift, -2));
 }
 
 void Menus::buildViewAndWindow(QMenuBar &bar)
@@ -234,7 +304,12 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     QMenu *view = bar.addMenu(QStringLiteral("&View"));
     add(view, QStringLiteral("zoomIn"), QStringLiteral("Zoom In"), QKeySequence(Qt::CTRL | Qt::Key_Equal), [this] { session().zoomIn(); });
     add(view, QStringLiteral("zoomOut"), QStringLiteral("Zoom Out"), QKeySequence(Qt::CTRL | Qt::Key_Minus), [this] { session().zoomOut(); });
-    add(view, QStringLiteral("fitArtboard"), QStringLiteral("Fit Artboard in Window"), QKeySequence(Qt::CTRL | Qt::Key_0), [this] { session().zoomToFit(); });
+    alias(add(view, QStringLiteral("fitArtboard"), QStringLiteral("Fit Artboard in Window"), QKeySequence(Qt::CTRL | Qt::Key_0),
+              [this] { session().zoomToFit(); }),
+          QKeySequence(Qt::SHIFT | Qt::Key_1));
+    alias(add(view, QStringLiteral("zoomToSelection"), QStringLiteral("Zoom to Selection"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_0),
+              [this] { session().zoomToSelection(); }),
+          QKeySequence(Qt::SHIFT | Qt::Key_2));
     add(view, QStringLiteral("actualSize"), QStringLiteral("Actual Size"), QKeySequence(Qt::CTRL | Qt::Key_1), [this] { session().actualSize(); });
     view->addSeparator();
     add(view, QStringLiteral("outline"), QStringLiteral("Outline"), QKeySequence(Qt::CTRL | Qt::Key_Y),
@@ -284,9 +359,24 @@ void Menus::watchFront(EditorCanvas *canvas)
     m_sessionWatch = connect(&session(), &EditorSession::changed, this, &Menus::synchronize);
     disconnect(m_canvasWatch);
     m_canvas = canvas;
-    if (m_canvas)
+    disconnect(m_menuWatch);
+    if (m_canvas) {
         m_canvasWatch = connect(m_canvas, &EditorCanvas::textEditingChanged, this, &Menus::synchronize);
+        m_menuWatch = connect(m_canvas, &EditorCanvas::contextMenuRequested, this, [this](QPoint at, const QList<QUuid> &hits) {
+            if (!m_canvas)
+                return;
+            QMenu *menu = ContextMenus::forCanvas(*this, session(), *m_canvas, hits, m_canvas);
+            menu->setAttribute(Qt::WA_DeleteOnClose);
+            menu->popup(at);
+        });
+    }
     synchronize();
+}
+
+void Menus::alias(QAction *entry, const QKeySequence &second)
+{
+    entry->setProperty("aliasShortcut", second);
+    entry->setShortcuts({entry->shortcut(), second});
 }
 
 void Menus::focusMoved(QWidget *, QWidget *to)

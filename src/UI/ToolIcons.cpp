@@ -131,6 +131,23 @@ void hand(QPainter &painter)
     painter.drawPath(palm);
 }
 
+// Two overlapping circles, their overlap filled, and a plus: regions merge.
+void shapeBuilder(QPainter &painter)
+{
+    QPainterPath left, right;
+    left.addEllipse(QPointF(6.5, 7), 4.8, 4.8);
+    right.addEllipse(QPointF(11.5, 7), 4.8, 4.8);
+    QPainterPath plus;
+    plus.moveTo(9, 13.2);
+    plus.lineTo(9, 17.2);
+    plus.moveTo(7, 15.2);
+    plus.lineTo(11, 15.2);
+    QPainterPathStroker stroker(painter.pen());
+    // One fill: overlapping antialiased strokes would round the ink off its colour.
+    const QPainterPath ink = stroker.createStroke(left).united(stroker.createStroke(right)).united(stroker.createStroke(plus)).united(left.intersected(right));
+    painter.fillPath(ink, painter.pen().color());
+}
+
 void zoom(QPainter &painter)
 {
     painter.drawEllipse(QRectF(2, 2, 10.5, 10.5));
@@ -160,6 +177,7 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::ellipse: painter.drawEllipse(QRectF(2, 4, 14, 10)); break;
     case Tool::polygon: painter.drawPolygon(ring(6, 7.2, 0)); break;
     case Tool::star: painter.drawPolygon(ring(5, 7.8, 3.3)); break;
+    case Tool::shapeBuilder: shapeBuilder(painter); break;
     case Tool::rotate: rotate(painter); break;
     case Tool::scale: scale(painter); break;
     case Tool::eyedropper: eyedropper(painter); break;

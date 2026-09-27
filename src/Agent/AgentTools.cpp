@@ -81,6 +81,7 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("show_panel"), &AgentTools::showPanel},
         {QStringLiteral("ai_start"), &AgentTools::aiStart},
         {QStringLiteral("live"), &AgentTools::live},
+        {QStringLiteral("live_deployed"), &AgentTools::liveDeployed},
         {QStringLiteral("command"), &AgentTools::command},
     };
     try {
@@ -154,7 +155,7 @@ QJsonObject AgentTools::selectTool(const QJsonObject &params)
 {
     static const QHash<QString, QString> aliases{{"move", "select"}, {"selection", "select"}, {"direct", "directSelect"},
                                                  {"directselection", "directSelect"}, {"type", "text"}, {"eyedrop", "eyedropper"},
-                                                 {"roundedrect", "roundedRectangle"}, {"rect", "rectangle"}};
+                                                 {"roundedrect", "roundedRectangle"}, {"rect", "rectangle"}, {"shape builder", "shapeBuilder"}};
     const QString given = requiredString(params, QStringLiteral("tool")).trimmed();
     QString name = aliases.value(given.toLower(), given);
     // Case aside, "directselect" and "directSelect" are one tool.
@@ -165,7 +166,7 @@ QJsonObject AgentTools::selectTool(const QJsonObject &params)
     const std::optional<Tool> tool = toolNamed(name);
     if (!tool)
         fail(QStringLiteral("There is no tool “%1”. Use one of: select, directSelect, pen, pencil, text, line, rectangle, "
-                            "roundedRectangle, ellipse, polygon, star, rotate, scale, eyedropper, hand, zoom.").arg(given));
+                            "roundedRectangle, ellipse, polygon, star, shapeBuilder, rotate, scale, eyedropper, hand, zoom.").arg(given));
     EditorSession *current = m_host.session();
     if (!current)
         throw Error(AgentProtocol::noDocument, QStringLiteral("Omastrator has no window open."));

@@ -54,6 +54,8 @@ private:
     bool m_renaming = false;
     int m_indent = 0;
     std::optional<QPoint> m_press;
+    // The eye or lock press's keys: Alt acts on the other rows.
+    Qt::KeyboardModifiers m_controlModifiers;
 };
 
 // Where a drag lands: its parent and position.
@@ -118,6 +120,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void changeEvent(QEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dragLeaveEvent(QDragLeaveEvent *event) override;

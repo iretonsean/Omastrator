@@ -265,11 +265,12 @@ private slots:
         QCOMPARE(text->text.text, QStringLiteral("Hello\nwide World"));
         QCOMPARE(text->text.family, QStringLiteral("DejaVu Sans"));
         QCOMPARE(text->text.size, 20.0);
-        QVERIFY(text->text.bold);
-        QVERIFY(text->text.italic);
+        QVERIFY(text->text.isBold());
+        QVERIFY(text->text.isItalic());
         QCOMPARE(text->text.alignment, TextAlignment::right);
-        QCOMPARE(text->text.leading, 1.5);
-        QCOMPARE(text->text.tracking, 1.5);
+        // 30 pt between baselines; 1.5 pt letter spacing is 75/1000 em at 20 pt.
+        QCOMPARE(text->text.leading, std::optional<double>(30));
+        QCOMPARE(text->text.tracking, 75.0);
         QCOMPARE(text->fill.color, QColor(Qt::red));
         QCOMPARE(text->stroke.paint.color, QColor(Qt::blue));
         QCOMPARE(text->stroke.width, 2.0);

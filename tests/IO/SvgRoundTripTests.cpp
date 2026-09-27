@@ -1,4 +1,5 @@
 #include "Document/PathOperations.h"
+#include "Document/TextLayout.h"
 #include "IO/SvgExporter.h"
 #include "IO/SvgImporter.h"
 #include <QTemporaryDir>
@@ -213,7 +214,7 @@ private slots:
         text.text.text = QStringLiteral("One & two\nThree");
         text.text.family = QStringLiteral("DejaVu Sans");
         text.text.size = 18;
-        text.text.italic = true;
+        text.text.style = TextContent::styleFor(text.text.family, 400, true);
         text.text.alignment = TextAlignment::center;
         text.fill = Paint::solid(Qt::blue);
         text.transform = QTransform::fromTranslate(150, 100);
@@ -307,11 +308,10 @@ private slots:
         text.text.text = QStringLiteral("Big  <news>\n\n  indented & more");
         text.text.family = QStringLiteral("DejaVu Serif");
         text.text.size = 30.5;
-        text.text.bold = true;
-        text.text.italic = true;
+        text.text.style = TextContent::styleFor(text.text.family, 700, true);
         text.text.alignment = TextAlignment::center;
-        text.text.leading = 1.5;
-        text.text.tracking = 2;
+        text.text.leading = 45.75;
+        text.text.tracking = 50;
         text.fill = Paint::solid(QColor(10, 20, 30, 128));
         text.stroke.paint = Paint::solid(QColor(200, 0, 0));
         text.stroke.width = 1.5;
@@ -337,11 +337,11 @@ private slots:
         QCOMPARE(after->text.text, text.text.text);
         QCOMPARE(after->text.family, text.text.family);
         QCOMPARE(after->text.size, text.text.size);
-        QVERIFY(after->text.bold);
-        QVERIFY(after->text.italic);
+        QVERIFY(after->text.isBold());
+        QVERIFY(after->text.isItalic());
         QCOMPARE(after->text.alignment, TextAlignment::center);
-        QCOMPARE(after->text.leading, 1.5);
-        QCOMPARE(after->text.tracking, 2.0);
+        QCOMPARE(after->text.leading, std::optional<double>(45.75));
+        QVERIFY(std::abs(after->text.tracking - 50) < 1e-6);
         QCOMPARE(after->fill.color.rgb(), text.fill.color.rgb());
         QVERIFY(std::abs(after->fill.color.alphaF() - 0.5) < 0.01);
         QCOMPARE(after->stroke.paint.color, QColor(200, 0, 0));
@@ -355,6 +355,64 @@ private slots:
         QCOMPARE(aligned->text, right.text);
         QVERIFY(!aligned->stroke.isVisible());
         QVERIFY(near(aligned->transform, right.transform));
+    }
+
+    void characterAttributesSurvive()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.name = QStringLiteral("Styled");
+        text.text.text = QStringLiteral("Styled type");
+        text.text.size = 20;
+        text.text.tracking = 50;
+        text.text.kerning = TextKerning::none;
+        text.text.textCase = TextCase::smallCaps;
+        text.text.underline = true;
+        text.text.strikethrough = true;
+        text.text.baselineShift = 4;
+        text.transform = QTransform::fromTranslate(20, 100);
+        add(document, text);
+        const QString svg = QString::fromUtf8(SvgExporter::serialize(document));
+        // Tracking is in em, as CSS reads it.
+        QVERIFY(svg.contains(QStringLiteral("letter-spacing=\"0.05em\"")));
+        QVERIFY(svg.contains(QStringLiteral("font-kerning=\"none\"")));
+        QVERIFY(svg.contains(QStringLiteral("font-variant=\"small-caps\"")));
+        QVERIFY(svg.contains(QStringLiteral("text-decoration=\"underline line-through\"")));
+        QVERIFY(svg.contains(QStringLiteral("baseline-shift=\"4\"")));
+        const VectorDocument read = roundTrip(document);
+        const VectorObject *after = find(read, QStringLiteral("Styled"), ObjectKind::text);
+        QVERIFY(after);
+        QVERIFY(std::abs(after->text.tracking - 50) < 1e-6);
+        QCOMPARE(after->text.kerning, TextKerning::none);
+        QCOMPARE(after->text.textCase, TextCase::smallCaps);
+        QVERIFY(after->text.underline && after->text.strikethrough);
+        QCOMPARE(after->text.baselineShift, 4.0);
+    }
+
+    void areaTypeWritesOneSpanPerLine()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.name = QStringLiteral("Area");
+        text.text.text = QStringLiteral("The quick brown fox jumps over the lazy dog and keeps running far away");
+        text.text.size = 16;
+        text.text.area = QSizeF(200, 0);
+        text.text.alignment = TextAlignment::justify;
+        text.transform = QTransform::fromTranslate(20, 20);
+        add(document, text);
+        const TextLayout layout(text.text);
+        const QString svg = QString::fromUtf8(SvgExporter::serialize(document));
+        QCOMPARE(int(svg.count(QStringLiteral("<tspan"))), int(layout.lines().size()));
+        // Justified lines are stretched to the box; the last isn't.
+        QCOMPARE(int(svg.count(QStringLiteral("lengthAdjust=\"spacing\""))), int(layout.lines().size()) - 1);
+        QVERIFY(svg.contains(QStringLiteral("textLength=\"200\"")));
+        // It comes back as point type with the same words, line by line where it wrapped.
+        const VectorObject *after = find(SvgImporter::parse(svg.toUtf8()), QStringLiteral("Area"), ObjectKind::text);
+        QVERIFY(after);
+        QCOMPARE(QString(after->text.text).replace(QLatin1Char('\n'), QLatin1Char(' ')).simplified(), text.text.text);
+        QCOMPARE(int(after->text.text.count(QLatin1Char('\n'))) + 1, int(layout.lines().size()));
     }
 
     void textGradientSurvives()

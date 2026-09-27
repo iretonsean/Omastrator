@@ -23,10 +23,60 @@
 const std::vector<std::vector<Tool>> ContentView::railGroups{
     {Tool::select, Tool::directSelect},
     {Tool::pen, Tool::pencil, Tool::text, Tool::line},
-    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star},
+    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::shapeBuilder},
     {Tool::rotate, Tool::scale, Tool::eyedropper},
     {Tool::hand, Tool::zoom},
 };
+
+namespace {
+const QString splitKey = QStringLiteral("panelSplitState");
+
+// The grip between Properties and Layers: a visible bar; a double-click resets it.
+class SplitHandle : public QSplitterHandle {
+public:
+    SplitHandle(Qt::Orientation orientation, QSplitter *parent) : QSplitterHandle(orientation, parent)
+    {
+        setToolTip(QStringLiteral("Drag to share the space between Properties and Layers; double-click to reset"));
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QColor line = palette().color(QPalette::Mid);
+        painter.fillRect(QRectF(0, height() / 2.0 - 0.5, width(), 1), line);
+        QColor grip = palette().color(underMouse() ? QPalette::WindowText : QPalette::PlaceholderText);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(grip);
+        painter.drawRoundedRect(QRectF(width() / 2.0 - 16, height() / 2.0 - 2, 32, 4), 2, 2);
+    }
+    void enterEvent(QEnterEvent *event) override
+    {
+        QSplitterHandle::enterEvent(event);
+        update();
+    }
+    void leaveEvent(QEvent *event) override
+    {
+        QSplitterHandle::leaveEvent(event);
+        update();
+    }
+    void mouseDoubleClickEvent(QMouseEvent *) override
+    {
+        const int total = splitter()->sizes().value(0) + splitter()->sizes().value(1);
+        splitter()->setSizes({total * 3 / 5, total - total * 3 / 5});
+        QSettings().remove(splitKey);
+    }
+};
+
+class PanelSplitter : public QSplitter {
+public:
+    using QSplitter::QSplitter;
+
+protected:
+    QSplitterHandle *createHandle() override { return new SplitHandle(orientation(), this); }
+};
+}
 
 // A rail button: its tool's icon; a plate when chosen.
 class ToolButton : public QToolButton {
@@ -205,13 +255,18 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     m_dock->setObjectName(QStringLiteral("panelDock"));
     auto *dockColumn = new QVBoxLayout(m_dock);
     dockColumn->setContentsMargins(0, 0, 0, 0);
-    auto *split = new QSplitter(Qt::Vertical, m_dock);
+    auto *split = new PanelSplitter(Qt::Vertical, m_dock);
     split->setObjectName(QStringLiteral("panelSplit"));
     split->setChildrenCollapsible(false);
+    split->setHandleWidth(9);
     split->addWidget(m_propertiesPanel);
     split->addWidget(m_layersPanel);
-    split->setStretchFactor(0, 1);
-    split->setStretchFactor(1, 1);
+    // Properties holds more fields; it takes the larger share until moved.
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
+    if (!split->restoreState(QSettings().value(splitKey).toByteArray()))
+        split->setSizes({600, 400});
+    connect(split, &QSplitter::splitterMoved, this, [split] { QSettings().setValue(splitKey, split->saveState()); });
     dockColumn->addWidget(split);
     m_dock->setFixedWidth(int(panelWidth()));
 
@@ -228,6 +283,7 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     m_column->addWidget(makeStatus());
 
     connect(m_canvas, &EditorCanvas::pointerMoved, this, &ContentView::showPointer);
+    connect(m_canvas, &EditorCanvas::textEditingChanged, m_propertiesPanel, &PropertiesPanel::setEditingText);
     connect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
     connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &ContentView::retitleTools);
     retitleTools();
