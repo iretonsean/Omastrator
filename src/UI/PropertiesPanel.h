@@ -62,6 +62,9 @@ private:
     // Live rectangles' corners and compound paths' fill rule.
     PanelSection *shapeSection();
     void synchronizeShape();
+    // An instance's variant properties, Detach and Reset; a component's name and instances.
+    PanelSection *componentSection();
+    void synchronizeComponent();
     QToolButton *iconButton(const QString &name, const QString &tip, PanelIcon icon, const std::function<void()> &run);
     // The reference point of the selection's bounds.
     QPointF reference() const;
@@ -101,6 +104,8 @@ private:
     PanelSection *m_align = nullptr;
     PanelSection *m_pathfinder = nullptr;
     PanelSection *m_shape = nullptr;
+    PanelSection *m_component = nullptr;
+    QWidget *m_componentRows = nullptr;
     NumberField *m_radius = nullptr;
     QToolButton *m_cornersLinked = nullptr;
     QWidget *m_corners = nullptr;

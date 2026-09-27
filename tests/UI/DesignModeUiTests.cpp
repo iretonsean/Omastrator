@@ -166,7 +166,7 @@ private slots:
         app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         bar = app.status()["bar"].toObject();
         QCOMPARE(bar["kind"].toString(), QStringLiteral("art:path"));
-        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"duplicate", "delete", "undo"}));
+        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"makeComponent", "designSystem", "duplicate", "delete", "undo"}));
         QCOMPARE(ids(bar["destinations"].toArray()), (QStringList{"overlay", "desk", "document", "source", "agent"}));
         // Apply to Source waits for a page with its code on this machine.
         QCOMPARE(bar["destinations"].toArray()[3].toObject()["enabled"].toBool(true), false);
@@ -292,7 +292,7 @@ private slots:
         const QJsonObject bar = app.status()["bar"].toObject();
         QCOMPARE(bar["kind"].toString(), QStringLiteral("web"));
         QCOMPARE(bar["surface"].toString(), QStringLiteral("web:https://example.com/pricing"));
-        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"inspect", "lift", "mockup", "measure"}));
+        QCOMPARE(ids(bar["actions"].toArray()), (QStringList{"inspect", "lift", "mockup", "measure", "extractSystem"}));
         // Inspect: the card's details, and Copy CSS puts real CSS on the clipboard.
         const QJsonObject inspected = app.call(QStringLiteral("action"), {{"id", "inspect"}, {"target", bar["target"]}});
         QVERIFY(inspected["css"].toString().contains(QLatin1String("border-radius: 8px;")));

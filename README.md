@@ -179,6 +179,23 @@ Copy Again. There's no dialog.
 The list lives in `~/.config/omastrator/shares.json`, never in the `.omai`.
 More in [docs/SHARE.md](docs/SHARE.md).
 
+## Design systems
+
+Window ▸ Design System holds the document's **tokens** (colour, type, spacing,
+radius, shadow, with light and dark modes) and **components** with variants.
+Fills, strokes, corners, stroke weights, group gaps and text styles can follow
+a token, and changing it changes every use in one undo step. Make Component
+(Ctrl+Alt+K) turns the selection into a component; instances keep their own
+text, colours and visibility, swap variants from the panel or Ctrl+K, and
+follow every edit to the component.
+
+A system syncs with the project's code (tokens.json, Tailwind v4 and v3, CSS
+variables), a global library, any site (extracted in Omastrator's browser) and
+Omarchy themes (read, edited, saved as a new theme and applied). Every push or
+pull first shows where it publishes, each file it writes, the repository and
+branch it commits to, and a preview, and waits for you to confirm. More in
+[docs/DESIGN-SYSTEMS.md](docs/DESIGN-SYSTEMS.md).
+
 ## AI, with the agent you already use
 
 Omastrator bundles no model. It hands work to your Omarchy default agent, such

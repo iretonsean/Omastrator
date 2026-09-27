@@ -76,7 +76,7 @@ void MenusTests::everyMenuKeyHasOneDefinition()
         QVERIFY2(definition != ShortcutDefinition::all().end(), qPrintable(entry->objectName()));
         used[definition->id()] += 1;
     }
-    QCOMPARE(keyed, 69);
+    QCOMPARE(keyed, 71);
     for (const ShortcutDefinition &definition : ShortcutDefinition::all()) {
         if (definition.isMenu())
             QVERIFY2(used.value(definition.id()) == 1, qPrintable(definition.id()));
