@@ -415,3 +415,109 @@ Made while building phase 2 on 2026-09-27.
   lines; justified text is set flush left.
 - AT-SPI extents and fonts are only as good as the toolkit's; Flutter and
   Electron apps give coarse panels, terminals none (so they're traced).
+
+## Decisions: change the real thing, widened (phase 4)
+
+Made while building phase 4's sites, Hand to Agent and lifted write-back on
+2026-09-27. (Visual Omarchy config and GTK/Qt styling are decided separately.)
+
+### Any site, without deploy
+
+- **The same tools.** A page whose origin isn't registered as a project runs
+  the whole Live overlay: select, the contextual bar (text, colour, spacing,
+  size, type, radius), handles, and snapping to the page's own CSS custom
+  properties (Tailwind v4 theme variables too, then the Omarchy colours).
+  Every change is a real DOM or CSS change in Omastrator's browser.
+- **Said plainly.** The page shows a small strip, bottom right: "Not your
+  site: changes stay on this machine." The Live panel says the same in place
+  of the project, the island's activity line adds it to the address, and the
+  status stream's `live.site` carries it. Deploy and Save are hidden on the
+  island and in the panel while such a page is open; `liveDeploy` refuses.
+- **Edit sets.** Keep Edits saves the edits not kept yet as a named set for
+  the origin (the name field, else "Edits 1", "Edits 2"…), in
+  `$XDG_DATA_HOME/omastrator/edit-sets.json`, never in the site or the
+  browser profile. A later change to the same element and property replaces
+  the earlier one and keeps the page's first value. Each edit remembers its
+  page's path, and comes back only there. Every enabled set is put back when
+  the page loads (including reloads and new sessions); elements a framework
+  renders late are caught for ten seconds. Sets are switched off and on in the
+  strip's Edit Sets list or the panel's checkboxes, and removed with
+  `removeEdits`. Edits not kept yet also survive a reload within the session.
+- **Undoing on the page.** The overlay records each element's `style`,
+  `class` and text before its first change, so switching a set off (and
+  Before) puts the page back exactly as the site made it, then re-applies what
+  stays on.
+- **Export CSS…** writes what's on the page (or one set) as plain CSS or a
+  userstyle, chosen by the file name (`.user.css`) or `format`. Rules are
+  `!important`, grouped by selector and page; a value that snapped to one of
+  the page's custom properties is written as `var(--name)`, so it follows the
+  site. The userstyle has the `==UserStyle==` header and one `@-moz-document
+  url-prefix()` per page. Text can't be CSS: text changes are listed in a
+  comment. From the page, the app comes forward with a save dialog in
+  Downloads.
+- **Before and After to Desk** lifts the whole viewport with every edit off,
+  then with them back on, and lands both as Desk frames ("host/path, before",
+  "…, after") in one undo step, "Before and After to Desk". The edits go back
+  on whatever happens to the lift.
+- The `live` method's new actions: `editSets`, `keepEdits`, `toggleEdits`,
+  `removeEdits`, `exportEdits`, `beforeAfter`, `original`, and `handoff` with
+  `"page": true`. The strip's buttons go through the same code, queued so a
+  dialog never opens inside a DevTools reply.
+
+### Hand to Agent, from any surface
+
+- **Where.** "Hand to Agent…" is on the floating bar for a page element, a
+  window and art; on the page strip and the Live panel for a site that isn't
+  yours; and `design handoff {surface|target, folder, prompt}`. File ▸ Hand to
+  Agent… (the document in front) goes through the same path.
+- **The package**, in one temporary folder the prompt names:
+  - `mockup.png` (rendered at 2×) and `mockup.svg`: all the art on the
+    surface, drawn and lifted, since the lifted UI says what the drawing is
+    over. A page with no art hands over its screenshot as the mockup.
+  - `selectors.json`: for each lifted element or widget, its `liftedFrom` (a
+    CSS selector, or the accessible path of roles), its name and its box.
+  - `edits.css` and a before → after list: a page's edits, kept and not.
+  - the surface's screenshot now (grim for windows, DevTools for pages), and
+    for a page with edits, a screenshot with them off.
+- **The run** is the existing project path: a git worktree of the chosen
+  folder on its own branch, headless where the agent allows, `agentDone`, and
+  the change written and recorded under Review changes. Nothing opens by
+  itself.
+- **The folder** is asked for in the Hand to Agent sheet, which offers the
+  one used last for that surface (`anywhere.json`'s `handoff`). Given in the
+  call, it runs at once.
+
+### Lifted vectors back to the source
+
+- **Only your own page**: Apply to Source (the bar's Send to) for art on a
+  page open in Live with its project. It first looks for lifted objects that
+  changed; if there are none it falls back to the agent with a picture of the
+  mock-up, as before.
+- **What it compares with.** When a page's lift lands on the overlay, each
+  lifted object's state is kept by id in `lifted.json` beside
+  `overlays.omai`. Apply to Source compares the selected art (else all of it)
+  with that, and afterwards records the new state, so nothing is applied
+  twice.
+- **What maps** (`LiftDiff`):
+  - text object: its words (line breaks become spaces; only an element that
+    holds text alone), fill → `color`, drawn size → `font-size`, face →
+    `font-weight`.
+  - an element's box: flat fill → `background-color`, live corner radii →
+    `border-radius` (four values when they differ). A box with nothing in it
+    resized → `width`/`height` by as much. A box whose edges moved around its
+    content → `padding-*` by as much; content that only grew doesn't count.
+  - Each becomes a Live edit (`LiveSession::edit`, snapped to tokens), then
+    `liveWriteBack`: certain ones are written directly, the rest go to the
+    agent, as with any Live edit.
+
+### Limits in phase 4
+
+- Edit sets match elements by the overlay's selector (an id, else a path of
+  `nth-of-type`), so a site that reorders its markup can lose an edit; it's
+  skipped quietly. Single-page apps that change the path without loading
+  aren't followed until the next load.
+- Userstyles can't change text; exported text changes are comments only.
+- Apply to Source doesn't move things: a lifted element dragged elsewhere is
+  said ("moves aren't applied"), and left for Hand to Agent. Gradients, images
+  and borders on lifted art aren't mapped back. Apps' lifted widgets have no
+  write-back of their own: Hand to Agent carries their accessible paths.

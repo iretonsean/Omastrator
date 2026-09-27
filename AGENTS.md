@@ -42,7 +42,8 @@ Each folder builds as its own static library:
 - `src/Live` → `oma_live`. Live web editing (docs/OS-SUITE.md): an in-tree
   WebSocket client and the DevTools Protocol (`WebSocket`, `Cdp`), Chromium in
   Omastrator's own profile (`Browser`), dev servers and a static server,
-  `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, write-back
+  `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, `EditSets` (edits to
+  sites that aren't yours, kept per origin), write-back
   (`WriteBack`, `AgentWork`), and Deploy (`Deploy`, `DeployJob`, `History`,
   with GitHub through `gh`). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
@@ -54,7 +55,8 @@ Each folder builds as its own static library:
   AT-SPI helper, distances), `Overlays` (`overlays.omai`, a layer per surface),
   `Desk` (frames), `Bar` (actions and suggestions), `Lift` (a surface's UI as
   vectors: `LiftScript.h` walks the DOM, `Lift+Screen` reads the AT-SPI tree or
-  traces, `LiftJob` runs it in the background; tests fake the tree through
+  traces, `LiftJob` runs it in the background, `LiftDiff` maps changed lifted
+  page vectors back to page edits; tests fake the tree through
   `FakeDesktop::trees` or `OMASTRATOR_ATSPI_TREE`) and `AnywhereSettings`
   (onboarding, destinations, in `anywhere.json`). The app side is
   `src/UI/DesignController` behind the `design` method. The overlay itself is
