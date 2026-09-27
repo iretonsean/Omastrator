@@ -172,9 +172,27 @@ void EditorCanvas::State::updateHover(QPointF view)
         hovered = next;
         canvas.update();
     }
+    updateHoverGuides(view);
     // The pen's rubber band follows the pointer.
     if (pen)
         canvas.update();
+}
+
+void EditorCanvas::State::updateHoverGuides(std::optional<QPointF> view)
+{
+    const Tool tool = session.tool();
+    const bool drawing = tool == Tool::pen || tool == Tool::pencil || tool == Tool::text || isShapeTool(tool);
+    if (view && drawing && !drag && !text && !spaceHeld && session.usesSmartGuides && session.hasDocument()) {
+        if (!hoverGuides)
+            hoverGuides = guidesExcluding(pen ? std::vector<QUuid>{pen->object} : std::vector<QUuid>{});
+        const std::vector<QLineF> lines = guideLines, gaps = guideGaps;
+        snapPoint(*hoverGuides, toDocument(*view));
+        if (lines != guideLines || gaps != guideGaps)
+            canvas.update();
+    } else if (!drag && (!guideLines.empty() || !guideGaps.empty())) {
+        clearGuides();
+        canvas.update();
+    }
 }
 
 // Selection tool ---------------------------------------------------------------
@@ -196,10 +214,10 @@ void EditorCanvas::State::selectPress(QPointF view, Qt::KeyboardModifiers modifi
     }
     const std::optional<QUuid> leaf = hitLeaf(document);
     std::optional<QUuid> target = leaf ? selectableTarget(*leaf) : std::nullopt;
-    // Outside the entered group leaves it.
-    if (!target && enteredGroup) {
+    // Outside the entered group leaves it; on empty space a marquee may still pick within it.
+    if (!target && enteredGroup && leaf) {
         enteredGroup.reset();
-        target = leaf ? selectableTarget(*leaf) : std::nullopt;
+        target = selectableTarget(*leaf);
     } else if (leaf && enteredGroup && !session.document()->isAncestor(*enteredGroup, *leaf)) {
         enteredGroup.reset();
         target = selectableTarget(*leaf);
@@ -238,15 +256,14 @@ void EditorCanvas::State::dragMove(QPointF view, Qt::KeyboardModifiers modifiers
     if (!drag->started)
         return;
     if (!drag->interacting) {
-        // Alt-drag leaves the originals and moves copies.
-        if (modifiers.testFlag(Qt::AltModifier)) {
-            session.duplicateSelection(QPointF(0, 0));
-            drag->duplicate = true;
-        }
-        drag->guides = guidesExcluding(session.selection());
-        drag->startBounds = session.selectionBounds();
+        // Alt-drag leaves the originals and moves copies, all one undo step.
+        drag->duplicate = modifiers.testFlag(Qt::AltModifier);
         session.beginInteraction(drag->duplicate ? QStringLiteral("Move Copy") : QStringLiteral("Move"));
         drag->interacting = true;
+        if (drag->duplicate)
+            session.previewDuplicateSelection();
+        drag->guides = guidesExcluding(session.selection());
+        drag->startBounds = session.selectionBounds();
     }
     const QPointF delta = snapMovement(drag->guides, drag->startBounds, toDocument(view) - drag->pressDocument,
                                        modifiers.testFlag(Qt::ShiftModifier));
@@ -331,15 +348,31 @@ void EditorCanvas::State::dragMarquee(QPointF view)
 
 void EditorCanvas::State::finishMarquee()
 {
-    if (!drag->started)
+    const bool inGroup = enteredGroup && session.document()->find(*enteredGroup);
+    if (!drag->started) {
+        // A click on empty space leaves the entered group.
+        enteredGroup.reset();
         return;
+    }
     const QRectF area = QRectF(drag->pressDocument, toDocument(drag->lastView)).normalized();
     std::vector<QUuid> ids = drag->additive ? drag->selectionBefore : std::vector<QUuid>();
-    for (const QUuid &id : session.objectsIn(area, false)) {
+    std::vector<QUuid> found;
+    if (inGroup) {
+        // Inside an entered group the marquee takes its children, as isolation does.
+        const VectorDocument &document = *session.document();
+        for (const QUuid &id : document.children(*enteredGroup)) {
+            if (!document.isEffectivelyVisible(id) || document.isEffectivelyLocked(id))
+                continue;
+            if (area.intersects(document.bounds(id).adjusted(-0.01, -0.01, 0.01, 0.01)))
+                found.push_back(id);
+        }
+    } else {
+        found = session.objectsIn(area, false);
+    }
+    for (const QUuid &id : found) {
         if (std::find(ids.begin(), ids.end(), id) == ids.end())
             ids.push_back(id);
     }
-    enteredGroup.reset();
     session.select(ids);
 }
 

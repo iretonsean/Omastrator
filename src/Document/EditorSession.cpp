@@ -114,6 +114,18 @@ void EditorSession::selectTool(Tool tool)
 {
     if (m_tool == tool)
         return;
+    if (m_interaction && m_tool == Tool::pen && m_document) {
+        // A pen path left at one anchor is no path; it goes without a trace.
+        std::vector<QUuid> lone;
+        for (const VectorObject &object : m_document->objects) {
+            if (object.kind == ObjectKind::path && object.path.nodeCount() < 2 && !m_interaction->before.find(object.id))
+                lone.push_back(object.id);
+        }
+        if (!lone.empty()) {
+            m_document->remove(lone);
+            pruneSelection();
+        }
+    }
     if (m_interaction)
         commitInteraction();
     m_tool = tool;
@@ -387,14 +399,14 @@ void EditorSession::beginInteraction(const QString &name)
         return;
     if (m_interaction)
         commitInteraction();
-    m_interaction = Interaction{name, *m_document, m_selection};
+    m_interaction = Interaction{name, *m_document, m_selection, *m_document};
 }
 
 void EditorSession::previewTransform(const QTransform &transform)
 {
     if (!m_document || !m_interaction)
         return;
-    VectorDocument document = m_interaction->before;
+    VectorDocument document = m_interaction->base;
     for (const QUuid &id : m_selection) {
         if (!document.isEffectivelyLocked(id))
             document.transform(id, transform);
@@ -415,7 +427,7 @@ void EditorSession::previewObject(const VectorObject &object)
 
 const VectorObject *EditorSession::originalObject(const QUuid &id) const
 {
-    return m_interaction ? m_interaction->before.find(id) : nullptr;
+    return m_interaction ? m_interaction->base.find(id) : nullptr;
 }
 
 void EditorSession::commitInteraction()
@@ -556,4 +568,14 @@ bool EditorSession::canCombine() const
             ++paths;
     }
     return paths >= 2;
+}
+
+void EditorSession::previewDocument(const VectorDocument &document, const std::vector<QUuid> &selection)
+{
+    if (!m_document || !m_interaction)
+        return;
+    m_document = document;
+    m_selection = selection;
+    pruneSelection();
+    notify();
 }

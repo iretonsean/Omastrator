@@ -249,6 +249,111 @@ private slots:
         QCOMPARE(image.pixelColor(10, 10), QColor(Qt::blue));
         QCOMPARE(image.pixelColor(30, 10), QColor(Qt::white));
     }
+
+    void layersMoveAmongLayersAsOneStep()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid first = session.activeLayer().value();
+        const QUuid art = rectangle(session, {0, 0, 10, 10});
+        const QUuid second = session.addLayer();
+        const QUuid third = session.addLayer();
+        QCOMPARE(session.document()->layers(), (std::vector<QUuid>{first, second, third}));
+        // The bottom layer to the top, its art riding along.
+        QVERIFY(session.moveLayer(first, 2));
+        QCOMPARE(session.document()->layers(), (std::vector<QUuid>{second, third, first}));
+        QCOMPARE(session.document()->find(art)->parentID, std::optional(first));
+        QCOMPARE(session.undoName(), QStringLiteral("Move Layer"));
+        session.undo();
+        QCOMPARE(session.document()->layers(), (std::vector<QUuid>{first, second, third}));
+        QVERIFY(session.moveLayer(third, 0));
+        QCOMPARE(session.document()->layers(), (std::vector<QUuid>{third, first, second}));
+        // Where it already is: no step. Art never goes to the top level, layers never into one another.
+        const QString before = session.undoName();
+        QVERIFY(!session.moveLayer(third, 0));
+        QCOMPARE(session.undoName(), before);
+        QVERIFY(!session.moveLayer(art, 0));
+        QVERIFY(!session.moveObject(second, first, 0));
+        QCOMPARE(session.document()->find(art)->parentID, std::optional(first));
+    }
+
+    void duplicateWithinAnInteractionIsOneStep()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid original = rectangle(session, {10, 10, 20, 20});
+        session.beginInteraction(QStringLiteral("Move Copy"));
+        session.previewDuplicateSelection();
+        const QUuid copy = session.selection().front();
+        QVERIFY(copy != original);
+        session.previewTransform(QTransform::fromTranslate(50, 0));
+        session.previewTransform(QTransform::fromTranslate(100, 0));
+        QCOMPARE(session.document()->bounds(original), QRectF(10, 10, 20, 20));
+        QCOMPARE(session.document()->bounds(copy), QRectF(110, 10, 20, 20));
+        session.commitInteraction();
+        QCOMPARE(session.undoName(), QStringLiteral("Move Copy"));
+        session.undo();
+        QVERIFY(!session.document()->find(copy));
+        QCOMPARE(session.document()->bounds(original), QRectF(10, 10, 20, 20));
+        QCOMPARE(session.undoName(), QStringLiteral("Draw Rectangle"));
+        // Cancelled: no copy, the original selected again.
+        session.select({original});
+        session.beginInteraction(QStringLiteral("Move Copy"));
+        session.previewDuplicateSelection();
+        session.previewTransform(QTransform::fromTranslate(30, 0));
+        session.cancelInteraction();
+        QCOMPARE(session.document()->children(session.activeLayer().value()).size(), size_t(1));
+        QCOMPARE(session.selection(), std::vector<QUuid>{original});
+    }
+
+    void switchingToolsDropsALoneAnchorPenPath()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid kept = rectangle(session, {10, 10, 20, 20});
+        session.selectTool(Tool::pen);
+        session.beginInteraction(QStringLiteral("Draw Path"));
+        VectorPath path;
+        path.contours.push_back({});
+        path.contours.back().nodes.push_back(PathNode(QPointF(50, 50)));
+        const QUuid lone = session.previewAddObject(session.pathObject(path, QStringLiteral("Path")));
+        session.selectTool(Tool::select);
+        QVERIFY(!session.isInteracting());
+        QVERIFY(!session.document()->find(lone));
+        QVERIFY(session.document()->find(kept));
+        QCOMPARE(session.undoName(), QStringLiteral("Draw Rectangle"));
+    }
+
+    void splittingASegmentKeepsItsShape()
+    {
+        VectorPath path;
+        Contour contour;
+        contour.nodes = {PathNode({0, 0}, {0, 0}, {0, -50}), PathNode({100, 0}, {100, -50}, {100, 0})};
+        path.contours = {contour};
+        const VectorPath before = path;
+        const auto hit = path.hitSegment({50, -37.5}, 2);
+        QVERIFY(hit);
+        QVERIFY(std::abs(hit->t - 0.5) < 0.01);
+        const NodeRef added = path.splitSegment(hit->from, hit->t);
+        QCOMPARE(added, (NodeRef{0, 1}));
+        QCOMPARE(path.nodeCount(), 3);
+        QVERIFY(path.node(added)->smooth);
+        QVERIFY(QLineF(path.node(added)->anchor, QPointF(50, -37.5)).length() < 0.1);
+        // Same outline: every sampled point of the old curve lies on the new one.
+        for (int step = 0; step <= 20; ++step) {
+            const QPointF point = before.painterPath().pointAtPercent(step / 20.0);
+            QVERIFY2(path.distanceToOutline(point) < 0.1, qPrintable(QString::number(step)));
+        }
+        // A straight side splits into a corner with no handles.
+        VectorPath line;
+        line.contours = {Contour{{PathNode({0, 0}), PathNode({10, 0})}, false}};
+        line.splitSegment({0, 0}, 0.25);
+        QCOMPARE(line.contours.front().nodes[1], PathNode(QPointF(2.5, 0)));
+        // Reversed runs the other way with handles swapped.
+        const Contour back = reversed(contour);
+        QCOMPARE(back.nodes.front().anchor, QPointF(100, 0));
+        QCOMPARE(back.nodes.front().out, QPointF(100, -50));
+    }
 };
 
 QTEST_MAIN(EditorSessionTests)

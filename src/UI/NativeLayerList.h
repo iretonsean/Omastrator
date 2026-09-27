@@ -58,6 +58,7 @@ private:
 
 // Where a drag lands: its parent and position.
 struct LayerDropTarget {
+    // Null for a layer dragged among layers.
     QUuid parent;
     // The sibling rows go above or below; none: into parent.
     std::optional<QUuid> anchor;
@@ -124,6 +125,10 @@ protected:
 
 private:
     std::vector<QUuid> draggedObjects(const QMimeData &data) const;
+    // Dragged layer rows, top down; a drag with any layer moves only layers.
+    std::vector<QUuid> draggedLayers(const QMimeData &data) const;
+    std::optional<LayerDropTarget> layerDropTarget(const std::vector<QUuid> &layers, QPoint inColumn) const;
+    bool acceptLayerDrop(const std::vector<QUuid> &layers, const LayerDropTarget &target);
     void showIndicator(const std::optional<LayerDropTarget> &target);
     void autoscroll(QPoint inViewport);
 

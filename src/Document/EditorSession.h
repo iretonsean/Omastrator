@@ -132,6 +132,10 @@ public:
     // Adds or removes an object within the interaction, as drawing tools preview.
     QUuid previewAddObject(VectorObject object);
     void previewRemoveObject(const QUuid &id);
+    // Alt-drag: copies the selection in place and selects them; later previews move the copies.
+    void previewDuplicateSelection();
+    // Replaces the whole document and selection, for edits an agent proposes.
+    void previewDocument(const VectorDocument &document, const std::vector<QUuid> &selection);
     void commitInteraction();
     void cancelInteraction();
 
@@ -195,6 +199,8 @@ public:
     void setExpanded(const QUuid &id, bool expanded);
     // Moves `id` under `parent` at child `index` (bottom-up), one undo step.
     bool moveObject(const QUuid &id, const QUuid &parent, int index);
+    // Moves a layer to `index` among the layers (bottom-up), one undo step.
+    bool moveLayer(const QUuid &id, int index);
     void lockSelection();
     void unlockAll();
     void hideSelection();
@@ -248,6 +254,7 @@ private:
     void pruneSelection();
     std::vector<QUuid> selectionInOrder() const;
     std::optional<QUuid> insertionParent() const;
+    std::vector<QUuid> duplicateInto(VectorDocument &document, QPointF offset) const;
 
     std::optional<VectorDocument> m_document;
     DocumentHistory m_history;
@@ -261,6 +268,8 @@ private:
         QString name;
         VectorDocument before;
         std::vector<QUuid> selection;
+        // What previews start from: `before`, plus any copies made within the interaction.
+        VectorDocument base;
     };
     std::optional<Interaction> m_interaction;
     mutable int m_pasteCount = 0;

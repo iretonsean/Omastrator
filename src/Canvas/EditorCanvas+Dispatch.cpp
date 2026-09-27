@@ -1,4 +1,6 @@
 #include "Canvas/EditorCanvasState.h"
+#include <QGuiApplication>
+#include <QStyleHints>
 
 // Dispatch ---------------------------------------------------------------------
 
@@ -9,6 +11,15 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     if (text) {
         if (textBox().adjusted(-reach(4), -reach(4), reach(4), reach(4)).contains(document)
             && (session.tool() == Tool::text || session.tool() == Tool::select || session.tool() == Tool::directSelect)) {
+            // A third click in quick succession takes the whole line.
+            if (sinceDoubleClick.isValid() && sinceDoubleClick.elapsed() <= QGuiApplication::styleHints()->mouseDoubleClickInterval()
+                && QLineF(view, doubleClickView).length() <= QGuiApplication::styleHints()->startDragDistance()) {
+                sinceDoubleClick.invalidate();
+                text->preedit.clear();
+                text->selectLine(text->positionAt(document));
+                restartCaret();
+                return;
+            }
             text->caret = text->positionAt(document);
             if (!modifiers.testFlag(Qt::ShiftModifier))
                 text->anchor = text->caret;
@@ -113,6 +124,9 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
     case DragKind::pen:
         dragPenHandle(view, modifiers);
         break;
+    case DragKind::convert:
+        dragConvert(view, modifiers);
+        break;
     case DragKind::textSelect:
         if (text) {
             text->caret = text->positionAt(toDocument(view));
@@ -156,6 +170,7 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::nodes:
     case DragKind::handle:
     case DragKind::shape:
+    case DragKind::convert:
         if (drag->interacting && session.isInteracting())
             session.commitInteraction();
         break;
@@ -185,21 +200,17 @@ void EditorCanvas::State::cancelDrag()
 void EditorCanvas::State::doubleClick(QPointF view, Qt::KeyboardModifiers modifiers)
 {
     const QPointF document = toDocument(view);
-    if (session.tool() == Tool::text) {
-        // A second click in the type selects its word.
-        if (text) {
-            const QString &content = text->text();
-            int from = text->caret, to = text->caret;
-            while (from > 0 && content[from - 1].isLetterOrNumber())
-                --from;
-            while (to < content.size() && content[to].isLetterOrNumber())
-                ++to;
-            text->anchor = from;
-            text->caret = to;
-            drag.reset();
-        }
+    // A second click in the type being edited selects its word.
+    if (text && textBox().adjusted(-reach(4), -reach(4), reach(4), reach(4)).contains(document)) {
+        text->selectWord(text->positionAt(document));
+        drag.reset();
+        sinceDoubleClick.start();
+        doubleClickView = view;
+        restartCaret();
         return;
     }
+    if (session.tool() == Tool::text)
+        return;
     if (session.tool() != Tool::select && session.tool() != Tool::directSelect)
         return;
     if (drag)
@@ -241,11 +252,14 @@ void EditorCanvas::State::toolChanged()
     if (shownTool != Tool::select)
         enteredGroup.reset();
     hovered.reset();
+    hoverGuides.reset();
+    updateHoverGuides(drag ? std::nullopt : hover);
     updateCursor();
 }
 
 void EditorCanvas::State::documentChanged()
 {
+    hoverGuides.reset();
     const std::optional<VectorDocument> &document = session.document();
     if (!document) {
         drag.reset();

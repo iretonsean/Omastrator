@@ -106,6 +106,95 @@ void InlineTextEditor::selectAll()
     caret = int(text().size());
 }
 
+namespace {
+// Word, punctuation or space: a Ctrl+arrow crosses one run of a kind, then any space.
+int charClass(QChar character)
+{
+    if (character.isSpace())
+        return 0;
+    return character.isLetterOrNumber() || character == QLatin1Char('_') || character.isMark() ? 1 : 2;
+}
+}
+
+int InlineTextEditor::wordBoundary(int position, bool forward) const
+{
+    const QString &content = text();
+    int at = std::clamp(position, 0, int(content.size()));
+    if (forward) {
+        if (at < content.size() && charClass(content[at]) != 0) {
+            const int kind = charClass(content[at]);
+            while (at < content.size() && charClass(content[at]) == kind)
+                ++at;
+        }
+        while (at < content.size() && charClass(content[at]) == 0 && content[at] != QLatin1Char('\n'))
+            ++at;
+        // A line end is a stop of its own.
+        if (at == position && at < content.size())
+            ++at;
+        return at;
+    }
+    while (at > 0 && charClass(content[at - 1]) == 0 && content[at - 1] != QLatin1Char('\n'))
+        --at;
+    if (at > 0 && charClass(content[at - 1]) != 0) {
+        const int kind = charClass(content[at - 1]);
+        while (at > 0 && charClass(content[at - 1]) == kind)
+            --at;
+    } else if (at == position && at > 0) {
+        --at;
+    }
+    return at;
+}
+
+void InlineTextEditor::selectWord(int position)
+{
+    const QString &content = text();
+    int from = std::clamp(position, 0, int(content.size())), to = from;
+    // The run under the pointer, or the one just before it at a word's end.
+    const int kind = to < content.size() && content[to] != QLatin1Char('\n') ? charClass(content[to])
+        : from > 0 && content[from - 1] != QLatin1Char('\n')                  ? charClass(content[from - 1])
+                                                                                : -1;
+    if (kind < 0) {
+        anchor = caret = from;
+        return;
+    }
+    while (from > 0 && content[from - 1] != QLatin1Char('\n') && charClass(content[from - 1]) == kind)
+        --from;
+    while (to < content.size() && content[to] != QLatin1Char('\n') && charClass(content[to]) == kind)
+        ++to;
+    anchor = from;
+    caret = to;
+}
+
+void InlineTextEditor::selectLine(int position)
+{
+    const Line span = lines()[size_t(lineOf(std::clamp(position, 0, int(text().size()))))];
+    anchor = span.start;
+    caret = span.start + span.length;
+}
+
+QString InlineTextEditor::displayText() const
+{
+    QString shown = text();
+    return preedit.isEmpty() ? shown : shown.insert(std::clamp(caret, 0, int(shown.size())), preedit);
+}
+
+VectorObject InlineTextEditor::displayObject() const
+{
+    VectorObject shown = object;
+    shown.text.text = displayText();
+    return shown;
+}
+
+void InlineTextEditor::eraseWord(bool forward)
+{
+    if (hasSelection()) {
+        insert(QString());
+        return;
+    }
+    anchor = wordBoundary(caret, forward);
+    insert(QString());
+}
+
 void InlineTextEditor::insert(const QString &typed)
 {
     QString &content = object.text.text;
@@ -173,13 +262,17 @@ InlineTextEditor::Result InlineTextEditor::keyPress(const QKeyEvent &event)
     const QString content = text();
     switch (event.key()) {
     case Qt::Key_Left:
-        if (!extend && hasSelection())
+        if (control)
+            moveTo(wordBoundary(caret, false), extend);
+        else if (!extend && hasSelection())
             moveTo(std::min(caret, anchor), false);
         else
             moveTo(caret - (caret >= 2 && content[caret - 1].isLowSurrogate() ? 2 : 1), extend);
         break;
     case Qt::Key_Right:
-        if (!extend && hasSelection())
+        if (control)
+            moveTo(wordBoundary(caret, true), extend);
+        else if (!extend && hasSelection())
             moveTo(std::max(caret, anchor), false);
         else
             moveTo(caret + (caret + 1 < content.size() && content[caret].isHighSurrogate() ? 2 : 1), extend);
@@ -213,10 +306,16 @@ InlineTextEditor::Result InlineTextEditor::keyPress(const QKeyEvent &event)
         break;
     }
     case Qt::Key_Backspace:
-        erase(false);
+        if (control)
+            eraseWord(false);
+        else
+            erase(false);
         return text() == content ? Result::ignored : Result::edited;
     case Qt::Key_Delete:
-        erase(true);
+        if (control)
+            eraseWord(true);
+        else
+            erase(true);
         return text() == content ? Result::ignored : Result::edited;
     case Qt::Key_Return:
     case Qt::Key_Enter:
@@ -311,18 +410,23 @@ void InlineTextEditor::draw(QPainter &painter, const QTransform &documentToView,
             painter.fillPath(toView.map(band), tint);
         }
     }
-    const QRectF caretBox = caretRect();
+    QRectF caretBox = caretRect();
     if (!preedit.isEmpty()) {
-        // The preedit sits at the caret, underlined, until it commits.
-        QPainterPath glyphs;
-        const QFont face = object.text.font();
-        glyphs.addText(QPointF(caretBox.left() / scale(), baseline(lineOf(caret)) / scale()), face, preedit);
-        glyphs = QTransform::fromScale(scale(), scale()).map(glyphs);
-        painter.fillPath(toView.map(glyphs), accent);
-        const double width = metrics.horizontalAdvance(preedit) * scale();
+        // The preedit sits at the caret, underlined, until it commits; what follows moves along.
+        InlineTextEditor shown(displayObject());
+        shown.caret = shown.anchor = caret + int(preedit.size());
         const double underline = baseline(lineOf(caret)) + descent / 2;
+        const double end = shown.xAt(shown.caret);
+        if (!inDocument) {
+            // Nothing is in the document to draw it yet.
+            QPainterPath glyphs;
+            glyphs.addText(QPointF(caretBox.left() / scale(), baseline(lineOf(caret)) / scale()), object.text.font(), preedit);
+            glyphs = QTransform::fromScale(scale(), scale()).map(glyphs);
+            painter.fillPath(toView.map(glyphs), accent);
+        }
         painter.setPen(QPen(accent, 1));
-        painter.drawLine(toView.map(QPointF(caretBox.left(), underline)), toView.map(QPointF(caretBox.left() + width, underline)));
+        painter.drawLine(toView.map(QPointF(caretBox.left(), underline)), toView.map(QPointF(end, underline)));
+        caretBox = shown.caretRect();
     }
     if (caretShown && !hasSelection()) {
         painter.setPen(QPen(accent, 1.5));

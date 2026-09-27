@@ -329,7 +329,20 @@ void VectorDocument::remove(const std::vector<QUuid> &ids)
 
 bool VectorDocument::move(const QUuid &id, const QUuid &parent, int index)
 {
-    if (id == parent || isAncestor(id, parent))
+    return moveUnder(id, parent, index);
+}
+
+bool VectorDocument::moveLayer(const QUuid &id, int index)
+{
+    const VectorObject *object = find(id);
+    if (!object || object->kind != ObjectKind::layer)
+        return false;
+    return moveUnder(id, std::nullopt, index);
+}
+
+bool VectorDocument::moveUnder(const QUuid &id, const std::optional<QUuid> &parent, int index)
+{
+    if (parent && (id == *parent || isAncestor(id, *parent)))
         return false;
     const int from = indexOf(id);
     if (from < 0)
@@ -341,7 +354,7 @@ bool VectorDocument::move(const QUuid &id, const QUuid &parent, int index)
     const std::vector<QUuid> siblings = children(parent);
     int at;
     if (index < 0 || index >= int(siblings.size())) {
-        const int parentIndex = indexOf(parent);
+        const int parentIndex = parent ? indexOf(*parent) : -1;
         at = parentIndex < 0 ? int(objects.size()) : subtreeEnd(parentIndex);
     } else {
         at = indexOf(siblings[size_t(index)]);

@@ -110,6 +110,8 @@ struct VectorDocument {
     void remove(const std::vector<QUuid> &ids);
     // Moves one object and its subtree under `parent` at child `index`.
     bool move(const QUuid &id, const QUuid &parent, int index);
+    // Moves a layer and its contents to `index` among the layers, bottom-up.
+    bool moveLayer(const QUuid &id, int index);
     // Applies `transform` to an object and its descendants.
     void transform(const QUuid &id, const QTransform &transform);
     // A copy of an object's subtree with new ids.
@@ -119,6 +121,7 @@ struct VectorDocument {
 
 private:
     int subtreeEnd(int index) const;
+    bool moveUnder(const QUuid &id, const std::optional<QUuid> &parent, int index);
 };
 
 // The colour each new layer takes in turn.

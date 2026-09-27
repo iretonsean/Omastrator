@@ -69,13 +69,67 @@ std::vector<QUuid> NativeLayerList::draggedObjects(const QMimeData &data) const
     return result;
 }
 
+std::vector<QUuid> NativeLayerList::draggedLayers(const QMimeData &data) const
+{
+    if (!data.hasFormat(rowType) || QString::fromUtf8(data.data(sourceType)) != m_dragToken || !m_session.document())
+        return {};
+    const VectorDocument &document = *m_session.document();
+    std::vector<QUuid> named;
+    for (const QString &line : QString::fromUtf8(data.data(rowType)).split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        const VectorObject *object = document.find(QUuid::fromString(line));
+        if (object && object->kind == ObjectKind::layer)
+            named.push_back(object->id);
+    }
+    std::vector<QUuid> result;
+    for (const Row &row : m_rows) {
+        if (std::find(named.begin(), named.end(), row.id) != named.end())
+            result.push_back(row.id);
+    }
+    return result;
+}
+
+std::optional<LayerDropTarget> NativeLayerList::layerDropTarget(const std::vector<QUuid> &layers, QPoint inColumn) const
+{
+    const VectorDocument &document = *m_session.document();
+    std::optional<LayerDropTarget> target;
+    for (size_t each = 0; each < m_cells.size() && !target; ++each) {
+        const QRect box = m_cells[each]->geometry();
+        if (inColumn.y() > box.bottom() + 1)
+            continue;
+        const VectorObject &object = *document.find(m_rows[each].id);
+        // Only a layer's own row takes a layer: above its top half, below its bottom.
+        if (object.kind != ObjectKind::layer)
+            return std::nullopt;
+        if (inColumn.y() < box.center().y()) {
+            target = LayerDropTarget{.parent = QUuid(), .anchor = object.id, .above = true, .atTop = false, .row = int(each), .fills = false};
+        } else {
+            // Below the layer's last unfolded row.
+            size_t end = each + 1;
+            while (end < m_rows.size() && m_rows[end].depth > 0)
+                ++end;
+            target = LayerDropTarget{.parent = QUuid(), .anchor = object.id, .above = false, .atTop = false, .row = int(end), .fills = false};
+        }
+    }
+    // Below every row: under the bottom layer.
+    if (!target)
+        target = LayerDropTarget{.parent = QUuid(), .anchor = document.layers().front(), .above = false, .atTop = false,
+                                 .row = int(m_cells.size()), .fills = false};
+    if (std::find(layers.begin(), layers.end(), *target->anchor) != layers.end())
+        return std::nullopt;
+    return target;
+}
+
 std::optional<LayerDropTarget> NativeLayerList::dropTarget(const QMimeData &data, QPoint listPoint) const
 {
+    if (m_cells.empty())
+        return std::nullopt;
+    const QPoint inColumn = m_column->mapFrom(viewport(), viewport()->mapFrom(this, listPoint));
+    if (const std::vector<QUuid> layers = draggedLayers(data); !layers.empty())
+        return layerDropTarget(layers, inColumn);
     const std::vector<QUuid> ids = draggedObjects(data);
-    if (ids.empty() || m_cells.empty())
+    if (ids.empty())
         return std::nullopt;
     const VectorDocument &document = *m_session.document();
-    const QPoint inColumn = m_column->mapFrom(viewport(), viewport()->mapFrom(this, listPoint));
     std::optional<LayerDropTarget> target;
     for (size_t each = 0; each < m_cells.size() && !target; ++each) {
         const QRect box = m_cells[each]->geometry();
@@ -102,11 +156,33 @@ std::optional<LayerDropTarget> NativeLayerList::dropTarget(const QMimeData &data
     return target;
 }
 
+bool NativeLayerList::acceptLayerDrop(const std::vector<QUuid> &layers, const LayerDropTarget &target)
+{
+    // The order the layers end in, bottom-up; then each is moved to its place.
+    std::vector<QUuid> order = m_session.document()->layers();
+    std::erase_if(order, [&](const QUuid &id) { return std::find(layers.begin(), layers.end(), id) != layers.end(); });
+    const auto anchor = std::find(order.begin(), order.end(), *target.anchor);
+    if (anchor == order.end())
+        return false;
+    const auto at = target.above ? anchor + 1 : anchor;
+    order.insert(at, layers.rbegin(), layers.rend());
+    m_session.beginEdit(layers.size() > 1 ? QStringLiteral("Move Layers") : QStringLiteral("Move Layer"));
+    bool moved = false;
+    for (size_t index = 0; index < order.size(); ++index) {
+        if (m_session.document()->layers()[index] != order[index])
+            moved = m_session.moveLayer(order[index], int(index)) || moved;
+    }
+    m_session.endEdit();
+    return moved;
+}
+
 bool NativeLayerList::acceptDrop(const QMimeData &data, QPoint listPoint)
 {
     const std::optional<LayerDropTarget> target = dropTarget(data, listPoint);
     if (!target)
         return false;
+    if (const std::vector<QUuid> layers = draggedLayers(data); !layers.empty())
+        return acceptLayerDrop(layers, *target);
     std::vector<QUuid> order = draggedObjects(data);
     // Rows that each land nearest the anchor go bottom-up.
     if ((target->anchor && !target->above) || (!target->anchor && target->atTop))
@@ -146,7 +222,7 @@ void NativeLayerList::dragEnterEvent(QDragEnterEvent *event)
 {
     const std::optional<LayerDropTarget> target = dropTarget(*event->mimeData(), viewport()->mapToParent(event->position().toPoint()));
     showIndicator(target);
-    if (!draggedObjects(*event->mimeData()).empty()) {
+    if (!draggedObjects(*event->mimeData()).empty() || !draggedLayers(*event->mimeData()).empty()) {
         event->setDropAction(Qt::MoveAction);
         event->accept();
     }

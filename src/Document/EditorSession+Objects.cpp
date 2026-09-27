@@ -189,28 +189,43 @@ void EditorSession::deleteObjects(const std::vector<QUuid> &ids)
     });
 }
 
+std::vector<QUuid> EditorSession::duplicateInto(VectorDocument &document, QPointF offset) const
+{
+    std::vector<QUuid> copies;
+    for (const QUuid &id : selectionInOrder()) {
+        std::vector<VectorObject> subtree = document.copySubtree(id);
+        if (subtree.empty())
+            continue;
+        const QUuid parent = *document.find(id)->parentID;
+        const QUuid root = subtree.front().id;
+        // Insert the root above the original, then its children in order.
+        document.insert(subtree.front(), parent, id);
+        for (size_t index = 1; index < subtree.size(); ++index)
+            document.insert(subtree[index], *subtree[index].parentID);
+        document.transform(root, QTransform::fromTranslate(offset.x(), offset.y()));
+        copies.push_back(root);
+    }
+    return copies;
+}
+
 void EditorSession::duplicateSelection(QPointF offset)
 {
     if (!m_document || m_selection.empty())
         return;
-    edit(QStringLiteral("Duplicate"), [&](VectorDocument &document) {
-        std::vector<QUuid> copies;
-        for (const QUuid &id : selectionInOrder()) {
-            std::vector<VectorObject> subtree = document.copySubtree(id);
-            if (subtree.empty())
-                continue;
-            const QUuid parent = *document.find(id)->parentID;
-            const QUuid root = subtree.front().id;
-            // Insert the root above the original, then its children in order.
-            VectorObject rootObject = subtree.front();
-            document.insert(rootObject, parent, id);
-            for (size_t index = 1; index < subtree.size(); ++index)
-                document.insert(subtree[index], *subtree[index].parentID);
-            document.transform(root, QTransform::fromTranslate(offset.x(), offset.y()));
-            copies.push_back(root);
-        }
-        m_selection = copies;
-    });
+    edit(QStringLiteral("Duplicate"), [&](VectorDocument &document) { m_selection = duplicateInto(document, offset); });
+}
+
+void EditorSession::previewDuplicateSelection()
+{
+    if (!m_document || !m_interaction || m_selection.empty())
+        return;
+    // The copies join the base, so transforms move them and leave the originals.
+    VectorDocument document = m_interaction->base;
+    m_selection = duplicateInto(document, QPointF(0, 0));
+    m_interaction->base = document;
+    m_document = std::move(document);
+    pruneSelection();
+    notify();
 }
 
 void EditorSession::groupSelection()
@@ -851,6 +866,19 @@ bool EditorSession::moveObject(const QUuid &id, const QUuid &parent, int index)
         return false;
     bool moved = false;
     edit(QStringLiteral("Move to Layer"), [&](VectorDocument &document) { moved = document.move(id, parent, index); });
+    return moved;
+}
+
+bool EditorSession::moveLayer(const QUuid &id, int index)
+{
+    if (!m_document)
+        return false;
+    const VectorObject *object = m_document->find(id);
+    if (!object || object->kind != ObjectKind::layer)
+        return false;
+    const std::vector<QUuid> before = m_document->layers();
+    bool moved = false;
+    edit(QStringLiteral("Move Layer"), [&](VectorDocument &document) { moved = document.moveLayer(id, index) && document.layers() != before; });
     return moved;
 }
 

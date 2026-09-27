@@ -68,6 +68,7 @@ private slots:
     void renamingTakesReturnAndEscape();
     void dropsPlaceAboveBelowAndInto();
     void aDropIntoItselfIsRefused();
+    void layersDragAmongLayers();
     void panelButtonsAddAndDelete();
 };
 
@@ -245,11 +246,50 @@ void NativeLayerListTests::aDropIntoItselfIsRefused()
     // The group into its own child is refused.
     QVERIFY(!list.dropTarget(*dragOf(list, group), at(list, f.b, 0.2)));
     QVERIFY(!list.acceptDrop(*dragOf(list, group), at(list, f.b, 0.2)));
-    // Layers cannot be dragged; strangers' data neither.
+    // Layers land only among layers; strangers' data nowhere.
     QVERIFY(!list.dropTarget(*dragOf(list, f.layer2), at(list, f.c, 0.2)));
     NativeLayerList other(f.session);
     QVERIFY(!list.dropTarget(*other.dragData(*other.cells().at(3)), at(list, f.c, 0.2)));
     QCOMPARE(f.children(group), (std::vector<QUuid>{f.a, f.b, f.c}));
+}
+
+void NativeLayerListTests::layersDragAmongLayers()
+{
+    Fixture f;
+    NativeLayerList list(f.session);
+    list.resize(300, 400);
+    list.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&list));
+    // Rows top down: Layer 2, Layer 1, C, B, A.
+    QCOMPARE(f.session.document()->layers(), (std::vector<QUuid>{f.layer1, f.layer2}));
+    const std::optional<LayerDropTarget> above = list.dropTarget(*dragOf(list, f.layer1), at(list, f.layer2, 0.2));
+    QVERIFY(above);
+    QVERIFY(above->parent.isNull());
+    QVERIFY(!above->fills);
+    QVERIFY(list.acceptDrop(*dragOf(list, f.layer1), at(list, f.layer2, 0.2)));
+    QCOMPARE(f.session.document()->layers(), (std::vector<QUuid>{f.layer2, f.layer1}));
+    QCOMPARE(f.children(f.layer1), (std::vector<QUuid>{f.a, f.b, f.c}));
+    QCOMPARE(f.session.undoName(), QString("Move Layer"));
+    f.session.undo();
+    QCOMPARE(f.session.document()->layers(), (std::vector<QUuid>{f.layer1, f.layer2}));
+    // Below a layer's bottom half: under it and all its rows.
+    list.update();
+    QVERIFY(list.acceptDrop(*dragOf(list, f.layer2), at(list, f.layer1, 0.8)));
+    QCOMPARE(f.session.document()->layers(), (std::vector<QUuid>{f.layer2, f.layer1}));
+    // Past the last row: the bottom.
+    f.session.undo();
+    list.update();
+    const LayerCell &last = *list.cells().back();
+    QVERIFY(list.acceptDrop(*dragOf(list, f.layer2), last.mapTo(&list, QPoint(last.width() / 2, last.height() + 20))));
+    QCOMPARE(f.session.document()->layers(), (std::vector<QUuid>{f.layer2, f.layer1}));
+    // Onto itself, onto art or into a group: refused.
+    list.update();
+    QVERIFY(!list.dropTarget(*dragOf(list, f.layer2), at(list, f.layer2, 0.2)));
+    QVERIFY(!list.dropTarget(*dragOf(list, f.layer2), at(list, f.b, 0.5)));
+    // Art still never lands at the top level: onto a layer row it goes into the layer.
+    const std::optional<LayerDropTarget> art = list.dropTarget(*dragOf(list, f.a), at(list, f.layer2, 0.2));
+    QVERIFY(art);
+    QCOMPARE(art->parent, f.layer2);
 }
 
 void NativeLayerListTests::panelButtonsAddAndDelete()

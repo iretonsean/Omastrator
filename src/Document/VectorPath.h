@@ -58,8 +58,20 @@ struct VectorPath {
     std::optional<std::pair<NodeRef, NodePart>> hitNode(QPointF point, double tolerance, bool withHandles) const;
     // Distance from `point` to the outline, sampled along each segment.
     double distanceToOutline(QPointF point) const;
+    // The nearest segment within `tolerance`: it runs from node `from` to the next, at `t`.
+    struct SegmentHit {
+        NodeRef from;
+        double t = 0;
+        double distance = 0;
+    };
+    std::optional<SegmentHit> hitSegment(QPointF point, double tolerance) const;
+    // Adds an anchor at `t` on the segment after `from` without changing the shape; returns it.
+    NodeRef splitSegment(NodeRef from, double t);
     friend bool operator==(const VectorPath &, const VectorPath &) = default;
 };
+
+// The same contour drawn the other way: nodes reversed, each node's handles swapped.
+Contour reversed(const Contour &contour);
 
 // Moves a handle; a smooth node turns its other handle to stay collinear.
 void moveHandle(PathNode &node, NodePart part, QPointF to, bool breakSmooth = false);

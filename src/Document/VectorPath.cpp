@@ -225,6 +225,79 @@ double VectorPath::distanceToOutline(QPointF point) const
     return best;
 }
 
+std::optional<VectorPath::SegmentHit> VectorPath::hitSegment(QPointF point, double tolerance) const
+{
+    std::optional<SegmentHit> best;
+    for (int c = 0; c < int(contours.size()); ++c) {
+        const Contour &contour = contours[size_t(c)];
+        const size_t count = contour.nodes.size();
+        const size_t segments = contour.closed ? count : (count ? count - 1 : 0);
+        for (size_t index = 0; index < segments && count >= 2; ++index) {
+            const PathNode &from = contour.nodes[index];
+            const PathNode &to = contour.nodes[(index + 1) % count];
+            const auto at = [&](double t) { return cubicPoint(from.anchor, from.out, to.in, to.anchor, t); };
+            // Coarse samples, then a finer look around the nearest.
+            constexpr int steps = 48;
+            double bestT = 0, bestDistance = std::numeric_limits<double>::infinity();
+            for (int step = 0; step <= steps; ++step) {
+                const double t = double(step) / steps;
+                const double distance = QLineF(point, at(t)).length();
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestT = t;
+                }
+            }
+            double span = 1.0 / steps;
+            for (int round = 0; round < 20; ++round) {
+                for (const double t : {std::max(0.0, bestT - span), std::min(1.0, bestT + span)}) {
+                    const double distance = QLineF(point, at(t)).length();
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestT = t;
+                    }
+                }
+                span /= 2;
+            }
+            if (bestDistance <= tolerance && (!best || bestDistance < best->distance))
+                best = SegmentHit{{c, int(index)}, bestT, bestDistance};
+        }
+    }
+    return best;
+}
+
+NodeRef VectorPath::splitSegment(NodeRef from, double t)
+{
+    Contour &contour = contours[size_t(from.contour)];
+    const size_t count = contour.nodes.size();
+    PathNode &a = contour.nodes[size_t(from.node)];
+    PathNode &b = contour.nodes[(size_t(from.node) + 1) % count];
+    const auto lerp = [t](QPointF p, QPointF q) { return p + (q - p) * t; };
+    PathNode middle;
+    if (!a.hasOut() && !b.hasIn()) {
+        // A straight side stays straight: the new anchor is a corner.
+        middle = PathNode(lerp(a.anchor, b.anchor));
+    } else {
+        // de Casteljau: the two halves trace the original curve exactly.
+        const QPointF p01 = lerp(a.anchor, a.out), p12 = lerp(a.out, b.in), p23 = lerp(b.in, b.anchor);
+        const QPointF p012 = lerp(p01, p12), p123 = lerp(p12, p23);
+        middle = PathNode(lerp(p012, p123), p012, p123, true);
+        a.out = p01;
+        b.in = p23;
+    }
+    const int at = from.node + 1;
+    contour.nodes.insert(contour.nodes.begin() + at, middle);
+    return {from.contour, at};
+}
+
+Contour reversed(const Contour &contour)
+{
+    Contour result = contour;
+    std::reverse(result.nodes.begin(), result.nodes.end());
+    for (PathNode &node : result.nodes)
+        std::swap(node.in, node.out);
+    return result;
+}
+
 void moveHandle(PathNode &node, NodePart part, QPointF to, bool breakSmooth)
 {
     if (part == NodePart::anchor) {

@@ -148,8 +148,8 @@ void LayerCell::mousePressEvent(QMouseEvent *event)
     if (event->button() != Qt::LeftButton)
         return;
     m_list.clickRow(*this, event->modifiers());
-    // Layers stay put: only art moves between rows.
-    m_press = m_isLayer ? std::nullopt : std::optional(event->position().toPoint());
+    // Layers drag among layers; art drags between rows.
+    m_press = event->position().toPoint();
 }
 
 // Left held past the distance drags.

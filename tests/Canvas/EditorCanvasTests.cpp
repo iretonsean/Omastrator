@@ -142,6 +142,29 @@ private slots:
         QCOMPARE(f.paths().size(), size_t(2));
         QVERIFY(near(f.session.document()->bounds(id), QRectF(50, 50, 60, 40)));
         QVERIFY(near(f.session.selectionBounds(), QRectF(150, 50, 60, 40)));
+        // One step: undo takes the copy and leaves the original.
+        QCOMPARE(f.session.undoName(), QStringLiteral("Move Copy"));
+        f.session.undo();
+        QCOMPARE(f.paths(), std::vector<QUuid>{id});
+        QVERIFY(near(f.session.document()->bounds(id), QRectF(50, 50, 60, 40)));
+        QCOMPARE(f.session.undoName(), QStringLiteral("Draw Rectangle"));
+    }
+
+    void escapeDuringAltDragRemovesTheCopy()
+    {
+        Fixture f;
+        const QUuid id = f.session.addPath(Shapes::rectangle({50, 50, 60, 40}), QStringLiteral("Rectangle"));
+        f.session.selectTool(Tool::select);
+        QTest::mousePress(&f.canvas, Qt::LeftButton, Qt::AltModifier, f.view({80, 70}));
+        f.move({110, 70}, Qt::AltModifier);
+        f.move({150, 70}, Qt::AltModifier);
+        QCOMPARE(f.paths().size(), size_t(2));
+        QTest::keyClick(&f.canvas, Qt::Key_Escape);
+        QTest::mouseRelease(&f.canvas, Qt::LeftButton, Qt::AltModifier, f.view({150, 70}));
+        QCOMPARE(f.paths(), std::vector<QUuid>{id});
+        QVERIFY(near(f.session.document()->bounds(id), QRectF(50, 50, 60, 40)));
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{id});
+        QCOMPARE(f.session.undoName(), QStringLiteral("Draw Rectangle"));
     }
 
     void cornerHandleScales()
@@ -465,6 +488,60 @@ private slots:
         QCOMPARE(f.session.selection(), std::vector<QUuid>{b});
         f.click({70, 70});
         QCOMPARE(f.session.selection(), std::vector<QUuid>{a});
+    }
+
+    void marqueeInAnEnteredGroupPicksItsChildren()
+    {
+        Fixture f;
+        const QUuid a = f.session.addPath(Shapes::rectangle({50, 50, 40, 40}), QStringLiteral("Rectangle"));
+        const QUuid b = f.session.addPath(Shapes::rectangle({150, 50, 40, 40}), QStringLiteral("Rectangle"));
+        f.session.select({a, b});
+        f.session.groupSelection();
+        const QUuid group = f.session.selection().front();
+        const QUuid outside = f.session.addPath(Shapes::rectangle({250, 50, 40, 40}), QStringLiteral("Rectangle"));
+        f.session.selectTool(Tool::select);
+        QTest::mouseDClick(&f.canvas, Qt::LeftButton, Qt::NoModifier, f.view({170, 70}));
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{b});
+        // Across both children and the outside object: only the children.
+        f.drag({40, 40}, {300, 100});
+        QCOMPARE(f.session.selection(), (std::vector<QUuid>{a, b}));
+        f.drag({140, 40}, {200, 100});
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{b});
+        // A click on nothing leaves the group; marquees pick top-level objects again.
+        f.click({300, 250});
+        f.drag({40, 40}, {300, 100});
+        QCOMPARE(f.session.selection(), (std::vector<QUuid>{group, outside}));
+    }
+
+    void drawingToolsShowGuidesWhileHovering()
+    {
+        Fixture f;
+        f.session.usesSmartGuides = true;
+        f.session.addPath(Shapes::rectangle({230, 20, 50, 50}), QStringLiteral("Rectangle"));
+        f.session.deselectAll();
+        const auto magenta = [&] {
+            const QImage image = f.canvas.grab().toImage();
+            int count = 0;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    const QColor pixel = image.pixelColor(x, y);
+                    // Guide magenta, softened by antialiasing.
+                    count += pixel.red() > 150 && pixel.red() - pixel.green() > 80 && pixel.blue() > 90 && pixel.red() > pixel.blue();
+                }
+            }
+            return count;
+        };
+        // Near the corner, no button held: the next click's snap shows.
+        f.session.selectTool(Tool::rectangle);
+        f.move({284, 74}, Qt::NoModifier, Qt::NoButton);
+        QVERIFY(magenta() > 20);
+        f.session.selectTool(Tool::pen);
+        f.move({284, 75}, Qt::NoModifier, Qt::NoButton);
+        QVERIFY(magenta() > 20);
+        // The selection tool shows none until it drags.
+        f.session.selectTool(Tool::select);
+        f.move({284, 74}, Qt::NoModifier, Qt::NoButton);
+        QCOMPARE(magenta(), 0);
     }
 
     void eyedropperPicksStyle()

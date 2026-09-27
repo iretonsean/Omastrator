@@ -13,6 +13,11 @@ enum class CursorKind {
     pen,
     penStart,
     penClose,
+    penContinue,
+    penJoin,
+    penAdd,
+    penDelete,
+    penConvert,
     pencil,
     cross,
     ibeam,
@@ -118,6 +123,24 @@ QCursor penCursor(CursorKind kind, double ratio)
         mark.lineTo(badge + QPointF(2.5, -2.5));
     } else if (kind == CursorKind::penClose) {
         mark.addEllipse(badge, 2.8, 2.8);
+    } else if (kind == CursorKind::penContinue || kind == CursorKind::penJoin) {
+        // A slash: the path goes on from here; joining adds the end it meets.
+        mark.moveTo(badge + QPointF(-2.5, 3));
+        mark.lineTo(badge + QPointF(2.5, -3));
+        if (kind == CursorKind::penJoin)
+            mark.addRect(QRectF(badge + QPointF(2, 1), QSizeF(3, 3)));
+    } else if (kind == CursorKind::penAdd || kind == CursorKind::penDelete) {
+        mark.moveTo(badge - QPointF(3, 0));
+        mark.lineTo(badge + QPointF(3, 0));
+        if (kind == CursorKind::penAdd) {
+            mark.moveTo(badge - QPointF(0, 3));
+            mark.lineTo(badge + QPointF(0, 3));
+        }
+    } else if (kind == CursorKind::penConvert) {
+        // A caret: the anchor turns between corner and smooth.
+        mark.moveTo(badge + QPointF(-3, 2));
+        mark.lineTo(badge + QPointF(0, -2.5));
+        mark.lineTo(badge + QPointF(3, 2));
     }
     if (!mark.isEmpty())
         strokeHaloed(painter, mark, 1.3);
@@ -228,6 +251,11 @@ QCursor build(CursorKind kind, double ratio)
     case CursorKind::pen:
     case CursorKind::penStart:
     case CursorKind::penClose:
+    case CursorKind::penContinue:
+    case CursorKind::penJoin:
+    case CursorKind::penAdd:
+    case CursorKind::penDelete:
+    case CursorKind::penConvert:
         return penCursor(kind, ratio);
     case CursorKind::pencil:
         return pencilCursor(ratio);
@@ -309,7 +337,32 @@ void EditorCanvas::State::updateCursor()
             kind = CursorKind::whiteArrow;
             break;
         case Tool::pen:
-            kind = !pen ? CursorKind::penStart : hover && nearPenStart(*hover) ? CursorKind::penClose : CursorKind::pen;
+            // The badge says what a click would do.
+            kind = pen ? CursorKind::pen : CursorKind::penStart;
+            if (hover && !drag) {
+                switch (penTargetAt(*hover, modifiers).action) {
+                case PenAction::close:
+                    kind = CursorKind::penClose;
+                    break;
+                case PenAction::resume:
+                    kind = CursorKind::penContinue;
+                    break;
+                case PenAction::join:
+                    kind = CursorKind::penJoin;
+                    break;
+                case PenAction::convert:
+                    kind = CursorKind::penConvert;
+                    break;
+                case PenAction::removeAnchor:
+                    kind = CursorKind::penDelete;
+                    break;
+                case PenAction::addAnchor:
+                    kind = CursorKind::penAdd;
+                    break;
+                case PenAction::draw:
+                    break;
+                }
+            }
             break;
         case Tool::pencil:
             kind = CursorKind::pencil;

@@ -31,6 +31,14 @@ public:
     // The nearest caret position to a document point.
     int positionAt(QPointF documentPoint) const;
     void selectAll();
+    // Double- and triple-click: the word or line around a position.
+    void selectWord(int position);
+    void selectLine(int position);
+    // Where Ctrl+Left and Ctrl+Right land from `position`.
+    int wordBoundary(int position, bool forward) const;
+    // The text as shown: the preedit sits at the caret and pushes what follows along.
+    QString displayText() const;
+    VectorObject displayObject() const;
     // The caret in the text's own coordinates.
     QRectF caretRect() const;
     void draw(QPainter &painter, const QTransform &documentToView, bool caretShown, const QColor &accent) const;
@@ -49,6 +57,7 @@ private:
     double scale() const;
     void insert(const QString &typed);
     void erase(bool forward);
+    void eraseWord(bool forward);
     void moveTo(int position, bool extend);
     bool hasSelection() const { return caret != anchor; }
 };

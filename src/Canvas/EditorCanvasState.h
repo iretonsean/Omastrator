@@ -3,6 +3,7 @@
 #include "Canvas/InlineTextEditor.h"
 #include "Canvas/SmartGuides.h"
 #include <QCursor>
+#include <QElapsedTimer>
 #include <QLineF>
 #include <QTimer>
 #include <memory>
@@ -39,6 +40,7 @@ struct EditorCanvas::State {
         shape,
         pencil,
         pen,
+        convert,
         textSelect,
     };
     struct Drag {
@@ -69,6 +71,9 @@ struct EditorCanvas::State {
     Drag &beginDrag(DragKind kind, QPointF view);
     std::vector<QLineF> guideLines;
     std::vector<QLineF> guideGaps;
+    // Drawing tools show where the next click would snap; targets freeze until the document changes.
+    std::optional<SmartGuides> hoverGuides;
+    void updateHoverGuides(std::optional<QPointF> view);
 
     void press(QPointF view, Qt::KeyboardModifiers modifiers);
     void move(QPointF view, Qt::KeyboardModifiers modifiers, bool held);
@@ -128,13 +133,32 @@ struct EditorCanvas::State {
     // Pen (P) and Pencil (N) --------------------------------------------------
     struct Pen {
         QUuid object;
+        // The contour being drawn; new anchors go on its end.
+        int contour = 0;
         // Clicked on the first anchor: the path closes on release.
         bool closing = false;
+        // Resumed from its first anchor: the contour runs backwards until the pen finishes.
+        bool reversed = false;
     };
     std::optional<Pen> pen;
+    // What a pen click at a point would do, for the press and the cursor.
+    enum class PenAction { draw, close, resume, join, convert, removeAnchor, addAnchor };
+    struct PenTarget {
+        PenAction action = PenAction::draw;
+        QUuid object;
+        NodeRef node;
+        double t = 0;
+    };
+    PenTarget penTargetAt(QPointF view, Qt::KeyboardModifiers modifiers) const;
+    // An open contour's end anchor near `view` on a path a click may continue.
+    std::optional<PenTarget> penEndpointAt(QPointF view, const std::vector<QUuid> &paths) const;
     const Contour *penContour() const;
     bool nearPenStart(QPointF view) const;
     void penPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void resumePen(const PenTarget &target, QPointF view);
+    void joinPen(const PenTarget &target);
+    void convertPress(const PenTarget &target, QPointF view);
+    void dragConvert(QPointF view, Qt::KeyboardModifiers modifiers);
     void dragPenHandle(QPointF view, Qt::KeyboardModifiers modifiers);
     void penRelease();
     void finishPen();
@@ -155,6 +179,9 @@ struct EditorCanvas::State {
     bool applyingText = false;
     QTimer caretBlink;
     bool caretShown = true;
+    // The last double-click in type: a click soon after at the same spot selects the line.
+    QElapsedTimer sinceDoubleClick;
+    QPointF doubleClickView;
     void textPress(QPointF view);
     void beginTextEditing(const VectorObject &object, bool inDocument, std::optional<QPointF> caretAt);
     void applyText();

@@ -70,7 +70,14 @@ void EditorCanvas::State::paint(QPainter &painter)
     options.outlineWidth = 1;
     if (options.outlineMode)
         painter.fillRect(QRectF(QPointF(0, 0), document->size), Qt::white);
-    VectorRenderer::draw(painter, *document, options);
+    if (text && text->inDocument && !text->preedit.isEmpty() && document->find(text->object.id)) {
+        // The input method's preedit shows in the type itself, pushing the rest along.
+        VectorDocument shown = *document;
+        shown.find(text->object.id)->text.text = text->displayText();
+        VectorRenderer::draw(painter, shown, options);
+    } else {
+        VectorRenderer::draw(painter, *document, options);
+    }
     painter.restore();
     if (session.showsGrid)
         drawGrid(painter, artboard);
