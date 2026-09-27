@@ -1,5 +1,5 @@
 #include "UI/FloatingPanel.h"
-#include "Rendering/EditorCanvas.h"
+#include "Canvas/EditorCanvas.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDialog>
@@ -74,7 +74,12 @@ void FloatingPanel::show(const QString &title, QWidget *content)
     m_panel->adjustSize();
     // A shown panel stays; without a canvas QDialog centres itself.
     if (!wasVisible) {
-        const CanvasView *canvas = m_owner.window()->findChild<CanvasView *>();
+        // A replaced editor may linger hidden: the shown canvas.
+        const EditorCanvas *canvas = nullptr;
+        for (const EditorCanvas *each : m_owner.window()->findChildren<EditorCanvas *>()) {
+            if (!canvas && each->isVisible())
+                canvas = each;
+        }
         if (positions().contains(m_name))
             m_panel->move(positions().value(m_name));
         else if (canvas)

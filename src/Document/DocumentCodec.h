@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
-// Thrown when JSON is not an OmaIllustrator document or clipboard.
+// Thrown when JSON is not an Omastrator document or clipboard.
 struct CodecError : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -14,7 +14,7 @@ struct CodecError : std::runtime_error {
 // as base64 PNG inside the object that shows them.
 namespace DocumentCodec {
 constexpr int version = 1;
-constexpr const char *clipboardMimeType = "application/x-omaillustrator-objects";
+constexpr const char *clipboardMimeType = "application/x-omastrator-objects";
 
 QJsonObject encode(const VectorDocument &document);
 VectorDocument decode(const QJsonObject &json);

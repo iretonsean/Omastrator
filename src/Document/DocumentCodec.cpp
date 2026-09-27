@@ -272,17 +272,17 @@ std::vector<VectorObject> decodeObjects(const QJsonArray &json)
 
 QJsonObject encode(const VectorDocument &document)
 {
-    return {{"format", "omaillustrator"}, {"version", version},
+    return {{"format", "omastrator"}, {"version", version},
             {"width", document.size.width()}, {"height", document.size.height()},
             {"background", color(document.background)}, {"objects", encode(document.objects)}};
 }
 
 VectorDocument decode(const QJsonObject &json)
 {
-    if (json["format"].toString() != QLatin1String("omaillustrator"))
-        throw CodecError("not an OmaIllustrator document");
+    if (json["format"].toString() != QLatin1String("omastrator"))
+        throw CodecError("not an Omastrator document");
     if (json["version"].toInt() < 1 || json["version"].toInt() > version)
-        throw CodecError("made by a newer OmaIllustrator");
+        throw CodecError("made by a newer Omastrator");
     VectorDocument document;
     document.size = {json["width"].toDouble(), json["height"].toDouble()};
     if (!(document.size.width() > 0 && document.size.height() > 0) || document.size.width() > 1e6 || document.size.height() > 1e6)

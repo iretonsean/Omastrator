@@ -54,7 +54,10 @@ QString keyText(int key)
     const QString typed = QKeySequence(key).toString(QKeySequence::PortableText).toLower();
     // Shifted brackets and signs count as their own keys.
     static const QHash<QString, QString> unshifted{{QStringLiteral("{"), QStringLiteral("[")}, {QStringLiteral("}"), QStringLiteral("]")},
-                                                   {QStringLiteral("+"), QStringLiteral("=")}, {QStringLiteral("_"), QStringLiteral("-")}};
+                                                   {QStringLiteral("+"), QStringLiteral("=")}, {QStringLiteral("_"), QStringLiteral("-")},
+                                                   {QStringLiteral("\""), QStringLiteral("'")}, {QStringLiteral("!"), QStringLiteral("1")},
+                                                   {QStringLiteral("@"), QStringLiteral("2")}, {QStringLiteral("#"), QStringLiteral("3")},
+                                                   {QStringLiteral("&"), QStringLiteral("7")}, {QStringLiteral("*"), QStringLiteral("8")}};
     return unshifted.value(typed, typed);
 }
 
@@ -62,7 +65,10 @@ QString keyText(int key)
 QString shiftedText(const QString &key, bool shifted)
 {
     static const QHash<QString, QString> shifts{{QStringLiteral("["), QStringLiteral("{")}, {QStringLiteral("]"), QStringLiteral("}")},
-                                                {QStringLiteral("="), QStringLiteral("+")}, {QStringLiteral("-"), QStringLiteral("_")}};
+                                                {QStringLiteral("="), QStringLiteral("+")}, {QStringLiteral("-"), QStringLiteral("_")},
+                                                {QStringLiteral("'"), QStringLiteral("\"")}, {QStringLiteral("1"), QStringLiteral("!")},
+                                                {QStringLiteral("2"), QStringLiteral("@")}, {QStringLiteral("3"), QStringLiteral("#")},
+                                                {QStringLiteral("7"), QStringLiteral("&")}, {QStringLiteral("8"), QStringLiteral("*")}};
     return shifted ? shifts.value(key, key) : key;
 }
 
@@ -80,6 +86,13 @@ ShortcutDefinition entry(const QString &title, const QString &key, int modifiers
 {
     return {title, menu ? QStringLiteral("Menus") : QStringLiteral("Canvas & Layers"), ShortcutChord(key, modifiers)};
 }
+
+// Illustrator's tool keys; the other tools have none.
+const std::array<std::pair<Tool, const char *>, 13> toolKeys{{
+    {Tool::select, "v"}, {Tool::directSelect, "a"}, {Tool::pen, "p"}, {Tool::pencil, "n"}, {Tool::text, "t"}, {Tool::line, "\\"},
+    {Tool::rectangle, "m"}, {Tool::ellipse, "l"}, {Tool::rotate, "r"}, {Tool::scale, "s"}, {Tool::eyedropper, "i"}, {Tool::hand, "h"},
+    {Tool::zoom, "z"},
+}};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)
 {
@@ -119,58 +132,45 @@ std::unique_ptr<QKeyEvent> ShortcutChord::event(const QKeyEvent &like) const
 const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
 {
     static const std::vector<ShortcutDefinition> definitions = [] {
-        const QString backspace = QStringLiteral("\x7f");
-        // Swift's list; Hide Compositor has no twin on Linux.
+        // The menus' keys, as Illustrator's with Ctrl for Cmd.
         std::vector<ShortcutDefinition> result{
-            entry("Undo", "z", 1, true), entry("Redo", "z", 9, true), entry("New Canvas", "n", 1, true),
-            entry("Open Project", "o", 1, true), entry("Save", "s", 1, true), entry("Save As", "s", 9, true),
-            entry("Export PNG", "e", 9, true), entry("Export JPEG", "s", 11, true), entry("Close Project", "w", 1, true),
-            entry("Fit Canvas", "0", 1, true), entry("Actual Pixels", "1", 1, true), entry("Zoom In", "=", 1, true),
-            entry("Zoom Out", "-", 1, true), entry("Show Transform Controls", "h", 1, true), entry("Cut", "x", 1, true),
-            entry("Copy", "c", 1, true), entry("Copy Merged", "c", 9, true), entry("Paste", "v", 1, true),
-            entry("Fill with Foreground", backspace, 2, true), entry("Fill with Background", backspace, 1, true),
-            entry("Content-Aware Fill", backspace, 8, true), entry("Select All", "a", 1, true), entry("Deselect", "d", 1, true),
-            entry("Inverse Selection", "i", 9, true), entry("Select Subject", "a", 3, true), entry("Curves", "m", 1, true),
-            entry("Levels", "l", 1, true), entry("Hue/Saturation", "u", 1, true), entry("Invert Pixels / Mask", "i", 1, true),
-            entry("Canvas Size", "c", 3, true), entry("Image Size", "i", 3, true), entry("Transform Layer / Selection", "t", 1, true),
-            entry("Duplicate / Layer via Copy", "j", 1, true), entry("Toggle Clipping Mask", "g", 3, true),
-            entry("Group Layers", "g", 1, true), entry("New Blank Layer", "n", 9, true), entry("Move Layer Up", "]", 1, true),
-            entry("Move Layer Down", "[", 1, true), entry("Merge Layers", "e", 1, true)};
-        const std::vector<std::pair<const char *, QString>> tools{
-            {"Select tool", "a"}, {"Move / Transform tool", "v"}, {"Hand tool", "h"}, {"Zoom tool", "z"}, {"Brush tool", "b"},
-            {"Eraser", "e"}, {"Spot Healing", "j"}, {"Clone Stamp", "s"}, {"Type tool", "t"}, {"Gradient tool", "g"},
-            {"Shape tool", "u"}, {"Eyedropper tool", "i"}, {"Marquee / cycle shape", "m"}, {"Magic Wand", "w"},
-            {"Lasso / cycle mode", "l"}, {"Blur / Smudge / Liquify", "r"}, {"Crop tool", "c"}, {"Swap foreground/background", "x"},
-            {"Reset colors", "d"}, {"Cycle tool mode", "\t"}, {"Temporary Hand tool (hold)", " "},
-            {"Delete selection / layer / effect / lasso point", backspace}, {"Apply current canvas operation", "\r"},
-            {"Cancel current canvas operation", "\x1b"}, {"Decrease brush size", "["}, {"Increase brush size", "]"}};
-        for (const auto &[title, key] : tools)
+            entry("New", "n", 1, true), entry("Open", "o", 1, true), entry("Close", "w", 1, true), entry("Save", "s", 1, true),
+            entry("Save As", "s", 9, true), entry("Place", "p", 9, true), entry("Export PNG", "e", 3, true), entry("Quit", "q", 1, true),
+            entry("Undo", "z", 1, true), entry("Redo", "z", 9, true), entry("Cut", "x", 1, true), entry("Copy", "c", 1, true),
+            entry("Paste", "v", 1, true), entry("Paste in Place", "v", 9, true), entry("Duplicate", "j", 1, true),
+            entry("Select All", "a", 1, true), entry("Deselect", "a", 9, true), entry("Move", "m", 9, true),
+            entry("Bring to Front", "]", 9, true), entry("Bring Forward", "]", 1, true), entry("Send Backward", "[", 1, true),
+            entry("Send to Back", "[", 9, true), entry("Group", "g", 1, true), entry("Ungroup", "g", 9, true),
+            entry("Lock Selection", "2", 1, true), entry("Unlock All", "2", 3, true), entry("Hide Selection", "3", 1, true),
+            entry("Show All", "3", 3, true), entry("Make Clipping Mask", "7", 1, true), entry("Release Clipping Mask", "7", 3, true),
+            entry("Make Compound Path", "8", 1, true), entry("Release Compound Path", "8", 11, true),
+            entry("Create Outlines", "o", 9, true), entry("Zoom In", "=", 1, true), entry("Zoom Out", "-", 1, true),
+            entry("Fit Artboard in Window", "0", 1, true), entry("Actual Size", "1", 1, true), entry("Outline", "y", 1, true),
+            entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true)};
+        for (const auto &[tool, key] : toolKeys)
+            result.push_back(entry(::title(tool) + QStringLiteral(" tool"), QString::fromLatin1(key), 0, false));
+        const std::vector<std::pair<const char *, QString>> keys{
+            {"Swap fill and stroke", "x"}, {"Default fill and stroke", "d"}, {"Temporary Hand tool (hold)", " "},
+            {"Apply / finish current operation", "\r"}, {"Cancel current operation", "\x1b"}};
+        for (const auto &[title, key] : keys)
             result.push_back(entry(title, key, 0, false));
-        for (const auto &[title, key] : std::vector<std::pair<const char *, const char *>>{
-                 {"Decrease brush hardness", "["}, {"Increase brush hardness", "]"}, {"Previous blend mode", "-"}, {"Next blend mode", "="}, {"Cycle shape kind", "u"}})
-            result.push_back(entry(title, key, 8, false));
-        for (int digit = 0; digit <= 9; ++digit)
-            result.push_back(entry(QStringLiteral("Opacity digit %1 (type two for exact %)").arg(digit), QString::number(digit), 0, false));
         for (const auto &[direction, key] : std::vector<std::pair<QString, QString>>{
                  {"Left", QString(QChar(0xf702))}, {"Right", QString(QChar(0xf703))}, {"Up", QString(QChar(0xf700))}, {"Down", QString(QChar(0xf701))}}) {
-            result.push_back(entry(QStringLiteral("Nudge %1 1 px").arg(direction), key, 0, false));
-            result.push_back(entry(QStringLiteral("Nudge %1 10 px").arg(direction), key, 8, false));
-            result.push_back(entry(QStringLiteral("Move selected pixels %1 1 px").arg(direction), key, 1, false));
-            result.push_back(entry(QStringLiteral("Move selected pixels %1 10 px").arg(direction), key, 9, false));
+            result.push_back(entry(QStringLiteral("Nudge %1 1 pt").arg(direction), key, 0, false));
+            result.push_back(entry(QStringLiteral("Nudge %1 10 pt").arg(direction), key, 8, false));
         }
-        const QString text = QStringLiteral("Text Editing");
-        result.push_back({QStringLiteral("Finish editing text"), text, ShortcutChord(QStringLiteral("\r"), 1)});
-        for (const auto &[title, key] : std::vector<std::pair<QString, QString>>{{"Decrease tracking", QString(QChar(0xf702))},
-                                                                                 {"Increase tracking", QString(QChar(0xf703))},
-                                                                                 {"Decrease leading", QString(QChar(0xf700))},
-                                                                                 {"Increase leading", QString(QChar(0xf701))}}) {
-            result.push_back({title, text, ShortcutChord(key, 2)});
-            result.push_back({title + QStringLiteral(" by 10"), text, ShortcutChord(key, 10)});
-        }
-        result.push_back(entry("Toggle Levels preview", "p", 2, false));
         return result;
     }();
     return definitions;
+}
+
+std::optional<Tool> ShortcutDefinition::tool(const ShortcutChord &chord)
+{
+    for (const auto &[tool, key] : toolKeys) {
+        if (chord == ShortcutChord(QString::fromLatin1(key)))
+            return tool;
+    }
+    return std::nullopt;
 }
 
 ShortcutSettings &ShortcutSettings::shared()

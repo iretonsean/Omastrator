@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-image=omaphoto-dev
+image=omastrator-dev
 runtime=/run/user/$(id -u)
 
 docker build -q -t "$image" -f "$repo/Dockerfile.dev" "$repo" >/dev/null
@@ -13,7 +13,7 @@ in_container() {
         -v "$repo:$repo" -w "$repo" "$@"
 }
 
-configure_and_build='cmake -S . -B build -G Ninja -DOMAPHOTO_WERROR=ON && cmake --build build'
+configure_and_build='cmake -S . -B build -G Ninja -DOMASTRATOR_WERROR=ON && cmake --build build'
 
 case "${1:-}" in
 build)
@@ -33,7 +33,7 @@ run)
         [[ -e $node ]] && mounts+=(--device "$node" --group-add "$(stat -c %g "$node")")
     done
     in_container "${mounts[@]}" -v "$socket:$runtime/wayland-0" -e WAYLAND_DISPLAY=wayland-0 \
-        -e QT_QPA_PLATFORM=wayland "$image" sh -c "$configure_and_build && exec build/omaphoto \"\$@\"" sh "${@:2}"
+        -e QT_QPA_PLATFORM=wayland "$image" sh -c "$configure_and_build && exec build/omastrator \"\$@\"" sh "${@:2}"
     ;;
 *)
     echo "usage: dev.sh build|test|run [args]" >&2

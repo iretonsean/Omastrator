@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(omaillustrator VERSION 0.1.0 LANGUAGES C CXX)
+project(omastrator VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-option(OMAILLUSTRATOR_WERROR "Treat warnings as errors" OFF)
+option(OMASTRATOR_WERROR "Treat warnings as errors" OFF)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Test)
 
@@ -23,9 +23,9 @@ function(oma_library name)
     endif()
     add_library(${name} STATIC ${sources})
     target_include_directories(${name} PUBLIC src)
-    target_compile_options(${name} PUBLIC -Wall -Wextra $<$<BOOL:${OMAILLUSTRATOR_WERROR}>:-Werror>)
+    target_compile_options(${name} PUBLIC -Wall -Wextra $<$<BOOL:${OMASTRATOR_WERROR}>:-Werror>)
     # Empty optionals and bad indexes abort, not pass by luck.
-    target_compile_definitions(${name} PUBLIC OMAILLUSTRATOR_VERSION="${PROJECT_VERSION}" _GLIBCXX_ASSERTIONS)
+    target_compile_definitions(${name} PUBLIC OMASTRATOR_VERSION="${PROJECT_VERSION}" _GLIBCXX_ASSERTIONS)
 endfunction()
 
 oma_library(oma_core src/Logging.cpp src/Document/*.cpp src/Rendering/*.cpp)
@@ -42,18 +42,18 @@ oma_library(oma_ui src/ContentView*.cpp src/UI/*.cpp)
 target_link_libraries(oma_ui PUBLIC oma_core oma_io oma_canvas)
 
 include(GNUInstallDirs)
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmaIllustratorApp.cpp)
-    add_executable(omaillustrator src/OmaIllustratorApp.cpp)
-    target_link_libraries(omaillustrator PRIVATE oma_ui)
-    install(TARGETS omaillustrator RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/OmastratorApp.cpp)
+    add_executable(omastrator src/OmastratorApp.cpp)
+    target_link_libraries(omastrator PRIVATE oma_ui)
+    install(TARGETS omastrator RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
-install(FILES packaging/io.github.omaillustrator.OmaIllustrator.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES packaging/io.github.omaillustrator.OmaIllustrator.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
+install(FILES packaging/io.github.iretonsean.Omastrator.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES packaging/io.github.iretonsean.Omastrator.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)
 foreach(size 16 32 64 128 256 512)
     install(FILES packaging/icons/app-icon-${size}.png
-            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps RENAME io.github.omaillustrator.OmaIllustrator.png)
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps RENAME io.github.iretonsean.Omastrator.png)
 endforeach()
-install(FILES LICENSE third_party/nanosvg/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omaillustrator OPTIONAL)
+install(FILES LICENSE third_party/nanosvg/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL)
 # A direct install registers the document type; packages use hooks.
 install(CODE "
     if(\"\$ENV{DESTDIR}\" STREQUAL \"\")
@@ -63,9 +63,9 @@ install(CODE "
         endif()
     endif()")
 
-set(CPACK_PACKAGE_NAME omaillustrator)
+set(CPACK_PACKAGE_NAME omastrator)
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Vector illustration for Linux, made for Omarchy")
-set(CPACK_PACKAGE_CONTACT "OmaIllustrator")
+set(CPACK_PACKAGE_CONTACT "Omastrator")
 set(CPACK_PACKAGING_INSTALL_PREFIX /usr)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_SECTION graphics)

@@ -1,0 +1,319 @@
+#include "ContentView.h"
+#include "Logging.h"
+#include "UI/ColorPaletteControls.h"
+#include "UI/KeyboardShortcuts.h"
+#include "UI/LayersPanel.h"
+#include "UI/NewDocumentSheet.h"
+#include "UI/ProjectWorkspace.h"
+#include "UI/PropertiesPanel.h"
+#include "UI/ToolHeaders.h"
+#include "UI/ToolIcons.h"
+#include <QFrame>
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QScrollArea>
+#include <QSettings>
+#include <QSplitter>
+#include <cmath>
+
+const std::vector<std::vector<Tool>> ContentView::railGroups{
+    {Tool::select, Tool::directSelect},
+    {Tool::pen, Tool::pencil, Tool::text, Tool::line},
+    {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star},
+    {Tool::rotate, Tool::scale, Tool::eyedropper},
+    {Tool::hand, Tool::zoom},
+};
+
+// A rail button: its tool's icon; a plate when chosen.
+class ToolButton : public QToolButton {
+public:
+    ToolButton(Tool tool, QWidget *parent) : QToolButton(parent), m_tool(tool)
+    {
+        setObjectName(QStringLiteral("tool:") + rawValue(tool));
+        setCheckable(true);
+        setFixedSize(34, 34);
+        setFocusPolicy(Qt::NoFocus);
+        setAccessibleName(title(tool));
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QColor ink = palette().color(QPalette::WindowText);
+        if (isChecked()) {
+            QColor plate = ink, edge = ink;
+            plate.setAlphaF(0.12f);
+            edge.setAlphaF(0.14f);
+            painter.setPen(edge);
+            painter.setBrush(plate);
+            painter.drawRoundedRect(QRectF(0.5, 0.5, 33, 33), 7, 7);
+        }
+        ToolIcons::paint(painter, m_tool, QPointF(8, 8), ToolIcons::points, ink);
+    }
+
+private:
+    const Tool m_tool;
+};
+
+namespace {
+// An 8-point grip: dragged left, the dock widens.
+class PanelResizeEdge : public QWidget {
+public:
+    PanelResizeEdge(QWidget &dock, QWidget *parent) : QWidget(parent), m_dock(dock)
+    {
+        setObjectName(QStringLiteral("panelEdge"));
+        setFixedWidth(8);
+        setCursor(Qt::SplitHCursor);
+        setToolTip(QStringLiteral("Drag to resize the panels"));
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.fillRect(QRect(width() / 2, 0, 1, height()), palette().color(QPalette::Mid));
+    }
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton)
+            m_start = std::pair(event->globalPosition().x(), double(m_dock.width()));
+    }
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (!m_start)
+            return;
+        const double wanted = std::round(m_start->second - (event->globalPosition().x() - m_start->first));
+        const double width = std::clamp(wanted, ContentView::minimumPanelWidth, ContentView::maximumPanelWidth);
+        if (width == m_dock.width())
+            return;
+        m_dock.setFixedWidth(int(width));
+        ContentView::setPanelWidth(width);
+    }
+    void mouseReleaseEvent(QMouseEvent *) override { m_start = std::nullopt; }
+
+private:
+    QWidget &m_dock;
+    std::optional<std::pair<double, double>> m_start;
+};
+
+// An accent ring while a drop may land.
+class DropRing : public QWidget {
+public:
+    explicit DropRing(QWidget *parent) : QWidget(parent)
+    {
+        setObjectName(QStringLiteral("dropRing"));
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        hide();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(palette().color(QPalette::Highlight), 3));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(QRectF(rect()).adjusted(4.5, 4.5, -4.5, -4.5), 8, 8);
+    }
+};
+
+QFrame *divider(QFrame::Shape shape, QWidget *parent)
+{
+    auto *line = new QFrame(parent);
+    line->setFrameShape(shape);
+    line->setFrameShadow(QFrame::Plain);
+    line->setForegroundRole(QPalette::Mid);
+    return line;
+}
+}
+
+ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QWidget *parent)
+    : QWidget(parent), m_session(session), m_workspace(workspace), m_column(new QVBoxLayout(this)), m_canvasSlot(new QGridLayout),
+      m_canvas(new EditorCanvas(session, this)), m_propertiesPanel(new PropertiesPanel(session, this)), m_layersPanel(new LayersPanel(session, this)),
+      m_dropRing(new DropRing(this)), m_zoom(new QLabel(this)), m_pointer(new QLabel(this)), m_artboard(new QLabel(this)),
+      m_selection(new QLabel(this)), m_hint(new QLabel(this))
+{
+    setMinimumSize(800, 520);
+    m_column->setContentsMargins(0, 0, 0, 0);
+    m_column->setSpacing(0);
+    auto *canvas = new QWidget(this);
+    canvas->setLayout(m_canvasSlot);
+    m_canvasSlot->setContentsMargins(0, 0, 0, 0);
+    // The welcome sits over the canvas.
+    m_canvasSlot->addWidget(m_canvas, 0, 0);
+    m_canvasSlot->addWidget(m_dropRing, 0, 0);
+    m_canvas->installEventFilter(this);
+    setAcceptDrops(true);
+
+    m_dock = new QWidget(this);
+    m_dock->setObjectName(QStringLiteral("panelDock"));
+    auto *dockColumn = new QVBoxLayout(m_dock);
+    dockColumn->setContentsMargins(0, 0, 0, 0);
+    auto *split = new QSplitter(Qt::Vertical, m_dock);
+    split->setObjectName(QStringLiteral("panelSplit"));
+    split->setChildrenCollapsible(false);
+    split->addWidget(m_propertiesPanel);
+    split->addWidget(m_layersPanel);
+    split->setStretchFactor(0, 1);
+    split->setStretchFactor(1, 1);
+    dockColumn->addWidget(split);
+    m_dock->setFixedWidth(int(panelWidth()));
+
+    auto *middle = new QHBoxLayout;
+    middle->setSpacing(0);
+    middle->addWidget(makeRail());
+    middle->addWidget(divider(QFrame::VLine, this));
+    middle->addWidget(canvas, 1);
+    middle->addWidget(new PanelResizeEdge(*m_dock, this));
+    middle->addWidget(m_dock);
+    m_column->addWidget(divider(QFrame::HLine, this));
+    m_column->addLayout(middle, 1);
+    m_column->addWidget(divider(QFrame::HLine, this));
+    m_column->addWidget(makeStatus());
+
+    connect(m_canvas, &EditorCanvas::pointerMoved, this, &ContentView::showPointer);
+    connect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
+    connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &ContentView::retitleTools);
+    retitleTools();
+    synchronizePanels();
+    showPointer(std::nullopt);
+    synchronize();
+}
+
+// ~QWidget deletes children after members go; stop listening first.
+ContentView::~ContentView()
+{
+    disconnect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
+    m_canvas->removeEventFilter(this);
+}
+
+QWidget *ContentView::makeRail()
+{
+    auto *tools = new QWidget(this);
+    auto *toolColumn = new QVBoxLayout(tools);
+    toolColumn->setContentsMargins(7, 12, 7, 12);
+    toolColumn->setSpacing(2);
+    for (const std::vector<Tool> &group : railGroups) {
+        if (&group != &railGroups.front()) {
+            toolColumn->addSpacing(4);
+            toolColumn->addWidget(divider(QFrame::HLine, tools));
+            toolColumn->addSpacing(4);
+        }
+        for (const Tool tool : group) {
+            auto *button = new ToolButton(tool, tools);
+            connect(button, &QToolButton::clicked, this, [this, tool] {
+                m_session.selectTool(tool);
+                synchronize();
+            });
+            toolColumn->addWidget(button, 0, Qt::AlignHCenter);
+            m_toolButtons.push_back({tool, button});
+        }
+    }
+    toolColumn->addSpacing(10);
+    toolColumn->addWidget(new ColorPaletteControls(m_session, tools), 0, Qt::AlignHCenter);
+    toolColumn->addStretch(1);
+    // Too short a window scrolls the rail.
+    auto *rail = new QScrollArea(this);
+    rail->setObjectName(QStringLiteral("toolRail"));
+    rail->setWidget(tools);
+    rail->setWidgetResizable(true);
+    rail->setFixedWidth(56);
+    rail->setFrameShape(QFrame::NoFrame);
+    rail->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    rail->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    return rail;
+}
+
+QString ContentView::toolTip(Tool tool)
+{
+    for (const ShortcutDefinition &definition : ShortcutDefinition::all()) {
+        if (!definition.isMenu() && ShortcutDefinition::tool(definition.original) == tool)
+            return QStringLiteral("%1 (%2)").arg(title(tool), ShortcutSettings::shared().chord(definition).label());
+    }
+    return title(tool);
+}
+
+void ContentView::retitleTools()
+{
+    for (const auto &[tool, button] : m_toolButtons)
+        button->setToolTip(toolTip(tool));
+}
+
+void ContentView::synchronizePanels()
+{
+    const bool properties = showsPanel(propertiesKey), layers = showsPanel(layersKey);
+    m_propertiesPanel->setVisible(properties);
+    m_layersPanel->setVisible(layers);
+    m_dock->setVisible(properties || layers);
+    findChild<QWidget *>(QStringLiteral("panelEdge"))->setVisible(properties || layers);
+}
+
+// Shows what the session holds: every line compares, then sets.
+void ContentView::synchronize()
+{
+    showHeader(m_session.tool());
+    for (const auto &[tool, button] : m_toolButtons)
+        button->setChecked(m_session.tool() == tool);
+    showWelcome(!m_session.hasDocument());
+    const std::optional<VectorDocument> &document = m_session.document();
+    for (QLabel *label : {m_zoom, m_pointer, m_artboard, m_selection})
+        label->setVisible(document.has_value());
+    if (document) {
+        m_zoom->setText(percent(m_session.viewport.zoom()));
+        const QLocale english(QLocale::English, QLocale::UnitedStates);
+        m_artboard->setText(QStringLiteral("%1 × %2 pt").arg(english.toString(document->size.width(), 'g', 6), english.toString(document->size.height(), 'g', 6)));
+        const size_t count = m_session.selection().size();
+        m_selection->setText(count == 0 ? QStringLiteral("No selection") : count == 1 ? QStringLiteral("1 object selected")
+                                                                                     : QStringLiteral("%1 objects selected").arg(count));
+    }
+    m_hint->setText(document ? hint(m_session.tool()) : QStringLiteral("Ready when you are"));
+}
+
+// No document shows the welcome; a document takes keys.
+void ContentView::showWelcome(bool shown)
+{
+    if (shown == (m_welcome != nullptr))
+        return;
+    if (!shown) {
+        m_welcome->hide();
+        m_welcome->deleteLater();
+        m_welcome = nullptr;
+        m_canvas->setFocus(Qt::OtherFocusReason);
+        return;
+    }
+    m_welcome = new NewDocumentSheet(
+        [this](QSizeF size) {
+            if (m_workspace)
+                m_workspace->createDocument(size);
+            else
+                m_session.createDocument(size);
+        },
+        [this] {
+            if (m_workspace)
+                m_workspace->open();
+        },
+        [this](const QString &path) {
+            if (m_workspace)
+                m_workspace->openFile(path);
+        },
+        this);
+    m_canvasSlot->addWidget(m_welcome, 0, 0, Qt::AlignCenter);
+    m_welcome->show();
+}
+
+void ContentView::showHeader(Tool tool)
+{
+    // Hand and Zoom share a bar; others have their own.
+    if (m_shownTool && ToolHeaders::family(*m_shownTool) == ToolHeaders::family(tool))
+        return;
+    m_shownTool = tool;
+    delete m_header;
+    m_header = ToolHeaders::make(m_session, tool, this);
+    m_header->setObjectName(QStringLiteral("toolHeader"));
+    m_column->insertWidget(0, m_header);
+    // A layout shows a late child only later: show now.
+    m_header->show();
+}

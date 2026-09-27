@@ -1,4 +1,5 @@
 #pragma once
+#include "Document/EditorSession.h"
 #include <QHash>
 #include <QKeySequence>
 #include <QObject>
@@ -42,6 +43,8 @@ struct ShortcutDefinition {
     QString id() const { return group + QLatin1Char(':') + title; }
     bool isMenu() const { return group == QLatin1String("Menus"); }
     static const std::vector<ShortcutDefinition> &all();
+    // The tool a plain canvas key picks, by original chord.
+    static std::optional<Tool> tool(const ShortcutChord &chord);
 };
 
 // Swift's ShortcutSettings: overrides, kept in QSettings.

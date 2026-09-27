@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Omastrator
+GenericName=Vector Illustration
+Comment=Vector illustration for Linux, made for Omarchy
+Exec=omastrator %F
+Icon=io.github.iretonsean.Omastrator
+Terminal=false
+Categories=Graphics;VectorGraphics;
+MimeType=application/x-omastrator;image/svg+xml;
+StartupWMClass=Omastrator

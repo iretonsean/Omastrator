@@ -7,6 +7,7 @@
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace {
 QLabel *headline(const QString &text, QWidget *parent)
@@ -115,6 +116,10 @@ KeyboardShortcutsSheet::KeyboardShortcutsSheet(std::function<void()> close, QWid
     rows->setContentsMargins(0, 0, 8, 0);
     rows->setSpacing(6);
     for (const QString &group : {QStringLiteral("Menus"), QStringLiteral("Canvas & Layers"), QStringLiteral("Text Editing")}) {
+        // A group without keys shows no heading.
+        if (std::none_of(ShortcutDefinition::all().begin(), ShortcutDefinition::all().end(),
+                         [&](const ShortcutDefinition &definition) { return definition.group == group; }))
+            continue;
         rows->addSpacing(8);
         rows->addWidget(headline(group, list));
         for (const ShortcutDefinition &definition : ShortcutDefinition::all()) {
@@ -145,11 +150,9 @@ KeyboardShortcutsSheet::KeyboardShortcutsSheet(std::function<void()> close, QWid
     rows->addWidget(words(QStringLiteral("Text fields keep their standard editing keys. Dialogs share the Apply and Cancel assignments above. "
                                          "Numeric fields use Up and Down, with Shift for larger steps. The shortcut editor itself always "
                                          "uses Return to save and Esc to cancel when not recording."), list));
-    rows->addWidget(words(QStringLiteral("Alt temporarily selects the eyedropper in painting tools. Shift constrains shapes and movement or adds to "
-                                         "a selection; Alt subtracts from selections or draws from the centre. Ctrl-drag moves selected pixels; "
-                                         "Ctrl-Alt-drag copies them. Alt-drag duplicates layers, folders and effects; Alt-click at a layer boundary "
-                                         "toggles clipping. Ctrl-click a thumbnail loads its selection. Ctrl bypasses snapping. Right-drag adjusts "
-                                         "brush size. Modifier-and-mouse gestures are fixed."), list));
+    rows->addWidget(words(QStringLiteral("Shift constrains shapes to squares, circles and 45° angles, and adds to a selection. "
+                                         "Alt draws shapes from their centre and duplicates what you drag. Space pans while held. "
+                                         "Modifier-and-mouse gestures are fixed."), list));
     rows->addStretch(1);
     scroll->setWidget(list);
     column->addWidget(scroll);

@@ -103,7 +103,7 @@ private slots:
         const QString path = dir.filePath(QStringLiteral("other.omai"));
         QFile file(path);
         QVERIFY(file.open(QIODevice::WriteOnly));
-        file.write(R"({"format": "omaillustrator", "version": 99, "width": 10, "height": 10})");
+        file.write(R"({"format": "omastrator", "version": 99, "width": 10, "height": 10})");
         file.close();
         try {
             ProjectStore::read(path);

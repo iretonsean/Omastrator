@@ -1,0 +1,277 @@
+#include "IO/ImageImporter.h"
+#include "IO/ProjectStore.h"
+#include "IO/SvgExporter.h"
+#include "IO/SvgImporter.h"
+#include "Logging.h"
+#include "UI/ExportSheet.h"
+#include "UI/ProjectWorkspace.h"
+#include <QDialog>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QVBoxLayout>
+
+namespace {
+bool samePlace(const std::optional<QString> &path, const QString &other)
+{
+    const auto resolved = [](const QString &place) {
+        const QString canonical = QFileInfo(place).canonicalFilePath();
+        return canonical.isEmpty() ? QFileInfo(place).absoluteFilePath() : canonical;
+    };
+    return path && resolved(*path) == resolved(other);
+}
+
+bool hasSuffix(const QString &path, const QString &suffix)
+{
+    return QFileInfo(path).suffix().compare(suffix, Qt::CaseInsensitive) == 0;
+}
+
+// A raster image opens on an artboard its size.
+VectorDocument imageDocument(const QImage &image, const QString &name)
+{
+    VectorDocument document = VectorDocument::blank(QSizeF(image.size()));
+    VectorObject placed;
+    placed.kind = ObjectKind::image;
+    placed.name = name;
+    placed.image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    document.insert(placed, document.layers().back());
+    return document;
+}
+}
+
+QStringList ProjectWorkspace::openFilters()
+{
+    QStringList filters{QStringLiteral("Omastrator documents (*.%1)").arg(QLatin1String(ProjectStore::extension))};
+    filters << ImageImporter::nameFilters();
+    // One filter with every pattern comes first.
+    QStringList patterns;
+    static const QRegularExpression inside(QStringLiteral("\\(([^)]*)\\)"));
+    for (const QString &filter : filters) {
+        const QRegularExpressionMatch match = inside.match(filter);
+        for (const QString &pattern : match.captured(1).split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+            if (!patterns.contains(pattern))
+                patterns << pattern;
+        }
+    }
+    filters.prepend(QStringLiteral("All supported files (%1)").arg(patterns.join(QLatin1Char(' '))));
+    return filters;
+}
+
+bool ProjectWorkspace::openFile(const QString &path)
+{
+    for (const std::shared_ptr<ProjectTab> &existing : m_tabs) {
+        if (samePlace(existing->path, path)) {
+            m_selectedID = existing->id;
+            emit changed();
+            return true;
+        }
+    }
+    const bool native = hasSuffix(path, QLatin1String(ProjectStore::extension));
+    VectorDocument document;
+    try {
+        if (native)
+            document = ProjectStore::read(path);
+        else if (ImageImporter::isVector(path))
+            document = SvgImporter::read(path);
+        else
+            document = imageDocument(ImageImporter::read(path), QFileInfo(path).fileName());
+    } catch (const FileError &error) {
+        showError(QStringLiteral("Couldn’t open “%1”").arg(QFileInfo(path).fileName()), error.message());
+        return false;
+    }
+    // Loaded apart: a failed open leaves no broken tab.
+    const auto opened = std::make_shared<ProjectTab>(ProjectTab::nameWithoutSuffix(path));
+    opened->session.loadDocument(std::move(document));
+    if (native)
+        opened->path = QFileInfo(path).absoluteFilePath();
+    adopt(opened);
+    noteRecent(path);
+    qCInfo(lcIO).noquote() << "opened" << path;
+    return true;
+}
+
+bool ProjectWorkspace::saveTo(ProjectTab &tab, const QString &path)
+{
+    if (!tab.session.hasDocument())
+        return false;
+    try {
+        ProjectStore::write(*tab.session.document(), path);
+    } catch (const FileError &error) {
+        showError(QStringLiteral("Couldn’t save “%1”").arg(QFileInfo(path).fileName()), error.message());
+        return false;
+    }
+    tab.path = QFileInfo(path).absoluteFilePath();
+    tab.session.markSaved();
+    noteRecent(path);
+    emit changed();
+    return true;
+}
+
+// SVG arrives as one group; pictures as image objects.
+bool ProjectWorkspace::placeFile(const QString &path)
+{
+    EditorSession &session = current().session;
+    if (!session.hasDocument())
+        return false;
+    const QString name = QFileInfo(path).fileName();
+    try {
+        if (!ImageImporter::isVector(path)) {
+            session.placeImage(ImageImporter::read(path), name);
+            return true;
+        }
+        const VectorDocument imported = SvgImporter::read(path);
+        session.beginEdit(QStringLiteral("Place"));
+        VectorObject group;
+        group.kind = ObjectKind::group;
+        group.name = name;
+        const QUuid groupID = session.addObject(group, QStringLiteral("Place"));
+        // Parents come first; each object tops its own parent.
+        for (const VectorObject &object : imported.objects) {
+            if (object.kind == ObjectKind::layer)
+                continue;
+            const QUuid parent = imported.find(object.parentID.value())->kind == ObjectKind::layer ? groupID : object.parentID.value();
+            const QUuid id = session.addObject(object, QStringLiteral("Place"));
+            session.moveObject(id, parent, -1);
+        }
+        session.select({groupID});
+        const QPointF middle(session.document()->size.width() / 2, session.document()->size.height() / 2);
+        const QPointF shift = middle - session.selectionBounds().center();
+        session.transformSelection(QTransform::fromTranslate(shift.x(), shift.y()), QStringLiteral("Place"));
+        session.endEdit();
+    } catch (const FileError &error) {
+        showError(QStringLiteral("Couldn’t place “%1”").arg(name), error.message());
+        return false;
+    }
+    return true;
+}
+
+bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format format, const RasterOptions &options)
+{
+    const std::optional<VectorDocument> &document = current().session.document();
+    if (!document)
+        return false;
+    try {
+        switch (format) {
+        case DocumentExporter::Format::pdf: DocumentExporter::writePdf(*document, path); break;
+        case DocumentExporter::Format::png: DocumentExporter::writePng(*document, path, options.scale, options.transparent); break;
+        case DocumentExporter::Format::jpeg: DocumentExporter::writeJpeg(*document, path, options.scale, options.quality); break;
+        case DocumentExporter::Format::svg: SvgExporter::write(*document, path); break;
+        }
+    } catch (const FileError &error) {
+        showError(QStringLiteral("Couldn’t export “%1”").arg(QFileInfo(path).fileName()), error.message());
+        return false;
+    }
+    qCInfo(lcIO).noquote() << "exported" << path;
+    return true;
+}
+
+void ProjectWorkspace::open()
+{
+    auto *panel = new QFileDialog(window, QStringLiteral("Open"));
+    panel->setAttribute(Qt::WA_DeleteOnClose);
+    panel->setFileMode(QFileDialog::ExistingFiles);
+    panel->setNameFilters(openFilters());
+    connect(panel, &QDialog::finished, this, [this, panel](int result) {
+        if (result == QDialog::Accepted)
+            receive(panel->selectedFiles());
+    });
+    panel->open();
+}
+
+void ProjectWorkspace::save(QUuid id, bool asNew, std::function<void(bool)> done)
+{
+    const std::shared_ptr<ProjectTab> saving = tab(id);
+    if (!saving || !saving->session.hasDocument()) {
+        finish(done, false);
+        return;
+    }
+    if (!asNew && saving->path) {
+        finish(done, saveTo(*saving, *saving->path));
+        return;
+    }
+    const QString suffix = QLatin1String(ProjectStore::extension);
+    auto *panel = new QFileDialog(window, asNew ? QStringLiteral("Save As") : QStringLiteral("Save"));
+    panel->setAttribute(Qt::WA_DeleteOnClose);
+    panel->setAcceptMode(QFileDialog::AcceptSave);
+    panel->setNameFilter(QStringLiteral("Omastrator document (*.%1)").arg(suffix));
+    panel->setDefaultSuffix(suffix);
+    panel->selectFile(saving->title() + QLatin1Char('.') + suffix);
+    connect(panel, &QDialog::finished, this, [this, panel, saving, suffix, done](int result) {
+        QString chosen = panel->selectedFiles().value(0);
+        if (result != QDialog::Accepted || chosen.isEmpty()) {
+            finish(done, false);
+            return;
+        }
+        if (!hasSuffix(chosen, suffix))
+            chosen += QLatin1Char('.') + suffix;
+        finish(done, saveTo(*saving, chosen));
+    });
+    panel->open();
+}
+
+void ProjectWorkspace::place()
+{
+    if (!current().session.hasDocument())
+        return;
+    auto *panel = new QFileDialog(window, QStringLiteral("Place"));
+    panel->setAttribute(Qt::WA_DeleteOnClose);
+    panel->setFileMode(QFileDialog::ExistingFiles);
+    panel->setNameFilters(ImageImporter::nameFilters());
+    connect(panel, &QDialog::finished, this, [this, panel](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        for (const QString &path : panel->selectedFiles())
+            placeFile(path);
+    });
+    panel->open();
+}
+
+QString ProjectWorkspace::suggestedName(const QString &suffix) const
+{
+    return current().title() + QLatin1Char('.') + suffix;
+}
+
+void ProjectWorkspace::exportAs(DocumentExporter::Format format)
+{
+    if (!current().session.hasDocument())
+        return;
+    const auto [filter, suffix] = [format]() -> std::pair<QString, QString> {
+        switch (format) {
+        case DocumentExporter::Format::pdf: return {QStringLiteral("PDF document (*.pdf)"), QStringLiteral("pdf")};
+        case DocumentExporter::Format::png: return {QStringLiteral("PNG image (*.png)"), QStringLiteral("png")};
+        case DocumentExporter::Format::jpeg: return {QStringLiteral("JPEG image (*.jpg *.jpeg)"), QStringLiteral("jpg")};
+        case DocumentExporter::Format::svg: return {QStringLiteral("SVG image (*.svg)"), QStringLiteral("svg")};
+        }
+        return {};
+    }();
+    const auto choosePath = [this, format, filter, suffix](RasterOptions options) {
+        auto *panel = new QFileDialog(window, QStringLiteral("Export"));
+        panel->setAttribute(Qt::WA_DeleteOnClose);
+        panel->setAcceptMode(QFileDialog::AcceptSave);
+        panel->setNameFilter(filter);
+        panel->setDefaultSuffix(suffix);
+        panel->selectFile(suggestedName(suffix));
+        connect(panel, &QDialog::finished, this, [this, panel, format, options](int result) {
+            if (result == QDialog::Accepted && !panel->selectedFiles().isEmpty())
+                exportTo(panel->selectedFiles().constFirst(), format, options);
+        });
+        panel->open();
+    };
+    if (format == DocumentExporter::Format::pdf || format == DocumentExporter::Format::svg) {
+        choosePath({});
+        return;
+    }
+    // Pictures ask their size and quality first, window-modal.
+    auto *dialog = new QDialog(window);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowModality(Qt::WindowModal);
+    dialog->setWindowTitle(format == DocumentExporter::Format::png ? QStringLiteral("Export PNG") : QStringLiteral("Export JPEG"));
+    auto *layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(new ExportSheet(*current().session.document(), format, [dialog, choosePath](std::optional<RasterOptions> chosen) {
+        dialog->done(chosen ? QDialog::Accepted : QDialog::Rejected);
+        if (chosen)
+            choosePath(*chosen);
+    }, dialog));
+    dialog->open();
+}

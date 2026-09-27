@@ -79,7 +79,7 @@ void writePdf(const VectorDocument &document, const QString &path)
     buffer.open(QIODevice::WriteOnly);
     {
         QPdfWriter writer(&buffer);
-        writer.setCreator(QStringLiteral("OmaIllustrator"));
+        writer.setCreator(QStringLiteral("Omastrator"));
         writer.setTitle(QFileInfo(path).completeBaseName());
         // One device unit per point: document coordinates draw as they are.
         writer.setResolution(72);

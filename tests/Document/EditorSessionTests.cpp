@@ -197,7 +197,11 @@ private slots:
         EditorSession session;
         session.createDocument({20, 20});
         session.setDefaultFill(Paint::solid(Qt::red));
-        session.setDefaultStroke({Paint::none()});
+        {
+            StrokeStyle none;
+            none.paint = Paint::none();
+            session.setDefaultStroke(none);
+        }
         rectangle(session, {0, 0, 10, 20});
         const QImage image = VectorRenderer::render(*session.document(), 1, false);
         QCOMPARE(image.pixelColor(5, 10), QColor(Qt::red));
@@ -231,7 +235,11 @@ private slots:
     {
         EditorSession session;
         session.createDocument({40, 20});
-        session.setDefaultStroke({Paint::none()});
+        {
+            StrokeStyle none;
+            none.paint = Paint::none();
+            session.setDefaultStroke(none);
+        }
         session.setDefaultFill(Paint::solid(Qt::blue));
         const QUuid art = rectangle(session, {0, 0, 40, 20});
         const QUuid clip = rectangle(session, {0, 0, 20, 20});
