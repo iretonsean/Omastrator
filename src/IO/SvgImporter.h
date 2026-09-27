@@ -3,11 +3,17 @@
 #include "IO/FileError.h"
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 
-// SVG in, through nanosvg: every shape becomes an editable path with its fill,
-// stroke and opacity. Text arrives as outlines; filters and masks are dropped.
+// SVG in: nanosvg reads the shapes and their paint; the XML itself gives the
+// layers, groups, names, text, images and clip groups. Filters, masks and
+// <use> copies can't be represented and are left out, with a warning each.
 namespace SvgImporter {
 // A whole document: the SVG's viewBox (or width and height) is the artboard.
-VectorDocument read(const QString &path);
-VectorDocument parse(const QByteArray &svg);
+// Top-level shapes land in a layer named after the file; relative image links
+// resolve against its folder.
+VectorDocument read(const QString &path, QStringList *warnings = nullptr);
+VectorDocument parse(const QByteArray &svg, QStringList *warnings = nullptr);
+// What the last read or parse on this thread left out, one sentence each.
+QStringList lastWarnings();
 }

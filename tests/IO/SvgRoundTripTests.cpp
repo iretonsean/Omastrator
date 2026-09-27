@@ -45,6 +45,29 @@ private:
         return QLineF(a, b).length() < 1e-3;
     }
 
+    static bool near(const QTransform &a, const QTransform &b)
+    {
+        return near(a.map(QPointF(0, 0)), b.map(QPointF(0, 0))) && near(a.map(QPointF(1, 0)), b.map(QPointF(1, 0)))
+               && near(a.map(QPointF(0, 1)), b.map(QPointF(0, 1)));
+    }
+
+    static const VectorObject *find(const VectorDocument &document, const QString &name, ObjectKind kind)
+    {
+        for (const VectorObject &object : document.objects) {
+            if (object.name == name && object.kind == kind)
+                return &object;
+        }
+        return nullptr;
+    }
+
+    static VectorObject container(ObjectKind kind, const QString &name)
+    {
+        VectorObject object;
+        object.kind = kind;
+        object.name = name;
+        return object;
+    }
+
     static VectorDocument roundTrip(const VectorDocument &document, const SvgExporter::Options &options = {})
     {
         return SvgImporter::parse(SvgExporter::serialize(document, options));
@@ -221,6 +244,218 @@ private slots:
         const VectorDocument read = SvgImporter::parse(svg.toUtf8());
         QVERIFY(!named(read, QStringLiteral("Mask")));
         QVERIFY(named(read, QStringLiteral("Inside")));
+    }
+
+    void layersGroupsAndNamesSurvive()
+    {
+        VectorDocument document = VectorDocument::blank({200, 200});
+        document.find(document.layers().front())->name = QStringLiteral("Background & Sky");
+        add(document, shape(QStringLiteral("Sky"), Shapes::rectangle({0, 0, 200, 100}), Paint::solid(Qt::cyan)));
+        VectorObject art = container(ObjectKind::layer, QStringLiteral("Art"));
+        art.opacity = 0.75;
+        art.blendMode = LayerBlendMode::multiply;
+        const QUuid artID = art.id;
+        document.objects.push_back(art);
+        VectorObject outer = container(ObjectKind::group, QStringLiteral("Face"));
+        outer.opacity = 0.5;
+        outer.blendMode = LayerBlendMode::colorDodge;
+        const QUuid outerID = add(document, outer, artID);
+        const QUuid innerID = add(document, container(ObjectKind::group, QStringLiteral("Eyes")), outerID);
+        VectorObject eye = shape(QStringLiteral("Left eye"), Shapes::ellipse({50, 50, 10, 10}), Paint::solid(Qt::black));
+        eye.opacity = 0.25;
+        eye.blendMode = LayerBlendMode::screen;
+        add(document, eye, innerID);
+        add(document, shape(QStringLiteral("Right eye"), Shapes::ellipse({80, 50, 10, 10}), Paint::solid(Qt::black)), innerID);
+        add(document, shape(QStringLiteral("Mouth"), Shapes::rectangle({50, 80, 40, 5}), Paint::solid(Qt::red)), outerID);
+
+        QStringList warnings;
+        const VectorDocument read = SvgImporter::parse(SvgExporter::serialize(document), &warnings);
+        QVERIFY(warnings.isEmpty());
+        const std::vector<QUuid> layers = read.layers();
+        QCOMPARE(layers.size(), size_t(2));
+        QCOMPARE(read.find(layers[0])->name, QStringLiteral("Background & Sky"));
+        const VectorObject *artRead = read.find(layers[1]);
+        QCOMPARE(artRead->name, QStringLiteral("Art"));
+        QVERIFY(std::abs(artRead->opacity - 0.75) < 1e-6);
+        QCOMPARE(artRead->blendMode, LayerBlendMode::multiply);
+        const VectorObject *face = find(read, QStringLiteral("Face"), ObjectKind::group);
+        QVERIFY(face);
+        QCOMPARE(face->parentID, artRead->id);
+        QCOMPARE(face->opacity, 0.5);
+        QCOMPARE(face->blendMode, LayerBlendMode::colorDodge);
+        const VectorObject *eyes = find(read, QStringLiteral("Eyes"), ObjectKind::group);
+        QCOMPARE(eyes->parentID, face->id);
+        const std::vector<QUuid> order = read.children(face->id);
+        QCOMPARE(order.size(), size_t(2));
+        QCOMPARE(order.front(), eyes->id);
+        QCOMPARE(read.find(order.back())->name, QStringLiteral("Mouth"));
+        const VectorObject *left = named(read, QStringLiteral("Left eye"));
+        QCOMPARE(left->parentID, eyes->id);
+        // Group opacity isn't multiplied into the children.
+        QCOMPARE(left->opacity, 0.25);
+        QCOMPARE(left->blendMode, LayerBlendMode::screen);
+        QCOMPARE(named(read, QStringLiteral("Right eye"))->opacity, 1.0);
+        QCOMPARE(named(read, QStringLiteral("Sky"))->parentID, layers[0]);
+    }
+
+    void textSurvives()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.name = QStringLiteral("Headline");
+        text.text.text = QStringLiteral("Big  <news>\n\n  indented & more");
+        text.text.family = QStringLiteral("DejaVu Serif");
+        text.text.size = 30.5;
+        text.text.bold = true;
+        text.text.italic = true;
+        text.text.alignment = TextAlignment::center;
+        text.text.leading = 1.5;
+        text.text.tracking = 2;
+        text.fill = Paint::solid(QColor(10, 20, 30, 128));
+        text.stroke.paint = Paint::solid(QColor(200, 0, 0));
+        text.stroke.width = 1.5;
+        text.opacity = 0.6;
+        text.blendMode = LayerBlendMode::overlay;
+        text.transform = QTransform().rotate(30) * QTransform::fromScale(2, 1.5) * QTransform::fromTranslate(120, 80);
+        add(document, text);
+        VectorObject right = text;
+        right.id = QUuid::createUuid();
+        right.name = QStringLiteral("Right");
+        right.text = TextContent();
+        right.text.text = QStringLiteral("Aligned");
+        right.text.alignment = TextAlignment::right;
+        right.opacity = 1;
+        right.blendMode = LayerBlendMode::normal;
+        right.stroke.paint = Paint::none();
+        right.transform = QTransform::fromTranslate(300, 250);
+        add(document, right);
+
+        const VectorDocument read = roundTrip(document);
+        const VectorObject *after = find(read, QStringLiteral("Headline"), ObjectKind::text);
+        QVERIFY(after);
+        QCOMPARE(after->text.text, text.text.text);
+        QCOMPARE(after->text.family, text.text.family);
+        QCOMPARE(after->text.size, text.text.size);
+        QVERIFY(after->text.bold);
+        QVERIFY(after->text.italic);
+        QCOMPARE(after->text.alignment, TextAlignment::center);
+        QCOMPARE(after->text.leading, 1.5);
+        QCOMPARE(after->text.tracking, 2.0);
+        QCOMPARE(after->fill.color.rgb(), text.fill.color.rgb());
+        QVERIFY(std::abs(after->fill.color.alphaF() - 0.5) < 0.01);
+        QCOMPARE(after->stroke.paint.color, QColor(200, 0, 0));
+        QVERIFY(std::abs(after->stroke.width - 1.5) < 1e-4);
+        QVERIFY(std::abs(after->opacity - 0.6) < 1e-6);
+        QCOMPARE(after->blendMode, LayerBlendMode::overlay);
+        QVERIFY(near(after->transform, text.transform));
+
+        const VectorObject *aligned = find(read, QStringLiteral("Right"), ObjectKind::text);
+        QVERIFY(aligned);
+        QCOMPARE(aligned->text, right.text);
+        QVERIFY(!aligned->stroke.isVisible());
+        QVERIFY(near(aligned->transform, right.transform));
+    }
+
+    void textGradientSurvives()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.name = QStringLiteral("Shiny");
+        text.text.text = QStringLiteral("Gradient");
+        text.text.size = 40;
+        text.fill = Paint::linear(Qt::red, Qt::blue);
+        text.fill.start = {0.2, 0.1};
+        text.fill.end = {0.8, 0.9};
+        text.stroke.paint = Paint::none();
+        text.transform = QTransform().rotate(-20) * QTransform::fromTranslate(50, 150);
+        add(document, text);
+
+        const VectorDocument read = roundTrip(document);
+        const VectorObject *after = find(read, QStringLiteral("Shiny"), ObjectKind::text);
+        QVERIFY(after);
+        QCOMPARE(after->fill.kind, PaintKind::linearGradient);
+        QVERIFY2(QLineF(after->fill.start, text.fill.start).length() < 1e-2,
+                 qPrintable(QStringLiteral("%1,%2").arg(after->fill.start.x()).arg(after->fill.start.y())));
+        QVERIFY(QLineF(after->fill.end, text.fill.end).length() < 1e-2);
+        QCOMPARE(after->fill.stops.size(), size_t(2));
+    }
+
+    void imagesSurvive()
+    {
+        VectorDocument document = VectorDocument::blank({300, 300});
+        VectorObject image;
+        image.kind = ObjectKind::image;
+        image.name = QStringLiteral("Photo");
+        image.image = QImage(3, 2, QImage::Format_ARGB32);
+        image.image.fill(Qt::transparent);
+        image.image.setPixelColor(0, 0, QColor(255, 0, 0));
+        image.image.setPixelColor(2, 1, QColor(0, 0, 255, 128));
+        image.transform = QTransform::fromScale(10, 20) * QTransform().rotate(15) * QTransform::fromTranslate(40, 60);
+        image.opacity = 0.8;
+        add(document, image);
+
+        const VectorDocument read = roundTrip(document);
+        const VectorObject *after = find(read, QStringLiteral("Photo"), ObjectKind::image);
+        QVERIFY(after);
+        QCOMPARE(after->image.size(), QSize(3, 2));
+        QCOMPARE(after->image.pixelColor(0, 0), QColor(255, 0, 0));
+        QCOMPARE(after->image.pixelColor(2, 1).alpha(), 128);
+        QCOMPARE(after->image.pixelColor(1, 0).alpha(), 0);
+        QVERIFY(near(after->transform, image.transform));
+        QVERIFY(std::abs(after->opacity - 0.8) < 1e-6);
+        QVERIFY(!read.find(*after->parentID)->isClipGroup);
+    }
+
+    void clipGroupsSurvive()
+    {
+        VectorDocument document = VectorDocument::blank({300, 300});
+        VectorObject group = container(ObjectKind::group, QStringLiteral("Porthole"));
+        group.isClipGroup = true;
+        group.opacity = 0.9;
+        const QUuid groupID = add(document, group);
+        VectorPath ring = Shapes::ellipse({0, 0, 100, 100});
+        ring.contours.push_back(Shapes::ellipse({25, 25, 50, 50}).contours.front());
+        ring.fillRule = Qt::OddEvenFill;
+        add(document, shape(QStringLiteral("Hole"), ring, Paint::none()), groupID);
+        add(document, shape(QStringLiteral("Sea"), Shapes::rectangle({-50, -50, 200, 200}), Paint::solid(Qt::blue)), groupID);
+        VectorObject text;
+        text.kind = ObjectKind::text;
+        text.name = QStringLiteral("Label");
+        text.text.text = QStringLiteral("Ahoy");
+        text.fill = Paint::solid(Qt::white);
+        text.stroke.paint = Paint::none();
+        text.transform = QTransform::fromTranslate(30, 50);
+        add(document, text, groupID);
+
+        const VectorDocument read = roundTrip(document);
+        const VectorObject *after = find(read, QStringLiteral("Porthole"), ObjectKind::group);
+        QVERIFY(after);
+        QVERIFY(after->isClipGroup);
+        QVERIFY(std::abs(after->opacity - 0.9) < 1e-6);
+        const std::vector<QUuid> inside = read.children(after->id);
+        QCOMPARE(inside.size(), size_t(3));
+        const VectorObject *clip = read.find(inside[0]);
+        QCOMPARE(clip->kind, ObjectKind::path);
+        QVERIFY(!clip->fill.isVisible());
+        QCOMPARE(clip->path.fillRule, Qt::OddEvenFill);
+        QCOMPARE(clip->path.contours.size(), size_t(2));
+        QVERIFY(near(clip->path.bounds(), {0, 0, 100, 100}));
+        QCOMPARE(read.find(inside[1])->name, QStringLiteral("Sea"));
+        QCOMPARE(read.find(inside[2])->kind, ObjectKind::text);
+        QVERIFY(near(read.find(inside[2])->transform, text.transform));
+    }
+
+    void hiddenShapesInTheSvgArriveHidden()
+    {
+        // Export leaves hidden objects out; hidden ones written by other apps stay, hidden.
+        const VectorDocument read = SvgImporter::parse("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>"
+            "<g id='Off' style='display:none'><text id='Note' y='5'>Hi</text><image id='Pic' width='1' height='1' href='data:,'/></g></svg>");
+        const VectorObject *layer = read.find(read.layers().front());
+        QCOMPARE(layer->name, QStringLiteral("Off"));
+        QVERIFY(!layer->isVisible);
+        QVERIFY(find(read, QStringLiteral("Note"), ObjectKind::text));
     }
 
     void textAsOutlinesImportsAsPaths()
