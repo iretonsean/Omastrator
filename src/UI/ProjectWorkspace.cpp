@@ -25,11 +25,17 @@ QString ProjectTab::title() const
     return path ? nameWithoutSuffix(*path) : defaultName;
 }
 
+QString ProjectTab::place() const
+{
+    return cloud ? cloud->location.toString() : path.value_or(title());
+}
+
 ProjectWorkspace::ProjectWorkspace()
 {
     const auto first = std::make_shared<ProjectTab>(QStringLiteral("Untitled"));
     m_tabs = {first};
     m_selectedID = first->id;
+    setUpCloud();
 }
 
 std::shared_ptr<ProjectTab> ProjectWorkspace::tab(QUuid id) const
@@ -144,8 +150,15 @@ void ProjectWorkspace::removeTab(QUuid id)
 
 void ProjectWorkspace::confirmClose(const std::shared_ptr<ProjectTab> &tab, std::function<void(bool)> then)
 {
+    // Saved or not, an upload still under way is settled next.
+    const auto settled = [this, tab, then](bool confirmed) {
+        if (confirmed)
+            settleUpload(tab, then);
+        else
+            then(false);
+    };
     if (!tab->session.hasDocument() || !tab->session.isModified()) {
-        then(true);
+        settled(true);
         return;
     }
     m_selectedID = tab->id;
@@ -159,11 +172,11 @@ void ProjectWorkspace::confirmClose(const std::shared_ptr<ProjectTab> &tab, std:
     const QPushButton *save = alert->addButton(QStringLiteral("Save"), QMessageBox::AcceptRole);
     alert->addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
     const QPushButton *discard = alert->addButton(QStringLiteral("Don’t Save"), QMessageBox::DestructiveRole);
-    connect(alert, &QDialog::finished, this, [this, alert, save, discard, tab, then] {
+    connect(alert, &QDialog::finished, this, [this, alert, save, discard, tab, then, settled] {
         if (alert->clickedButton() == save)
-            this->save(tab->id, false, then);
+            this->save(tab->id, false, settled);
         else
-            then(alert->clickedButton() == discard);
+            settled(alert->clickedButton() == discard);
     });
     alert->open();
 }
@@ -246,10 +259,18 @@ QStringList ProjectWorkspace::recentFiles()
 void ProjectWorkspace::noteRecent(const QString &path)
 {
     QStringList recent = recentFiles();
-    const QString absolute = QFileInfo(path).absoluteFilePath();
+    // A cloud entry ("work:a.omai") is kept as it is.
+    const QString absolute = !path.startsWith(QLatin1Char('/')) && !QFileInfo::exists(path) && CloudLocation::parse(path) ? path : QFileInfo(path).absoluteFilePath();
     recent.removeAll(absolute);
     recent.prepend(absolute);
     QSettings().setValue(recentKey, recent.mid(0, recentLimit));
+}
+
+void ProjectWorkspace::forgetRecent(const QString &path)
+{
+    QStringList recent = recentFiles();
+    if (recent.removeAll(QFileInfo(path).absoluteFilePath()) > 0)
+        QSettings().setValue(recentKey, recent);
 }
 
 void ProjectWorkspace::clearRecent()

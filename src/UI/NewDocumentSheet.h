@@ -15,8 +15,9 @@ enum class LengthUnit { pt, px, in, mm };
 class NewDocumentSheet : public QWidget {
     Q_OBJECT
 public:
+    // With `onCloud`, a Cloud Storage… button opens the storage sheet.
     NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::function<void()> onOpen, std::function<void(const QString &)> onOpenRecent,
-                     QWidget *parent = nullptr);
+                     QWidget *parent = nullptr, std::function<void()> onCloud = {});
 
     struct Preset {
         const char *name;

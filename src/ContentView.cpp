@@ -369,7 +369,7 @@ void ContentView::showWelcome(bool shown)
             if (m_workspace)
                 m_workspace->openFile(path);
         },
-        this);
+        this, m_workspace ? std::function<void()>([this] { m_workspace->connectCloud(); }) : std::function<void()>());
     m_canvasSlot->addWidget(m_welcome, 0, 0, Qt::AlignCenter);
     m_welcome->show();
 }

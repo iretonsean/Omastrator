@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -145,9 +146,18 @@ void CloudStorage::refreshRemotes()
         // A failed listing keeps what was known: offline doesn't disconnect anyone.
         if (job.succeeded()) {
             m_remotes = parseRemotes(job.output());
+            QVariantMap types;
+            for (const CloudRemote &remote : m_remotes)
+                types.insert(remote.name, remote.type);
+            QSettings().setValue(QStringLiteral("cloud/remoteTypes"), types);
             emit remotesChanged();
         }
     });
+}
+
+QString CloudStorage::rememberedType(const QString &remote)
+{
+    return QSettings().value(QStringLiteral("cloud/remoteTypes")).toMap().value(remote).toString();
 }
 
 CloudJob *CloudStorage::list(const CloudLocation &folder, std::function<void(const QList<CloudEntry> &, const QString &)> done)

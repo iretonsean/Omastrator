@@ -91,6 +91,8 @@ public:
     // "Google Drive" for a drive remote; the remote's own name when two share a service.
     QString serviceName(const QString &remote) const;
     void refreshRemotes();
+    // A remote's type as last listed, kept in settings for badges before rclone answers.
+    static QString rememberedType(const QString &remote);
 
     CloudJob *list(const CloudLocation &folder, std::function<void(const QList<CloudEntry> &, const QString &error)> done);
     // A missing file is a stamp with exists false, not an error.
