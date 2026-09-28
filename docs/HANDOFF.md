@@ -5,6 +5,33 @@ here" just below.**
 
 ## Next session starts here
 
+**Update 2026-09-27 ~23:30.** The author was away from the screen, so the work
+below was checked only in offscreen renders and tests. It's on two branches,
+stacked:
+
+- `feat/graphite-look`, off fix/design-mode-escape;
+- `feat/frames`, off feat/graphite-look. It's pushed and holds frames, auto
+  layout and constraints, with 95 of 95 test suites passing.
+
+The app (feat/frames) is installed and the daemon is running on it.
+
+1. **Once the session is unlocked**, run `scripts/install-local.sh --shell`.
+   That syncs the Graphite island and bar. It was held back because restarting
+   omarchy-shell under the lock screen could kill the lock.
+2. **Ask the author how the Graphite look reads on the real desktop** (see
+   "The Graphite look" below).
+3. **Ask them to try frames and auto layout:**
+   - F draws a frame.
+   - Ctrl+Alt+G frames the selection.
+   - Shift+A adds auto layout.
+   - The Layout section edits it.
+   - Dragging a frame's handles resizes it by its children's constraints.
+4. **Then continue docs/FIGMA-AUDIT.md's build order**, starting with effects.
+5. **Merging:** fix/design-mode-escape, then feat/graphite-look, then
+   feat/frames, with `scripts/merge-branch.sh` each time.
+
+The earlier notes follow.
+
 1. Chromium was started with the extension, and the whole path worked on the
    real machine (2026-09-27 22:19): the extension linked,
    `live start --tab --folder ~/Projects/seanireton.com` joined the
