@@ -585,10 +585,9 @@ void Interpreter::runForm(const Object &formObject, const Dict &callerResources)
     --m_formDepth;
 }
 
-void Interpreter::runInlineImage(const Dict &dict, const QByteArray &rawData, const Dict &resources)
+void Interpreter::runImage(const Object &imageObject, const Dict &resources)
 {
-    const Object streamObject = Object::stream(dict, rawData);
-    const QImage image = decodeImageObject(streamObject, resources);
+    const QImage image = decodeImageObject(imageObject, resources);
     if (image.isNull())
         return;
     VectorObject object;
@@ -601,6 +600,11 @@ void Interpreter::runInlineImage(const Dict &dict, const QByteArray &rawData, co
     object.stroke.paint = Paint::none();
     object.opacity = m_state.fillAlpha;
     m_target.insert(std::move(object), m_state.insertionParent);
+}
+
+void Interpreter::runInlineImage(const Dict &dict, const QByteArray &rawData, const Dict &resources)
+{
+    runImage(Object::stream(dict, rawData), resources);
 }
 
 void Interpreter::beginMarkedContent(const QList<Object> &operands, const Dict &resources)
