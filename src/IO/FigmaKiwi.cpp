@@ -121,6 +121,10 @@ const Definition *Schema::find(const QString &name) const
 }
 
 namespace {
+// Nesting deeper than any real Figma message; a hostile schema can recurse without reading a byte.
+constexpr int maximumDepth = 64;
+// Decompressed output above this is a decompression bomb, not a design file.
+constexpr qsizetype maximumDecompressed = qsizetype(256) << 20;
 constexpr const char *primitiveTypes[] = {"bool", "byte", "int", "uint", "float", "string", "int64", "uint64"};
 constexpr int primitiveCount = 8;
 }
@@ -129,6 +133,9 @@ Schema decodeSchema(const QByteArray &data)
 {
     ByteReader reader(data);
     const quint32 count = reader.readVarUint();
+    // A definition takes at least a name terminator, a kind and a field count.
+    if (qsizetype(count) > reader.remaining() / 3)
+        throw KiwiError("Kiwi schema claims more definitions than it holds.");
     Schema schema;
     schema.definitions.resize(count);
     std::vector<std::vector<qint32>> rawTypes(count);
@@ -140,6 +147,9 @@ Schema decodeSchema(const QByteArray &data)
             throw KiwiError("Unknown Kiwi definition kind.");
         definition.kind = DefinitionKind(kind);
         const quint32 fieldCount = reader.readVarUint();
+        // A field takes at least a name terminator, a type, an array flag and a tag.
+        if (qsizetype(fieldCount) > reader.remaining() / 4)
+            throw KiwiError("Kiwi definition claims more fields than it holds.");
         definition.fields.resize(fieldCount);
         rawTypes[i].resize(fieldCount);
         for (quint32 j = 0; j < fieldCount; ++j) {
@@ -173,28 +183,33 @@ Schema decodeSchema(const QByteArray &data)
 }
 
 namespace {
-QVariant decodeField(ByteReader &reader, const Schema &schema, const QString &typeName);
+QVariant decodeField(ByteReader &reader, const Schema &schema, const QString &typeName, int depth);
 
 // Arrays are a varuint length then that many elements, except a byte array,
 // whose bytes come back as one QByteArray rather than a list of numbers.
-QVariant decodeArray(ByteReader &reader, const Schema &schema, const QString &typeName)
+QVariant decodeArray(ByteReader &reader, const Schema &schema, const QString &typeName, int depth)
 {
     const quint32 length = reader.readVarUint();
     if (typeName == QLatin1String("byte"))
         return reader.readBytes(length);
+    // Every element that can hold anything takes at least a byte, so a longer claim is false.
+    if (qsizetype(length) > reader.remaining())
+        throw KiwiError("Kiwi array is longer than the data.");
     QVariantList list;
-    list.reserve(int(length));
+    list.reserve(qsizetype(length));
     for (quint32 i = 0; i < length; ++i)
-        list.append(decodeField(reader, schema, typeName));
+        list.append(decodeField(reader, schema, typeName, depth));
     return list;
 }
 
-QVariant decodeOne(ByteReader &reader, const Schema &schema, const Definition &definition)
+QVariant decodeOne(ByteReader &reader, const Schema &schema, const Definition &definition, int depth)
 {
+    if (depth > maximumDepth)
+        throw KiwiError("Kiwi data is nested too deeply.");
     if (definition.kind == DefinitionKind::Struct) {
         QVariantMap result;
         for (const Field &field : definition.fields)
-            result.insert(field.name, field.isArray ? decodeArray(reader, schema, field.type) : decodeField(reader, schema, field.type));
+            result.insert(field.name, field.isArray ? decodeArray(reader, schema, field.type, depth + 1) : decodeField(reader, schema, field.type, depth + 1));
         return result;
     }
     // Message: a tag, then that field's value, until a 0 tag closes it.
@@ -206,12 +221,12 @@ QVariant decodeOne(ByteReader &reader, const Schema &schema, const Definition &d
         const Field *field = definition.fieldWithTag(tag);
         if (!field)
             throw KiwiError(QStringLiteral("Message \"%1\" has no field tagged %2.").arg(definition.name).arg(tag).toStdString());
-        result.insert(field->name, field->isArray ? decodeArray(reader, schema, field->type) : decodeField(reader, schema, field->type));
+        result.insert(field->name, field->isArray ? decodeArray(reader, schema, field->type, depth + 1) : decodeField(reader, schema, field->type, depth + 1));
     }
     return result;
 }
 
-QVariant decodeField(ByteReader &reader, const Schema &schema, const QString &typeName)
+QVariant decodeField(ByteReader &reader, const Schema &schema, const QString &typeName, int depth)
 {
     if (typeName == QLatin1String("bool"))
         return reader.readBool();
@@ -238,7 +253,7 @@ QVariant decodeField(ByteReader &reader, const Schema &schema, const QString &ty
             return member->name;
         return value;
     }
-    return decodeOne(reader, schema, *inner);
+    return decodeOne(reader, schema, *inner, depth);
 }
 }
 
@@ -247,7 +262,7 @@ QVariant decodeMessage(ByteReader &reader, const Schema &schema, const QString &
     const Definition *root = schema.find(typeName);
     if (!root)
         throw KiwiError(QStringLiteral("Kiwi schema has no \"%1\" type.").arg(typeName).toStdString());
-    return decodeOne(reader, schema, *root);
+    return decodeOne(reader, schema, *root, 0);
 }
 
 bool canDecompress(const QByteArray &data)
@@ -274,6 +289,10 @@ QByteArray decompress(const QByteArray &data)
 #ifdef OMASTRATOR_HAVE_ZSTD
         const unsigned long long size = ZSTD_getFrameContentSize(data.constData(), size_t(data.size()));
         if (size != ZSTD_CONTENTSIZE_UNKNOWN && size != ZSTD_CONTENTSIZE_ERROR) {
+            if (size > (unsigned long long)maximumDecompressed) {
+                qCWarning(lcIO) << "Figma data claims to decompress past the size limit";
+                return {};
+            }
             QByteArray out(qsizetype(size), Qt::Uninitialized);
             const size_t result = ZSTD_decompress(out.data(), size_t(out.size()), data.constData(), size_t(data.size()));
             if (ZSTD_isError(result))
@@ -298,6 +317,11 @@ QByteArray decompress(const QByteArray &data)
                 return {};
             }
             out.append(chunk.data(), qsizetype(outBuf.pos));
+            if (out.size() > maximumDecompressed) {
+                ZSTD_freeDStream(stream);
+                qCWarning(lcIO) << "Figma data decompressed past the size limit";
+                return {};
+            }
         } while (in.pos < in.size && code != 0);
         ZSTD_freeDStream(stream);
         return out;
@@ -324,6 +348,16 @@ QByteArray decompress(const QByteArray &data)
             return {};
         }
         out.append(chunk.data(), qsizetype(chunk.size() - stream.avail_out));
+        if (out.size() > maximumDecompressed) {
+            inflateEnd(&stream);
+            qCWarning(lcIO) << "Figma data decompressed past the size limit";
+            return {};
+        }
+        // Truncated input: inflate makes no progress and returns Z_OK forever otherwise.
+        if (result == Z_OK && stream.avail_in == 0 && stream.avail_out != 0) {
+            inflateEnd(&stream);
+            return {};
+        }
     } while (result != Z_STREAM_END);
     inflateEnd(&stream);
     return out;

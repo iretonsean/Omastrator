@@ -29,6 +29,8 @@ struct Context {
     std::map<Guid, QUuid> objectFor;
     std::vector<PendingInstance> pendingInstances;
     std::map<QString, QByteArray> imagesByHash;
+    // How deep the recursive walk is now; hostile files nest (or loop) without end.
+    int depth = 0;
 
     void warn(const QString &message);
 };

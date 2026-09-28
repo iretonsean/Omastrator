@@ -139,7 +139,29 @@ once works everywhere:
 - **The personal access token** lives in `~/.config/omastrator/figma.json`,
   mode 0600, via `FigmaImporter::Token` (never in an `.omai`). Preferences
   gets a "Forget Access Token" button; the link sheet asks for one inline,
-  the first time, with a link to where Figma issues it.
+  the first time, with a link to where Figma issues it. A typed token is
+  saved only after Figma accepts it (a mistyped one is never stored behind a
+  hidden field), and `Token::save` returns false when it can't write; the
+  import then warns that the token was used once only. The token file is
+  0600 from the moment it's written (set on the temporary file, before the
+  rename), in a folder created 0700. Requests use
+  `SameOriginRedirectPolicy`, so the token can't follow a redirect off
+  `api.figma.com`.
+- **Hostile input** ends in a `FileError` or a warning, never a crash. Kiwi
+  counts are checked against the bytes left before anything is allocated,
+  decompressed output is capped at 256 MB (a zstd frame that claims more, and
+  a deflate bomb, both fail), Kiwi nesting stops at 64 levels, the mapper
+  stops at 256 levels ("Layers nested deeper than 256 levels were left
+  out."), star and polygon point counts clamp to 3..1000, and
+  `fromKiwiBytes` turns a `std::bad_alloc` into a `FileError`. Tests:
+  `tests/IO/FigmaHostileTests.cpp`.
+- **Paste** has a cheap `recognises` check (the marker in the first 16 KB of
+  the HTML), used by `canPaste()` on every menu refresh, and a full `read`
+  that only Paste runs. What a paste leaves out reaches the user through
+  `EditorSession::pasteLeftOut`, shown by `ProjectWorkspace`.
+- **Several pages** each sit inside their own artboard (artboards go left to
+  right with a gutter, and a page's content is moved to its artboard's
+  origin).
 
 ## Tests (`tests/IO/FigmaImporterTests.cpp`, `tests/IO/ZipReaderTests.cpp`)
 

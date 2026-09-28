@@ -2,6 +2,8 @@
 #include "IO/FigmaMapperInternal.h"
 #include "Logging.h"
 #include <QSizeF>
+#include <algorithm>
+#include <cmath>
 
 namespace FigmaMap {
 
@@ -12,12 +14,32 @@ void Context::warn(const QString &message)
 }
 
 namespace {
+constexpr int maximumDepth = 256;
+
+// Counts one level of nesting for as long as it lives; `tooDeep` says to stop.
+struct DepthGuard {
+    Context &ctx;
+    bool tooDeep;
+    explicit DepthGuard(Context &context) : ctx(context), tooDeep(++context.depth > maximumDepth)
+    {
+        if (tooDeep)
+            ctx.warn(QStringLiteral("Layers nested deeper than %1 levels were left out.").arg(maximumDepth));
+    }
+    ~DepthGuard() { --ctx.depth; }
+};
+
 QSizeF nodeSize(const QVariantMap &node)
 {
     const QVariantMap size = map(node, "size");
     if (!size.isEmpty())
         return {num(size, "x", 1), num(size, "y", 1)};
     return {1, 1};
+}
+
+// A star's or polygon's point count from the file: 3..1000, whatever the file claims.
+int clampedCount(double count)
+{
+    return int(std::clamp(std::isfinite(count) ? count : 3.0, 3.0, 1000.0));
 }
 
 // A non-rectangle, non-ellipse shape's local (untransformed) outline: Kiwi's parametric
@@ -27,12 +49,12 @@ VectorPath localShapePath(Context &ctx, const QVariantMap &node, const QString &
 {
     const QSizeF size = nodeSize(node);
     if (type == QLatin1String("STAR") && node.contains(QStringLiteral("count"))) {
-        const int points = std::max(3, int(num(node, "count", 5)));
+        const int points = clampedCount(num(node, "count", 5));
         const double outer = std::min(size.width(), size.height()) / 2;
         return Shapes::star({size.width() / 2, size.height() / 2}, outer, outer * num(node, "starInnerScale", 0.5), points);
     }
     if (type == QLatin1String("REGULAR_POLYGON") && node.contains(QStringLiteral("count"))) {
-        const int sides = std::max(3, int(num(node, "count", 3)));
+        const int sides = clampedCount(num(node, "count", 3));
         return Shapes::polygon({size.width() / 2, size.height() / 2}, std::min(size.width(), size.height()) / 2, sides);
     }
     if (type == QLatin1String("LINE"))
@@ -44,6 +66,9 @@ VectorPath localShapePath(Context &ctx, const QVariantMap &node, const QString &
 // FIGMA.md: the model has no live boolean node, so this becomes one plain path.
 QPainterPath booleanOutline(Context &ctx, const Guid &guid, const QTransform &parentTransform)
 {
+    const DepthGuard guard(ctx);
+    if (guard.tooDeep)
+        return {};
     const Node &node = ctx.tree.nodes.at(guid);
     const QString type = str(node.fields, "type");
     const QTransform own = matrix(node.fields.value(QStringLiteral("transform"))) * parentTransform;
@@ -153,6 +178,9 @@ void applyCommon(Context &ctx, const QVariantMap &node, VectorObject &object)
 
 std::optional<QUuid> mapNode(Context &ctx, const Guid &guid, const QUuid &parent, const QTransform &parentTransform)
 {
+    const DepthGuard guard(ctx);
+    if (guard.tooDeep)
+        return std::nullopt;
     const auto found = ctx.tree.nodes.find(guid);
     if (found == ctx.tree.nodes.end())
         return std::nullopt;
@@ -281,8 +309,9 @@ VectorDocument map(const Tree &tree, QStringList &warnings)
             mapNode(ctx, child, layerId, {});
         const QRectF bounds = document.bounds(layerId, true);
         const QRectF box = bounds.isValid() ? bounds : QRectF(0, 0, 800, 600);
-        if (bounds.isValid() && (bounds.left() != 0 || bounds.top() != 0)) {
-            const QTransform shift = QTransform::fromTranslate(-bounds.left(), -bounds.top());
+        // Each page's content sits inside its own artboard, at x, not piled at the origin.
+        if (bounds.isValid() && (bounds.left() != x || bounds.top() != 0)) {
+            const QTransform shift = QTransform::fromTranslate(x - bounds.left(), -bounds.top());
             document.transform(layerId, shift);
         }
         Artboard board;

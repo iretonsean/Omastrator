@@ -3,6 +3,7 @@
 #include <QString>
 #include <QStringList>
 #include <cstring>
+#include <optional>
 #include <vector>
 #include <zlib.h>
 
@@ -239,3 +240,117 @@ inline QByteArray kiwiContainer(const QByteArray &schema, const QByteArray &mess
     result += le32(quint32(compressedMessage.size())) + compressedMessage;
     return result;
 }
+
+// The smallest .fig that maps: a schema of Guid, ParentIndex, Vec2, VectorData,
+// Blob, Node and Message, and a message built from addNode() calls. Hostile
+// tests use it to make odd trees and blobs without the big fixture.
+class MinimalFig {
+public:
+    MinimalFig()
+    {
+        writeNode(1, 0, QStringLiteral("CANVAS"), QStringLiteral("Page 1"));
+    }
+
+    // Node `local` under `parent` (0 = the page), of `type`; `count` becomes the STAR/polygon
+    // point count when set, `blob` the vector network it points at.
+    void addNode(quint32 local, quint32 parent, const QString &type, const QString &name = QStringLiteral("n"), std::optional<float> count = {},
+                 std::optional<qint32> blob = {})
+    {
+        writeNode(local + 1, parent == 0 ? 1 : parent + 1, type, name, count, blob);
+    }
+
+    void addBlob(const QByteArray &bytes) { blobs.push_back(bytes); }
+
+    QByteArray file() const { return kiwiContainer(schema(), message()); }
+
+    QByteArray message() const
+    {
+        KiwiWriter root;
+        root.writeVarUint(1);
+        root.writeVarUint(quint32(nodeCount));
+        root.bytes += nodes;
+        if (!blobs.empty()) {
+            root.writeVarUint(2);
+            root.writeVarUint(quint32(blobs.size()));
+            for (const QByteArray &blob : blobs) {
+                KiwiWriter one;
+                one.writeByteArray(blob);
+                root.bytes += one.bytes;
+            }
+        }
+        root.writeVarUint(0);
+        return root.bytes;
+    }
+
+    static QByteArray schema()
+    {
+        KiwiSchemaBuilder s;
+        const int vec2 = s.addStruct(QStringLiteral("Vec2"));
+        s.field(vec2, QStringLiteral("x"), QStringLiteral("float"), 1);
+        s.field(vec2, QStringLiteral("y"), QStringLiteral("float"), 2);
+        const int guid = s.addStruct(QStringLiteral("GUID"));
+        s.field(guid, QStringLiteral("sessionID"), QStringLiteral("uint"), 1);
+        s.field(guid, QStringLiteral("localID"), QStringLiteral("uint"), 2);
+        const int parent = s.addStruct(QStringLiteral("ParentIndex"));
+        s.fieldOfType(parent, QStringLiteral("guid"), guid, 1);
+        s.field(parent, QStringLiteral("position"), QStringLiteral("string"), 2);
+        const int vectorData = s.addStruct(QStringLiteral("VectorData"));
+        s.field(vectorData, QStringLiteral("vectorNetworkBlob"), QStringLiteral("int"), 1);
+        s.fieldOfType(vectorData, QStringLiteral("normalizedSize"), vec2, 2);
+        const int blob = s.addStruct(QStringLiteral("Blob"));
+        s.field(blob, QStringLiteral("bytes"), QStringLiteral("byte"), 1, true);
+        const int node = s.addMessage(QStringLiteral("Node"));
+        s.fieldOfType(node, QStringLiteral("guid"), guid, 1);
+        s.fieldOfType(node, QStringLiteral("parentIndex"), parent, 2);
+        s.field(node, QStringLiteral("type"), QStringLiteral("string"), 3);
+        s.field(node, QStringLiteral("name"), QStringLiteral("string"), 4);
+        s.fieldOfType(node, QStringLiteral("size"), vec2, 7);
+        s.fieldOfType(node, QStringLiteral("vectorData"), vectorData, 13);
+        s.field(node, QStringLiteral("count"), QStringLiteral("float"), 16);
+        const int message = s.addMessage(QStringLiteral("Message"));
+        s.fieldOfType(message, QStringLiteral("nodeChanges"), node, 1, true);
+        s.fieldOfType(message, QStringLiteral("blobs"), blob, 2, true);
+        return s.encode();
+    }
+
+private:
+    QByteArray nodes;
+    int nodeCount = 0;
+    std::vector<QByteArray> blobs;
+
+    // `local` and `parentLocal` are the guids' localIDs; parentLocal 0 has no parent.
+    void writeNode(quint32 local, quint32 parentLocal, const QString &type, const QString &name, std::optional<float> count = {},
+                   std::optional<qint32> blob = {})
+    {
+        KiwiWriter w;
+        w.writeVarUint(1);
+        w.writeVarUint(1);
+        w.writeVarUint(local);
+        if (parentLocal != 0) {
+            w.writeVarUint(2);
+            w.writeVarUint(1);
+            w.writeVarUint(parentLocal);
+            w.writeString(QStringLiteral("a"));
+        }
+        w.writeVarUint(3);
+        w.writeString(type);
+        w.writeVarUint(4);
+        w.writeString(name);
+        w.writeVarUint(7);
+        w.writeVarFloat(40);
+        w.writeVarFloat(40);
+        if (blob) {
+            w.writeVarUint(13);
+            w.writeVarInt(*blob);
+            w.writeVarFloat(1);
+            w.writeVarFloat(1);
+        }
+        if (count) {
+            w.writeVarUint(16);
+            w.writeVarFloat(*count);
+        }
+        w.writeVarUint(0);
+        nodes += w.bytes;
+        ++nodeCount;
+    }
+};

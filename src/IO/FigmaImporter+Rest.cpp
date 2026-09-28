@@ -223,7 +223,8 @@ QVariantMap translateFields(const QJsonObject &node)
 void walk(const QJsonObject &node, const Guid &parent, int index, Tree &tree)
 {
     const Guid guid = node.value(QStringLiteral("id")).toString();
-    if (guid.isEmpty())
+    // A repeated id (a hostile or buggy response) would make a node its own descendant.
+    if (guid.isEmpty() || tree.nodes.count(guid))
         return;
     Node built;
     built.fields = translateFields(node);
