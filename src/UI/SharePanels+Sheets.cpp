@@ -37,6 +37,15 @@ SharePopover *showOptions(ShareController &share, QWidget &window)
     return popup;
 }
 
+DevicePopover *showDevices(ShareController &share, QWidget &window)
+{
+    auto *popup = new DevicePopover(share, &window);
+    placeUnderShare(popup, window);
+    popup->show();
+    share.device().refresh();
+    return popup;
+}
+
 SharedPopover *showShared(ShareController &share, QWidget &window)
 {
     auto *popup = new SharedPopover(share, &window);

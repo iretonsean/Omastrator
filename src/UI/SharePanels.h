@@ -55,6 +55,28 @@ private:
     QPushButton *const m_latest;
     QPushButton *const m_go;
     QPushButton *const m_shared;
+    QPushButton *const m_device;
+};
+
+// Send to a device: the format, the nearby devices found by omdrop (the last one used is chosen first), and Send.
+// It looks for devices as it opens; progress and the result go to the toast.
+class DevicePopover : public QFrame {
+    Q_OBJECT
+public:
+    DevicePopover(ShareController &share, QWidget *parent);
+    ~DevicePopover() override;
+
+private:
+    void synchronize();
+    void selectDevice();
+
+    ShareController &m_share;
+    QLabel *const m_scope;
+    QComboBox *const m_format;
+    QComboBox *const m_device;
+    QLabel *const m_status;
+    QPushButton *const m_refresh;
+    QPushButton *const m_go;
 };
 
 // The Shared popover: each link with Copy, Open and Unshare, and Paste client feedback.
@@ -80,6 +102,8 @@ namespace SharePanels {
 void shareNow(ShareController &share);
 // Opens the popovers under the toolbar's Share button (or the window's top right).
 SharePopover *showOptions(ShareController &share, QWidget &window);
+// Looks for nearby devices as it opens.
+DevicePopover *showDevices(ShareController &share, QWidget &window);
 SharedPopover *showShared(ShareController &share, QWidget &window);
 // Under the toolbar's Share button, right edges together; else the window's top right.
 void placeUnderShare(QWidget *popup, QWidget &window);

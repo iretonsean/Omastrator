@@ -38,6 +38,7 @@ ShareController::ShareController(ProjectWorkspace &workspace, AgentBridge *agent
     connect(&m_job, &ShareJob::finished, this, &ShareController::finished);
     connect(&m_workspace, &ProjectWorkspace::changed, this, &ShareController::followRenames);
     connect(&m_workspace.cloud(), &CloudStorage::remotesChanged, this, &ShareController::changed);
+    connectDevice();
     followRenames();
 }
 
@@ -194,7 +195,7 @@ void ShareController::remember(const Options &options)
 
 QString ShareController::share(const Options &options)
 {
-    if (m_job.running())
+    if (running())
         return QStringLiteral("A share is already under way.");
     remember(options);
     // rclone's remotes may not have been listed yet; list them once, then decide.
@@ -238,16 +239,10 @@ QString ShareController::start(const Options &options)
     const EditorSession &session = tab.session;
     const Share::Format format = options.format.value_or(chosenFormat());
     const bool selection = sharesSelection();
-    const VectorDocument document = selection ? Share::selectionDocument(*session.document(), session.selection())
-        : session.document()->artboards.empty() ? *session.document() : session.document()->artboardDocument(session.activeArtboard());
-    m_folder = std::make_unique<QTemporaryDir>(QDir::temp().filePath(QStringLiteral("omastrator-share-XXXXXX")));
-    const QDateTime now = QDateTime::currentDateTime();
-    const QString file = m_folder->filePath(QStringLiteral("%1-%2.%3").arg(Share::safeName(tab.title()), Share::stamp(now), Share::suffix(format)));
-    try {
-        Share::write(document, format, file);
-    } catch (const FileError &error) {
-        return error.message();
-    }
+    QString file;
+    if (const QString failure = render(format, QStringLiteral("%1-%2").arg(Share::safeName(tab.title()), Share::stamp(QDateTime::currentDateTime())), &file);
+        !failure.isEmpty())
+        return failure;
     ShareJob::Request request;
     request.file = file;
     request.format = format;
@@ -268,6 +263,23 @@ QString ShareController::start(const Options &options)
     return {};
 }
 
+QString ShareController::render(Share::Format format, const QString &baseName, QString *file)
+{
+    const ProjectTab &tab = m_workspace.current();
+    const EditorSession &session = tab.session;
+    const VectorDocument document = sharesSelection() ? Share::selectionDocument(*session.document(), session.selection())
+        : session.document()->artboards.empty() ? *session.document() : session.document()->artboardDocument(session.activeArtboard());
+    m_folder = std::make_unique<QTemporaryDir>(QDir::temp().filePath(QStringLiteral("omastrator-share-XXXXXX")));
+    *file = m_folder->filePath(QStringLiteral("%1.%2").arg(baseName, Share::suffix(format)));
+    try {
+        Share::write(document, format, *file);
+    } catch (const FileError &error) {
+        m_folder.reset();
+        return error.message();
+    }
+    return {};
+}
+
 void ShareController::answerGitHub(bool yes)
 {
     if (!m_pending)
@@ -285,7 +297,7 @@ void ShareController::answerGitHub(bool yes)
 
 QString ShareController::shareLive(bool fresh)
 {
-    if (m_job.running())
+    if (running())
         return QStringLiteral("A share is already under way.");
     const QString folder = liveProject();
     if (folder.isEmpty())
@@ -375,7 +387,7 @@ std::vector<Share::Record> ShareController::sharedList() const
 
 QString ShareController::unshare(const QString &recordId)
 {
-    if (m_job.running())
+    if (running())
         return QStringLiteral("Wait for the share under way to finish.");
     for (const QString &key : {documentKey(), liveKey()}) {
         if (key.isEmpty())

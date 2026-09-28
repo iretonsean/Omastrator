@@ -114,6 +114,10 @@ void Menus::buildFile(QMenuBar &bar)
         if (m_share)
             SharePanels::showOptions(*m_share, m_window);
     });
+    add(file, QStringLiteral("sendToDevice"), QStringLiteral("Send to a Device…"), QKeySequence(), [this] {
+        if (m_share)
+            SharePanels::showDevices(*m_share, m_window);
+    });
     add(file, QStringLiteral("sharedLinks"), QStringLiteral("Shared Links…"), QKeySequence(), [this] {
         if (m_share)
             SharePanels::showShared(*m_share, m_window);

@@ -65,6 +65,42 @@ of the customer in one step, and bring their feedback back just as fast.
   …", "Preview deploy failed: …", with Details for the deploy's log) and may
   carry one dry line after it, each at most once per install (docs/HUMOR.md).
 
+## Send to a device
+
+The other way to get a design in front of someone, for the author's own phone:
+File ▸ Send to a Device… (or Ctrl+K, "AirDrop", or the button in the Share
+popover) AirDrops the selection, or the artboard when nothing is selected, to
+a nearby Apple device.
+
+- **Nothing new to install beyond AirDrop itself.** It uses `omdrop` (the
+  netmojo.omdrop plugin: discovery and the sender) and, when it's there,
+  `omadrop` (the Omarchy AirDrop front end: it wakes a sleeping iPhone over Bluetooth
+  and keeps the omdrop window open). Without omdrop the popover says "AirDrop
+  isn't set up on this computer" and how to install the plugin. Without
+  omadrop, omdrop sends alone with `--wait 45`.
+- **The popover** opens and looks at once: what it sends, Format (PNG at 2×,
+  PDF or SVG; remembered), and To, the devices nearby. The device used last
+  is chosen first (matched by its address, else its name; kept in QSettings
+  as `shareDeviceAddress` and `shareDeviceName`). Look Again searches again.
+- **Looking.** `omdrop peers --json` lists what's nearby. When AirDrop is off
+  ("currently OFF") it runs `omdrop on 5m` first, which makes this computer
+  visible to nearby devices for five minutes; omadrop does the same to send.
+  It looks for about ten seconds before saying "No Apple devices nearby. Set
+  the iPhone to AirDrop ▸ Everyone for 10 Minutes, unlock it and open its
+  share sheet." The names come from `peers -n --json --stream`, a device at a
+  time (15 to 20 seconds; unnamed devices show as "Apple device (-48 dBm)"),
+  and Send is available meanwhile: sending stops the name lookup first,
+  because it transmits.
+- **Sending.** `omadrop send --quiet --to <address> --label <name> -- <file>`.
+  The file is rendered like a share (the selection cropped to its bounds on
+  clear paper) into a temporary folder that goes when the send ends. The
+  toast, the same one Share uses, says "Sending to Test iPhone…", "Waiting
+  for … to accept…", then "Sent to …" with what was sent. Cancel stops it.
+  Failures lead with the plain line: "… declined it.", "… didn't answer. Set
+  AirDrop to Everyone for 10 Minutes, unlock it, then send again.", or the
+  sender's last line.
+- Nothing is recorded in the Shared list: there's no link to keep.
+
 ## Where things are kept
 
 - `$XDG_CONFIG_HOME/omastrator/shares.json`, readable only by the user:
@@ -104,7 +140,12 @@ of the customer in one step, and bring their feedback back just as fast.
   GitHub question, the notice, Unshare and Paste client feedback. The window
   owns one.
 - `src/UI/SharePanels`: the toast, the Share and Shared popovers, and the
-  GitHub sheet.
+  GitHub sheet. `SharePanels+Device.cpp` is the Send to a Device popover.
+- `src/UI/DeviceSend`: finds devices and sends through omdrop and omadrop;
+  `ShareController+Device.cpp` renders the file, remembers the choice and
+  drives the toast. `$OMASTRATOR_OMDROP` and `$OMASTRATOR_OMADROP` replace the
+  programs (one that doesn't exist counts as not installed);
+  `$OMASTRATOR_DEVICE_RETRY_MS` shortens the wait between looks.
 
 ## Tests
 
@@ -114,3 +155,7 @@ files, a fake deploy command in a git project whose remote is a local bare
 repository, and the fake agent for Paste client feedback. It checks that no
 token or link reaches the log. `CloudStorageTests` covers `link` and
 `deletefile`; `DeployTests` covers `resolvePreview` and preview records.
+
+`tests/UI/DeviceShareTests.cpp` runs Send to a device against a fake omdrop
+(peers, on, names) and a fake omadrop that keeps the file it was given: the
+radio is never reached, and the tests set both variables before anything runs.
