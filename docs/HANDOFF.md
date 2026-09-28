@@ -110,6 +110,18 @@ docs/SHARE.md ("Send to a device").
      same).
 - It doesn't touch omadrop's remembered device (its `device` file);
   Omastrator keeps its own last device.
+**Dense panels (2026-09-28, feat/dense-panels):** the Properties panel is now
+the A + C hybrid the author picked (docs/PANELS.md; the mock-ups are at
+https://claude.ai/artifact/Jm2gU67JnMHBcTmDJKVAZk).
+- Fields are one 24 px box with their label inside, and fields go in pairs.
+- Layout's flow and remove sit in its heading.
+- Blend and opacity share one row.
+- Stroke takes 4 rows, down from 8.
+- Align and Pathfinder start folded, and every folded section shows a
+  one-line summary.
+- For a frame with auto layout the panel is about 680 px, down from about
+  1,020. It was checked headlessly (a grab of the panel), but the author
+  hasn't seen it on the desktop yet.
 
 **Update 2026-09-28 ~08:45: queued item 1 (Inspect inside windows) is built**
 on `feat/inspect-inside` (off `feat/frames`, pushed, 95/95). It's installed in

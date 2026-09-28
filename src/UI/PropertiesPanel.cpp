@@ -81,17 +81,24 @@ void PropertiesPanel::evenControls()
 {
     for (QComboBox *combo : widget()->findChildren<QComboBox *>()) {
         combo->setFont(ToolHeaderStyle::controlFont());
-        combo->setFixedHeight(26);
+        combo->setFixedHeight(NumberField::fieldHeight);
+        // Paired menus share a row: they may shrink below their longest item and elide it,
+        // unless they were given a width of their own.
+        if (combo->minimumWidth() != combo->maximumWidth()) {
+            combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+            combo->setMinimumWidth(56);
+        }
     }
     for (QLineEdit *field : widget()->findChildren<QLineEdit *>()) {
-        if (qobject_cast<QComboBox *>(field->parentWidget()))
+        // A number field sizes its own edit, inside its box.
+        if (qobject_cast<QComboBox *>(field->parentWidget()) || qobject_cast<NumberField *>(field->parentWidget()))
             continue;
         field->setFont(ToolHeaderStyle::controlFont());
-        field->setFixedHeight(26);
+        field->setFixedHeight(NumberField::fieldHeight);
     }
     for (QPushButton *button : widget()->findChildren<QPushButton *>()) {
         button->setFont(ToolHeaderStyle::controlFont());
-        button->setFixedHeight(26);
+        button->setFixedHeight(NumberField::fieldHeight);
     }
 }
 
@@ -102,8 +109,8 @@ QToolButton *PropertiesPanel::iconButton(const QString &name, const QString &tip
     button->setToolTip(tip);
     button->setAccessibleName(tip.section(QStringLiteral(" ("), 0, 0));
     button->setAutoRaise(true);
-    button->setFixedSize(28, 28);
-    button->setIconSize(QSize(18, 18));
+    button->setFixedSize(NumberField::fieldHeight, NumberField::fieldHeight);
+    button->setIconSize(QSize(16, 16));
     connect(button, &QToolButton::clicked, this, run);
     m_iconButtons.push_back({button, icon});
     return button;
@@ -114,9 +121,9 @@ void PropertiesPanel::applyIcons()
 {
     const QColor ink = palette().color(QPalette::WindowText);
     for (const auto &[button, icon] : m_iconButtons)
-        button->setIcon(PanelIcons::pixmap(icon, 18, ink, devicePixelRatio()));
+        button->setIcon(PanelIcons::pixmap(icon, 16, ink, devicePixelRatio()));
     if (m_link)
-        m_link->setIcon(PanelIcons::pixmap(m_link->isChecked() ? PanelIcon::link : PanelIcon::unlink, 18, ink, devicePixelRatio()));
+        m_link->setIcon(PanelIcons::pixmap(m_link->isChecked() ? PanelIcon::link : PanelIcon::unlink, 16, ink, devicePixelRatio()));
     if (m_rotation)
         m_rotation->handle()->setPixmap(PanelIcons::pixmap(PanelIcon::rotate, 14, palette().color(QPalette::PlaceholderText), devicePixelRatio()));
 }
@@ -390,4 +397,9 @@ void PropertiesPanel::synchronize()
     }
     for (QToolButton *button : m_pathfinderButtons)
         button->setEnabled(m_session.canCombine());
+    // Folded sections keep their one-line summaries current.
+    for (PanelSection *section : widget()->findChildren<PanelSection *>()) {
+        if (section->isVisible() && section->isCollapsed())
+            section->refreshSummary();
+    }
 }

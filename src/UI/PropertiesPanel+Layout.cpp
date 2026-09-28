@@ -5,6 +5,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QStandardItemModel>
+#include <QToolButton>
 
 // Frames and auto layout (docs/AUTO-LAYOUT.md), laid out as Figma's panel is: the flow, gap and
 // padding, the alignment grid, then how the selection sizes itself.
@@ -54,10 +55,12 @@ PanelSection *PropertiesPanel::layoutSection()
     auto *rows = new QVBoxLayout(m_layoutRows);
     rows->setContentsMargins(0, 0, 0, 0);
     rows->setSpacing(6);
-    // The flow: a row, a column, or a row that wraps.
-    auto *flowRow = new QHBoxLayout;
-    flowRow->setSpacing(6);
-    m_layoutFlow = new QComboBox(m_layoutRows);
+    // The flow (a row, a column, or a row that wraps) and Remove sit in the heading, as Figma's do.
+    m_layoutHeading = new QWidget(m_layout);
+    auto *flowRow = new QHBoxLayout(m_layoutHeading);
+    flowRow->setContentsMargins(0, 0, 0, 0);
+    flowRow->setSpacing(2);
+    m_layoutFlow = new QComboBox(m_layoutHeading);
     m_layoutFlow->setObjectName(QStringLiteral("layoutFlow"));
     m_layoutFlow->setAccessibleName(QStringLiteral("Direction"));
     m_layoutFlow->addItems({QStringLiteral("Horizontal"), QStringLiteral("Vertical"), QStringLiteral("Wrap")});
@@ -67,13 +70,23 @@ PanelSection *PropertiesPanel::layoutSection()
             layout.wrap = index == 2;
         });
     });
-    auto *remove = new QPushButton(QStringLiteral("Remove"), m_layoutRows);
+    auto *remove = new QToolButton(m_layoutHeading);
+    remove->setText(QStringLiteral("−"));
+    remove->setAutoRaise(true);
+    remove->setFixedSize(NumberField::fieldHeight, NumberField::fieldHeight);
+    remove->setAccessibleName(QStringLiteral("Remove auto layout"));
     remove->setObjectName(QStringLiteral("layoutRemove"));
     remove->setToolTip(ShortcutSettings::shared().tip(QStringLiteral("Remove auto layout; the children stay where they are"), QStringLiteral("Remove Auto Layout")));
-    connect(remove, &QPushButton::clicked, this, [this] { m_session.removeAutoLayout(); });
-    flowRow->addWidget(m_layoutFlow, 1);
+    connect(remove, &QToolButton::clicked, this, [this] { m_session.removeAutoLayout(); });
+    m_layoutFlow->setFixedWidth(96);
+    flowRow->addWidget(m_layoutFlow);
     flowRow->addWidget(remove);
-    rows->addLayout(flowRow);
+    m_layout->trailing->addWidget(m_layoutHeading);
+    // The alignment grid on the left; gap and padding beside it.
+    auto *beside = new QHBoxLayout;
+    beside->setSpacing(6);
+    auto *fields = new QVBoxLayout;
+    fields->setSpacing(6);
     // Gap, or Auto: the room spread between the items.
     auto *gapRow = new QHBoxLayout;
     gapRow->setSpacing(6);
@@ -94,16 +107,16 @@ PanelSection *PropertiesPanel::layoutSection()
     });
     gapRow->addWidget(m_layoutGap, 1);
     gapRow->addWidget(m_layoutAutoGap);
-    rows->addLayout(gapRow);
+    fields->addLayout(gapRow);
     // Padding, sides in pairs as Figma shows them first.
     auto *padRow = new QHBoxLayout;
-    padRow->setSpacing(10);
-    m_layoutPadX = new NumberField(QStringLiteral("Pad ↔"), QStringLiteral("pt"), [this](double padding) {
+    padRow->setSpacing(6);
+    m_layoutPadX = new NumberField(QStringLiteral("↔"), QStringLiteral("pt"), [this](double padding) {
         changeLayout(QStringLiteral("Padding"), [padding](AutoLayout &layout) { layout.paddingLeft = layout.paddingRight = std::max(0.0, padding); });
     }, m_layoutRows);
     m_layoutPadX->setObjectName(QStringLiteral("layoutPaddingX"));
     m_layoutPadX->field->setObjectName(QStringLiteral("layoutPaddingXField"));
-    m_layoutPadY = new NumberField(QStringLiteral("Pad ↕"), QStringLiteral("pt"), [this](double padding) {
+    m_layoutPadY = new NumberField(QStringLiteral("↕"), QStringLiteral("pt"), [this](double padding) {
         changeLayout(QStringLiteral("Padding"), [padding](AutoLayout &layout) { layout.paddingTop = layout.paddingBottom = std::max(0.0, padding); });
     }, m_layoutRows);
     m_layoutPadY->setObjectName(QStringLiteral("layoutPaddingY"));
@@ -112,15 +125,14 @@ PanelSection *PropertiesPanel::layoutSection()
         field->lengths = true;
         field->minimum = 0;
     }
+    m_layoutPadX->setToolTip(QStringLiteral("Padding left and right"));
+    m_layoutPadY->setToolTip(QStringLiteral("Padding top and bottom"));
     padRow->addWidget(m_layoutPadX, 1);
     padRow->addWidget(m_layoutPadY, 1);
-    rows->addLayout(padRow);
+    fields->addLayout(padRow);
     // The alignment grid: where the items sit in the frame, as the frame is laid out.
-    auto *alignRow = new QHBoxLayout;
-    alignRow->setSpacing(10);
-    alignRow->addWidget(caption(QStringLiteral("Align"), m_layoutRows));
     auto *grid = new QGridLayout;
-    grid->setSpacing(2);
+    grid->setSpacing(0);
     auto *cells = new QButtonGroup(m_layoutRows);
     cells->setExclusive(true);
     static const std::array<const char *, 3> across{"top", "middle", "bottom"}, along{"left", "centre", "right"};
@@ -129,7 +141,7 @@ PanelSection *PropertiesPanel::layoutSection()
         button->setObjectName(QStringLiteral("layoutAlign%1").arg(cell));
         button->setCheckable(true);
         button->setAutoRaise(true);
-        button->setFixedSize(20, 20);
+        button->setFixedSize(18, 18);
         button->setText(QStringLiteral("·"));
         button->setToolTip(QStringLiteral("Align %1 %2").arg(QString::fromLatin1(across[size_t(cell / 3)]), QString::fromLatin1(along[size_t(cell % 3)])));
         cells->addButton(button, cell);
@@ -144,9 +156,9 @@ PanelSection *PropertiesPanel::layoutSection()
             });
         });
     }
-    alignRow->addLayout(grid);
-    alignRow->addStretch(1);
-    rows->addLayout(alignRow);
+    beside->addLayout(grid);
+    beside->addLayout(fields, 1);
+    rows->addLayout(beside);
     body->addWidget(m_layoutRows);
 
     // How the selection sizes itself, and whether it takes part in the flow.
@@ -173,7 +185,6 @@ PanelSection *PropertiesPanel::layoutSection()
     m_layoutAbsolute->setObjectName(QStringLiteral("layoutAbsolute"));
     m_layoutAbsolute->setToolTip(QStringLiteral("Keep it where it is, out of the auto-layout flow"));
     connect(m_layoutAbsolute, &QCheckBox::toggled, this, [this](bool on) { m_session.setAbsolutePosition(on); });
-    body->addWidget(m_layoutAbsolute);
     // Constraints: how a child outside a flow follows its frame's resize.
     m_layoutConstraints = new QWidget(m_layout);
     auto *constraints = new QGridLayout(m_layoutConstraints);
@@ -204,7 +215,19 @@ PanelSection *PropertiesPanel::layoutSection()
     m_layoutClip->setObjectName(QStringLiteral("layoutClip"));
     m_layoutClip->setToolTip(QStringLiteral("Show the frame's children only inside its box"));
     connect(m_layoutClip, &QCheckBox::toggled, this, [this](bool on) { m_session.setClipsContent(on); });
-    body->addWidget(m_layoutClip);
+    // The two switches share a row; only one of them usually shows.
+    auto *switches = new QHBoxLayout;
+    switches->setSpacing(12);
+    switches->addWidget(m_layoutAbsolute);
+    switches->addWidget(m_layoutClip);
+    switches->addStretch(1);
+    body->addLayout(switches);
+    m_layout->summary = [this] {
+        const std::optional<AutoLayout> layout = m_session.selectedAutoLayout();
+        if (!layout)
+            return m_layoutClip->isVisible() && m_layoutClip->isChecked() ? QStringLiteral("Clips content") : QString();
+        return QStringLiteral("%1 · gap %2").arg(m_layoutFlow->currentText(), layout->spaceBetween ? QStringLiteral("auto") : NumberField::formatted(layout->gap));
+    };
     return m_layout;
 }
 
@@ -219,6 +242,7 @@ void PropertiesPanel::synchronizeLayout()
     const bool anyLayout = std::any_of(frames.begin(), frames.end(), [&](const QUuid &id) { return document.find(id)->autoLayout.has_value(); });
     m_layoutAdd->setVisible(!frames.empty() && !anyLayout);
     m_layoutRows->setVisible(layout.has_value());
+    m_layoutHeading->setVisible(layout.has_value());
     if (layout) {
         const QSignalBlocker quietFlow(m_layoutFlow), quietAuto(m_layoutAutoGap);
         m_layoutFlow->setCurrentIndex(layout->wrap && layout->direction == LayoutDirection::horizontal ? 2

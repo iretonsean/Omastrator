@@ -1,19 +1,21 @@
 #include "UI/PanelSection.h"
+#include "UI/NumberField.h"
 #include "UI/PanelIcons.h"
 #include <QEvent>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QSettings>
 #include <array>
 
-PanelSection::PanelSection(const QString &title, const QString &key, QWidget *parent)
+PanelSection::PanelSection(const QString &title, const QString &key, QWidget *parent, bool folded)
     : QWidget(parent), body(new QVBoxLayout), trailing(new QHBoxLayout), m_key(key), m_toggle(new QToolButton(this)),
-      m_content(new QWidget(this))
+      m_summary(new QLabel(this)), m_content(new QWidget(this))
 {
     setObjectName(key + QStringLiteral("Section"));
     auto *column = new QVBoxLayout(this);
-    column->setContentsMargins(12, 8, 16, 12);
+    column->setContentsMargins(12, 8, 12, 10);
     column->setSpacing(6);
     auto *heading = new QHBoxLayout;
     heading->setSpacing(4);
@@ -30,12 +32,21 @@ PanelSection::PanelSection(const QString &title, const QString &key, QWidget *pa
     m_toggle->setFont(font);
     m_toggle->setIconSize(QSize(12, 12));
     heading->addWidget(m_toggle);
-    heading->addStretch(1);
+    // The summary takes the room between the title and the trailing controls, and clicks open the section.
+    m_summary->setObjectName(key + QStringLiteral("Summary"));
+    m_summary->setForegroundRole(QPalette::PlaceholderText);
+    m_summary->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_summary->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    QFont quiet = m_summary->font();
+    quiet.setPixelSize(12);
+    m_summary->setFont(quiet);
+    m_summary->installEventFilter(this);
+    heading->addWidget(m_summary, 1);
     trailing->setSpacing(2);
     heading->addLayout(trailing);
     column->addLayout(heading);
-    body->setContentsMargins(4, 0, 0, 0);
-    body->setSpacing(8);
+    body->setContentsMargins(0, 0, 0, 0);
+    body->setSpacing(6);
     m_content->setLayout(body);
     column->addWidget(m_content);
     connect(m_toggle, &QToolButton::clicked, this, [this] {
@@ -43,7 +54,21 @@ PanelSection::PanelSection(const QString &title, const QString &key, QWidget *pa
         QSettings().setValue(settingsKey(m_key), collapse);
         setCollapsed(collapse);
     });
-    setCollapsed(QSettings().value(settingsKey(key), false).toBool());
+    setCollapsed(QSettings().value(settingsKey(key), folded).toBool());
+}
+
+void PanelSection::refreshSummary()
+{
+    const QString text = summary && isCollapsed() ? summary() : QString();
+    m_summary->setToolTip(text);
+    // Elided to the room there is, as the panel narrows.
+    m_summary->setText(m_summary->fontMetrics().elidedText(text, Qt::ElideRight, std::max(0, m_summary->width())));
+    m_summary->setProperty("fullText", text);
+}
+
+QString PanelSection::summaryText() const
+{
+    return m_summary->property("fullText").toString();
 }
 
 QString PanelSection::settingsKey(const QString &key)
@@ -54,6 +79,17 @@ QString PanelSection::settingsKey(const QString &key)
 bool PanelSection::isCollapsed() const
 {
     return m_content->isHidden();
+}
+
+bool PanelSection::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_summary && event->type() == QEvent::MouseButtonRelease && isCollapsed()) {
+        m_toggle->click();
+        return true;
+    }
+    if (watched == m_summary && event->type() == QEvent::Resize)
+        refreshSummary();
+    return QWidget::eventFilter(watched, event);
 }
 
 void PanelSection::changeEvent(QEvent *event)
@@ -74,6 +110,7 @@ void PanelSection::setCollapsed(bool collapsed)
     m_content->setVisible(!collapsed);
     m_toggle->setAccessibleDescription(collapsed ? QStringLiteral("Collapsed") : QStringLiteral("Expanded"));
     applyChevron();
+    refreshSummary();
 }
 
 ReferencePointPicker::ReferencePointPicker(QWidget *parent) : QWidget(parent)
@@ -110,10 +147,18 @@ QString ReferencePointPicker::name(int point)
     return QString::fromLatin1(names.at(size_t(std::clamp(point, 0, 8))));
 }
 
+void ReferencePointPicker::setCompact()
+{
+    m_side = NumberField::fieldHeight;
+    setFixedSize(sizeHint());
+    update();
+}
+
 QRectF ReferencePointPicker::cell(int point) const
 {
-    const double step = (width() - 10) / 2.0;
-    return {1 + (point % 3) * step, 1 + (point / 3) * step, 8, 8};
+    const double square = width() >= 30 ? 8 : 6;
+    const double step = (width() - square - 2) / 2.0;
+    return {1 + (point % 3) * step, 1 + (point / 3) * step, square, square};
 }
 
 void ReferencePointPicker::paintEvent(QPaintEvent *)
