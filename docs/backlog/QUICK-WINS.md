@@ -22,8 +22,8 @@ file with the work. Don't delete finished items.
 - [ ] 6. Lock Document (read-only mode)
 - [ ] 7. Settings that travel
 - [ ] 8. Canvas size limit (check and document)
-- [ ] 9. Browser View and canvas workspaces (added by the author on
-      2026-09-28; see section 9)
+- [ ] 9. Browser View and canvas workspaces (high effort, high priority:
+      before anything in MEDIUM-EFFORT.md; see section 9)
 
 ## Agents and models (the author, 2026-09-28)
 
@@ -128,9 +128,9 @@ file with the work. Don't delete finished items.
 - **Done when:** the README states a tested limit.
 
 ## 9. Browser View and canvas workspaces
-- **Not actually a quick win:** it's the largest item here (see
-  HIGH-EFFORT.md, item 1). The author put it at the end of this queue so it
-  starts as soon as items 1–8 are done.
+- **Why it's here:** it's high effort (HIGH-EFFORT.md, item 1), but it has
+  a higher priority than anything in MEDIUM-EFFORT.md. The author placed it
+  after the quick wins and before the medium-effort list.
 - **Design:** docs/BROWSER-FRAMES.md, approved by the author on
   2026-09-28, including the headless Omastrator Chromium profile with a
   one-time sign-in.
