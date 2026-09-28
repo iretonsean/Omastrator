@@ -580,9 +580,16 @@ void PropertiesPanelTests::iconButtonsSayWhatTheyDo()
     // The rotation field is labelled by name for tooltips and screen readers.
     QCOMPARE(panel.findChild<QLineEdit *>("transformRotationField")->accessibleName(), QString("Rotation"));
     QVERIFY(!numberNamed(panel, "transformRotation")->handle()->pixmap().isNull());
-    // Menus and fields share one height.
-    for (const char *name : {"strokeCap", "alignTarget", "fillKind"})
-        QCOMPARE(panel.findChild<QWidget *>(name)->height(), panel.findChild<QWidget *>("strokeWidth")->height());
+    // Menus, number fields' boxes and icon buttons share one height (docs/PANELS.md).
+    for (const char *name : {"strokeCap", "alignTarget", "fillKind", "transformLink"})
+        QCOMPARE(panel.findChild<QWidget *>(name)->height(), NumberField::fieldHeight);
+    QCOMPARE(panel.findChild<QWidget *>("strokeWidth")->parentWidget()->height(), NumberField::fieldHeight);
+    // Folded, a section keeps a summary of what's inside; Align and Pathfinder start folded.
+    auto *stroke = panel.findChild<PanelSection *>("strokeSection");
+    stroke->setCollapsed(true);
+    QVERIFY(stroke->summaryText().contains(QStringLiteral(" pt · ")));
+    stroke->setCollapsed(false);
+    QVERIFY(stroke->summaryText().isEmpty());
 }
 
 void PropertiesPanelTests::theDocumentShowsWithNothingSelected()

@@ -45,6 +45,9 @@ PanelSection *PropertiesPanel::shapeSection()
     row->addWidget(m_cornersLinked);
     row->addWidget(style);
     body->addLayout(row);
+    m_shape->summary = [this] {
+        return m_radius->isMixed() ? QStringLiteral("Radius mixed") : QStringLiteral("Radius %1").arg(NumberField::formatted(m_radius->value()));
+    };
     m_corners = new QWidget(m_shape);
     m_corners->setObjectName(QStringLiteral("shapeCorners"));
     auto *grid = new QGridLayout(m_corners);

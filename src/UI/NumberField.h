@@ -42,9 +42,12 @@ public:
     static std::optional<std::function<double(double)>> relative(const QString &text, bool lengths = true);
     // Applies the typed text, as Return does.
     void commit();
+    // Every panel control's height (docs/PANELS.md).
+    static constexpr int fieldHeight = 24;
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
 
 private:
     void apply(double value);

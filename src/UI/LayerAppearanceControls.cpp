@@ -25,28 +25,23 @@ LayerAppearanceControls::LayerAppearanceControls(EditorSession &session, QWidget
       m_percentage(new QLineEdit(this))
 {
     setObjectName(QStringLiteral("layerAppearance"));
+    // One row: the blend mode, then opacity (docs/PANELS.md). The menu names itself ("Normal").
     auto *column = new QVBoxLayout(this);
     column->setContentsMargins(0, 0, 0, 0);
-    column->setSpacing(8);
-    auto *blend = new QHBoxLayout;
-    auto *blendCaption = caption(QStringLiteral("Blend"), this);
-    blendCaption->setFixedWidth(46);
-    blend->addWidget(blendCaption);
-    blend->addWidget(m_picker, 1);
-    column->addLayout(blend);
+    column->setSpacing(6);
     auto *opacity = new QHBoxLayout;
     opacity->setSpacing(6);
-    auto *opacityCaption = caption(QStringLiteral("Opacity"), this);
-    opacityCaption->setFixedWidth(46);
-    opacity->addWidget(opacityCaption);
+    m_picker->setToolTip(QStringLiteral("Blend mode"));
+    opacity->addWidget(m_picker, 1);
     // A thousandth a step; a drag is one undo step.
     m_slider->setRange(0, 1000);
     m_slider->setObjectName(QStringLiteral("opacitySlider"));
     m_slider->setAccessibleName(QStringLiteral("Opacity"));
+    m_slider->setToolTip(QStringLiteral("Opacity"));
     opacity->addWidget(m_slider, 1);
     m_percentage->setObjectName(QStringLiteral("opacityPercent"));
     m_percentage->setAccessibleName(QStringLiteral("Opacity percent"));
-    m_percentage->setFixedWidth(44);
+    m_percentage->setFixedWidth(40);
     m_percentage->installEventFilter(this);
     opacity->addWidget(m_percentage);
     opacity->addWidget(caption(QStringLiteral("%"), this));

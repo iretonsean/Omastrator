@@ -20,7 +20,7 @@ QLabel *caption(const QString &text, QWidget *parent)
     font.setPixelSize(11);
     label->setFont(font);
     label->setForegroundRole(QPalette::PlaceholderText);
-    label->setFixedWidth(46);
+    label->setFixedWidth(40);
     return label;
 }
 
@@ -56,7 +56,7 @@ PaintRow::PaintRow(EditorSession &session, bool stroke, FloatingPanel &picker, Q
     m_hex->setObjectName(prefix + QStringLiteral("Hex"));
     m_hex->setAccessibleName(stroke ? QStringLiteral("Stroke hex color") : QStringLiteral("Fill hex color"));
     m_hex->setToolTip(QStringLiteral("Hex color, such as ff6600"));
-    m_hex->setFixedWidth(66);
+    m_hex->setFixedWidth(60);
     row->addWidget(m_hex);
     row->addWidget(m_kind, 1);
     connect(m_hex, &QLineEdit::editingFinished, this, [this] {
@@ -206,6 +206,14 @@ PanelSection *PropertiesPanel::appearanceSection()
     body->addWidget(m_strokeStack);
     body->addWidget(new LayerAppearanceControls(m_session, block));
     body->addWidget(m_selectionColors);
+    block->summary = [this] {
+        const auto named = [](const Paint &paint) {
+            return paint.kind == PaintKind::none ? QStringLiteral("None")
+                   : paint.stops.size() >= 2      ? QStringLiteral("Gradient")
+                                                  : HexColor::format(paint.swatch());
+        };
+        return QStringLiteral("Fill %1 · Stroke %2").arg(named(ShownStyle::fill(m_session)), named(ShownStyle::stroke(m_session).paint));
+    };
     return block;
 }
 
@@ -294,25 +302,36 @@ PanelSection *PropertiesPanel::strokeSection()
     arrows->addWidget(m_arrowScale, 0, 3);
     arrows->setColumnStretch(1, 1);
     arrows->setColumnStretch(2, 1);
+    // In pairs (docs/PANELS.md): weight and where it sits, cap and corner, profile and dashes.
+    const auto brief = [block](const QString &text) {
+        QLabel *made = caption(text, block);
+        made->setFixedWidth(40);
+        return made;
+    };
     auto *grid = new QGridLayout;
     grid->setHorizontalSpacing(6);
     grid->setVerticalSpacing(6);
-    grid->addWidget(caption(QStringLiteral("Weight"), block), 0, 0);
+    grid->addWidget(brief(QStringLiteral("Weight")), 0, 0);
     grid->addWidget(m_strokeWidth, 0, 1);
-    grid->addWidget(caption(QStringLiteral("Profile"), block), 1, 0);
-    grid->addWidget(m_widthProfile, 1, 1);
-    grid->addWidget(caption(QStringLiteral("Cap"), block), 2, 0);
-    grid->addWidget(m_cap, 2, 1);
-    grid->addWidget(caption(QStringLiteral("Corner"), block), 3, 0);
-    grid->addWidget(m_join, 3, 1);
-    grid->addWidget(caption(QStringLiteral("Dashes"), block), 4, 0);
-    grid->addWidget(m_dashes, 4, 1);
-    grid->addWidget(m_alignDashes, 5, 1);
-    grid->addWidget(m_strokeAlignCaption, 6, 0);
-    grid->addWidget(m_strokeAlign, 6, 1);
+    grid->addWidget(m_strokeAlignCaption, 0, 2);
+    grid->addWidget(m_strokeAlign, 0, 3);
+    grid->addWidget(brief(QStringLiteral("Cap")), 1, 0);
+    grid->addWidget(m_cap, 1, 1);
+    grid->addWidget(brief(QStringLiteral("Corner")), 1, 2);
+    grid->addWidget(m_join, 1, 3);
+    grid->addWidget(brief(QStringLiteral("Profile")), 2, 0);
+    grid->addWidget(m_widthProfile, 2, 1);
+    grid->addWidget(brief(QStringLiteral("Dashes")), 2, 2);
+    grid->addWidget(m_dashes, 2, 3);
+    grid->addWidget(m_alignDashes, 3, 2, 1, 2);
     grid->setColumnStretch(1, 1);
+    grid->setColumnStretch(3, 1);
     body->addLayout(grid);
     body->addWidget(m_arrows);
+    block->summary = [this] {
+        const StrokeStyle stroke = shownStroke();
+        return QStringLiteral("%1 pt · %2 · %3").arg(NumberField::formatted(stroke.width), m_strokeAlign->currentText(), m_cap->currentText());
+    };
     connect(m_widthProfile, &QComboBox::activated, this, [this](int index) {
         const auto profile = std::array{StrokeWidthProfile::uniform, StrokeWidthProfile::taperStart, StrokeWidthProfile::taperEnd,
                                         StrokeWidthProfile::bulge, StrokeWidthProfile::custom}

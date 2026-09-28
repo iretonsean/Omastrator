@@ -4,12 +4,18 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <functional>
+
+class QLabel;
+
 // A Properties section: a heading that folds its body away, remembered per section.
+// Folded, the heading keeps a one-line summary of what's inside (docs/PANELS.md).
 class PanelSection : public QWidget {
     Q_OBJECT
 public:
-    // `key` names the section in settings and in object names.
-    PanelSection(const QString &title, const QString &key, QWidget *parent);
+    // `key` names the section in settings and in object names; `folded` is how it starts
+    // until the user folds or opens it.
+    PanelSection(const QString &title, const QString &key, QWidget *parent, bool folded = false);
     QVBoxLayout *const body;
     // Controls at the heading's right end, such as an options button.
     QHBoxLayout *const trailing;
@@ -17,14 +23,21 @@ public:
     bool isCollapsed() const;
     void setCollapsed(bool collapsed);
     static QString settingsKey(const QString &key);
+    // What the folded heading says, such as "1 pt · Center · Butt".
+    std::function<QString()> summary;
+    // Reads `summary` again; the panel calls it as the selection changes.
+    void refreshSummary();
+    QString summaryText() const;
 
 protected:
     void changeEvent(QEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void applyChevron();
     const QString m_key;
     QToolButton *const m_toggle;
+    QLabel *const m_summary;
     QWidget *const m_content;
 };
 
@@ -40,7 +53,9 @@ public:
     // The point's place within `bounds`.
     static QPointF locate(const QRectF &bounds, int point);
     static QString name(int point);
-    QSize sizeHint() const override { return {38, 38}; }
+    QSize sizeHint() const override { return {m_side, m_side}; }
+    // Drawn to fit one row of fields.
+    void setCompact();
 
 signals:
     void pointChanged(int point);
@@ -53,4 +68,5 @@ protected:
 private:
     QRectF cell(int point) const;
     int m_point = 0;
+    int m_side = 38;
 };

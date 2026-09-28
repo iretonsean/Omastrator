@@ -89,20 +89,22 @@ PanelSection *PropertiesPanel::transformSection()
     });
     m_link->setCheckable(true);
     m_link->setChecked(QSettings().value(linkKey, false).toBool());
-    m_link->setFixedSize(22, 28);
+    m_link->setFixedSize(NumberField::fieldHeight, NumberField::fieldHeight);
+    m_reference->setCompact();
 
+    // Pairs, as Figma lays them out: X Y, W H with the link, then rotation beside the reference point.
     auto *grid = new QGridLayout;
     grid->setHorizontalSpacing(6);
     grid->setVerticalSpacing(6);
-    grid->addWidget(m_reference, 0, 0, 2, 1, Qt::AlignTop);
-    grid->addWidget(m_x, 0, 1);
-    grid->addWidget(m_y, 0, 3);
-    grid->addWidget(m_width, 1, 1);
+    grid->addWidget(m_x, 0, 0);
+    grid->addWidget(m_y, 0, 1);
+    grid->addWidget(m_width, 1, 0);
+    grid->addWidget(m_height, 1, 1);
     grid->addWidget(m_link, 1, 2);
-    grid->addWidget(m_height, 1, 3);
-    grid->addWidget(m_rotation, 2, 1);
+    grid->addWidget(m_rotation, 2, 0);
+    grid->addWidget(m_reference, 2, 2);
+    grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
-    grid->setColumnStretch(3, 1);
     body->addLayout(grid);
 
     // Options that change what scaling does, as Illustrator's Transform panel menu holds.
@@ -128,6 +130,13 @@ PanelSection *PropertiesPanel::transformSection()
     options->setMenu(menu);
     options->setFixedSize(24, 22);
     m_transform->trailing->addWidget(options);
+    m_transform->summary = [this] {
+        const QRectF bounds = m_session.selectionBounds();
+        const QPointF at = reference();
+        return QStringLiteral("%1, %2 · %3 × %4")
+            .arg(NumberField::formatted(at.x()), NumberField::formatted(at.y()), NumberField::formatted(bounds.width()),
+                 NumberField::formatted(bounds.height()));
+    };
     return m_transform;
 }
 
@@ -178,7 +187,8 @@ void PropertiesPanel::resizeEach(bool vertical, const std::function<double(doubl
 
 PanelSection *PropertiesPanel::alignSection()
 {
-    m_align = new PanelSection(QStringLiteral("Align"), QStringLiteral("align"), this);
+    // Folded until opened: the heading says what it aligns to (docs/PANELS.md).
+    m_align = new PanelSection(QStringLiteral("Align"), QStringLiteral("align"), this, true);
     const std::array<std::tuple<AlignEdge, const char *, const char *, PanelIcon>, 6> edges{{
         {AlignEdge::left, "alignLeft", "Align left edges", PanelIcon::alignLeft},
         {AlignEdge::horizontalCenter, "alignHorizontalCenter", "Align horizontal centers", PanelIcon::alignHorizontalCenter},
@@ -246,12 +256,15 @@ PanelSection *PropertiesPanel::alignSection()
     m_alignTarget->addItems({QStringLiteral("To selection"), QStringLiteral("To artboard"), QStringLiteral("To key object")});
     third->addWidget(m_alignTarget, 1);
     m_align->body->addLayout(third);
+    m_align->summary = [this] { return m_alignTarget->currentText(); };
+    connect(m_alignTarget, &QComboBox::currentIndexChanged, m_align, &PanelSection::refreshSummary);
     return m_align;
 }
 
 PanelSection *PropertiesPanel::pathfinderSection()
 {
-    m_pathfinder = new PanelSection(QStringLiteral("Pathfinder"), QStringLiteral("pathfinder"), this);
+    m_pathfinder = new PanelSection(QStringLiteral("Pathfinder"), QStringLiteral("pathfinder"), this, true);
+    m_pathfinder->summary = [] { return QStringLiteral("Unite · Minus Front · Intersect · Exclude"); };
     const std::array<std::tuple<BooleanOperation, const char *, const char *, PanelIcon>, 4> operations{{
         {BooleanOperation::unite, "unite", "Unite (Pathfinder): merge the shapes into one", PanelIcon::unite},
         {BooleanOperation::minusFront, "minusFront", "Minus Front (Pathfinder): cut the front shapes out of the back one", PanelIcon::minusFront},

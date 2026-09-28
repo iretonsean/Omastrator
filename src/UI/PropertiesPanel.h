@@ -119,6 +119,8 @@ private:
     PanelSection *m_layout = nullptr;
     QPushButton *m_layoutAdd = nullptr;
     QWidget *m_layoutRows = nullptr;
+    // The flow menu and Remove, in the Layout heading.
+    QWidget *m_layoutHeading = nullptr;
     QComboBox *m_layoutFlow = nullptr;
     NumberField *m_layoutGap = nullptr;
     QCheckBox *m_layoutAutoGap = nullptr;

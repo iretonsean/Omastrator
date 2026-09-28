@@ -4,6 +4,8 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QStyleOptionFrame>
 #include <algorithm>
 #include <cmath>
 
@@ -151,9 +153,12 @@ NumberField::NumberField(const QString &label, const QString &suffix, std::funct
     : QWidget(parent), field(new QLineEdit(this)), m_change(std::move(change))
 {
     lengths = suffix == QLatin1String("pt");
+    // One field, as Figma draws them: the label and unit sit inside the box, around the value.
+    setAttribute(Qt::WA_Hover);
+    setFixedHeight(fieldHeight);
     auto *row = new QHBoxLayout(this);
-    row->setContentsMargins(0, 0, 0, 0);
-    row->setSpacing(4);
+    row->setContentsMargins(7, 0, 7, 0);
+    row->setSpacing(5);
     const auto quiet = [this](const QString &words) {
         auto *made = new QLabel(words, this);
         made->setFont(ToolHeaderStyle::controlFont());
@@ -167,7 +172,9 @@ NumberField::NumberField(const QString &label, const QString &suffix, std::funct
     }
     field->setAccessibleName(label);
     field->setFont(ToolHeaderStyle::controlFont());
-    field->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    field->setFrame(false);
+    field->setFixedHeight(fieldHeight - 2);
+    field->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     field->installEventFilter(this);
     // Narrow docks shrink the field, never push the unit out of sight.
     field->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -295,8 +302,22 @@ void NumberField::stepBy(double amount)
     field->setText(m_mixed ? QString() : formatted(m_value));
 }
 
+void NumberField::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    QStyleOptionFrame box;
+    box.initFrom(this);
+    box.lineWidth = 1;
+    if (field->hasFocus())
+        box.state |= QStyle::State_HasFocus;
+    style()->drawPrimitive(QStyle::PE_PanelLineEdit, &box, &painter, this);
+}
+
 bool NumberField::eventFilter(QObject *watched, QEvent *event)
 {
+    // The box shows the field's focus.
+    if (watched == field && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut))
+        update();
     if (watched == m_handle && isEnabled()) {
         const auto *mouse = static_cast<QMouseEvent *>(event);
         switch (event->type()) {
