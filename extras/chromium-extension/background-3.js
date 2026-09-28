@@ -214,4 +214,8 @@ chrome.runtime.onConnect.addListener((panel) => {
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
+// Chromium wakes a worker at launch only for these: without them the link waited for a click.
+chrome.runtime.onStartup.addListener(() => {});
+chrome.runtime.onInstalled.addListener(() => {});
+
 connect();

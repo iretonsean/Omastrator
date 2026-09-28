@@ -445,7 +445,42 @@ shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 | ![Menu entries](docs/screenshots/setup-menu-entries.png) | |
 | The Omastrator group setup adds to the Omarchy menu. | |
 
-## Build
+## Install (alpha)
+
+Omastrator is in **alpha**, and alpha testers are welcome. Expect rough edges,
+and please report them. Pull requests with improvements are just as welcome;
+see Contributing below.
+
+For now it installs from source. On Omarchy (Arch):
+
+```sh
+sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative
+git clone https://github.com/iretonsean/Omastrator.git
+cd Omastrator
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+cmake --build build -j"$(nproc)"
+cmake --install build
+omastrator setup
+```
+
+- **How long it takes:** a first build compiles the whole app. On a typical
+  8–16 core machine with 16 GB of RAM or more, that's a few minutes;
+  rebuilds after a `git pull` only compile what changed.
+- **Low on RAM:** each compile job can take about 1 GB, so on a machine with
+  16 GB or less, use `-j2` or `-j3` instead of `-j"$(nproc)"`.
+- **`omastrator setup`** shows every change it would make (the island and tray
+  light in omarchy-shell, the Hyprland keys, the Omarchy menu entries, the
+  Chromium extension) and asks before making it. `omastrator setup --remove`
+  undoes it.
+
+Coming, to make installing quicker:
+
+- an AUR package (`omastrator-git`), so it's one `yay -S omastrator-git`;
+- prebuilt binaries for x86_64 and aarch64 on GitHub Releases, built by
+  GitHub Actions, and an `omastrator-bin` AUR package that installs in
+  seconds.
+
+## Build for development
 
 You need C++20, Qt 6.4 or later (Widgets, Concurrent and Network), and CMake.
 Qt Qml is optional: one test runs the overlay's logic with it.
@@ -453,13 +488,24 @@ rclone is optional: cloud storage uses it, and one test runs it when present.
 
 ```sh
 cmake -S . -B build
-cmake --build build -j3
+cmake --build build -j"$(nproc)"
 ctest --test-dir build
 build/omastrator
 ```
 
-If you have Docker, `scripts/dev.sh build|test|run` does the same in an
-Ubuntu 24.04 container.
+- `scripts/check.sh` builds with warnings as errors and runs every test.
+- `scripts/install-local.sh` installs a Release build into ~/.local.
+- If you have Docker, `scripts/dev.sh build|test|run` does the same in an
+  Ubuntu 24.04 container.
+
+## Contributing
+
+Pull requests are welcome: fixes, features, and anything that brings it
+closer to Figma and Illustrator on your desktop.
+
+- Read AGENTS.md for how the code is laid out.
+- Add Qt tests for new behaviour, and make sure `scripts/check.sh` passes.
+- Keep commits free of personal data (`scripts/sweep.sh` checks).
 
 ## Credits
 

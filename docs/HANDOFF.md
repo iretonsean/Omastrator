@@ -32,9 +32,14 @@ is animated they approve a storyboard:
 
 ### Waiting on the author (not blocking the storyboard)
 
-- **Restart Chromium** (or reload the Omastrator extension) and **restart the
-  daemon**, after `scripts/install-local.sh` from main. Main isn't installed
-  yet, and Inspect inside windows only goes live after this.
+- **Installed and live (2026-09-28 10:10):** main is installed in ~/.local,
+  and the daemon and Chromium were restarted with the author's OK.
+  - The extension is now version 1.1 (background-3.js). It listens for
+    `runtime.onStartup`, because without that Chromium never woke its worker
+    at launch, so the link to Omastrator waited for a click on the toolbar
+    button.
+  - Bump the manifest `version` whenever the worker changes: Chromium kept
+    the old registration while it stayed at 1.0.
 - **Try on the desktop:**
   - the dense panel (docs/PANELS.md);
   - Shift+A after clicking in Layers, and Esc and Tab;
@@ -45,6 +50,20 @@ is animated they approve a storyboard:
   it.
 - **Parked until the author is at the Mac:** the Inspect sluggishness, with
   `scripts/profile-design-mode.sh`.
+
+### Queued: easy installs for alpha testers (before the v4 promo ships)
+
+The README's Install (alpha) section promises these, and the v4 outro invites
+alpha testers:
+
+1. An AUR package, `omastrator-git`: a PKGBUILD with cmake, a Release build
+   and `-j$(nproc)`, depending on qt6-base (optdepends: qt6-declarative,
+   rclone, python-gobject for AT-SPI).
+2. A GitHub Actions workflow that builds x86_64 and aarch64 on a tag and
+   attaches tarballs to GitHub Releases, plus an `omastrator-bin` AUR package
+   that installs them.
+3. After install, `omastrator setup` stays the single step that wires the
+   shell, the keys, the menu and the extension.
 
 ### Memory hygiene (the machine has 15 GB and /tmp is in RAM)
 
