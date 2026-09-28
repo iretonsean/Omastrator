@@ -152,12 +152,20 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   or in colour.
 - Files:
   - saves and opens `.omai` documents (oh my)
-  - imports SVG
+  - opens and places other tools' files as editable layers, not pictures
+    (text stays text, frames stay frames):
+    - SVG and `.svgz`, with Inkscape layers
+    - PDF, Adobe Illustrator `.ai` (through its PDF part), and EPS/PostScript
+      (through Ghostscript, when it's installed)
+    - Figma: paste straight from Figma, File ▸ Import from Figma Link…, and
+      `.fig` files (best effort)
+    - Sketch, Penpot (v3 exports) and Excalidraw
   - exports SVG, PDF (kept as vectors), PNG and JPEG
   - File ▸ Export ▸ Export for Screens… batches any artboards and objects
     collected with Object ▸ Collect for Export, at several scales (0.5×–4×,
     suffixed `@2x` and so on) and formats (PNG, JPG, SVG, PDF, WebP) at once
-  - places JPEG, PNG, TIFF, WebP and GIF images
+  - places JPEG, PNG, TIFF, WebP, GIF, HEIC and AVIF images, and Photoshop
+    `.psd` files flattened
   - opens and saves on cloud storage as well as on this computer
     ([Cloud storage](#cloud-storage))
   - shares the artboard or the selection as a link in one press

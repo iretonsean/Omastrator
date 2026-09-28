@@ -35,9 +35,9 @@ file with the work. Don't delete finished items.
 
 - **Coding** is done by **Sonnet agents at high effort**, one per item, each
   in its own worktree and branch off `main`. Start them in Herdr panes with
-  `herdr agent start <name> --kind claude --pane <pane> -- --model claude-sonnet-5 --effort high`.
-  The author asked for "Sonnet 5.5". The newest Sonnet is Sonnet 5, so use
-  it, and switch when a newer one ships.
+  `herdr agent start <name> --kind claude --pane <pane> -- --model claude-sonnet-5-5 --effort high`.
+  Sonnet 5.5 was confirmed live on 2026-09-28. (Claude Code 2.1.283 prints
+  an "unrecognized model" notice for it; that's harmless.)
 - **Code review and thinking** (design questions, reviewing each branch
   before it merges, and anything that needs judgment) are done by **Opus 5.5
   agents at medium effort**:

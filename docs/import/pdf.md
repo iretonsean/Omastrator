@@ -1,8 +1,7 @@
 # Importing PDF, Illustrator (.ai) and EPS/PostScript
 
-Branch `feat/import-pdf`. The rules are in [SHARED.md](../../../.omastrator-import-briefs/SHARED.md)
-and [PDF.md](../../../.omastrator-import-briefs/PDF.md) (outside the repo, in
-the three-agent brief). This doc is PDF.md's own required write-up: the
+Branch `feat/import-pdf`. The rules were in the three-agent brief (SHARED.md and PDF.md, kept
+outside the repo). This doc is PDF.md's own required write-up: the
 decisions made along the way, then what imports, what doesn't, and what
 couldn't be tested without real files.
 
