@@ -491,8 +491,9 @@ omastrator setup
   Chromium extension) and asks before making it. `omastrator setup --remove`
   undoes it.
 
-Coming, to make installing quicker (the PKGBUILDs and the release workflow
-exist and are tested locally, but **not yet published** — see
+Coming, to make installing quicker (the PKGBUILDs are tested locally, the
+release and CI workflows are written but have **never run**, and nothing is
+**published** yet — see
 [docs/RELEASING.md](docs/RELEASING.md)):
 
 - an AUR package (`omastrator-git`), once published one `yay -S
