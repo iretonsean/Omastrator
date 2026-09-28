@@ -75,6 +75,26 @@ private slots:
         QVERIFY_EXCEPTION_THROWN(FigmaImporter::parse(kiwiContainer(s.encode(), body.bytes)), FileError);
     }
 
+    void anArrayOfEmptyStructsThrows()
+    {
+        // An empty struct takes no bytes, so a claimed length can't be checked against the data.
+        KiwiSchemaBuilder s;
+        const int empty = s.addStruct(QStringLiteral("Empty"));
+        const int holder = s.addStruct(QStringLiteral("Holder"));
+        s.fieldOfType(holder, QStringLiteral("items"), empty, 1, true);
+        const int message = s.addMessage(QStringLiteral("Message"));
+        s.fieldOfType(message, QStringLiteral("holders"), holder, 1, true);
+        KiwiWriter body;
+        body.writeVarUint(1);
+        // 20,000 holders of 50,000 empty structs each: every length is under the bytes left, yet
+        // together they are a billion values from about 100 KB.
+        body.writeVarUint(20000);
+        for (int i = 0; i < 20000; ++i)
+            body.writeVarUint(50000);
+        body.bytes += QByteArray(100000, '\0'); // keeps each length under the bytes left
+        QVERIFY_EXCEPTION_THROWN(FigmaImporter::parse(kiwiContainer(s.encode(), body.bytes)), FileError);
+    }
+
     void messagesNestedWithoutEndThrow()
     {
         KiwiSchemaBuilder s;

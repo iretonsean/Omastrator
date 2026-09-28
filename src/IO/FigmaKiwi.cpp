@@ -96,6 +96,13 @@ QString ByteReader::readString()
     return QString::fromUtf8(bytes.constData() + start, int(pos - start - 1));
 }
 
+void ByteReader::spendValues(qint64 count)
+{
+    valuesLeft -= count;
+    if (valuesLeft < 0)
+        throw KiwiError("Kiwi data holds far more values than its size allows.");
+}
+
 QByteArray ByteReader::readByteArray()
 {
     const quint32 length = readVarUint();
@@ -192,11 +199,12 @@ QVariant decodeArray(ByteReader &reader, const Schema &schema, const QString &ty
     const quint32 length = reader.readVarUint();
     if (typeName == QLatin1String("byte"))
         return reader.readBytes(length);
-    // Every element that can hold anything takes at least a byte, so a longer claim is false.
-    if (qsizetype(length) > reader.remaining())
+    // Nearly every element takes a byte; the empty struct doesn't, so the value budget covers it.
+    if (qsizetype(length) > reader.remaining() && schema.find(typeName) == nullptr)
         throw KiwiError("Kiwi array is longer than the data.");
+    reader.spendValues(length);
     QVariantList list;
-    list.reserve(qsizetype(length));
+    list.reserve(qsizetype(std::min<quint32>(length, quint32(reader.remaining()))));
     for (quint32 i = 0; i < length; ++i)
         list.append(decodeField(reader, schema, typeName, depth));
     return list;
@@ -207,6 +215,7 @@ QVariant decodeOne(ByteReader &reader, const Schema &schema, const Definition &d
     if (depth > maximumDepth)
         throw KiwiError("Kiwi data is nested too deeply.");
     if (definition.kind == DefinitionKind::Struct) {
+        reader.spendValues(qint64(definition.fields.size()) + 1);
         QVariantMap result;
         for (const Field &field : definition.fields)
             result.insert(field.name, field.isArray ? decodeArray(reader, schema, field.type, depth + 1) : decodeField(reader, schema, field.type, depth + 1));

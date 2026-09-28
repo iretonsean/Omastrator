@@ -19,7 +19,7 @@ struct KiwiError : std::runtime_error {
 // Reads Kiwi's primitives from a byte buffer; throws KiwiError past the end.
 class ByteReader {
 public:
-    explicit ByteReader(const QByteArray &bytes) : bytes(bytes) {}
+    explicit ByteReader(const QByteArray &bytes) : bytes(bytes), valuesLeft(qint64(bytes.size()) * 8 + 1024) {}
     bool atEnd() const { return pos >= bytes.size(); }
     qsizetype remaining() const { return bytes.size() - pos; }
     quint8 readByte();
@@ -32,10 +32,13 @@ public:
     float readVarFloat();
     QString readString();
     QByteArray readByteArray();
+    // Zero-byte values (empty structs) cost no input, so each decoded value is charged against a budget instead.
+    void spendValues(qint64 count);
 
 private:
     QByteArray bytes;
     qsizetype pos = 0;
+    qint64 valuesLeft;
 };
 
 enum class DefinitionKind { Enum, Struct, Message };

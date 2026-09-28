@@ -305,6 +305,7 @@ VectorDocument map(const Tree &tree, QStringList &warnings)
         layer.layerColor = nextLayerColor(int(boards.size()));
         document.objects.push_back(layer);
         const QUuid layerId = document.objects.back().id;
+        const size_t firstInstance = ctx.pendingInstances.size();
         for (const Guid &child : pageNode.children)
             mapNode(ctx, child, layerId, {});
         const QRectF bounds = document.bounds(layerId, true);
@@ -313,6 +314,9 @@ VectorDocument map(const Tree &tree, QStringList &warnings)
         if (bounds.isValid() && (bounds.left() != x || bounds.top() != 0)) {
             const QTransform shift = QTransform::fromTranslate(x - bounds.left(), -bounds.top());
             document.transform(layerId, shift);
+            // Instances resolve after every page has moved, so their placement moves with the page.
+            for (size_t i = firstInstance; i < ctx.pendingInstances.size(); ++i)
+                ctx.pendingInstances[i].transform = ctx.pendingInstances[i].transform * shift;
         }
         Artboard board;
         board.name = layer.name;

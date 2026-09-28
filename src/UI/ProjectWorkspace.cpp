@@ -82,7 +82,6 @@ ProjectTab &ProjectWorkspace::addTab(bool reuseEmpty, const QString &name)
     return current();
 }
 
-// A lone empty tab gives way to what arrives.
 // A paste from another app says once what it couldn't bring along.
 void ProjectWorkspace::watchPaste(ProjectTab &tab)
 {
@@ -90,6 +89,7 @@ void ProjectWorkspace::watchPaste(ProjectTab &tab)
             [this](const QStringList &warnings) { showError(QStringLiteral("Some of what you pasted was left out"), warnings.join(QLatin1Char('\n'))); });
 }
 
+// A lone empty tab gives way to what arrives.
 void ProjectWorkspace::adopt(std::shared_ptr<ProjectTab> tab)
 {
     watchPaste(*tab);

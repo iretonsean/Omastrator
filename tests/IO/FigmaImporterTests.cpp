@@ -565,10 +565,16 @@ private slots:
         const QByteArray json = R"({"document": {"id": "0:0", "type": "DOCUMENT", "children": [
             {"id": "0:1", "type": "CANVAS", "name": "One", "children": [
                 {"id": "1:1", "type": "RECTANGLE", "name": "A", "size": {"x": 50, "y": 30},
-                 "relativeTransform": [[1, 0, 200], [0, 1, 70]]}]},
+                 "relativeTransform": [[1, 0, 200], [0, 1, 70]]},
+                {"id": "1:2", "type": "COMPONENT", "name": "Master", "size": {"x": 50, "y": 30},
+                 "relativeTransform": [[1, 0, 300], [0, 1, 400]], "children": [
+                    {"id": "1:3", "type": "RECTANGLE", "name": "Inner", "size": {"x": 50, "y": 30},
+                     "relativeTransform": [[1, 0, 0], [0, 1, 0]]}]}]},
             {"id": "0:2", "type": "CANVAS", "name": "Two", "children": [
                 {"id": "2:1", "type": "RECTANGLE", "name": "B", "size": {"x": 80, "y": 60},
-                 "relativeTransform": [[1, 0, -40], [0, 1, 500]]}]}]}})";
+                 "relativeTransform": [[1, 0, -40], [0, 1, 500]]},
+                {"id": "2:2", "type": "INSTANCE", "name": "Copy", "componentId": "1:2", "size": {"x": 50, "y": 30},
+                 "relativeTransform": [[1, 0, -30], [0, 1, 510]]}]}]}})";
         const VectorDocument document = FigmaImporter::parseRestFile(json, QString());
         QCOMPARE(document.artboards.size(), size_t(2));
         const VectorObject *a = named(document, QStringLiteral("A"));
@@ -577,6 +583,12 @@ private slots:
         QVERIFY(document.artboards[0].rect.contains(a->path.bounds()));
         QVERIFY(document.artboards[1].rect.contains(b->path.bounds()));
         QVERIFY(!document.artboards[0].rect.intersects(document.artboards[1].rect));
+        // An instance made on page two, of a component on page one, stays on page two.
+        const VectorObject *copy = named(document, QStringLiteral("Copy"));
+        QVERIFY(copy && copy->instance.has_value());
+        const QRectF copyBounds = document.bounds(copy->id, true);
+        QVERIFY(copyBounds.isValid());
+        QVERIFY(document.artboards[1].rect.contains(copyBounds));
     }
 
     void tokenRoundTripsWithRestrictivePermissions()
