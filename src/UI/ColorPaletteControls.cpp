@@ -1,5 +1,6 @@
 #include "UI/ColorPaletteControls.h"
 #include "UI/ColorPickerSheet.h"
+#include "UI/KeyboardShortcuts.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <cmath>
@@ -194,11 +195,11 @@ ColorPaletteControls::ColorPaletteControls(EditorSession &session, QWidget *pare
     m_fill->raise();
     m_swap->setObjectName(QStringLiteral("swapFillStroke"));
     m_swap->move(origin + QPoint(int(swatchSize) + 2, -3));
-    m_swap->setToolTip(QStringLiteral("Swap fill and stroke (X)"));
+    m_swap->setToolTip(ShortcutSettings::shared().tip(QStringLiteral("Swap fill and stroke"), QStringLiteral("Swap fill and stroke")));
     m_swap->setAccessibleName(QStringLiteral("Swap fill and stroke"));
     m_reset->setObjectName(QStringLiteral("defaultFillStroke"));
     m_reset->move(origin + QPoint(-1, int(swatchSize) + 3));
-    m_reset->setToolTip(QStringLiteral("Default fill and stroke (D)"));
+    m_reset->setToolTip(ShortcutSettings::shared().tip(QStringLiteral("Default fill and stroke"), QStringLiteral("Default fill and stroke")));
     m_reset->setAccessibleName(QStringLiteral("Default fill and stroke"));
     connect(m_fill, &QAbstractButton::clicked, this, &ColorPaletteControls::pickFill);
     connect(m_stroke, &QAbstractButton::clicked, this, &ColorPaletteControls::pickStroke);

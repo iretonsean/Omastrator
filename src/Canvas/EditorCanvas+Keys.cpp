@@ -93,6 +93,11 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             finishPen();
         } else if (session.isolatedGroup()) {
             session.exitIsolation();
+        } else if (!session.pickedNodes().empty()) {
+            session.pickNodes({});
+        } else if (session.hasSelection() && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+            // Figma's Esc lets go of the selection.
+            session.deselectAll();
         } else {
             return false;
         }
@@ -103,7 +108,7 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             finishPen();
             return true;
         }
-        return false;
+        return enterSelection(shift);
     case Qt::Key_Delete:
     case Qt::Key_Backspace:
         if (drag || !plain)
@@ -142,15 +147,6 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         session.selectTool(Tool::width);
         return true;
     }
-    // Shift+A: auto layout, as in Figma; Alt+Shift+A takes it off.
-    const bool altOnly = (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) == Qt::AltModifier;
-    if ((plain || altOnly) && shift && !event->isAutoRepeat() && event->key() == Qt::Key_A && !drag && session.hasSelection()) {
-        if (altOnly)
-            session.removeAutoLayout();
-        else
-            session.addAutoLayout();
-        return true;
-    }
     // Shift-O: the Artboard tool.
     if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_O) {
         session.selectTool(Tool::artboard);
@@ -163,6 +159,27 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         }
     }
     return false;
+}
+
+// Figma's Enter: type opens for editing, a group or frame gives up its children, and Shift+Enter goes back out.
+bool EditorCanvas::State::enterSelection(bool toParent)
+{
+    if (drag || !session.hasSelection())
+        return false;
+    if (toParent) {
+        session.selectParent();
+        return true;
+    }
+    const std::vector<QUuid> &picked = session.selection();
+    const VectorObject *only = picked.size() == 1 ? session.document()->find(picked.front()) : nullptr;
+    if (only && only->kind == ObjectKind::text && !session.document()->isEffectivelyLocked(only->id)) {
+        const VectorObject copy = *only;
+        session.selectTool(Tool::text);
+        beginTextEditing(copy, true, std::nullopt);
+        return true;
+    }
+    session.selectChildren();
+    return true;
 }
 
 bool EditorCanvas::State::nudge(QKeyEvent *event)

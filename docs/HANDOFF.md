@@ -49,6 +49,41 @@ one artboard, and whether the stacked name is easy to hit).
 
 Not done: nudging a selected artboard with the arrow keys, X and Y fields for
 it in the Properties panel, and artboards in the agent tools.
+**Update 2026-09-28: queued item 5 (keyboard shortcuts) is built** on
+`feat/shortcuts` (off `feat/frames`, 95/95). The full comparison with Figma's
+keys, every conflict and the choice made are in docs/SHORTCUTS.md.
+
+- **Why Shift+A failed:** it was a canvas key, so it only fired while the canvas
+  held focus. After a click in Layers or on any panel button it did nothing,
+  and the Object menu showed no key for it. Now Shift+A, Alt+Shift+A, Shift+H
+  and Shift+V are menu entries (they work from any focus, show in the menu, the
+  task bar tooltips and Ctrl+K, and can be remapped; text fields keep their
+  capitals). Tool letters, X, D, digits (opacity) and, from a plain button,
+  arrows and Delete now reach the canvas from a panel too
+  (`ContentView::panelKey`); text fields, spin boxes, combo boxes and lists
+  keep their keys.
+- **New keys:** Figma's K, O and Shift+P (second names for Scale, Ellipse,
+  Pencil); Enter (into groups and frames, or edit selected type), Shift+Enter
+  (to the parent), Tab and Shift+Tab (next and previous sibling, wrapping),
+  Esc (deselect, after leaving isolation and clearing picked anchors);
+  Ctrl+Shift+L, Ctrl+Shift+H, Ctrl+Alt+M, Shift+0 and Alt+1 as second keys;
+  Ctrl+Shift+E for Export for Screens; Alt+8 for Properties.
+- **Discoverable:** Keyboard Shortcuts moved to Help with Figma's Ctrl+Shift+?;
+  the sheet lists the fixed keys; tool tooltips, the palette and menus already
+  showed keys, and the Properties panel's auto layout, Detach and swap/reset
+  tooltips now read the current key (`ShortcutSettings::tip`).
+- **Left unbound on purpose:** Alt+A/D/W/S/H/V (Figma's align keys) clash with
+  the menu bar's Alt mnemonics; Figma's Ctrl+D, R, L, C, S, A, N and Ctrl+0
+  lose to Illustrator's keys (docs/SHORTCUTS.md).
+- **Verified:** tests for the menu keys, the panel routing (a button and a text
+  field with focus), Enter/Tab/Esc on the canvas, and the definition counts.
+  Not looked at on the real desktop.
+- **Needs the author:** try Shift+A after clicking in Layers; say whether Esc
+  deselecting and Tab walking the selection feel right (Tab still moves focus
+  when nothing is selected); say whether the Figma column in docs/SHORTCUTS.md
+  matches what they know (it came from cheat sheets, not a running Figma).
+  Saved remaps of "Add auto layout" from the last day are dropped (the key
+  moved to the Menus group); nothing else is affected.
 
 **Update 2026-09-28 ~08:45: queued item 1 (Inspect inside windows) is built**
 on `feat/inspect-inside` (off `feat/frames`, pushed, 95/95). It's installed in
@@ -183,7 +218,7 @@ after the author has seen the look.
    - tabs.
 
    Don't rebuild anything until they pick an option.
-5. **Keyboard shortcuts feel missing.** Check the keys against Figma's.
+5. **(Built on feat/shortcuts; see the update at the top.) Keyboard shortcuts feel missing.** Check the keys against Figma's.
    - Shift+A is there, as a canvas key, and needs a selection and canvas
      focus. Find out why the author didn't find it working, or didn't find it
      at all.

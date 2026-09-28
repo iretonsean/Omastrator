@@ -59,7 +59,8 @@ QString keyText(int key)
                                                    {QStringLiteral("\""), QStringLiteral("'")}, {QStringLiteral("!"), QStringLiteral("1")},
                                                    {QStringLiteral("@"), QStringLiteral("2")}, {QStringLiteral("#"), QStringLiteral("3")},
                                                    {QStringLiteral("&"), QStringLiteral("7")}, {QStringLiteral("*"), QStringLiteral("8")},
-                                                   {QStringLiteral(">"), QStringLiteral(".")}, {QStringLiteral("<"), QStringLiteral(",")}};
+                                                   {QStringLiteral(">"), QStringLiteral(".")}, {QStringLiteral("<"), QStringLiteral(",")},
+                                                   {QStringLiteral("?"), QStringLiteral("/")}};
     return unshifted.value(typed, typed);
 }
 
@@ -71,7 +72,8 @@ QString shiftedText(const QString &key, bool shifted)
                                                 {QStringLiteral("'"), QStringLiteral("\"")}, {QStringLiteral("1"), QStringLiteral("!")},
                                                 {QStringLiteral("2"), QStringLiteral("@")}, {QStringLiteral("3"), QStringLiteral("#")},
                                                 {QStringLiteral("7"), QStringLiteral("&")}, {QStringLiteral("8"), QStringLiteral("*")},
-                                                {QStringLiteral("."), QStringLiteral(">")}, {QStringLiteral(","), QStringLiteral("<")}};
+                                                {QStringLiteral("."), QStringLiteral(">")}, {QStringLiteral(","), QStringLiteral("<")},
+                                                {QStringLiteral("/"), QStringLiteral("?")}};
     return shifted ? shifts.value(key, key) : key;
 }
 
@@ -102,6 +104,9 @@ const std::array<ToolKey, 20> toolKeys{{
     {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8}, {Tool::gradient, "g"}, {Tool::scissors, "c"}, {Tool::typeOnPath, "t", 8},
     {Tool::width, "w", 8}, {Tool::artboard, "o", 8}, {Tool::frame, "f"},
 }};
+
+// Figma's tool keys that Illustrator's leave free; the tool's own key stays first in the sheet.
+const std::array<ToolKey, 3> toolAliases{{{Tool::scale, "k"}, {Tool::ellipse, "o"}, {Tool::pencil, "p", 8}}};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)
 {
@@ -163,7 +168,11 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Show Grid", "'", 1, true), entry("Snap to Grid", "'", 9, true), entry("Command Palette", "k", 1, true),
             entry("Rulers", "r", 1, true), entry("Hide Guides", ";", 1, true), entry("Lock Guides", ";", 3, true),
             entry("Make Guides", "5", 1, true), entry("Release Guides", "5", 3, true), entry("Join", "j", 1, true), entry("Average", "j", 3, true),
-            entry("Make Component", "k", 3, true), entry("Detach Instance", "b", 3, true)};
+            entry("Make Component", "k", 3, true), entry("Detach Instance", "b", 3, true),
+            // Figma's keys for the commands that had none; a plain Shift letter is safe because typing keeps its capitals.
+            entry("Add Auto Layout", "a", 8, true), entry("Remove Auto Layout", "a", 10, true), entry("Flip Horizontal", "h", 8, true),
+            entry("Flip Vertical", "v", 8, true), entry("Export for Screens", "e", 9, true), entry("Properties", "8", 2, true),
+            entry("Keyboard Shortcuts", "/", 9, true)};
         // Illustrator's type keys: they work on selected type and while typing, and rest otherwise.
         const QString left(QChar(0xf702)), right(QChar(0xf703)), up(QChar(0xf700)), down(QChar(0xf701));
         for (const auto &[title, key, modifiers] : std::vector<std::tuple<const char *, QString, int>>{
@@ -174,14 +183,15 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             result.push_back({QString::fromUtf8(title), QStringLiteral("Type"), ShortcutChord(key, modifiers)});
         for (const auto &[tool, key, modifiers] : toolKeys)
             result.push_back(entry(::title(tool) + QStringLiteral(" tool"), QString::fromLatin1(key), modifiers, false));
+        for (const auto &[tool, key, modifiers] : toolAliases)
+            result.push_back(entry(::title(tool) + QStringLiteral(" tool (Figma's %1%2)").arg(modifiers ? QStringLiteral("Shift+") : QString(),
+                                                                                                   QString::fromLatin1(key).toUpper()),
+                                   QString::fromLatin1(key), modifiers, false));
         const std::vector<std::pair<const char *, QString>> keys{
             {"Swap fill and stroke", "x"}, {"Default fill and stroke", "d"}, {"Temporary Hand tool (hold)", " "},
             {"Apply / finish current operation", "\r"}, {"Cancel current operation", "\x1b"}};
         for (const auto &[title, key] : keys)
             result.push_back(entry(title, key, 0, false));
-        // Figma's auto layout keys, on the canvas.
-        result.push_back(entry("Add auto layout", QStringLiteral("a"), 8, false));
-        result.push_back(entry("Remove auto layout", QStringLiteral("a"), 10, false));
         for (const auto &[direction, key] : std::vector<std::pair<QString, QString>>{
                  {"Left", QString(QChar(0xf702))}, {"Right", QString(QChar(0xf703))}, {"Up", QString(QChar(0xf700))}, {"Down", QString(QChar(0xf701))}}) {
             // The step is the keyboard increment in Preferences.
@@ -196,6 +206,10 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
 std::optional<Tool> ShortcutDefinition::tool(const ShortcutChord &chord)
 {
     for (const auto &[tool, key, modifiers] : toolKeys) {
+        if (chord == ShortcutChord(QString::fromLatin1(key), modifiers))
+            return tool;
+    }
+    for (const auto &[tool, key, modifiers] : toolAliases) {
         if (chord == ShortcutChord(QString::fromLatin1(key), modifiers))
             return tool;
     }
@@ -262,6 +276,15 @@ ShortcutChord ShortcutSettings::native(const ShortcutChord &original) const
     return original;
 }
 
+QString ShortcutSettings::tip(const QString &text, const QString &title) const
+{
+    for (const ShortcutDefinition &definition : ShortcutDefinition::all()) {
+        if (definition.title == title)
+            return QStringLiteral("%1 (%2)").arg(text, chord(definition).label());
+    }
+    return text;
+}
+
 bool ShortcutSettings::save(const QHash<QString, ShortcutChord> &values)
 {
     if (problem(values))
@@ -314,7 +337,7 @@ std::unique_ptr<QKeyEvent> ShortcutSettings::canvasEvent(const QKeyEvent &event)
                 return ShortcutChord(definition.original.key, 8).event(event);
         }
         for (const ShortcutDefinition &definition : all) {
-            if (!definition.isMenu() && definition.original == plain && chord(definition) != plain)
+            if (!definition.isMenu() && definition.original == plain && chord(definition) != plain && !shiftTaken(definition.original.key))
                 return nullptr;
         }
     }

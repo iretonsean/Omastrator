@@ -20,7 +20,7 @@ checked against the code on `feat/graphite-look` (0999e92).
 | Per-layer export | there | Export for Screens (`ScreenExport`), `exportAssets` |
 | Prototyping | missing | links between frames |
 | Text boxes | there | auto width, auto height, fixed (`TextContent::area`), styles, OpenType |
-| Canvas UX | partial | artboard labels, Alt distances and rulers are there. Missing: Ctrl+Alt+G (done with frames), Shift+A, K, tidy up, frame labels (done with frames) |
+| Canvas UX | partial | artboard labels, Alt distances and rulers are there. Keys are compared in docs/SHORTCUTS.md (Ctrl+Alt+G, Shift+A and K are in). Missing: tidy up, frame labels (done with frames) |
 | Pages | missing | one canvas per document |
 | Image fills | missing | `PaintKind` has no image; images are only their own layers |
 | Vector networks | missing | classic contour paths |

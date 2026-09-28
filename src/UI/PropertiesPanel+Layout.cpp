@@ -1,3 +1,4 @@
+#include "UI/KeyboardShortcuts.h"
 #include "UI/NumberField.h"
 #include "UI/PropertiesPanel.h"
 #include <QButtonGroup>
@@ -45,7 +46,7 @@ PanelSection *PropertiesPanel::layoutSection()
     QVBoxLayout *body = m_layout->body;
     m_layoutAdd = new QPushButton(QStringLiteral("Add auto layout"), m_layout);
     m_layoutAdd->setObjectName(QStringLiteral("layoutAdd"));
-    m_layoutAdd->setToolTip(QStringLiteral("Lay the frame's children out in a row or column (Shift+A)"));
+    m_layoutAdd->setToolTip(ShortcutSettings::shared().tip(QStringLiteral("Lay the frame's children out in a row or column"), QStringLiteral("Add Auto Layout")));
     connect(m_layoutAdd, &QPushButton::clicked, this, [this] { m_session.addAutoLayout(); });
     body->addWidget(m_layoutAdd);
 
@@ -68,7 +69,7 @@ PanelSection *PropertiesPanel::layoutSection()
     });
     auto *remove = new QPushButton(QStringLiteral("Remove"), m_layoutRows);
     remove->setObjectName(QStringLiteral("layoutRemove"));
-    remove->setToolTip(QStringLiteral("Remove auto layout; the children stay where they are (Alt+Shift+A)"));
+    remove->setToolTip(ShortcutSettings::shared().tip(QStringLiteral("Remove auto layout; the children stay where they are"), QStringLiteral("Remove Auto Layout")));
     connect(remove, &QPushButton::clicked, this, [this] { m_session.removeAutoLayout(); });
     flowRow->addWidget(m_layoutFlow, 1);
     flowRow->addWidget(remove);

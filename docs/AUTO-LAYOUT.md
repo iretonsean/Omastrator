@@ -70,6 +70,8 @@ Moving is a translation of the child's subtree.
 
 ## Editing
 
+- **Keys:** Shift+A and Alt+Shift+A are Object menu entries, so they work with any panel
+  focused and show beside the entry. Typing keeps its capital A.
 - **Shift+A with a frame selected:** adds auto layout, choosing the direction
   from how its children are spread.
 - **Shift+A with loose objects selected:** wraps them in a new auto-layout

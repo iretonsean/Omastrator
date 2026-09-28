@@ -1,3 +1,4 @@
+#include "UI/KeyboardShortcuts.h"
 #include "UI/PropertiesPanel.h"
 #include <QComboBox>
 #include <QHBoxLayout>
@@ -64,7 +65,7 @@ void PropertiesPanel::synchronizeComponent()
         auto *detach = new QToolButton(buttons);
         detach->setObjectName(QStringLiteral("propertiesDetach"));
         detach->setText(QStringLiteral("Detach"));
-        detach->setToolTip(QStringLiteral("Detach Instance"));
+        detach->setToolTip(ShortcutSettings::shared().tip(QStringLiteral("Detach Instance"), QStringLiteral("Detach Instance")));
         connect(detach, &QToolButton::clicked, this, [this] { m_session.detachInstances(); });
         layout->addStretch();
         layout->addWidget(reset);

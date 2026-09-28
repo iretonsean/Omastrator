@@ -126,8 +126,8 @@ void Menus::buildFile(QMenuBar &bar)
     add(exports, QStringLiteral("exportSVG"), QStringLiteral("SVG…"), QKeySequence(), [this] { m_workspace.exportAs(DocumentExporter::Format::svg); });
     add(exports, QStringLiteral("exportPDF"), QStringLiteral("PDF…"), QKeySequence(), [this] { m_workspace.exportAs(DocumentExporter::Format::pdf); });
     exports->addSeparator();
-    // Alt+Ctrl+E is PNG's; this batch export gets no key of its own.
-    add(exports, QStringLiteral("exportForScreens"), QStringLiteral("Export for Screens…"), QKeySequence(),
+    // Alt+Ctrl+E is PNG's; the batch export takes Figma's Export key.
+    add(exports, QStringLiteral("exportForScreens"), QStringLiteral("Export for Screens…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_E),
         [this] { (new ExportForScreensSheet(session(), &m_window))->open(); });
     file->addSeparator();
     add(file, QStringLiteral("quit"), QStringLiteral("Quit"), QKeySequence(Qt::CTRL | Qt::Key_Q), [this] { m_window.close(); })
@@ -205,10 +205,6 @@ void Menus::buildEdit(QMenuBar &bar)
             session().deleteSelection();
     });
     edit->addSeparator();
-    add(edit, QStringLiteral("keyboardShortcuts"), QStringLiteral("Keyboard Shortcuts…"), QKeySequence(), [this] {
-        m_shortcutsPanel.onClose = [this] { m_shortcutsPanel.close(); };
-        m_shortcutsPanel.show(QStringLiteral("Keyboard Shortcuts"), new KeyboardShortcutsSheet([this] { m_shortcutsPanel.close(); }));
-    });
     add(edit, QStringLiteral("preferences"), QStringLiteral("Preferences…"), QKeySequence(), [this] { ObjectDialogs::preferences(&m_window); })
         ->setMenuRole(QAction::PreferencesRole);
 }
@@ -227,8 +223,8 @@ void Menus::buildObject(QMenuBar &bar)
     add(transform, QStringLiteral("reflectDialog"), QStringLiteral("Reflect…"), QKeySequence(), [this] { ObjectDialogs::reflect(session(), &m_window); });
     add(transform, QStringLiteral("scaleDialog"), QStringLiteral("Scale…"), QKeySequence(), [this] { ObjectDialogs::scale(session(), &m_window); });
     transform->addSeparator();
-    add(transform, QStringLiteral("flipHorizontal"), QStringLiteral("Flip Horizontal"), QKeySequence(), [this] { session().flipSelection(Qt::Horizontal); });
-    add(transform, QStringLiteral("flipVertical"), QStringLiteral("Flip Vertical"), QKeySequence(), [this] { session().flipSelection(Qt::Vertical); });
+    add(transform, QStringLiteral("flipHorizontal"), QStringLiteral("Flip Horizontal"), QKeySequence(Qt::SHIFT | Qt::Key_H), [this] { session().flipSelection(Qt::Horizontal); });
+    add(transform, QStringLiteral("flipVertical"), QStringLiteral("Flip Vertical"), QKeySequence(Qt::SHIFT | Qt::Key_V), [this] { session().flipSelection(Qt::Vertical); });
     QMenu *arrange = object->addMenu(QStringLiteral("Arrange"));
     arrange->menuAction()->setObjectName(QStringLiteral("arrangeMenu"));
     add(arrange, QStringLiteral("bringToFront"), QStringLiteral("Bring to Front"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketRight),
@@ -248,9 +244,10 @@ void Menus::buildObject(QMenuBar &bar)
     add(object, QStringLiteral("clipContent"), QStringLiteral("Clip Content"), QKeySequence(), [this] {
         session().setClipsContent(!session().selectedFramesClip());
     })->setCheckable(true);
-    // Shift+A and Alt+Shift+A are canvas keys (docs/AUTO-LAYOUT.md), so typing keeps its capital A.
-    add(object, QStringLiteral("addAutoLayout"), QStringLiteral("Add Auto Layout"), QKeySequence(), [this] { session().addAutoLayout(); });
-    add(object, QStringLiteral("removeAutoLayout"), QStringLiteral("Remove Auto Layout"), QKeySequence(),
+    // Figma's Shift+A. Text fields and open type answer the key before a menu does, so a capital A still types.
+    add(object, QStringLiteral("addAutoLayout"), QStringLiteral("Add Auto Layout"), QKeySequence(Qt::SHIFT | Qt::Key_A),
+        [this] { session().addAutoLayout(); });
+    add(object, QStringLiteral("removeAutoLayout"), QStringLiteral("Remove Auto Layout"), QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_A),
         [this] { session().removeAutoLayout(); });
     object->addSeparator();
     // Components (docs/DESIGN-SYSTEMS.md): Figma's keys for Make and Detach.
@@ -266,9 +263,12 @@ void Menus::buildObject(QMenuBar &bar)
             session().select({*master});
     });
     object->addSeparator();
-    add(object, QStringLiteral("lockSelection"), QStringLiteral("Lock Selection"), QKeySequence(Qt::CTRL | Qt::Key_2), [this] { session().lockSelection(); });
+    // Figma's Ctrl+Shift+L and Ctrl+Shift+H ride beside Illustrator's keys.
+    alias(add(object, QStringLiteral("lockSelection"), QStringLiteral("Lock Selection"), QKeySequence(Qt::CTRL | Qt::Key_2), [this] { session().lockSelection(); }),
+          QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L));
     add(object, QStringLiteral("unlockAll"), QStringLiteral("Unlock All"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_2), [this] { session().unlockAll(); });
-    add(object, QStringLiteral("hideSelection"), QStringLiteral("Hide Selection"), QKeySequence(Qt::CTRL | Qt::Key_3), [this] { session().hideSelection(); });
+    alias(add(object, QStringLiteral("hideSelection"), QStringLiteral("Hide Selection"), QKeySequence(Qt::CTRL | Qt::Key_3), [this] { session().hideSelection(); }),
+          QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_H));
     add(object, QStringLiteral("showAll"), QStringLiteral("Show All"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_3), [this] { session().showAll(); });
     object->addSeparator();
     QMenu *path = object->addMenu(QStringLiteral("Path"));
@@ -297,7 +297,9 @@ void Menus::buildObject(QMenuBar &bar)
     })->setCheckable(true);
     QMenu *clipping = object->addMenu(QStringLiteral("Clipping Mask"));
     clipping->menuAction()->setObjectName(QStringLiteral("clippingMenu"));
-    add(clipping, QStringLiteral("makeClippingMask"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_7), [this] { session().makeClippingMask(); });
+    // Figma's Use as Mask is Ctrl+Alt+M.
+    alias(add(clipping, QStringLiteral("makeClippingMask"), QStringLiteral("Make"), QKeySequence(Qt::CTRL | Qt::Key_7), [this] { session().makeClippingMask(); }),
+          QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_M));
     add(clipping, QStringLiteral("releaseClippingMask"), QStringLiteral("Release"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_7),
         [this] { session().releaseClippingMask(); });
     QMenu *opacityMask = object->addMenu(QStringLiteral("Opacity Mask"));
@@ -453,7 +455,9 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     alias(add(view, QStringLiteral("zoomToSelection"), QStringLiteral("Zoom to Selection"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_0),
               [this] { session().zoomToSelection(); }),
           QKeySequence(Qt::SHIFT | Qt::Key_2));
-    add(view, QStringLiteral("actualSize"), QStringLiteral("Actual Size"), QKeySequence(Qt::CTRL | Qt::Key_1), [this] { session().actualSize(); });
+    // Shift+0 is Figma's Zoom to 100 %.
+    alias(add(view, QStringLiteral("actualSize"), QStringLiteral("Actual Size"), QKeySequence(Qt::CTRL | Qt::Key_1), [this] { session().actualSize(); }),
+          QKeySequence(Qt::SHIFT | Qt::Key_0));
     view->addSeparator();
     add(view, QStringLiteral("outline"), QStringLiteral("Outline"), QKeySequence(Qt::CTRL | Qt::Key_Y),
         [this] { session().setShowsOutline(!session().showsOutline); })
@@ -489,13 +493,15 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     })->setCheckable(true);
     QMenu *window = bar.addMenu(QStringLiteral("&Window"));
     // F7 is Illustrator's; no remap covers function keys.
+    // Alt+1 is Figma's Layers key.
     QAction *layers = add(window, QStringLiteral("showLayers"), QStringLiteral("Layers"), QKeySequence(Qt::Key_F7), [this] {
         ContentView::setShowsPanel(ContentView::layersKey, !ContentView::showsPanel(ContentView::layersKey));
         emit layersToggled(ContentView::showsPanel(ContentView::layersKey));
         synchronize();
     });
     layers->setCheckable(true);
-    QAction *properties = add(window, QStringLiteral("showProperties"), QStringLiteral("Properties"), QKeySequence(), [this] {
+    alias(layers, QKeySequence(Qt::ALT | Qt::Key_1));
+    QAction *properties = add(window, QStringLiteral("showProperties"), QStringLiteral("Properties"), QKeySequence(Qt::ALT | Qt::Key_8), [this] {
         ContentView::setShowsPanel(ContentView::propertiesKey, !ContentView::showsPanel(ContentView::propertiesKey));
         emit propertiesToggled(ContentView::showsPanel(ContentView::propertiesKey));
         synchronize();
@@ -518,6 +524,12 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     alias(add(help, QStringLiteral("commandPalette"), QStringLiteral("Command Palette…"), QKeySequence(Qt::CTRL | Qt::Key_K),
               [this] { commandPalette()->open(); }),
           QKeySequence(Qt::CTRL | Qt::Key_Slash));
+    // Figma's Ctrl+Shift+? (typed as Ctrl+Shift+/), Illustrator's Edit ▸ Keyboard Shortcuts in its other home.
+    alias(add(help, QStringLiteral("keyboardShortcuts"), QStringLiteral("Keyboard Shortcuts…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Question), [this] {
+              m_shortcutsPanel.onClose = [this] { m_shortcutsPanel.close(); };
+              m_shortcutsPanel.show(QStringLiteral("Keyboard Shortcuts"), new KeyboardShortcutsSheet([this] { m_shortcutsPanel.close(); }));
+          }),
+          QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Slash));
     help->addSeparator();
     add(help, QStringLiteral("connectAgent"), QStringLiteral("Connect an Agent…"), QKeySequence(), [this] {
         if (m_agent)

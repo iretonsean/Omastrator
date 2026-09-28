@@ -2,7 +2,9 @@
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
 #include "UI/ProjectWorkspaceView.h"
+#include <QLineEdit>
 #include <QMenu>
+#include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QtTest>
@@ -39,6 +41,8 @@ private slots:
     void altArrowsDuplicateAnythingElse();
     void typeKeysKernAtACaretWhileTyping();
     void typeMenuConvertsPointAndArea();
+    void figmaKeysWorkFromAnyPanel();
+    void figmaKeysSitBesideIllustratorsOnTheirEntries();
 };
 
 void MenusTests::initTestCase()
@@ -78,7 +82,7 @@ void MenusTests::everyMenuKeyHasOneDefinition()
         QVERIFY2(definition != ShortcutDefinition::all().end(), qPrintable(entry->objectName()));
         used[definition->id()] += 1;
     }
-    QCOMPARE(keyed, 72);
+    QCOMPARE(keyed, 79);
     for (const ShortcutDefinition &definition : ShortcutDefinition::all()) {
         if (definition.isMenu())
             QVERIFY2(used.value(definition.id()) == 1, qPrintable(definition.id()));
@@ -361,6 +365,65 @@ void MenusTests::typeMenuConvertsPointAndArea()
     menus.action("convertToPointType")->trigger();
     QVERIFY(!w.session().document()->find(id)->text.area.has_value());
     QCOMPARE(w.session().document()->find(id)->text.text, QString("Point to area"));
+}
+
+// Shift+A was a canvas key: it did nothing once a panel held focus, and its entry showed no key.
+void MenusTests::figmaKeysWorkFromAnyPanel()
+{
+    TypeWindow w;
+    const QUuid one = box(w.session(), 10), two = box(w.session(), 100);
+    w.session().select({one, two});
+    Menus &menus = *w.window.menus();
+    QCOMPARE(menus.action("addAutoLayout")->shortcut(), QKeySequence(Qt::SHIFT | Qt::Key_A));
+    // A button in a panel holds focus, as after a click on a panel's control.
+    auto *button = new QPushButton(QStringLiteral("Focus"), &w.window.content()->layersPanel());
+    button->show();
+    button->setFocus();
+    QVERIFY(QTest::qWaitFor([&] { return QApplication::focusWidget() == button; }));
+    // A text field keeps its capital A.
+    auto *field = new QLineEdit(&w.window.content()->layersPanel());
+    field->show();
+    field->setFocus();
+    QTest::keyClick(field, 'A', Qt::ShiftModifier);
+    QCOMPARE(field->text(), QString("A"));
+    QCOMPARE(w.count(), size_t(2));
+    button->setFocus();
+    QTest::keyClick(button, Qt::Key_A, Qt::ShiftModifier);
+    QCOMPARE(w.count(), size_t(3));
+    QVERIFY(w.session().canRemoveAutoLayout());
+    QTest::keyClick(button, Qt::Key_A, Qt::AltModifier | Qt::ShiftModifier);
+    QVERIFY(!w.session().canRemoveAutoLayout());
+    // Tool letters reach the canvas from the button too, and not from the field.
+    QTest::keyClick(button, Qt::Key_P);
+    QCOMPARE(w.session().tool(), Tool::pen);
+    field->setFocus();
+    QTest::keyClick(field, Qt::Key_V);
+    QCOMPARE(w.session().tool(), Tool::pen);
+    QCOMPARE(field->text(), QString("Av"));
+    button->setFocus();
+    QTest::keyClick(button, Qt::Key_V);
+    QCOMPARE(w.session().tool(), Tool::select);
+    // So do the arrows, from a plain button.
+    const QRectF before = w.session().selectionBounds();
+    QTest::keyClick(button, Qt::Key_Right);
+    QCOMPARE(w.session().selectionBounds().left(), before.left() + 1);
+}
+
+void MenusTests::figmaKeysSitBesideIllustratorsOnTheirEntries()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    QCOMPARE(menus.action("flipHorizontal")->shortcut(), QKeySequence(Qt::SHIFT | Qt::Key_H));
+    QCOMPARE(menus.action("removeAutoLayout")->shortcut(), QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_A));
+    QCOMPARE(menus.action("lockSelection")->shortcuts(), (QList<QKeySequence>{QKeySequence(Qt::CTRL | Qt::Key_2), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L)}));
+    QCOMPARE(menus.action("actualSize")->shortcuts().last(), QKeySequence(Qt::SHIFT | Qt::Key_0));
+    // The sheet is under Help now, with Figma's key.
+    QCOMPARE(menus.action("keyboardShortcuts")->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Question));
+    // Remapping the entry moves its Figma key with it, and the fixed second key stays.
+    QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Menus:Lock Selection"), ShortcutChord("l", 3)}}));
+    QCOMPARE(menus.action("lockSelection")->shortcuts().first(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_L));
+    QCOMPARE(menus.action("lockSelection")->shortcuts().last(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L));
 }
 
 QTEST_MAIN(MenusTests)

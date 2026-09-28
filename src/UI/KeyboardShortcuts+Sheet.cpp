@@ -150,6 +150,10 @@ KeyboardShortcutsSheet::KeyboardShortcutsSheet(std::function<void()> close, QWid
     rows->addWidget(words(QStringLiteral("Text fields keep their standard editing keys. Dialogs share the Apply and Cancel assignments above. "
                                          "Numeric fields use Up and Down, with Shift for larger steps. The shortcut editor itself always "
                                          "uses Return to save and Esc to cancel when not recording."), list));
+    rows->addWidget(words(QStringLiteral("Fixed keys: Enter goes into the selected group or frame, or edits selected type; Shift+Enter goes out to the parent; "
+                                         "Tab and Shift+Tab walk the siblings; Esc lets go. Figma's second keys ride beside these menu entries: "
+                                         "Ctrl+Shift+L (Lock), Ctrl+Shift+H (Hide), Ctrl+Alt+M (Make Clipping Mask), Shift+0 (Actual Size), "
+                                         "Alt+1 (Layers), Ctrl+/ (Command Palette). Figma's K and O and Shift+P are second names for Scale, Ellipse and Pencil."), list));
     rows->addWidget(words(QStringLiteral("Shift constrains shapes to squares, circles and 45° angles, and adds to a selection. "
                                          "Alt draws shapes from their centre and duplicates what you drag. Space pans while held. "
                                          "Modifier-and-mouse gestures are fixed."), list));

@@ -143,6 +143,10 @@ public:
     // Select menu: every other object, the next sibling up or down, and matches of the first selected leaf.
     void selectInverse();
     void selectAdjacent(bool above);
+    // Figma's Enter, Shift+Enter and Tab: into the selected groups and frames, out to their parents, and along the siblings (wrapping).
+    void selectChildren();
+    void selectParent();
+    void selectSibling(bool next);
     void selectSame(SameAttribute attribute);
     void selectObjects(ObjectFilter filter);
     void selectAllOnSameLayers();
