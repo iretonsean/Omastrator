@@ -1,6 +1,9 @@
 #include "Document/Components.h"
 #include "FigmaKiwiFixtures.h"
 #include "IO/FigmaImporter.h"
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QTest>
 
 namespace {
@@ -477,6 +480,56 @@ private slots:
     void notFigmaDataThrows()
     {
         QVERIFY_EXCEPTION_THROWN(FigmaImporter::parse(QByteArray("hello")), FileError);
+    }
+
+    void pasteReadsTheFigmaHtmlComment()
+    {
+        const QByteArray html = "<!--(figmeta)" + QByteArray("anything").toBase64() + "(/figmeta)-->"
+            + "<!--(figma)" + fixtureFile().toBase64() + "(/figma)-->";
+        QVERIFY(FigmaImporter::isFigmaClipboardHtml(html));
+        const VectorDocument document = FigmaImporter::parseClipboardHtml(html);
+        QVERIFY(named(document, QStringLiteral("Card")));
+    }
+
+    void pasteRejectsPlainHtml()
+    {
+        const QByteArray html = "<html><body>hi</body></html>";
+        QVERIFY(!FigmaImporter::isFigmaClipboardHtml(html));
+        QVERIFY_EXCEPTION_THROWN(FigmaImporter::parseClipboardHtml(html), FileError);
+    }
+
+    void linkParsesKeyAndNodeID()
+    {
+        const auto design = FigmaImporter::parseLink(QStringLiteral("https://www.figma.com/design/abc123/My-File?node-id=1-2&t=xyz"));
+        QVERIFY(design.has_value());
+        QCOMPARE(design->fileKey, QStringLiteral("abc123"));
+        QCOMPARE(design->nodeID, QStringLiteral("1:2"));
+
+        const auto file = FigmaImporter::parseLink(QStringLiteral("https://www.figma.com/file/def456/Old-Style-Link"));
+        QVERIFY(file.has_value());
+        QCOMPARE(file->fileKey, QStringLiteral("def456"));
+        QVERIFY(file->nodeID.isEmpty());
+
+        QVERIFY(!FigmaImporter::parseLink(QStringLiteral("https://example.com/not-figma")).has_value());
+    }
+
+    void tokenRoundTripsWithRestrictivePermissions()
+    {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        QVERIFY(!FigmaImporter::Token::load().has_value());
+        FigmaImporter::Token::save(QStringLiteral("figd_secret"));
+        const auto loaded = FigmaImporter::Token::load();
+        QVERIFY(loaded.has_value());
+        QCOMPARE(*loaded, QStringLiteral("figd_secret"));
+        const QString path = QDir(config.path()).filePath(QStringLiteral("omastrator/figma.json"));
+        QVERIFY(QFile::exists(path));
+        const QFile::Permissions perms = QFile(path).permissions();
+        QVERIFY(!(perms & (QFile::ReadGroup | QFile::WriteGroup | QFile::ReadOther | QFile::WriteOther)));
+        FigmaImporter::Token::forget();
+        QVERIFY(!FigmaImporter::Token::load().has_value());
+        qunsetenv("XDG_CONFIG_HOME");
     }
 };
 
