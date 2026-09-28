@@ -128,7 +128,20 @@ obvious, always-working way out.
 2. **Match the installed Omarchy theme** (the author uses Graphite). The
    island, bar, cards and the app window should use the theme's fonts,
    colours and radii. The author called the current look ugly.
-3. **An editable lift from the author's own browser.** The author says
+3. **Figma's design core** (the author, 2026-09-27: "a hybrid
+   figma/illustrator app built directly into the omarchy os"). Omastrator has
+   components with variants, artboards, multiple fills and strokes, and live
+   rectangles. It has **no frame layer type**. First audit what's there
+   against Figma's design features, then build in this order:
+   - frames: nestable, with fill, corner radii, clip content and a size;
+   - auto layout: direction, gap, per-side padding, alignment, wrap,
+     hug/fill/fixed, Shift+A;
+   - constraints and resizing;
+   - effects: shadows and blurs;
+   - boolean groups, per-layer export, and whatever else the audit finds.
+   The editable lift (item 4) imports flexbox as auto-layout frames, so it
+   lands after frames and auto layout exist.
+4. **An editable lift from the author's own browser.** The author says
    tracing a screenshot of an interface is "horrible": it's fine for small
    graphics picked with the pointer, not for whole interfaces. Study Paper
    Snapshot first (installed in their Chromium, id
@@ -140,8 +153,8 @@ obvious, always-working way out.
    site should give real text layers, groups and shapes on the Desk, like
    paper.design's Chrome extension, not a traced screenshot. This shares the
    way into the user's Chromium with item 1.
-4. **Design sessions:** see `docs/SESSIONS.md` (agreed, not started).
-5. **Minor audit leftovers.**
+5. **Design sessions:** see `docs/SESSIONS.md` (agreed, not started).
+6. **Minor audit leftovers.**
    - The tray light's tooltip says "Enter keeps it, Esc discards it" for app
      proposals. Check it isn't shown for overlay proposals.
    - Design mode without setup's keys, with the island on another monitor

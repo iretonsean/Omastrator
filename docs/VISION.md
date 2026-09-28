@@ -16,6 +16,12 @@ makes the designer useful**. Automation speeds up the creative process; it
 never takes it over. The designer stays the author, has more room to be
 creative, and has fun working.
 
+Omastrator is **a hybrid of Figma and Illustrator, built into Omarchy**. It
+is not an illustration tool with a few Figma extras. Figma's design features
+are part of the core document, alongside Illustrator's vector and type
+depth: frames, auto layout, constraints, components and variants, styles and
+variables, and effects. (The author, 2026-09-27.)
+
 Above all, Omastrator removes the layers of separation between the designer
 and the customer they're designing for.
 

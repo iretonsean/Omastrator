@@ -438,8 +438,9 @@ Sources:
   - **Smart selection:** pink spacing handles let you drag to change the gap,
     drag to reorder, and Shift-scroll to adjust.
 - **Auto layout** (Figma) and flex (Paper): stacks with gap, per-side
-  padding, hug/fill/fixed sizing and wrapping. Useful for UI mock-ups, but
-  outside an illustration tool's core. See P2.
+  padding, hug/fill/fixed sizing and wrapping. In scope since 2026-09-27:
+  Omastrator is a Figma/Illustrator hybrid (docs/VISION.md), and the editable
+  lift maps a page's flexbox onto it.
 
 ### Paint and appearance
 
@@ -822,7 +823,7 @@ has Qt Test coverage in `tests/<Folder>/`.
 | On-canvas gradient annotator | ✓ | ✓ | ✓ done | P2 |
 | Opacity masks | ✓ | masks | clip only | P2 |
 | Per-object export / Export for Screens | ✓ | ✓ | whole document | P2 |
-| Auto layout | ✗ | ✓ | ✗ | out of scope |
+| Auto layout | ✗ | ✓ | ✗ | planned (hybrid, 2026-09-27) |
 
 ### P0: must-have quality of life
 
@@ -1596,8 +1597,10 @@ has Qt Test coverage in `tests/<Folder>/`.
 
 ### Out of scope
 
-Figma-style auto layout, components with variants and multiplayer or cloud
-features don't fit an offline illustration tool. Paper's HTML-native model
+*Reversed 2026-09-27:* Omastrator is a Figma/Illustrator hybrid
+(docs/VISION.md), so Figma's design features (frames, auto layout,
+constraints, effects) belong in the core document. Components with variants
+already shipped. Only real-time multiplayer stays out of scope for now. Paper's HTML-native model
 belongs with Omastrator's Live feature, not the core document.
 
 ### Suggested order
