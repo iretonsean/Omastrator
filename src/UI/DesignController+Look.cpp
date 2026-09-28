@@ -321,10 +321,10 @@ QJsonObject DesignController::lookStatus()
         return status;
     // The gap handles: what the gaps are, with the edit on top, for the overlay to draw and drag.
     const DesktopLook::Look now = DesktopLook::read(DesktopLook::Paths::current(), false);
-    status["gapsIn"] = m_lookEdits["gapsIn"].toInt(now.gapsIn);
-    status["gapsOut"] = m_lookEdits["gapsOut"].toInt(now.gapsOut);
-    status["borderSize"] = m_lookEdits["borderSize"].toInt(now.borderSize);
-    status["rounding"] = m_lookEdits["rounding"].toInt(now.rounding);
+    status["gapsIn"] = m_lookEdits.value(QLatin1String("gapsIn")).toInt(now.gapsIn);
+    status["gapsOut"] = m_lookEdits.value(QLatin1String("gapsOut")).toInt(now.gapsOut);
+    status["borderSize"] = m_lookEdits.value(QLatin1String("borderSize")).toInt(now.borderSize);
+    status["rounding"] = m_lookEdits.value(QLatin1String("rounding")).toInt(now.rounding);
     status["handles"] = true;
     return status;
 }

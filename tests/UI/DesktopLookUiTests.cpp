@@ -278,6 +278,11 @@ private slots:
         QVERIFY(look["handles"].toBool());
         QCOMPARE(look["gapsOut"].toInt(), 24);
         QVERIFY(look["pending"].toBool());
+        // Reading the handles leaves the edit as it was, so the next preview still validates.
+        QVERIFY(!app.design().lookEdits().contains(QStringLiteral("borderSize")));
+        QString previewError;
+        app.call(QStringLiteral("look"), {{"op", "preview"}, {"edits", QJsonObject{{"gapsIn", 9}}}}, &previewError);
+        QCOMPARE(previewError, QString());
         // Nothing reached a file.
         QCOMPARE(readAll(desktop.config() + QStringLiteral("/hypr/looknfeel.lua")), userLooknfeel);
         panel->close();
