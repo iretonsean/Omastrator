@@ -40,35 +40,9 @@ their panes are closed. Their session IDs are in
    (builds under `flock ~/.cache/omastrator-build.lock`, `-j2`), and
    **ask the author before pushing**. Remove the merged worktrees
    afterwards.
-2. **Quick wins from the research** (docs/research/unbuilt-features-2026-09.md),
-   easiest first. They're all small, and each is a feature Illustrator or
-   Figma users vote for that neither has built:
-   - **Text stroke inside/outside** (Illustrator, 213 votes). Check it
-     first: the renderer already aligns strokes on closed paths
-     (VectorRenderer.cpp:259), and glyph outlines are closed, so it may
-     already work on text. If it does, add a test and a README line. If it
-     doesn't, route text strokes through the same path.
-   - **Non-printing / non-exporting artboards** (Illustrator, 152 votes).
-     Add a flag on `Artboard` (VectorDocument.h:263), a toggle in the
-     Artboards list and its context menu, and make Export, Export for
-     Screens and Share skip flagged artboards. Show a marker on the canvas
-     label.
-   - **Editable document presets** (Illustrator, 150 votes). The New
-     Document sheet's five presets are hard-coded (NewDocumentSheet.cpp:10).
-     Add Save Preset…, Rename and Delete, stored in
-     `~/.config/omastrator/presets.json`.
-   - **Lock Document / read-only mode** (Figma, 44 votes plus duplicate
-     threads). A per-file toggle stops edits in `EditorSession` with a
-     plain status line, shows a lock on the tab, and is saved in the
-     `.omai`.
-   - **Settings that travel** (Illustrator, 144 votes). Preferences ▸
-     Export/Import Settings saves one file (preferences, remapped keys,
-     workspace, presets), with an option to keep it on connected cloud
-     storage through the existing rclone code.
-   - **Spell check in type** (Illustrator's Grammarly request, 432 votes).
-     Underline misspellings in the inline text editor through Hunspell
-     (LGPL/MPL, optional at build time), plus "Check Spelling with AI" on
-     the selection through the agent.
+2. **Quick wins:** `docs/backlog/QUICK-WINS.md` (eight small items, easiest
+   first, most from the research). Medium and high effort work is in
+   `docs/backlog/MEDIUM-EFFORT.md` and `docs/backlog/HIGH-EFFORT.md`.
 3. **Effects** (docs/EFFECTS.md): **the author hasn't reviewed the design
    yet.** Ask before building. It's built in phases on `feat/effects` after
    the merge.
@@ -77,11 +51,7 @@ their panes are closed. Their session IDs are in
    sign-in in a normal window. Build order: Pages, canvas workspaces, the
    Browser View frame and Browse tool, Live inside the frame (then remove
    Live from the island), then Duplicate at Breakpoints and Clean Session.
-5. **Bigger bets from the research**, for later:
-   - vector halftones, after effects;
-   - grid auto layout with Hug/Fill;
-   - native tables and a chart tool;
-   - real-time co-editing.
+5. **After that:** pick from `docs/backlog/MEDIUM-EFFORT.md`, where spell check, Pages and image fills lead.
 6. **The author's own steps:**
    - publish to the AUR and cut the first tagged release, per
      docs/RELEASING.md;
