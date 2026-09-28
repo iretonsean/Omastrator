@@ -3,7 +3,9 @@
 Multi-phase work: a design doc first, then an agent (or several) per phase.
 Two already have approved or drafted designs.
 
-## 1. Browser View and canvas workspaces (approved)
+## 1. Browser View and canvas workspaces (approved; in the quick-win queue)
+- **Scheduled:** the author moved it to the end of the queue in
+  QUICK-WINS.md (item 9). Track its progress there.
 - **Design:** docs/BROWSER-FRAMES.md, approved by the author on 2026-09-28.
 - **What it covers:**
   - pages as Omarchy workspaces;

@@ -8,6 +8,39 @@ finished branches are merged (see the top of docs/HANDOFF.md).
 Every item follows AGENTS.md: edits go through `EditorSession` as one named
 undo step, with tests, following docs/PANELS.md and docs/HUMOR.md.
 
+## The queue (the next session works top to bottom)
+
+Tick each item when it's done. Change `[ ]` to `[x]` and add the merge
+commit and date, for example `[x] … (a1b2c3d, 2026-09-29)`, then commit this
+file with the work. Don't delete finished items.
+
+- [ ] 1. Text stroke inside/outside (check first)
+- [ ] 2. Non-printing / non-exporting artboards
+- [ ] 3. Editable document presets
+- [ ] 4. Frame presets
+- [ ] 5. Per-side padding fields in auto layout
+- [ ] 6. Lock Document (read-only mode)
+- [ ] 7. Settings that travel
+- [ ] 8. Canvas size limit (check and document)
+- [ ] 9. Browser View and canvas workspaces (added by the author on
+      2026-09-28; see section 9)
+
+## Agents and models (the author, 2026-09-28)
+
+- **Coding** is done by **Sonnet agents at high effort**, one per item, each
+  in its own worktree and branch off `main`. Start them in Herdr panes with
+  `herdr agent start <name> --kind claude --pane <pane> -- --model claude-sonnet-5 --effort high`.
+  The author asked for "Sonnet 5.5". The newest Sonnet is Sonnet 5, so use
+  it, and switch when a newer one ships.
+- **Code review and thinking** (design questions, reviewing each branch
+  before it merges, and anything that needs judgment) are done by **Opus 5.5
+  agents at medium effort**:
+  `--model claude-opus-5-5 --effort medium`.
+- **Every item** gets an Opus review before it merges. The lead merges,
+  ticks the item here, and asks the author before pushing.
+- **Build rules:** `flock ~/.cache/omastrator-build.lock` with `-j2`. Never
+  touch the running daemon.
+
 ## 1. Text stroke inside/outside (verify first)
 - **Demand:** Illustrator, 213 votes and still unanswered. Adobe's text model
   blocks it. Affinity has it.
@@ -93,3 +126,22 @@ undo step, with tests, following docs/PANELS.md and docs/HUMOR.md.
   - Fix what breaks.
   - State the real limit in the README.
 - **Done when:** the README states a tested limit.
+
+## 9. Browser View and canvas workspaces
+- **Not actually a quick win:** it's the largest item here (see
+  HIGH-EFFORT.md, item 1). The author put it at the end of this queue so it
+  starts as soon as items 1–8 are done.
+- **Design:** docs/BROWSER-FRAMES.md, approved by the author on
+  2026-09-28, including the headless Omastrator Chromium profile with a
+  one-time sign-in.
+- **Phases, each its own branch, Opus review and merge:**
+  1. Pages;
+  2. canvas workspaces (Hyprland named workspaces);
+  3. the Browser View frame, the Browse tool, breakpoints as a preview, and
+     streaming through the headless profile;
+  4. Live inside the frame (the element bar, tokens, Review changes,
+     History, Deploy, and "Build it" through the agent), then removing Live
+     mode from the island;
+  5. Duplicate at Breakpoints, the three pinning rules, and Clean Session.
+- **Tick it off** only when all five phases are merged. Record each phase's
+  merge commit next to the item.

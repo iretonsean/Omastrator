@@ -40,17 +40,16 @@ their panes are closed. Their session IDs are in
    (builds under `flock ~/.cache/omastrator-build.lock`, `-j2`), and
    **ask the author before pushing**. Remove the merged worktrees
    afterwards.
-2. **Quick wins:** `docs/backlog/QUICK-WINS.md` (eight small items, easiest
-   first, most from the research). Medium and high effort work is in
+2. **The quick-win queue:** `docs/backlog/QUICK-WINS.md`, nine items, ending
+   with Browser View and canvas workspaces. **Tick each item off in that
+   file as it merges.** Coding goes to Sonnet agents at high effort; review
+   and thinking go to Opus 5.5 agents at medium effort (see "Agents and
+   models" in that file). Medium and high effort work is in
    `docs/backlog/MEDIUM-EFFORT.md` and `docs/backlog/HIGH-EFFORT.md`.
 3. **Effects** (docs/EFFECTS.md): **the author hasn't reviewed the design
    yet.** Ask before building. It's built in phases on `feat/effects` after
    the merge.
-4. **Browser View and canvas workspaces** (docs/BROWSER-FRAMES.md):
-   **approved**, including the headless Omastrator profile with a one-time
-   sign-in in a normal window. Build order: Pages, canvas workspaces, the
-   Browser View frame and Browse tool, Live inside the frame (then remove
-   Live from the island), then Duplicate at Breakpoints and Clean Session.
+4. **Browser View and canvas workspaces:** now item 9 of the quick-win queue (above).
 5. **After that:** pick from `docs/backlog/MEDIUM-EFFORT.md`, where spell check, Pages and image fills lead.
 6. **The author's own steps:**
    - publish to the AUR and cut the first tagged release, per
