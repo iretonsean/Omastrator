@@ -115,7 +115,8 @@ after the author has seen the look.
      (`QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1`); and GTK apps checked.
    - Web pages already go through the DOM when Omastrator's browser link
      reaches the tab.
-2. **A path in a frame should resize with the frame, keeping its
+2. **Parked indefinitely (the author, 2026-09-28): don't start it or ask about it.**
+   **A path in a frame should resize with the frame, keeping its
    proportions.** Today paths default to the Left/Top constraints and stay put.
    The proposal waiting on the author's answer:
    - vector paths default to Scale with their aspect ratio kept;
