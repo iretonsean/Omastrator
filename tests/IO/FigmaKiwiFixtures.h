@@ -138,6 +138,87 @@ inline QByteArray deflateRaw(const QByteArray &data)
     return out;
 }
 
+// A minimal zip archive: stored or raw-deflated entries, no CRC (ZipReader
+// doesn't check it), no zip64.
+struct ZipEntry {
+    QString name;
+    QByteArray data;
+    bool deflate = false;
+};
+
+inline QByteArray buildZipArchive(const std::vector<ZipEntry> &entries)
+{
+    const auto u16 = [](QByteArray &out, quint16 v) {
+        out.append(char(v & 0xff));
+        out.append(char((v >> 8) & 0xff));
+    };
+    const auto u32 = [](QByteArray &out, quint32 v) {
+        out.append(char(v & 0xff));
+        out.append(char((v >> 8) & 0xff));
+        out.append(char((v >> 16) & 0xff));
+        out.append(char((v >> 24) & 0xff));
+    };
+    QByteArray data;
+    struct Written {
+        QString name;
+        quint32 offset, compressedSize, uncompressedSize;
+        quint16 method;
+    };
+    std::vector<Written> written;
+    for (const ZipEntry &entry : entries) {
+        const QByteArray compressed = entry.deflate ? deflateRaw(entry.data) : entry.data;
+        const quint16 method = entry.deflate ? 8 : 0;
+        const quint32 offset = quint32(data.size());
+        u32(data, 0x04034b50);
+        u16(data, 20);
+        u16(data, 0);
+        u16(data, method);
+        u16(data, 0);
+        u16(data, 0);
+        u32(data, 0);
+        u32(data, quint32(compressed.size()));
+        u32(data, quint32(entry.data.size()));
+        const QByteArray name = entry.name.toUtf8();
+        u16(data, quint16(name.size()));
+        u16(data, 0);
+        data += name;
+        data += compressed;
+        written.push_back({entry.name, offset, quint32(compressed.size()), quint32(entry.data.size()), method});
+    }
+    const quint32 centralStart = quint32(data.size());
+    for (const Written &w : written) {
+        u32(data, 0x02014b50);
+        u16(data, 20);
+        u16(data, 20);
+        u16(data, 0);
+        u16(data, w.method);
+        u16(data, 0);
+        u16(data, 0);
+        u32(data, 0);
+        u32(data, w.compressedSize);
+        u32(data, w.uncompressedSize);
+        const QByteArray name = w.name.toUtf8();
+        u16(data, quint16(name.size()));
+        u16(data, 0);
+        u16(data, 0);
+        u16(data, 0);
+        u16(data, 0);
+        u32(data, 0);
+        u32(data, w.offset);
+        data += name;
+    }
+    const quint32 centralSize = quint32(data.size()) - centralStart;
+    u32(data, 0x06054b50);
+    u16(data, 0);
+    u16(data, 0);
+    u16(data, quint16(written.size()));
+    u16(data, quint16(written.size()));
+    u32(data, centralSize);
+    u32(data, centralStart);
+    u16(data, 0);
+    return data;
+}
+
 // The fig-kiwi container: magic, version, then the schema and message, each
 // length-prefixed and deflate-compressed.
 inline QByteArray kiwiContainer(const QByteArray &schema, const QByteArray &message, quint32 version = 42)

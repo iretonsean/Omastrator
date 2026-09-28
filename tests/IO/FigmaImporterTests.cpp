@@ -531,6 +531,64 @@ private slots:
         QVERIFY(!FigmaImporter::Token::load().has_value());
         qunsetenv("XDG_CONFIG_HOME");
     }
+
+    void figFileOpensAsAZip()
+    {
+        const QByteArray fig = buildZipArchive(
+            {{QStringLiteral("canvas.fig"), fixtureFile(), false}, {QStringLiteral("thumbnail.png"), "not a real png", false}});
+        QVERIFY(FigmaImporter::canRead(fig));
+        const VectorDocument document = FigmaImporter::parse(fig);
+        QVERIFY(named(document, QStringLiteral("Card")));
+    }
+
+    // A small, hand-written REST API response (docs.figma.com): one page with an
+    // auto-layout frame holding a rectangle, through GET /v1/files/:key.
+    void restFileMapsAutoLayoutAndFills()
+    {
+        const QByteArray json = R"({
+            "document": {
+                "id": "0:0", "type": "DOCUMENT", "name": "Document",
+                "children": [{
+                    "id": "0:1", "type": "CANVAS", "name": "Page 1",
+                    "children": [{
+                        "id": "1:1", "type": "FRAME", "name": "Card",
+                        "size": {"x": 200, "y": 140},
+                        "relativeTransform": [[1, 0, 0], [0, 1, 0]],
+                        "layoutMode": "VERTICAL", "itemSpacing": 8,
+                        "paddingLeft": 4, "paddingTop": 4, "paddingRight": 4, "paddingBottom": 4,
+                        "primaryAxisAlignItems": "MIN", "counterAxisAlignItems": "CENTER",
+                        "fills": [{"type": "SOLID", "color": {"r": 0.2, "g": 0.4, "b": 0.9, "a": 1}, "opacity": 1, "visible": true}],
+                        "cornerRadius": 6,
+                        "children": [{
+                            "id": "1:2", "type": "RECTANGLE", "name": "Swatch",
+                            "size": {"x": 40, "y": 40},
+                            "relativeTransform": [[1, 0, 0], [0, 1, 0]],
+                            "fills": [{"type": "SOLID", "color": {"r": 1, "g": 0, "b": 0, "a": 1}, "opacity": 1, "visible": true}]
+                        }]
+                    }]
+                }]
+            }
+        })";
+        QStringList warnings;
+        const VectorDocument document = FigmaImporter::parseRestFile(json, QString(), &warnings);
+        QCOMPARE(document.artboards.size(), size_t(1));
+        QCOMPARE(document.artboards.front().name, QStringLiteral("Page 1"));
+        const VectorObject *card = named(document, QStringLiteral("Card"));
+        QVERIFY(card);
+        QCOMPARE(card->kind, ObjectKind::frame);
+        QVERIFY(card->autoLayout.has_value());
+        QCOMPARE(card->autoLayout->direction, LayoutDirection::vertical);
+        QCOMPARE(card->autoLayout->gap, 8.0);
+        QCOMPARE(card->shape->radii[0], 6.0);
+        const VectorObject *swatch = named(document, QStringLiteral("Swatch"));
+        QVERIFY(swatch);
+        QCOMPARE(swatch->fill.color.redF(), 1.0f);
+    }
+
+    void restErrorResponseThrows()
+    {
+        QVERIFY_EXCEPTION_THROWN(FigmaImporter::parseRestFile(R"({"status":403,"err":"Invalid token"})", QString()), FileError);
+    }
 };
 
 QTEST_MAIN(FigmaImporterTests)
