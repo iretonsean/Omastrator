@@ -50,7 +50,12 @@ Two loose ends from the design-mode Esc audit mentioned just above:
    `tests/UI/DesignModeUiTests.cpp` to lock it in. No code changed for this
    item — it was already correct.
 
+   **Review (Opus, 2026-09-28) disagrees:** without setup's keys and with
+   the Point or Inspect tool, Esc doesn't leave design mode although the
+   island says it does, and a drawing tool's overlay covers the Omarchy bar.
+   Both are being fixed before this branch merges.
 
+### Done: the promo animation (2026-09-28)
 
 The clean-slate promo is finished, approved and posted on X by the author. Its
 brief, source, renderer and video are kept **outside the repo**, in
