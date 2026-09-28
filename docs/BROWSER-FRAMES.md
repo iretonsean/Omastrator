@@ -1,6 +1,6 @@
 # Browser View frames and canvas workspaces (design, 2026-09-28)
 
-**Status: agreed with the author on 2026-09-28, except the browser profile, which the rendering test reopened (see "Revised profile plan"). Nothing is built.** This
+**Status: agreed with the author on 2026-09-28, including the revised profile plan (a headless Omastrator profile). Nothing is built.** This
 replaces the island's Live mode once it ships. Read it alongside VISION.md
 ("close to the customer") and ANYWHERE.md.
 
@@ -59,7 +59,7 @@ Live button opens a Browser View instead.
 - **Duplicate at Breakpoints** lays the same URL out as frames side by side,
   one per breakpoint, sharing one design layer. A note added in one shows in
   all of them.
-- **Profile:** the author chose their own Chromium profile, but the rendering test (below) rules it out. The revised plan is waiting on the author.
+- **Profile:** a separate Omastrator profile running headless, signed in once in a normal window. The author approved it after the rendering test ruled out using their own profile. See "Revised profile plan".
 
 ## The browser behind the frame
 
@@ -132,11 +132,11 @@ What this means:
   viewport. Frames should send `mobile: false` unless the user picks a
   device, or real pages without a viewport tag won't hit their breakpoints.
 
-### Revised profile plan (waiting on the author, 2026-09-28)
+### Revised profile plan (approved by the author, 2026-09-28)
 
-The test rules out the agreed default, so this goes back to the author:
+The test ruled out the first choice, and the author approved this instead:
 
-- **Proposed default:** a **separate Omastrator profile running headless**,
+- **Default:** a **separate Omastrator profile running headless**,
   set up once to feel like the user's own:
   - **Sign in once:** the first Browser View opens that profile in a normal
     window, with a "Sign in to Omastrator's browser" prompt. Google sign-in
