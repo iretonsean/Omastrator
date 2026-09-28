@@ -14,8 +14,9 @@ the dense Properties panel.
 ### Done: the promo animation (2026-09-28)
 
 The clean-slate promo is finished, approved and posted on X by the author. Its
-brief, source, renderer and video are in `media/animation/` (see the Status
-note at the top of `media/animation/BRIEF.md`).
+brief, source, renderer and video are kept **outside the repo**, in
+`~/Projects/.omastrator-promo/` on the author's machine, along with the older
+`media/promo/` work. The author doesn't want promo material in the repo.
 
 ### Checklist for the next session (written 2026-09-28 ~15:00)
 
