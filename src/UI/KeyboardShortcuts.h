@@ -59,6 +59,8 @@ public:
     // A menu entry's key, or a sheet's, as remapped.
     QKeySequence menu(const QKeySequence &original) const;
     ShortcutChord native(const ShortcutChord &original) const;
+    // "text (Key)" for the definition with this title, as remapped; the text alone when it has none.
+    QString tip(const QString &text, const QString &title) const;
     // Saves valid overrides; answers whether it did.
     bool save(const QHash<QString, ShortcutChord> &values);
     static std::optional<QString> problem(const QHash<QString, ShortcutChord> &values);

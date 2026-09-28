@@ -220,6 +220,45 @@ private slots:
         QVERIFY(!f.canvas.isolatedGroup());
     }
 
+    void enterTabAndEscapeWalkTheSelection()
+    {
+        Fixture f;
+        const QUuid a = f.box({10, 10, 40, 40}), b = f.box({100, 10, 40, 40});
+        f.session.select({a, b});
+        f.session.groupSelection();
+        const QUuid group = f.session.selection().front();
+        // Enter goes into the group; Shift+Enter comes back out.
+        QTest::keyClick(&f.canvas, Qt::Key_Return);
+        QCOMPARE(f.session.selection().size(), size_t(2));
+        QVERIFY(f.session.isSelected(a) && f.session.isSelected(b));
+        QTest::keyClick(&f.canvas, Qt::Key_Return, Qt::ShiftModifier);
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{group});
+        // Nothing above a top-level object: Shift+Enter leaves it be.
+        QTest::keyClick(&f.canvas, Qt::Key_Return, Qt::ShiftModifier);
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{group});
+        // Tab moves along the siblings and wraps; Shift+Tab goes back.
+        const QUuid c = f.box({200, 10, 40, 40});
+        f.session.select({c});
+        QTest::keyClick(&f.canvas, Qt::Key_Tab);
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{group});
+        QTest::keyClick(&f.canvas, Qt::Key_Tab, Qt::ShiftModifier);
+        QCOMPARE(f.session.selection(), std::vector<QUuid>{c});
+        // Esc lets go.
+        QTest::keyClick(&f.canvas, Qt::Key_Escape);
+        QVERIFY(!f.session.hasSelection());
+    }
+
+    void enterOpensSelectedTypeForEditing()
+    {
+        Fixture f;
+        const QUuid text = f.session.addText(QPointF(100, 100), QStringLiteral("Words"));
+        f.session.select({text});
+        QTest::keyClick(&f.canvas, Qt::Key_Return);
+        QVERIFY(f.canvas.isEditingText());
+        QCOMPARE(f.session.tool(), Tool::text);
+        f.canvas.finishTextEditing();
+    }
+
     void typeHasItsOwnMenu()
     {
         Fixture f;

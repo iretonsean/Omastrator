@@ -189,6 +189,16 @@ bool EditorCanvas::event(QEvent *event)
     // Tab would move focus away mid-drawing.
     if (event->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key() == Qt::Key_Tab && m_state->text)
         return true;
+    // Figma's Tab walks the selection along its siblings; with none it moves focus as usual.
+    if (event->type() == QEvent::KeyPress && !m_paused && !m_state->text && !m_state->drag && m_session.hasSelection()) {
+        const auto *key = static_cast<QKeyEvent *>(event);
+        const bool plain = !(key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+        if (plain && (key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab)) {
+            m_session.selectSibling(key->key() == Qt::Key_Tab);
+            event->accept();
+            return true;
+        }
+    }
     if (event->type() == QEvent::NativeGesture) {
         const auto *gesture = static_cast<QNativeGestureEvent *>(event);
         if (gesture->gestureType() == Qt::ZoomNativeGesture && !m_state->drag && m_session.hasDocument()) {

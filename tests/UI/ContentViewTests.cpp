@@ -86,8 +86,8 @@ void ContentViewTests::theRailHoldsEveryToolInGroups()
     QCOMPARE(editor.tool(Tool::select).toolTip(), QString("Selection (V)"));
     QCOMPARE(editor.tool(Tool::frame).toolTip(), QString("Frame (F)"));
     // A remapped key shows at once.
-    QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("k")}}));
-    QCOMPARE(editor.tool(Tool::pen).toolTip(), QString("Pen (K)"));
+    QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("e")}}));
+    QCOMPARE(editor.tool(Tool::pen).toolTip(), QString("Pen (E)"));
     // Groups run top to bottom: selection above drawing above navigation.
     QVERIFY(editor.tool(Tool::select).y() < editor.tool(Tool::pen).y());
     QVERIFY(editor.tool(Tool::pen).y() < editor.tool(Tool::rotate).y());
@@ -309,9 +309,9 @@ void ContentViewTests::remappedKeysReachTheCanvasAsTheirOriginals()
 {
     Editor editor;
     editor.view.canvas().setFocus();
-    QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("k")},
+    QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("e")},
                                              {QStringLiteral("Canvas & Layers:Nudge Right"), ShortcutChord("j")}}));
-    editor.press(Qt::Key_K);
+    editor.press(Qt::Key_E);
     QCOMPARE(editor.session.tool(), Tool::pen);
     // The old key no longer picks the tool.
     editor.press(Qt::Key_V);

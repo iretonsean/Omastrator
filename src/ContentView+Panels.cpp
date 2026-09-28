@@ -4,14 +4,21 @@
 #include "UI/AgentBridge.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ProjectWorkspace.h"
+#include <QAbstractButton>
+#include <QAbstractItemView>
+#include <QAbstractSpinBox>
 #include <QApplication>
+#include <QComboBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileInfo>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QMimeData>
+#include <QPlainTextEdit>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QTextEdit>
 
 const QString ContentView::layersKey = QStringLiteral("showsLayersPanel");
 const QString ContentView::propertiesKey = QStringLiteral("showsPropertiesPanel");
@@ -72,6 +79,12 @@ bool ContentView::eventFilter(QObject *watched, QEvent *event)
     const bool key = event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease;
     if (watched == m_canvas && key && !m_forwarding)
         return canvasKey(static_cast<QKeyEvent *>(event));
+    if (event->type() == QEvent::KeyPress && !m_forwarding && watched->isWidgetType() && watched != m_canvas) {
+        // Once, at the widget that holds focus; the press then climbs its parents.
+        auto *widget = static_cast<QWidget *>(watched);
+        if (widget == QApplication::focusWidget() && isAncestorOf(widget) && isVisible() && panelKey(widget, static_cast<QKeyEvent *>(event)))
+            return true;
+    }
     return QWidget::eventFilter(watched, event);
 }
 
@@ -113,6 +126,32 @@ bool ContentView::canvasKey(QKeyEvent *event)
     QCoreApplication::sendEvent(m_canvas, typed.get());
     m_forwarding = false;
     return true;
+}
+
+bool ContentView::panelKey(QWidget *focus, QKeyEvent *event)
+{
+    if (!m_session.hasDocument() || m_canvas->isEditingText() || (event->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)))
+        return false;
+    // Fields that type, and lists and boxes that search by the letter, keep their keys.
+    if (focus->testAttribute(Qt::WA_InputMethodEnabled) || qobject_cast<QLineEdit *>(focus) || qobject_cast<QTextEdit *>(focus)
+        || qobject_cast<QPlainTextEdit *>(focus) || qobject_cast<QAbstractSpinBox *>(focus) || qobject_cast<QComboBox *>(focus)
+        || qobject_cast<QAbstractItemView *>(focus))
+        return false;
+    const int key = event->key();
+    const bool printable = !event->text().isEmpty() && event->text().at(0).isPrint() && key != Qt::Key_Space;
+    // Arrows and Delete belong to a plain button, which has no use for them; a list or slider keeps its own.
+    const auto *button = qobject_cast<QAbstractButton *>(focus);
+    const bool moves = key == Qt::Key_Delete || key == Qt::Key_Backspace || (key >= Qt::Key_Left && key <= Qt::Key_Down);
+    if (!printable && !(moves && button && !button->autoExclusive()))
+        return false;
+    if (canvasKey(event))
+        return true;
+    const std::unique_ptr<QKeyEvent> copy(event->clone());
+    copy->accept();
+    m_forwarding = true;
+    QCoreApplication::sendEvent(m_canvas, copy.get());
+    m_forwarding = false;
+    return copy->isAccepted();
 }
 
 bool ContentView::acceptsDrop(const QMimeData &data) const

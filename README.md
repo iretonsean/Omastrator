@@ -409,7 +409,7 @@ shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 | ![Export](docs/screenshots/export.png) | ![Swatches](docs/screenshots/swatches.png) |
 | Export PNG, with a preview, resolution and the file's size. | The Swatches panel, with the Omarchy theme's colours as a group. |
 | ![Keyboard shortcuts](docs/screenshots/keyboard-shortcuts.png) | ![Connect an Agent](docs/screenshots/connect-an-agent.png) |
-| Keyboard Shortcuts: every key can be remapped. | Help ▸ Connect an Agent: the socket, the MCP line and the CLI. |
+| Keyboard Shortcuts (Help, Ctrl+Shift+?): every key can be remapped; Figma's keys are in beside Illustrator's (docs/SHORTCUTS.md). | Help ▸ Connect an Agent: the socket, the MCP line and the CLI. |
 
 ### AI
 

@@ -380,5 +380,6 @@ struct EditorCanvas::State {
     int cursorKey = -1;
     void updateCursor();
     bool keyPress(QKeyEvent *event);
+    bool enterSelection(bool toParent);
     bool keyRelease(QKeyEvent *event);
 };

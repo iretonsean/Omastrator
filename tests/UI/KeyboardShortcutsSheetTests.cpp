@@ -181,16 +181,16 @@ void KeyboardShortcutsSheetTests::aClashRestsSaveAndDefaultsComeBack()
 void KeyboardShortcutsSheetTests::cancelKeepsWhatWasSaved()
 {
     Bar bar;
-    ShortcutSettings::shared().save({{"Canvas & Layers:Pen tool", ShortcutChord("k")}});
+    ShortcutSettings::shared().save({{"Canvas & Layers:Pen tool", ShortcutChord("e")}});
     QWidget &panel = opened(bar);
     auto &pen = find<ShortcutRecorder>(panel, "recorder:Canvas & Layers:Pen tool");
     // The sheet starts from what is saved.
-    QCOMPARE(pen.text(), QString("K"));
+    QCOMPARE(pen.text(), QString("E"));
     pen.click();
     QTest::keyClick(&pen, Qt::Key_Y);
     find<QPushButton>(panel, "cancelShortcuts").click();
     QTRY_VERIFY(!shownPanel());
-    QCOMPARE(ShortcutSettings::shared().overrides().value("Canvas & Layers:Pen tool"), ShortcutChord("k"));
+    QCOMPARE(ShortcutSettings::shared().overrides().value("Canvas & Layers:Pen tool"), ShortcutChord("e"));
     // Escape closes it as Cancel does.
     QWidget &again = opened(bar);
     QTRY_COMPARE(QApplication::activeWindow(), &again);

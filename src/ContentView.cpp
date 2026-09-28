@@ -11,6 +11,7 @@
 #include "UI/PropertiesPanel.h"
 #include "UI/ToolHeaders.h"
 #include "UI/ToolIcons.h"
+#include <QApplication>
 #include <QContextMenuEvent>
 #include <QFrame>
 #include <QKeyEvent>
@@ -371,6 +372,8 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     m_canvasSlot->addWidget(m_canvas, 0, 0);
     m_canvasSlot->addWidget(m_dropRing, 0, 0);
     m_canvas->installEventFilter(this);
+    // Tool keys and the rest also work from a panel: only text fields keep them.
+    qApp->installEventFilter(this);
     setAcceptDrops(true);
 
     m_dock = new QWidget(this);

@@ -93,10 +93,10 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Fifty-nine menu entries (Frame Selection the last in), eleven type keys, twenty tools (Type on a
-    // Path's Shift+T, Width, Artboard and Frame among them), five keys, two auto layout keys, eight nudges.
-    QCOMPARE(int(all.size()), 107);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 72);
+    // Sixty-eight menu entries (Keyboard Shortcuts the last in), eleven type keys, twenty tools (Type on a
+    // Path's Shift+T, Width, Artboard and Frame among them) and Figma's three tool aliases, five keys, eight nudges.
+    QCOMPARE(int(all.size()), 115);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 79);
     QCOMPARE(named("Join").original, ShortcutChord("j", 1));
     QCOMPARE(named("Hide Guides").original, ShortcutChord(";", 1));
     QCOMPARE(named("Scissors tool").original, ShortcutChord("c"));
@@ -122,6 +122,12 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
     QCOMPARE(named("Zoom to Selection").original, ShortcutChord("0", 3));
     QCOMPARE(named("Next Object Above").original, ShortcutChord("]", 3));
     QCOMPARE(named("Swap fill and stroke").group, QString("Canvas & Layers"));
+    // Figma's Shift+A is a menu entry now, so it shows its key and works from any panel.
+    QVERIFY(named("Add Auto Layout").isMenu());
+    QCOMPARE(named("Add Auto Layout").original, ShortcutChord("a", 8));
+    QCOMPARE(named("Remove Auto Layout").original, ShortcutChord("a", 10));
+    QCOMPARE(named("Flip Horizontal").original, ShortcutChord("h", 8));
+    QCOMPARE(named("Keyboard Shortcuts").original.combination(), QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_Question));
     QCOMPARE(named("Undo").id(), QString("Menus:Undo"));
     // Illustrator's type keys sit under Type, where the sheet lists them.
     QCOMPARE(named("Loosen Tracking").original, ShortcutChord(QString(QChar(0xf703)), 2));
@@ -147,6 +153,12 @@ void KeyboardShortcutsTests::toolLettersNameTheirTools()
     // Modifiers and unassigned letters pick nothing.
     QVERIFY(!ShortcutDefinition::tool(ShortcutChord("v", 8)));
     QVERIFY(!ShortcutDefinition::tool(ShortcutChord("q")));
+    // Figma's tool keys that Illustrator leaves free are second names, after the tool's own.
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("k")).value(), Tool::scale);
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("o")).value(), Tool::ellipse);
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("p", 8)).value(), Tool::pencil);
+    QCOMPARE(ShortcutDefinition::tool(ShortcutChord("s")).value(), Tool::scale);
+    QCOMPARE(named("Scale tool (Figma's K)").original, ShortcutChord("k"));
     // Shape Builder is Illustrator's Shift-M, beside the Rectangle's M.
     QCOMPARE(ShortcutDefinition::tool(ShortcutChord("m", 8)).value(), Tool::shapeBuilder);
     QCOMPARE(ShortcutDefinition::tool(ShortcutChord("m")).value(), Tool::rectangle);
@@ -187,15 +199,15 @@ void KeyboardShortcutsTests::savedOverridesPersistAndBadOnesAreIgnored()
     const QString pen = named("Pen tool").id();
     QVERIFY(!settings.save({{pen, ShortcutChord("v")}}));
     QVERIFY(settings.overrides().isEmpty() && changes.isEmpty());
-    QVERIFY(settings.save({{pen, ShortcutChord("k")}}));
+    QVERIFY(settings.save({{pen, ShortcutChord("e")}}));
     QCOMPARE(changes.count(), 1);
-    QCOMPARE(settings.chord(named("Pen tool")), ShortcutChord("k"));
+    QCOMPARE(settings.chord(named("Pen tool")), ShortcutChord("e"));
     QCOMPARE(settings.chord(named("Pencil tool")), ShortcutChord("n"));
     // Read again as at launch, from QSettings.
     settings.reload();
-    QCOMPARE(settings.overrides(), (QHash<QString, ShortcutChord>{{pen, ShortcutChord("k")}}));
+    QCOMPARE(settings.overrides(), (QHash<QString, ShortcutChord>{{pen, ShortcutChord("e")}}));
     QCOMPARE(QSettings().value(QLatin1String(ShortcutSettings::storageKey)).toByteArray(),
-             QByteArray(R"({"Canvas & Layers:Pen tool":{"key":"k","modifiers":0}})"));
+             QByteArray(R"({"Canvas & Layers:Pen tool":{"key":"e","modifiers":0}})"));
     // Stored overrides that clash are dropped with a warning.
     QSettings().setValue(QLatin1String(ShortcutSettings::storageKey), QByteArray(R"({"Canvas & Layers:Pen tool":{"key":"v","modifiers":0}})"));
     QTest::ignoreMessage(QtWarningMsg, "stored keyboard shortcuts ignored: V is assigned to both Selection tool and Pen tool.");
@@ -209,7 +221,7 @@ void KeyboardShortcutsTests::menusAndSheetsTakeTheirRemappedKeys()
     const QKeySequence undo(Qt::CTRL | Qt::Key_Z);
     QCOMPARE(settings.menu(undo), undo);
     QVERIFY(settings.save({{named("Undo").id(), ShortcutChord("u", 3)}, {named("Group").id(), ShortcutChord("h", 3)},
-                           {named("Apply / finish current operation").id(), ShortcutChord("k")}}));
+                           {named("Apply / finish current operation").id(), ShortcutChord("e")}}));
     QCOMPARE(settings.menu(undo), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_U));
     // An unlisted entry keeps its key; none stays none.
     QCOMPARE(settings.menu(QKeySequence(Qt::CTRL | Qt::Key_G)), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H));
@@ -217,7 +229,7 @@ void KeyboardShortcutsTests::menusAndSheetsTakeTheirRemappedKeys()
     QCOMPARE(settings.menu(QKeySequence(Qt::Key_F7)), QKeySequence(Qt::Key_F7));
     QCOMPARE(settings.menu(QKeySequence()), QKeySequence());
     // Sheets read the canvas's Apply and Cancel.
-    QCOMPARE(settings.native(ShortcutChord("\r")), ShortcutChord("k"));
+    QCOMPARE(settings.native(ShortcutChord("\r")), ShortcutChord("e"));
     QCOMPARE(settings.native(ShortcutChord("\x1b")), ShortcutChord("\x1b"));
     QCOMPARE(settings.native(ShortcutChord("y", 1)), ShortcutChord("y", 1));
     // A menu's chord is no sheet's.
@@ -230,17 +242,23 @@ void KeyboardShortcutsTests::theCanvasTranslatesRemappedKeys()
     // Without overrides every key passes as it is.
     std::unique_ptr<QKeyEvent> same = settings.canvasEvent(press(Qt::Key_P, Qt::NoModifier, "p"));
     QVERIFY(same && same->key() == Qt::Key_P);
-    QVERIFY(settings.save({{named("Pen tool").id(), ShortcutChord("k")}, {named("Undo").id(), ShortcutChord("u", 3)}}));
+    QVERIFY(settings.save({{named("Pen tool").id(), ShortcutChord("e")}, {named("Hand tool").id(), ShortcutChord("u")},
+                           {named("Undo").id(), ShortcutChord("u", 3)}}));
     // The new key stands for the old; the old goes.
-    const std::unique_ptr<QKeyEvent> pen = settings.canvasEvent(press(Qt::Key_K, Qt::NoModifier, "k"));
+    const std::unique_ptr<QKeyEvent> pen = settings.canvasEvent(press(Qt::Key_E, Qt::NoModifier, "e"));
     QVERIFY(pen && pen->key() == Qt::Key_P && pen->modifiers() == Qt::NoModifier);
     QVERIFY(!settings.canvasEvent(press(Qt::Key_P, Qt::NoModifier, "p")));
     // A menu's old chord is swallowed at the canvas too.
     QVERIFY(!settings.canvasEvent(press(Qt::Key_Z, Qt::ControlModifier)));
     // Shift follows a letter home.
-    const std::unique_ptr<QKeyEvent> shifted = settings.canvasEvent(press(Qt::Key_K, Qt::ShiftModifier, "K"));
-    QVERIFY(shifted && shifted->key() == Qt::Key_P && shifted->modifiers() == Qt::ShiftModifier);
-    QVERIFY(!settings.canvasEvent(press(Qt::Key_P, Qt::ShiftModifier, "P")));
+    const std::unique_ptr<QKeyEvent> shifted = settings.canvasEvent(press(Qt::Key_U, Qt::ShiftModifier, "U"));
+    QVERIFY(shifted && shifted->key() == Qt::Key_H && shifted->modifiers() == Qt::ShiftModifier);
+    QVERIFY(!settings.canvasEvent(press(Qt::Key_H, Qt::ShiftModifier, "H")));
+    // Shift+P has its own tool (Figma's Pencil), so the Pen's move doesn't take it or carry Shift along.
+    const std::unique_ptr<QKeyEvent> pencil = settings.canvasEvent(press(Qt::Key_P, Qt::ShiftModifier, "P"));
+    QVERIFY(pencil && pencil->key() == Qt::Key_P);
+    const std::unique_ptr<QKeyEvent> shiftE = settings.canvasEvent(press(Qt::Key_E, Qt::ShiftModifier, "E"));
+    QVERIFY(shiftE && shiftE->key() == Qt::Key_E);
     // Keys nobody moved pass untouched.
     const std::unique_ptr<QKeyEvent> other = settings.canvasEvent(press(Qt::Key_Q, Qt::NoModifier, "q"));
     QVERIFY(other && other->key() == Qt::Key_Q);

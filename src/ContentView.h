@@ -82,6 +82,8 @@ private:
     void showWelcome(bool shown);
     // Remapped keys, then tool letters, before the canvas.
     bool canvasKey(QKeyEvent *event);
+    // Canvas keys pressed while a panel holds focus: true when the canvas took them.
+    bool panelKey(QWidget *focus, QKeyEvent *event);
     void showPointer(std::optional<QPointF> point);
     void retitleTools();
 

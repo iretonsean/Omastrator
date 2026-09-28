@@ -59,6 +59,55 @@ void EditorSession::selectAdjacent(bool above)
     });
 }
 
+void EditorSession::selectChildren()
+{
+    if (!m_document)
+        return;
+    std::vector<QUuid> inside;
+    for (const QUuid &id : selectionInOrder()) {
+        for (const QUuid &child : m_document->children(id)) {
+            if (m_document->isEffectivelyVisible(child) && !m_document->isEffectivelyLocked(child))
+                inside.push_back(child);
+        }
+    }
+    if (!inside.empty())
+        select(inside);
+}
+
+void EditorSession::selectParent()
+{
+    if (!m_document)
+        return;
+    std::vector<QUuid> out;
+    for (const QUuid &id : selectionInOrder()) {
+        const VectorObject *object = m_document->find(id);
+        const VectorObject *parent = object && object->parentID ? m_document->find(*object->parentID) : nullptr;
+        // A layer isn't something to select: the top level has no parent.
+        if (parent && parent->kind != ObjectKind::layer && std::find(out.begin(), out.end(), parent->id) == out.end())
+            out.push_back(parent->id);
+    }
+    if (!out.empty())
+        select(out);
+}
+
+void EditorSession::selectSibling(bool next)
+{
+    if (!m_document || m_selection.empty())
+        return;
+    const std::vector<QUuid> ordered = selectionInOrder();
+    const QUuid from = next ? ordered.back() : ordered.front();
+    const std::vector<QUuid> siblings = m_document->children(m_document->find(from)->parentID);
+    const int count = int(siblings.size());
+    const int start = int(std::find(siblings.begin(), siblings.end(), from) - siblings.begin());
+    for (int step = 1; step < count; ++step) {
+        const QUuid &id = siblings[size_t(((start + (next ? step : -step)) % count + count) % count)];
+        if (m_document->isEffectivelyVisible(id) && !m_document->isEffectivelyLocked(id)) {
+            select({id});
+            return;
+        }
+    }
+}
+
 void EditorSession::selectSame(SameAttribute attribute)
 {
     runSelect([this, attribute] {
