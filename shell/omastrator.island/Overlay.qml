@@ -206,6 +206,7 @@ Item {
         model: window.myArt
 
         Image {
+          id: art
           required property var modelData
           x: modelData.rect[0] - window.place.x
           y: modelData.rect[1] - window.place.y
@@ -217,7 +218,7 @@ Item {
 
           // Being worked on by the agent: shown as it was, with a soft pulse so it's clearly not stuck.
           Rectangle {
-            visible: !!parent.modelData.working
+            visible: !!art.modelData.working
             anchors.fill: parent
             anchors.margins: -4
             color: "transparent"
@@ -225,7 +226,7 @@ Item {
             border.width: 2
             radius: 6
             SequentialAnimation on opacity {
-              running: !!parent.modelData.working
+              running: !!art.modelData.working
               loops: Animation.Infinite
               NumberAnimation { from: 0.25; to: 0.9; duration: 700; easing.type: Easing.InOutSine }
               NumberAnimation { from: 0.9; to: 0.25; duration: 700; easing.type: Easing.InOutSine }

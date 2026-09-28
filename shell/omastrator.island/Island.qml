@@ -127,7 +127,7 @@ Item {
   }
 
   Timer { id: activityTimer; onTriggered: root.activityText = "" }
-  onActivityTextChanged: if (activityText === "") activityDetail = 
+  onActivityTextChanged: if (activityText === "") activityDetail = ""
 
   function plural(count, one, many) {
     return count + " " + (count === 1 ? one : many)
@@ -290,7 +290,9 @@ Item {
   // The button under the pointer; the tooltip reads its tip live.
   property Item hoveredButton: null
   // The card under the pill: a message's later lines, or the whole line when the pill had to cut it.
-  readonly property string shownDetail: activityText === "" ? "" : activityDetail !== "" ? activityDetail : ticker.truncated ? activityText : ""
+  // Whether the shown pill cut its line; the ticker lives in each screen's window, so it reports here.
+  property bool tickerCut: false
+  readonly property string shownDetail: activityText === "" ? "" : activityDetail !== "" ? activityDetail : tickerCut ? activityText : ""
   readonly property string hoverTip: hoveredButton && hoveredButton.visible ? hoveredButton.tip : ""
 
   // Leaving waits a moment, so crossing the gap between two buttons doesn't blink the tip.
@@ -443,6 +445,7 @@ Item {
 
             Text {
               id: ticker
+              onTruncatedChanged: if (window.visible) root.tickerCut = truncated
               visible: root.showLabel || root.activityText !== ""
               anchors.verticalCenter: parent.verticalCenter
               leftPadding: Style.space(2)
