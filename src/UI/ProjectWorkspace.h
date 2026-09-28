@@ -126,6 +126,7 @@ private:
     void confirmClose(const std::shared_ptr<ProjectTab> &tab, std::function<void(bool)> then);
     void askNext(std::vector<std::shared_ptr<ProjectTab>> order, size_t index, std::function<void(bool)> done);
     void adopt(std::shared_ptr<ProjectTab> tab);
+    void watchPaste(ProjectTab &tab);
     void removeTab(QUuid id);
     QString suggestedName(const QString &suffix) const;
     void openHere();

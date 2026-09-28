@@ -1345,13 +1345,8 @@ bool EditorSession::canPaste() const
         return false;
     if (data->hasFormat(QString::fromLatin1(DocumentCodec::clipboardMimeType)) || data->hasImage())
         return true;
-    if (!externalPasteHandler())
-        return false;
-    try {
-        return externalPasteHandler()(*data).has_value();
-    } catch (...) {
-        return false;
-    }
+    const ExternalPasteHandler &handler = externalPasteHandler();
+    return handler.recognises && handler.recognises(*data);
 }
 
 void EditorSession::paste(bool inPlace)
@@ -1374,10 +1369,13 @@ void EditorSession::paste(PastePosition position)
         } catch (const CodecError &) {
             return;
         }
-    } else if (externalPasteHandler()) {
+    } else if (externalPasteHandler().read) {
         try {
-            if (auto external = externalPasteHandler()(*data))
-                objects = std::move(*external);
+            if (auto external = externalPasteHandler().read(*data)) {
+                objects = std::move(external->objects);
+                if (!external->warnings.isEmpty())
+                    emit pasteLeftOut(external->warnings);
+            }
         } catch (...) {
             return;
         }
