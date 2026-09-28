@@ -113,16 +113,21 @@ Item {
   // ------------------------------------------------------------ activity
 
   property string activityText: ""
+  // A message's lines after its first: they go in a card under the pill, not in the pill.
+  property string activityDetail: ""
   readonly property real startedAt: Date.now()
 
   function flash(text, seconds) {
     if (!text) return
-    activityText = text
+    var lines = String(text).split("\n")
+    activityText = lines[0]
+    activityDetail = lines.slice(1).join("\n").trim()
     activityTimer.interval = Math.max(1, seconds || 3) * 1000
     activityTimer.restart()
   }
 
   Timer { id: activityTimer; onTriggered: root.activityText = "" }
+  onActivityTextChanged: if (activityText === "") activityDetail = 
 
   function plural(count, one, many) {
     return count + " " + (count === 1 ? one : many)
@@ -161,9 +166,9 @@ Item {
   function liveLine(prev, next) {
     var before = prev.deploy || {}, after = next.deploy || {}
     if (after.message && after.message !== before.message) return after.message
+    if (next.state === "starting" && (next.state !== prev.state || next.message !== prev.message)) return "Live: " + (next.message || "starting…")
     if (next.state === prev.state) return ""
-    if (next.state === "starting") return "Live: " + (next.message || "starting…")
-    if (next.state === "failed") return next.message || "Live couldn't start"
+    if (next.state === "failed") return "Live couldn't start: " + (next.message || "no reason given")
     if (next.state === "running") return "Live: " + next.url + (next.mockup ? " (not your site: changes stay on this machine)" : "")
     if (next.state === "off" && prev.state === "running") return next.message || "Live stopped"
     return ""
@@ -174,10 +179,13 @@ Item {
     var deploy = next.deploy || {}
     if (deploy.running) return 600
     if (deploy.failed) return 10
+    // Starting says each step until the next one; a failure stays long enough to read its details.
+    if (next.state === "starting") return 600
+    if (next.state === "failed") return 15
     return deploy.message ? 8 : 4
   }
 
-  readonly property bool deployFailedShown: !!(root.live.deploy && root.live.deploy.failed) && activityText === root.live.deploy.message
+  readonly property bool deployFailedShown: !!(root.live.deploy && root.live.deploy.failed) && activityText === String(root.live.deploy.message || "").split("\n")[0]
 
   // ------------------------------------------------------------ actions
 
@@ -284,6 +292,8 @@ Item {
 
   // The button under the pointer; the tooltip reads its tip live.
   property Item hoveredButton: null
+  // The card under the pill: a message's later lines, or the whole line when the pill had to cut it.
+  readonly property string shownDetail: activityText === "" ? "" : activityDetail !== "" ? activityDetail : ticker.truncated ? activityText : ""
   readonly property string hoverTip: hoveredButton && hoveredButton.visible ? hoveredButton.tip : ""
 
   // Leaving waits a moment, so crossing the gap between two buttons doesn't blink the tip.
@@ -386,7 +396,8 @@ Item {
       exclusionMode: ExclusionMode.Normal
       exclusiveZone: 0
       margins.top: Style.gapsOut
-      implicitHeight: root.pillHeight + Style.space(40)
+      // Tall enough for the detail card too; the mask keeps the empty part click-through.
+      implicitHeight: root.pillHeight + Style.space(180)
       color: "transparent"
       WlrLayershell.layer: WlrLayer.Top
       WlrLayershell.namespace: "omastrator-island"
@@ -435,6 +446,7 @@ Item {
           }
 
           Text {
+            id: ticker
             visible: root.showLabel || root.activityText !== ""
             anchors.verticalCenter: parent.verticalCenter
             leftPadding: Style.space(2)
@@ -444,13 +456,13 @@ Item {
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             elide: Text.ElideRight
-            width: Math.min(implicitWidth, Style.space(420))
+            width: Math.min(implicitWidth, Style.space(560))
 
             // While "Heard: …" waits, a click on it cancels, as Esc does. A failed deploy's line opens its log;
             // a deploy's progress steps aside for the tools.
             MouseArea {
               anchors.fill: parent
-              enabled: status.value("dictation", "idle") === "heard" || root.deployFailedShown || root.deploying
+              enabled: status.value("dictation", "idle") === "heard" || root.deployFailedShown || root.deploying || root.shownDetail !== ""
               cursorShape: Qt.PointingHandCursor
               onClicked: {
                 if (root.deployFailedShown) status.run(["island", "live", "details"])
@@ -496,6 +508,34 @@ Item {
               onClicked: function (mouse) { if (!dim) root.runAction(modelData, mouse) }
             }
           }
+        }
+      }
+
+      // The rest of a long or many-line message, wrapped. A click on the pill's line dismisses both.
+      Rectangle {
+        id: detailCard
+        visible: root.shownDetail !== "" && root.hoverTip === ""
+        anchors.horizontalCenter: pill.horizontalCenter
+        anchors.top: pill.bottom
+        anchors.topMargin: Style.space(6)
+        width: detailText.width + Style.space(20)
+        height: detailText.implicitHeight + Style.space(12)
+        radius: Style.space(6)
+        color: Color.tooltip.background
+        border.color: Util.alpha(Color.tooltip.border, 0.4)
+        border.width: 1
+
+        Text {
+          id: detailText
+          anchors.centerIn: parent
+          width: Math.min(implicitWidth, Style.space(560))
+          text: root.shownDetail
+          color: Color.tooltip.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.Wrap
+          maximumLineCount: 7
+          elide: Text.ElideRight
         }
       }
 

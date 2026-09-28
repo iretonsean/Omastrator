@@ -45,7 +45,8 @@ std::optional<DevCommand> DevCommand::detect(const QString &folder, QString *why
     }
     QFile package(dir.filePath(QStringLiteral("package.json")));
     if (package.open(QIODevice::ReadOnly)) {
-        const QJsonObject scripts = QJsonDocument::fromJson(package.readAll()).object()["scripts"].toObject();
+        const QJsonObject json = QJsonDocument::fromJson(package.readAll()).object();
+        const QJsonObject scripts = json["scripts"].toObject();
         const QString script = scripts.contains("dev") ? QStringLiteral("dev") : scripts.contains("start") ? QStringLiteral("start") : QString();
         if (!script.isEmpty()) {
             // The lockfile says which package manager the project uses.
@@ -65,6 +66,9 @@ std::optional<DevCommand> DevCommand::detect(const QString &folder, QString *why
             command.program = program;
             command.arguments = {QStringLiteral("run"), script};
             command.description = QStringLiteral("%1 run %2").arg(manager, script);
+            const bool needsPackages = !json["dependencies"].toObject().isEmpty() || !json["devDependencies"].toObject().isEmpty();
+            if (needsPackages && !dir.exists(QStringLiteral("node_modules")))
+                command.install = {QStringLiteral("install")};
             return command;
         }
     }
@@ -155,6 +159,11 @@ QString DevServer::start(const QString &folder, int timeoutMs)
     environment.insert(QStringLiteral("FORCE_COLOR"), QStringLiteral("0"));
     m_process.setProcessEnvironment(environment);
     m_process.setWorkingDirectory(folder);
+    if (!m_command.install.isEmpty())
+        if (const QString failure = install(folder); !failure.isEmpty())
+            return failure;
+    m_output.clear();
+    emit step(QStringLiteral("Starting the project (%1)…").arg(m_command.description));
     m_process.start(m_command.program, m_command.arguments);
     if (!m_process.waitForStarted(10'000))
         return QStringLiteral("Could not start %1: %2").arg(m_command.description, m_process.errorString());
@@ -172,6 +181,28 @@ QString DevServer::start(const QString &folder, int timeoutMs)
     }
     stop();
     return QStringLiteral("%1 didn't answer within %2 seconds.").arg(m_command.description).arg(timeoutMs / 1000);
+}
+
+QString DevServer::install(const QString &folder)
+{
+    const QString what = QStringLiteral("%1 %2").arg(QFileInfo(m_command.program).fileName(), m_command.install.join(QLatin1Char(' ')));
+    emit step(QStringLiteral("Installing %1's packages (%2)…").arg(QDir(folder).dirName(), what));
+    m_process.start(m_command.program, m_command.install);
+    if (!m_process.waitForStarted(10'000))
+        return QStringLiteral("Could not start %1: %2").arg(what, m_process.errorString());
+    // Pausing, not blocking, so a stop() while it installs ends it.
+    for (int waited = 0; m_process.state() != QProcess::NotRunning; waited += 250) {
+        if (waited >= 600'000) {
+            stop();
+            return QStringLiteral("%1 didn't finish within 10 minutes.").arg(what);
+        }
+        pause(250);
+    }
+    if (m_process.exitStatus() != QProcess::NormalExit || m_process.exitCode() != 0) {
+        const QString tail = output().right(600).trimmed();
+        return QStringLiteral("%1 failed, so the project can't start.%2").arg(what, tail.isEmpty() ? QString() : QStringLiteral("\n") + tail);
+    }
+    return {};
 }
 
 void DevServer::stop()

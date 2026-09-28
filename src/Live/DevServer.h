@@ -16,6 +16,8 @@ struct DevCommand {
     QStringList arguments;
     // "pnpm run dev", for the island and the log.
     QString description;
+    // A fresh clone has no node_modules: the package manager installs first, with these arguments.
+    QStringList install;
     // omastrator.json may say where the server listens; otherwise its output does.
     QUrl url;
 
@@ -42,6 +44,8 @@ public:
 
 signals:
     void exited();
+    // What start() is doing while it waits, for the island.
+    void step(const QString &message);
 
 private:
     QProcess m_process;
@@ -49,4 +53,6 @@ private:
     DevCommand m_command;
     QUrl m_url;
     QByteArray m_output;
+    // Runs the package manager's install and waits for it. Returns why it failed, or empty.
+    QString install(const QString &folder);
 };

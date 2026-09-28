@@ -150,6 +150,15 @@ private slots:
         auto npm = DevCommand::detect(root + "/npm", &why);
         QVERIFY2(npm, qPrintable(why));
         QCOMPARE(npm->description, QStringLiteral("npm run start"));
+        QVERIFY(npm->install.isEmpty());
+        // A fresh clone has packages to install before its dev script can run.
+        write(root + "/fresh/package.json", "{\"scripts\": {\"dev\": \"vite\"}, \"devDependencies\": {\"vite\": \"^8\"}}");
+        write(root + "/fresh/package-lock.json", "{}");
+        auto fresh = DevCommand::detect(root + "/fresh", &why);
+        QVERIFY2(fresh, qPrintable(why));
+        QCOMPARE(fresh->install, QStringList{QStringLiteral("install")});
+        QVERIFY(QDir(root + "/fresh").mkdir(QStringLiteral("node_modules")));
+        QVERIFY(DevCommand::detect(root + "/fresh", &why)->install.isEmpty());
 
         write(root + "/stat/index.html", "<h1>hi</h1>");
         QCOMPARE(DevCommand::detect(root + "/stat", &why)->kind, DevCommand::Kind::staticSite);
