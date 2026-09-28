@@ -1,0 +1,52 @@
+# Maintainer: Sean Ireton <1441621+iretonsean@users.noreply.github.com>
+pkgname=omastrator-git
+pkgver=r171.a95b84d
+pkgrel=1
+pkgdesc="Vector illustration for Linux, made for Omarchy (git version)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/iretonsean/Omastrator"
+license=('MIT')
+depends=('qt6-base' 'jq' 'shared-mime-info' 'hicolor-icon-theme' 'desktop-file-utils')
+makedepends=('cmake' 'git')
+# hyprpicker, slurp, grim, wl-clipboard: Capture (Pick Colour, Screenshot Region/Window).
+# rclone: Cloud storage. python-gobject/at-spi2-core: Design mode's AT-SPI inspector
+# reading native app windows. chromium: Live web editing and the browser inspector.
+# github-cli: Deploy's GitHub history. qt6-imageformats: placing TIFF and WebP images.
+# Two more outside programs aren't pacman packages, so they aren't listed here: voxtype
+# (Omarchy's own dictation engine, installed with `omarchy voxtype install`) and omdrop/
+# omadrop (Send to a Device, installed with `omarchy plugin add
+# https://github.com/brentkearney/omdrop-plugin.git`). `omastrator setup` names each
+# missing program and how to install it.
+optdepends=('hyprpicker: Capture > Pick Colour as a Swatch'
+            'slurp: Capture > Screenshot Region, selecting the region'
+            'grim: Capture > Screenshot Region and Screenshot Window'
+            'wl-clipboard: Capture > paste from the clipboard'
+            'rclone: Cloud storage (open and save on a cloud remote)'
+            'python-gobject: Design mode reading a native app window (AT-SPI)'
+            'at-spi2-core: Design mode reading a native app window (AT-SPI)'
+            'chromium: Live web editing, and Design mode in a Chromium tab'
+            'github-cli: Deploy shows its GitHub history'
+            'qt6-imageformats: placing TIFF and WebP images')
+provides=('omastrator')
+conflicts=('omastrator' 'omastrator-bin')
+install=omastrator.install
+source=("$pkgname::git+https://github.com/iretonsean/Omastrator.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$pkgname"
+    printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+    cd "$pkgname"
+    cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build --target omastrator
+}
+
+package() {
+    cd "$pkgname"
+    DESTDIR="$pkgdir" cmake --install build
+}

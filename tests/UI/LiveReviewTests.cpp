@@ -135,6 +135,15 @@ private slots:
         git(m_repo, {"push", "-q", "-u", "origin", "main"});
     }
 
+    // m_directory's Chromium profile can be well over 100 MB; QTemporaryDir removes it on
+    // destruction, but confirm that here so a silent failure (a still-running renderer holding
+    // it open, say) shows up as a test failure instead of a leftover in /tmp.
+    void cleanupTestCase()
+    {
+        if (m_directory.isValid() && QFileInfo::exists(m_directory.path()))
+            QVERIFY(QDir(m_directory.path()).removeRecursively());
+    }
+
     void deployWritesBackCommitsPushesAndDeploys()
     {
         ProjectWorkspace workspace;

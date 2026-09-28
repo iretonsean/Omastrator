@@ -135,6 +135,36 @@ QString omarchyShell()
 }
 
 namespace Setup {
+// Where a package for any prefix (/usr, ~/.local, …) puts the shell plugins next to `binary`,
+// independent of the prefix: GNUInstallDirs' bindir and datadir are always "bin" and "share"
+// relative to it, so `binary`'s ../share/omastrator/shell is always right once installed.
+QString installedShellSource(const QString &binary)
+{
+    return QDir::cleanPath(QDir(QFileInfo(binary).absolutePath()).filePath(QStringLiteral("../share/omastrator/shell")));
+}
+
+ShellLocation locateShell(const QString &binary)
+{
+    ShellLocation location;
+    const QString overridden = qEnvironmentVariable("OMASTRATOR_SHELL_DIR");
+    const QString installed = installedShellSource(binary);
+    if (!overridden.isEmpty())
+        location.source = overridden;
+    else if (QFileInfo::exists(installed))
+        location.source = installed;
+#ifdef OMASTRATOR_SHELL_SOURCE
+    else if (QFileInfo::exists(QStringLiteral(OMASTRATOR_SHELL_SOURCE)))
+        location.source = QStringLiteral(OMASTRATOR_SHELL_SOURCE);
+#endif
+    // Installed as share/omastrator/extras next to share/omastrator/shell; in the repo, extras/ next to shell/.
+    if (!location.source.isEmpty()) {
+        const QString extension = QDir::cleanPath(QDir(location.source).filePath(QStringLiteral("../extras/chromium-extension")));
+        if (QFileInfo::exists(QDir(extension).filePath(QStringLiteral("manifest.json"))))
+            location.extension = extension;
+    }
+    return location;
+}
+
 Environment Environment::current()
 {
     Environment environment;
@@ -142,26 +172,13 @@ Environment Environment::current()
     environment.configHome = configHomeFor(environment.home);
     environment.omarchyPath = qEnvironmentVariable("OMARCHY_PATH", QStringLiteral("/usr/share/omarchy"));
     environment.binary = QCoreApplication::applicationFilePath();
-    const QString overridden = qEnvironmentVariable("OMASTRATOR_SHELL_DIR");
-    const QString installed = QDir(QFileInfo(environment.binary).absolutePath()).filePath(QStringLiteral("../share/omastrator/shell"));
-    if (!overridden.isEmpty())
-        environment.shellSource = overridden;
-    else if (QFileInfo::exists(installed))
-        environment.shellSource = QDir::cleanPath(installed);
-#ifdef OMASTRATOR_SHELL_SOURCE
-    else if (QFileInfo::exists(QStringLiteral(OMASTRATOR_SHELL_SOURCE)))
-        environment.shellSource = QStringLiteral(OMASTRATOR_SHELL_SOURCE);
-#endif
+    const ShellLocation shell = locateShell(environment.binary);
+    environment.shellSource = shell.source;
+    environment.extension = shell.extension;
     // The keys and menu run `omastrator` when that is this binary; otherwise its full path.
     const QString onPath = QStandardPaths::findExecutable(QStringLiteral("omastrator"));
     const bool same = !onPath.isEmpty() && QFileInfo(onPath).canonicalFilePath() == QFileInfo(environment.binary).canonicalFilePath();
     environment.command = same ? QStringLiteral("omastrator") : environment.binary;
-    // Installed as share/omastrator/extras next to share/omastrator/shell; in the repo, extras/ next to shell/.
-    if (!environment.shellSource.isEmpty()) {
-        const QString extension = QDir::cleanPath(QDir(environment.shellSource).filePath(QStringLiteral("../extras/chromium-extension")));
-        if (QFileInfo::exists(QDir(extension).filePath(QStringLiteral("manifest.json"))))
-            environment.extension = extension;
-    }
     return environment;
 }
 

@@ -1,0 +1,86 @@
+# On a v* tag: build x86_64 and aarch64, test offscreen, and attach a /usr tree tarball for
+# each arch plus a combined SHA256SUMS.txt to a GitHub Release. See docs/RELEASING.md.
+#
+# Built in Arch Linux containers, not a generic Ubuntu image: Omastrator only supports Arch/
+# Omarchy (AGENTS.md), so building where it runs means the same rolling-release Qt and glibc
+# the binary will run against, with no version to pin or cross-version ABI to reason about.
+# There is no official Arch container for aarch64 (the x86_64 one runs under QEMU instead,
+# which is why the aarch64 job below uses a native arm64 runner with an Arch Linux ARM image
+# rather than emulating x86_64's). Nothing here uses Qt's private API (checked with a grep for
+# `private/` Qt headers), so this isn't building against a Qt version chosen to dodge that.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            image: archlinux:base-devel
+          # No official Arch Linux ARM container is published for GitHub's arm64 runners, so
+          # this uses the community image the Arch Linux ARM project's own CI points people at.
+          # Worth a first-run check: docs/RELEASING.md.
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            image: menci/archlinuxarm:base-devel
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install build and test dependencies
+        run: |
+          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq chromium
+
+      - uses: actions/checkout@v4
+
+      - name: Version from the tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test (offscreen; each test already sets QT_QPA_PLATFORM itself)
+        run: ctest --test-dir build --output-on-failure --timeout 300
+
+      - name: Install to a /usr tree
+        run: DESTDIR="$PWD/pkgroot" cmake --install build
+
+      - name: Tar it up
+        working-directory: pkgroot
+        run: tar --zstd -cf "../omastrator-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.zst" usr
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omastrator-${{ matrix.arch }}
+          path: omastrator-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.zst
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: artifacts
+        run: sha256sum *.tar.zst > SHA256SUMS.txt
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes artifacts/*.tar.zst artifacts/SHA256SUMS.txt
