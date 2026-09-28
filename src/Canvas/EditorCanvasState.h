@@ -57,8 +57,8 @@ struct EditorCanvas::State {
         corner,
         // A selected path text's start bracket.
         pathBracket,
-        // The Artboard tool: drawing a new one, moving or resizing one, or
-        // moving the fresh copy an Alt-drag made.
+        // The Artboard tool, or the Select tool on a selected artboard: drawing a new one, moving
+        // or resizing one, or moving the fresh copy an Alt-drag made.
         artboard,
     };
     struct Drag {
@@ -115,7 +115,7 @@ struct EditorCanvas::State {
     void documentChanged();
 
     // Snapping ---------------------------------------------------------------
-    SmartGuides guidesExcluding(const std::vector<QUuid> &excluded) const;
+    SmartGuides guidesExcluding(const std::vector<QUuid> &excluded, const QUuid &excludedBoard = {}) const;
     // Smart guides, then the grid on axes they left alone; shows the guides.
     QPointF snapPoint(const SmartGuides &guides, QPointF point, std::optional<QPointF> anchor = std::nullopt, bool constrained = false);
     QPointF snapMovement(const SmartGuides &guides, const QRectF &bounds, QPointF delta, bool constrained);
@@ -137,6 +137,8 @@ struct EditorCanvas::State {
     void transformToolPress(QPointF view);
     void dragMove(QPointF view, Qt::KeyboardModifiers modifiers);
     void dragScale(QPointF view, Qt::KeyboardModifiers modifiers);
+    // A handle drag's scale of `box` about its fixed point: snapped, Shift proportional, Alt from the centre.
+    QTransform handleScale(const QRectF &box, int handle, QPointF view, Qt::KeyboardModifiers modifiers);
     void dragRotate(QPointF view, Qt::KeyboardModifiers modifiers);
     void dragScaleTool(QPointF view, Qt::KeyboardModifiers modifiers);
     void dragMarquee(QPointF view);
@@ -177,6 +179,13 @@ struct EditorCanvas::State {
     // A resize handle of the active artboard under `view`, only under the Artboard tool.
     std::optional<int> artboardHandleAt(QPointF view) const;
     void artboardPress(QPointF view, Qt::KeyboardModifiers modifiers);
+    // A resize or move drag of artboard `index`, its snap targets frozen (its own art moves with it, so isn't one).
+    SmartGuides artboardGuides(int index) const;
+    void beginArtboardResize(int index, int handle, QPointF view);
+    void beginArtboardMove(int index, QPointF view, Qt::KeyboardModifiers modifiers);
+    // Names above artboards, hit-tested for the Select tool: a click selects the artboard, a drag moves it.
+    std::vector<std::pair<int, QRectF>> artboardLabels() const;
+    std::optional<int> artboardLabelAt(QPointF view) const;
     void dragArtboard(QPointF view, Qt::KeyboardModifiers modifiers);
     void finishArtboard();
     void drawArtboardTool(QPainter &painter) const;

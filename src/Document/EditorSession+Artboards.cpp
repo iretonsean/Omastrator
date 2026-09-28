@@ -1,11 +1,50 @@
 #include "Document/EditorSession.h"
 #include <algorithm>
+#include <cmath>
+
+namespace {
+// Artboard `index` becomes `rect`. Art whose centre sat on it follows when `artFollows`: carried
+// along by a move, and by its constraints (as a frame's children) when the size changes.
+void placeArtboard(VectorDocument &document, int index, const QRectF &rect, bool artFollows)
+{
+    std::vector<Artboard> boards = document.allArtboards();
+    const QRectF from = boards[size_t(index)].rect;
+    std::vector<QUuid> art;
+    if (artFollows && rect != from)
+        art = document.artCenteredIn(from);
+    boards[size_t(index)].rect = rect;
+    document.setArtboards(boards);
+    if (art.empty())
+        return;
+    if (std::abs(rect.width() - from.width()) < 1e-9 && std::abs(rect.height() - from.height()) < 1e-9) {
+        const QPointF delta = rect.topLeft() - from.topLeft();
+        for (const QUuid &id : art)
+            document.transform(id, QTransform::fromTranslate(delta.x(), delta.y()));
+    } else {
+        document.constrainToBox(art, from, rect);
+    }
+}
+}
 
 int EditorSession::activeArtboard() const
 {
     if (!m_document)
         return 0;
     return std::clamp(m_activeArtboard, 0, m_document->artboardCount() - 1);
+}
+
+void EditorSession::setArtboardSize(QSizeF size)
+{
+    if (!m_document || !(size.width() > 0 && size.height() > 0))
+        return;
+    const int index = activeArtboard();
+    if (m_document->artboard(index).rect.size() == size)
+        return;
+    edit(QStringLiteral("Artboard Size"), [&](VectorDocument &document) {
+        QRectF rect = document.artboard(index).rect;
+        rect.setSize(size);
+        placeArtboard(document, index, rect, artboardMovesArt);
+    });
 }
 
 void EditorSession::setActiveArtboard(int index)
@@ -16,6 +55,17 @@ void EditorSession::setActiveArtboard(int index)
     if (clamped == m_activeArtboard)
         return;
     m_activeArtboard = clamped;
+    notify(false);
+}
+
+void EditorSession::selectArtboard(int index)
+{
+    if (!m_document)
+        return;
+    select({});
+    m_pickedNodes.clear();
+    m_activeArtboard = std::clamp(index, 0, m_document->artboardCount() - 1);
+    m_artboardSelected = true;
     notify(false);
 }
 
@@ -103,6 +153,7 @@ void EditorSession::deleteArtboard(int index)
     });
     if (m_document)
         m_activeArtboard = std::clamp(m_activeArtboard, 0, m_document->artboardCount() - 1);
+    m_artboardSelected = false;
     notify(false);
 }
 
@@ -112,21 +163,7 @@ void EditorSession::previewArtboardRect(int index, QRectF rect)
         || !(rect.width() > 0 && rect.height() > 0))
         return;
     VectorDocument document = m_interaction->base;
-    std::vector<Artboard> boards = document.allArtboards();
-    const QRectF from = boards[size_t(index)].rect;
-    const QPointF delta = rect.topLeft() - from.topLeft();
-    boards[size_t(index)].rect = rect;
-    document.setArtboards(boards);
-    if (artboardMovesArt && !delta.isNull()) {
-        // Art whose centre sat on the artboard before the drag moves the same way.
-        const VectorDocument &before = m_interaction->base;
-        for (const QUuid &layer : before.layers()) {
-            for (const QUuid &child : before.children(layer)) {
-                if (from.contains(before.bounds(child).center()))
-                    document.transform(child, QTransform::fromTranslate(delta.x(), delta.y()));
-            }
-        }
-    }
+    placeArtboard(document, index, rect, artboardMovesArt);
     m_document = std::move(document);
     notify();
 }

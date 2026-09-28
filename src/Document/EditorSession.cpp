@@ -118,6 +118,7 @@ void EditorSession::loadDocument(VectorDocument document)
     const auto layers = m_document->layers();
     m_activeLayer = layers.empty() ? std::nullopt : std::optional(layers.back());
     m_activeArtboard = 0;
+    m_artboardSelected = false;
     viewport.fit(m_document->size);
     m_viewportDocumentSize = m_document->size;
     notify();
@@ -133,21 +134,8 @@ void EditorSession::closeDocument()
     m_isolation.clear();
     m_keyObject.reset();
     m_activeLayer.reset();
+    m_artboardSelected = false;
     notify();
-}
-
-void EditorSession::setArtboardSize(QSizeF size)
-{
-    if (!m_document || !(size.width() > 0 && size.height() > 0))
-        return;
-    const int index = activeArtboard();
-    if (m_document->artboard(index).rect.size() == size)
-        return;
-    edit(QStringLiteral("Artboard Size"), [&](VectorDocument &document) {
-        std::vector<Artboard> boards = document.allArtboards();
-        boards[size_t(index)].rect.setSize(size);
-        document.setArtboards(boards);
-    });
 }
 
 void EditorSession::setArtboardBackground(const QColor &color)
@@ -250,6 +238,8 @@ void EditorSession::select(const std::vector<QUuid> &ids)
     }
     if (kept == m_selection)
         return;
+    if (!kept.empty())
+        m_artboardSelected = false;
     m_selection = std::move(kept);
     if (m_keyObject && (m_selection.size() < 2 || !isSelected(*m_keyObject)))
         m_keyObject.reset();
@@ -298,6 +288,7 @@ void EditorSession::selectAll()
 void EditorSession::deselectAll()
 {
     m_pickedNodes.clear();
+    m_artboardSelected = false;
     select({});
     notify(false);
 }
@@ -457,6 +448,8 @@ void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
 {
     m_document = snapshot.document;
     m_selection = snapshot.selection;
+    if (!m_selection.empty())
+        m_artboardSelected = false;
     m_pickedNodes.clear();
     pruneSelection();
     notify();

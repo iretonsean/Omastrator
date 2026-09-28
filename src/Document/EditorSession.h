@@ -80,6 +80,10 @@ public:
     // The Artboard tool, the list, next/previous and select() all set this.
     int activeArtboard() const;
     void setActiveArtboard(int index);
+    // A click on an artboard's name: it becomes the selection, as a frame does, so the Select
+    // tool shows its handles. The object selection empties; picking any object ends it.
+    void selectArtboard(int index);
+    bool artboardSelected() const { return m_artboardSelected && m_selection.empty(); }
     // Placed to the right of the active one with a 20 pt gap unless `rect` is given.
     QUuid addArtboard(QRectF rect = {});
     // To the right of `index` with a 20 pt gap, copying its art.
@@ -88,7 +92,9 @@ public:
     // Never the last artboard; its art is untouched.
     void deleteArtboard(int index);
     // A drag: beginInteraction("Move Artboard" or "Resize Artboard"), a preview per
-    // move, then commitInteraction. Art whose centre was on it moves too when `artboardMovesArt`.
+    // move, then commitInteraction. Art whose centre was on it follows when `artboardMovesArt`:
+    // a move carries it along, and a resize applies each object's constraints, as a frame's
+    // children do (Left and Top by default, so it rides the top left corner).
     void previewArtboardRect(int index, QRectF rect);
     // Object ▸ Artboards ▸ Fit to Artwork Bounds: the art overlapping it, or every
     // visible object when none does, strokes included.
@@ -597,6 +603,7 @@ private:
     std::optional<QUuid> m_activeLayer;
     // Not saved; clamped to range whenever it's read.
     int m_activeArtboard = 0;
+    bool m_artboardSelected = false;
     // Artboard 1's size the last time notify() ran, to compensate the viewport when it changes.
     QSizeF m_viewportDocumentSize;
     std::optional<QUuid> m_keyObject;

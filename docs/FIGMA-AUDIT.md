@@ -8,7 +8,7 @@ checked against the code on `feat/graphite-look` (0999e92).
 |---|---|---|
 | Frames | **built** (feat/frames) | `ObjectKind::frame`: a box (`shape`), fills and strokes, radii, Clip Content, the Frame tool (F), Frame Selection (Ctrl+Alt+G), canvas labels. Still to come: drag into or out of a frame, Figma's resize, presets |
 | Auto layout | **built** (feat/frames) | docs/AUTO-LAYOUT.md: direction, gap/Auto, padding, alignment, wrap, Fixed/Hug/Fill, Absolute, Shift+A, the Layout section. Still to come: drag to reorder, per-side padding fields, baseline, min/max, canvas handles |
-| Constraints and resizing | **built** (feat/frames) | Left/Right/Left & Right/Center/Scale per axis; box resizes on frames follow them (`VectorDocument::resizeFrame`) |
+| Constraints and resizing | **built** (feat/frames) | Left/Right/Left & Right/Center/Scale per axis; box resizes on frames follow them (`VectorDocument::resizeFrame`). An artboard resizes the same way on the Select tool, its art following its constraints and riding along when it moves (`VectorDocument::constrainToBox`) |
 | Boolean groups (live) | partial | Pathfinder operations are destructive (`PathOperations`); no live boolean node |
 | Components | partial | main components, variants, instances, overrides, detach, reset (`Components.h`); no component properties (boolean, text, instance swap) |
 | Styles and variables | partial | text styles; design tokens with modes (`DesignTokens.h`); swatches. No colour or effect styles as their own objects |

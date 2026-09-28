@@ -26,8 +26,9 @@ public:
 
     SmartGuides() = default;
     // Targets freeze when a drag begins: every visible object but `excluded` and
-    // their subtrees, so the moving objects never snap to themselves.
-    SmartGuides(const VectorDocument &document, const std::vector<QUuid> &excluded);
+    // their subtrees, so the moving objects never snap to themselves. `excludedBoard` is an
+    // artboard being moved or resized, likewise.
+    SmartGuides(const VectorDocument &document, const std::vector<QUuid> &excluded, const QUuid &excludedBoard = {});
 
     // `bounds` moved by `delta`, pulled onto the nearest target on each axis.
     // `scale` is view points per document unit; `constrained` keeps 45° steps.

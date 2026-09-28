@@ -26,11 +26,11 @@ double degreesBetween(QPointF center, QPointF from, QPointF to)
 
 // Snapping ---------------------------------------------------------------------
 
-SmartGuides EditorCanvas::State::guidesExcluding(const std::vector<QUuid> &excluded) const
+SmartGuides EditorCanvas::State::guidesExcluding(const std::vector<QUuid> &excluded, const QUuid &excludedBoard) const
 {
     if (!session.document())
         return {};
-    SmartGuides guides = session.usesSmartGuides ? SmartGuides(*session.document(), excluded) : SmartGuides();
+    SmartGuides guides = session.usesSmartGuides ? SmartGuides(*session.document(), excluded, excludedBoard) : SmartGuides();
     // Ruler guides pull whether or not smart guides are on, while they show.
     if (session.showsGuides)
         guides.addGuides(session.document()->guides);
@@ -128,6 +128,9 @@ std::optional<QUuid> EditorCanvas::State::selectableTarget(const QUuid &leaf) co
 
 std::optional<QRectF> EditorCanvas::State::selectionBox() const
 {
+    // A selected artboard shows the handles an object would.
+    if (session.tool() == Tool::select && session.artboardSelected() && !text && session.document())
+        return activeArtboardBox();
     if (session.tool() != Tool::select || !session.hasSelection() || text || !session.document())
         return std::nullopt;
     // Locked objects show no handles: nothing would move.
@@ -174,7 +177,8 @@ std::optional<int> EditorCanvas::State::handleAt(QPointF view) const
 bool EditorCanvas::State::inRotateZone(QPointF view) const
 {
     const std::optional<QRectF> box = selectionBox();
-    if (!box)
+    // An artboard never turns.
+    if (!box || session.artboardSelected())
         return false;
     const QRectF shown(toView(box->topLeft()), toView(box->bottomRight()));
     if (shown.adjusted(-2, -2, 2, 2).contains(view))
@@ -230,6 +234,10 @@ void EditorCanvas::State::selectPress(QPointF view, Qt::KeyboardModifiers modifi
 {
     const QPointF document = toDocument(view);
     if (const std::optional<int> handle = handleAt(view)) {
+        if (session.artboardSelected()) {
+            beginArtboardResize(session.activeArtboard(), *handle, view);
+            return;
+        }
         beginDrag(DragKind::scale, view);
         drag->handle = *handle;
         drag->startBounds = *selectionBox();
@@ -244,6 +252,11 @@ void EditorCanvas::State::selectPress(QPointF view, Qt::KeyboardModifiers modifi
     // A frame's name on the canvas picks the frame itself.
     std::optional<QUuid> target = frameLabelAt(view);
     if (!target) {
+        // So does an artboard's: a click selects it, and a drag moves it.
+        if (const std::optional<int> board = artboardLabelAt(view)) {
+            beginArtboardMove(*board, view, modifiers);
+            return;
+        }
         const std::optional<QUuid> leaf = hitLeaf(document);
         target = leaf ? selectableTarget(*leaf) : std::nullopt;
     }
@@ -301,27 +314,20 @@ void EditorCanvas::State::dragMove(QPointF view, Qt::KeyboardModifiers modifiers
     session.previewTransform(QTransform::fromTranslate(delta.x(), delta.y()));
 }
 
-void EditorCanvas::State::dragScale(QPointF view, Qt::KeyboardModifiers modifiers)
+QTransform EditorCanvas::State::handleScale(const QRectF &box, int handle, QPointF view, Qt::KeyboardModifiers modifiers)
 {
-    if (!drag->started)
-        return;
-    if (!drag->interacting) {
-        session.beginInteraction(QStringLiteral("Scale"));
-        drag->interacting = true;
-    }
-    const QRectF box = drag->startBounds;
-    const QPointF unit = handleUnits[size_t(drag->handle)];
-    const QPointF handle(box.left() + unit.x() * box.width(), box.top() + unit.y() * box.height());
+    const QPointF unit = handleUnits[size_t(handle)];
+    const QPointF grip(box.left() + unit.x() * box.width(), box.top() + unit.y() * box.height());
     const bool fromCenter = modifiers.testFlag(Qt::AltModifier);
     const QPointF opposite(box.left() + (1 - unit.x()) * box.width(), box.top() + (1 - unit.y()) * box.height());
     const QPointF fixed = fromCenter ? box.center() : opposite;
-    const QPointF moved = snapPoint(drag->guides, handle + toDocument(view) - drag->pressDocument);
+    const QPointF moved = snapPoint(drag->guides, grip + toDocument(view) - drag->pressDocument);
     const auto factor = [](double to, double from, double pivot) {
         const double span = from - pivot;
         return std::abs(span) < 1e-9 ? 1.0 : (to - pivot) / span;
     };
-    double sx = unit.x() == 0.5 ? 1 : factor(moved.x(), handle.x(), fixed.x());
-    double sy = unit.y() == 0.5 ? 1 : factor(moved.y(), handle.y(), fixed.y());
+    double sx = unit.x() == 0.5 ? 1 : factor(moved.x(), grip.x(), fixed.x());
+    double sy = unit.y() == 0.5 ? 1 : factor(moved.y(), grip.y(), fixed.y());
     if (modifiers.testFlag(Qt::ShiftModifier)) {
         // Proportional: the axis pulled further leads; a side handle drags both.
         const double lead = unit.x() == 0.5 ? sy : unit.y() == 0.5 ? sx : (std::abs(sx) > std::abs(sy) ? sx : sy);
@@ -332,7 +338,18 @@ void EditorCanvas::State::dragScale(QPointF view, Qt::KeyboardModifiers modifier
     }
     // Never quite flat: a zero scale can't come back.
     const auto nonZero = [](double value) { return std::abs(value) < 1e-4 ? std::copysign(1e-4, value) : value; };
-    session.previewTransform(around(fixed, QTransform::fromScale(nonZero(sx), nonZero(sy))), true);
+    return around(fixed, QTransform::fromScale(nonZero(sx), nonZero(sy)));
+}
+
+void EditorCanvas::State::dragScale(QPointF view, Qt::KeyboardModifiers modifiers)
+{
+    if (!drag->started)
+        return;
+    if (!drag->interacting) {
+        session.beginInteraction(QStringLiteral("Scale"));
+        drag->interacting = true;
+    }
+    session.previewTransform(handleScale(drag->startBounds, drag->handle, view, modifiers), true);
 }
 
 void EditorCanvas::State::dragRotate(QPointF view, Qt::KeyboardModifiers modifiers)

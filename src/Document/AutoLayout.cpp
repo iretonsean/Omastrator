@@ -299,16 +299,27 @@ void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box)
     frame->shape->rect = QRectF(fresh.topLeft(), QSizeF(std::max(0.01, fresh.width()), std::max(0.01, fresh.height())));
     frame->path = frame->shape->path();
     const bool flows = frame->autoLayout.has_value();
-    Layouter layouter(*this);
+    std::vector<QUuid> moving;
     for (const QUuid &child : children(id)) {
         const VectorObject *object = find(child);
         // Children in a flow are placed by the layout, which runs after.
-        if (!object || (flows && !object->layout.absolute))
+        if (object && (!flows || object->layout.absolute))
+            moving.push_back(child);
+    }
+    constrainToBox(moving, old, fresh);
+}
+
+void VectorDocument::constrainToBox(const std::vector<QUuid> &ids, const QRectF &old, const QRectF &fresh)
+{
+    Layouter layouter(*this);
+    for (const QUuid &id : ids) {
+        const VectorObject *object = find(id);
+        if (!object)
             continue;
-        const QRectF was = bounds(child);
+        const QRectF was = bounds(id);
         const auto [left, right] = constrained(object->layout.horizontal, was.left(), was.right(), old.left(), old.right(), fresh.left(), fresh.right());
         const auto [top, bottom] = constrained(object->layout.vertical, was.top(), was.bottom(), old.top(), old.bottom(), fresh.top(), fresh.bottom());
-        layouter.fit(child, QRectF(QPointF(left, top), QPointF(right, bottom)));
+        layouter.fit(id, QRectF(QPointF(left, top), QPointF(right, bottom)));
     }
 }
 

@@ -43,7 +43,7 @@ QPointF constrain45(QPointF delta)
     return axis * along;
 }
 
-SmartGuides::SmartGuides(const VectorDocument &document, const std::vector<QUuid> &excluded)
+SmartGuides::SmartGuides(const VectorDocument &document, const std::vector<QUuid> &excluded, const QUuid &excludedBoard)
 {
     const auto isExcluded = [&](const QUuid &id) {
         return std::any_of(excluded.begin(), excluded.end(), [&](const QUuid &gone) { return gone == id || document.isAncestor(gone, id); });
@@ -57,8 +57,10 @@ SmartGuides::SmartGuides(const VectorDocument &document, const std::vector<QUuid
             continue;
         m_objects.push_back(bounds);
     }
-    for (const Artboard &board : document.allArtboards())
-        m_boards.push_back(board.rect);
+    for (const Artboard &board : document.allArtboards()) {
+        if (board.id != excludedBoard)
+            m_boards.push_back(board.rect);
+    }
 }
 
 void SmartGuides::addGuides(const std::vector<Guide> &guides)

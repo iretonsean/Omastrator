@@ -489,6 +489,9 @@ struct VectorDocument {
     // Figma's resize: the frame's box to `box`, its children outside a flow moved and sized by their
     // constraints (and theirs, in child frames, in turn). Sized by hand, a hugging frame becomes fixed.
     void resizeFrame(const QUuid &id, const QRectF &box);
+    // The same for loose art: each of `ids` follows its constraints as the box `old` becomes `fresh`
+    // (an artboard's art, whose box isn't an object). Left and Top, the default, follow the top left.
+    void constrainToBox(const std::vector<QUuid> &ids, const QRectF &old, const QRectF &fresh);
     // Fills every text's `flow` (P2-4): wrap objects above area type in paint order
     // become exclusions, and threadNext chains become frames sharing one story. A
     // no-op, clearing any stale flow, when nothing wraps or threads.
@@ -509,6 +512,8 @@ struct VectorDocument {
     // The objects directly in layers that belong to an artboard: those whose bounds,
     // strokes included, meet it. With one artboard, every one of them.
     std::vector<QUuid> objectsOn(int index) const;
+    // A layer's children whose centre lies in `rect`: the art an artboard carries when it moves or resizes.
+    std::vector<QUuid> artCenteredIn(const QRectF &rect) const;
     // One artboard as a document of its own: its art moved so its corner is the
     // origin, and with several artboards, the art on none of the others' alone.
     VectorDocument artboardDocument(int index) const;

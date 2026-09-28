@@ -3,12 +3,8 @@
 #include <QLineF>
 #include <QPainter>
 #include <algorithm>
-#include <array>
 
 namespace {
-// The same eight unit points EditorCanvas+Selection.cpp uses for its handles.
-constexpr std::array<QPointF, 8> artboardHandleUnits{QPointF(0, 0), QPointF(0.5, 0), QPointF(1, 0), QPointF(1, 0.5),
-                                                     QPointF(1, 1), QPointF(0.5, 1), QPointF(0, 1), QPointF(0, 0.5)};
 constexpr double artboardHandleReach = 6;
 constexpr double minimumArtboardSide = 4;
 
@@ -56,6 +52,50 @@ std::optional<int> EditorCanvas::State::artboardHandleAt(QPointF view) const
     return best;
 }
 
+SmartGuides EditorCanvas::State::artboardGuides(int index) const
+{
+    const VectorDocument &document = *session.document();
+    const Artboard board = document.artboard(index);
+    // Art riding along with the artboard can't be a target for it.
+    return guidesExcluding(session.artboardMovesArt ? document.artCenteredIn(board.rect) : std::vector<QUuid>{}, board.id);
+}
+
+void EditorCanvas::State::beginArtboardResize(int index, int handle, QPointF view)
+{
+    // An implicit artboard's id isn't stable enough to look up again, so the index is kept instead.
+    beginDrag(DragKind::artboard, view);
+    drag->handle = handle;
+    drag->artboardIndex = index;
+    drag->object = session.document()->artboard(index).id;
+    drag->startBounds = session.document()->artboard(index).rect;
+    drag->guides = artboardGuides(index);
+}
+
+void EditorCanvas::State::beginArtboardMove(int index, QPointF view, Qt::KeyboardModifiers modifiers)
+{
+    // Under Select the artboard becomes the selection; the Artboard tool only makes it the active one.
+    const bool selecting = session.tool() == Tool::select;
+    if (selecting)
+        session.selectArtboard(index);
+    else
+        session.setActiveArtboard(index);
+    if (modifiers.testFlag(Qt::AltModifier)) {
+        // A committed duplicate, then a plain move drag repositions it.
+        const QUuid copy = session.duplicateArtboard(index);
+        index = session.document() ? session.document()->artboardIndex(copy) : -1;
+        if (index < 0)
+            return;
+        if (selecting)
+            session.selectArtboard(index);
+    }
+    beginDrag(DragKind::artboard, view);
+    drag->handle = -2;
+    drag->artboardIndex = index;
+    drag->object = session.document()->artboard(index).id;
+    drag->startBounds = session.document()->artboard(index).rect;
+    drag->guides = artboardGuides(index);
+}
+
 void EditorCanvas::State::artboardPress(QPointF view, Qt::KeyboardModifiers modifiers)
 {
     if (!session.hasDocument())
@@ -63,14 +103,7 @@ void EditorCanvas::State::artboardPress(QPointF view, Qt::KeyboardModifiers modi
     const VectorDocument &document = *session.document();
     const QPointF point = toDocument(view);
     if (const std::optional<int> handle = artboardHandleAt(view)) {
-        // Resizing the active artboard: the opposite corner stays put. An implicit
-        // artboard's id isn't stable enough to look up again, so the index is kept instead.
-        const int index = session.activeArtboard();
-        beginDrag(DragKind::artboard, view);
-        drag->handle = *handle;
-        drag->artboardIndex = index;
-        drag->object = document.artboard(index).id;
-        drag->startBounds = *activeArtboardBox();
+        beginArtboardResize(session.activeArtboard(), *handle, view);
         return;
     }
     const int hit = document.artboardAt(point);
@@ -81,25 +114,7 @@ void EditorCanvas::State::artboardPress(QPointF view, Qt::KeyboardModifiers modi
         drag->startBounds = QRectF(point, QSizeF(0, 0));
         return;
     }
-    session.setActiveArtboard(hit);
-    if (modifiers.testFlag(Qt::AltModifier)) {
-        // A committed duplicate, then a plain move drag repositions it.
-        const QUuid copy = session.duplicateArtboard(hit);
-        const int copyIndex = session.document() ? session.document()->artboardIndex(copy) : -1;
-        if (copyIndex < 0)
-            return;
-        beginDrag(DragKind::artboard, view);
-        drag->handle = -2;
-        drag->artboardIndex = copyIndex;
-        drag->object = copy;
-        drag->startBounds = session.document()->artboard(copyIndex).rect;
-        return;
-    }
-    beginDrag(DragKind::artboard, view);
-    drag->handle = -2;
-    drag->artboardIndex = hit;
-    drag->object = document.artboard(hit).id;
-    drag->startBounds = document.artboard(hit).rect;
+    beginArtboardMove(hit, view, modifiers);
 }
 
 void EditorCanvas::State::dragArtboard(QPointF view, Qt::KeyboardModifiers modifiers)
@@ -121,33 +136,14 @@ void EditorCanvas::State::dragArtboard(QPointF view, Qt::KeyboardModifiers modif
     }
     QRectF rect = drag->startBounds;
     if (drag->handle >= 0) {
-        const QPointF unit = artboardHandleUnits[size_t(drag->handle)];
-        double left = rect.left(), right = rect.right(), top = rect.top(), bottom = rect.bottom();
-        if (unit.x() == 0)
-            left = current.x();
-        else if (unit.x() == 1)
-            right = current.x();
-        if (unit.y() == 0)
-            top = current.y();
-        else if (unit.y() == 1)
-            bottom = current.y();
-        rect = QRectF(QPointF(std::min(left, right), std::min(top, bottom)), QPointF(std::max(left, right), std::max(top, bottom)));
+        // The same handles as an object's: snapped, Shift keeps the ratio, Alt works from the centre.
+        rect = handleScale(drag->startBounds, drag->handle, view, modifiers).mapRect(drag->startBounds);
         if (rect.width() < minimumArtboardSide)
             rect.setWidth(minimumArtboardSide);
         if (rect.height() < minimumArtboardSide)
             rect.setHeight(minimumArtboardSide);
-        // Shift on a corner: keep the artboard's own proportions.
-        if (modifiers.testFlag(Qt::ShiftModifier) && unit.x() != 0.5 && unit.y() != 0.5 && drag->startBounds.height() > 0) {
-            const double ratio = drag->startBounds.width() / drag->startBounds.height();
-            const double height = rect.width() / std::max(ratio, 1e-6);
-            if (unit.y() == 0)
-                rect.setTop(rect.bottom() - height);
-            else
-                rect.setHeight(height);
-        }
     } else {
-        const QPointF delta = current - drag->pressDocument;
-        rect.translate(delta);
+        rect.translate(snapMovement(drag->guides, drag->startBounds, current - drag->pressDocument, modifiers.testFlag(Qt::ShiftModifier)));
     }
     session.previewArtboardRect(index, rect);
 }
@@ -165,7 +161,9 @@ void EditorCanvas::State::finishArtboard()
 
 void EditorCanvas::State::drawArtboardTool(QPainter &painter) const
 {
-    if (session.tool() != Tool::artboard || !session.hasDocument())
+    // The Artboard tool always shows the active one; the Select tool, only once it's selected.
+    const bool selected = session.tool() == Tool::select && session.artboardSelected() && !text;
+    if ((session.tool() != Tool::artboard && !selected) || !session.hasDocument())
         return;
     if (drag && drag->kind == DragKind::artboard && drag->object.isNull() && drag->started) {
         // A dashed preview of the artboard being drawn.
@@ -246,24 +244,57 @@ std::optional<QUuid> EditorCanvas::State::frameLabelAt(QPointF view) const
     return std::nullopt;
 }
 
-void EditorCanvas::State::drawArtboardLabels(QPainter &painter) const
+std::vector<std::pair<int, QRectF>> EditorCanvas::State::artboardLabels() const
 {
+    std::vector<std::pair<int, QRectF>> labels;
     if (!session.hasDocument())
-        return;
+        return labels;
     const std::vector<Artboard> boards = session.document()->allArtboards();
-    if (boards.size() < 2 && session.tool() != Tool::artboard)
-        return;
+    const Tool tool = session.tool();
+    if (boards.size() < 2 && tool != Tool::artboard && tool != Tool::select)
+        return labels;
     QFont font = canvas.font();
     font.setPixelSize(11);
     const QFontMetricsF metrics(font);
-    painter.save();
-    painter.setFont(font);
+    const auto frames = frameLabels();
     for (int index = 0; index < int(boards.size()); ++index) {
         const Artboard &board = boards[size_t(index)];
         const QPointF at = toView(board.rect.topLeft()) - QPointF(0, 6);
-        const bool active = index == session.activeArtboard();
-        painter.setPen(active ? accent() : canvas.palette().color(QPalette::PlaceholderText));
-        painter.drawText(QRectF(at - QPointF(0, metrics.height()), QSizeF(400, metrics.height())), Qt::AlignLeft | Qt::AlignBottom, board.name);
+        QRectF rect(at - QPointF(0, metrics.height()), QSizeF(metrics.horizontalAdvance(board.name) + 2, metrics.height()));
+        // A frame at the artboard's corner has its own name there: this one stacks above it.
+        for (int tries = 0; tries < 8; ++tries) {
+            const bool taken = std::any_of(frames.begin(), frames.end(), [&](const auto &frame) { return frame.second.intersects(rect); });
+            if (!taken)
+                break;
+            rect.translate(0, -(metrics.height() + 2));
+        }
+        labels.emplace_back(index, rect);
+    }
+    return labels;
+}
+
+std::optional<int> EditorCanvas::State::artboardLabelAt(QPointF view) const
+{
+    const auto labels = artboardLabels();
+    for (auto it = labels.rbegin(); it != labels.rend(); ++it) {
+        if (it->second.adjusted(-2, -2, 2, 2).contains(view))
+            return it->first;
+    }
+    return std::nullopt;
+}
+
+void EditorCanvas::State::drawArtboardLabels(QPainter &painter) const
+{
+    const auto labels = artboardLabels();
+    if (labels.empty())
+        return;
+    QFont font = canvas.font();
+    font.setPixelSize(11);
+    painter.save();
+    painter.setFont(font);
+    for (const auto &[index, rect] : labels) {
+        painter.setPen(index == session.activeArtboard() ? accent() : canvas.palette().color(QPalette::PlaceholderText));
+        painter.drawText(rect, Qt::AlignLeft | Qt::AlignBottom, session.document()->artboard(index).name);
     }
     painter.restore();
 }

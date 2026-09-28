@@ -5,6 +5,51 @@ here" just below.**
 
 ## Next session starts here
 
+**Update 2026-09-28: queued item 6 (resize artboards on the canvas) is built**
+on `feat/artboard-resize` (off `feat/inspect-inside`). Not installed; the
+daemon still runs the earlier build.
+
+The decision, Figma's: an artboard behaves like a top-level frame.
+
+- **Moving** carries its art with it, whatever the art's constraints.
+- **Resizing** applies each object's constraints, as a frame's children do
+  (`VectorDocument::constrainToBox`, the loop `resizeFrame` now shares). The
+  default is Left and Top, so art rides the top-left corner and stays put when
+  a right or bottom handle is dragged. The Layout section's constraints change
+  that per object.
+- "The art" is what the Artboard tool already used: the layer children whose
+  centre sits on the artboard (`artCenteredIn`). The Artboard tool's "Move art
+  with artboard" option still turns all of it off.
+- This applies to W and H in the Properties panel as well, so the panel, the
+  handles and the Artboard tool all resize the same way.
+
+What's built:
+
+- **Selecting:** with the Select tool, a click on an artboard's name above it
+  selects the artboard (`EditorSession::selectArtboard`, `artboardSelected`).
+  Picking any object, or an empty click, ends it. Names now show on the Select
+  tool even with one artboard. If a frame's name sits at the same corner, the
+  artboard's name stacks above it.
+- **Handles:** a selected artboard shows the object handles (no rotate zone).
+  They snap and use smart guides like an object's (the artboard itself and the
+  art riding with it aren't targets), Shift keeps the ratio (side handles
+  too), Alt works from the centre. `handleScale` is now shared by objects and
+  artboards.
+- **Moving:** drag the name; Alt-drag duplicates, and the copy is selected.
+  Snaps to other art and artboards.
+- **Delete** removes the selected artboard (never the last one).
+- One undo step per drag ("Move Artboard", "Resize Artboard"); Escape cancels.
+- **Tests:** tests/Document/ArtboardResizeTests.cpp, tests/Canvas/ArtboardSelectTests.cpp
+  (ArtboardToolTests still pass unchanged).
+- **Verified:** the tests, and an offscreen grab of a selected artboard with a
+  frame at its corner (handles and stacked names look right).
+
+Needs the author: try it by eye on the desktop (the look of the names with
+one artboard, and whether the stacked name is easy to hit).
+
+Not done: nudging a selected artboard with the arrow keys, X and Y fields for
+it in the Properties panel, and artboards in the agent tools.
+
 **Update 2026-09-28 ~08:45: queued item 1 (Inspect inside windows) is built**
 on `feat/inspect-inside` (off `feat/frames`, pushed, 95/95). It's installed in
 ~/.local, but it isn't live until the author does two things (ask them; don't
@@ -153,7 +198,7 @@ after the author has seen the look.
 
      The Object menu lists Add Auto Layout without its key, because the key is
      a canvas key so that a capital A still types.
-6. **Resize an artboard on the canvas as you would a frame,** with the Select
+6. **(Built on feat/artboard-resize; see the update at the top.) Resize an artboard on the canvas as you would a frame,** with the Select
    tool, not only with the Artboard tool.
 
 The earlier notes follow.

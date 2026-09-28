@@ -82,6 +82,18 @@ std::vector<QUuid> VectorDocument::objectsOn(int index) const
     return result;
 }
 
+std::vector<QUuid> VectorDocument::artCenteredIn(const QRectF &rect) const
+{
+    std::vector<QUuid> result;
+    for (const QUuid &layer : layers()) {
+        for (const QUuid &child : children(layer)) {
+            if (rect.contains(bounds(child).center()))
+                result.push_back(child);
+        }
+    }
+    return result;
+}
+
 VectorDocument VectorDocument::artboardDocument(int index) const
 {
     VectorDocument result = *this;
