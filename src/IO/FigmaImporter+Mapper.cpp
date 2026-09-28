@@ -130,7 +130,8 @@ void mapChildren(Context &ctx, const Guid &guid, const QUuid &parent, const QTra
 
 void applyCommon(Context &ctx, const QVariantMap &node, VectorObject &object)
 {
-    Q_UNUSED(ctx);
+    if (boolean(node, "mask"))
+        ctx.warn(QStringLiteral("Masks aren’t supported yet; masked layers show without clipping."));
     object.name = str(node, "name", object.name);
     object.isVisible = boolean(node, "visible", true);
     object.isLocked = boolean(node, "locked", false);

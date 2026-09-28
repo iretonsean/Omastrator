@@ -169,6 +169,8 @@ QVariantMap translateFields(const QJsonObject &node)
     }
     if (node.contains(QStringLiteral("clipsContent")))
         fields.insert(QStringLiteral("clipsContent"), node.value(QStringLiteral("clipsContent")).toBool());
+    if (node.value(QStringLiteral("isMask")).toBool())
+        fields.insert(QStringLiteral("mask"), true);
 
     // Auto layout: REST's own names, folded onto Kiwi's stack* fields (docs/import/figma.md).
     const QString layoutMode = node.value(QStringLiteral("layoutMode")).toString();
