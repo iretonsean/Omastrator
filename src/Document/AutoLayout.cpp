@@ -14,6 +14,9 @@ const std::array<std::pair<LayoutAlign, const char *>, 3> alignNames{{
     {LayoutAlign::start, "start"}, {LayoutAlign::center, "center"}, {LayoutAlign::end, "end"}}};
 const std::array<std::pair<LayoutSizing, const char *>, 3> sizingNames{{
     {LayoutSizing::fixed, "fixed"}, {LayoutSizing::hug, "hug"}, {LayoutSizing::fill, "fill"}}};
+const std::array<std::pair<LayoutConstraint, const char *>, 5> constraintNames{{
+    {LayoutConstraint::start, "start"}, {LayoutConstraint::end, "end"}, {LayoutConstraint::both, "both"},
+    {LayoutConstraint::center, "center"}, {LayoutConstraint::scale, "scale"}}};
 
 template <typename Enum, size_t Count> QString nameOf(const std::array<std::pair<Enum, const char *>, Count> &names, Enum value)
 {
@@ -212,8 +215,10 @@ private:
             return false;
         size = QSizeF(std::max(0.01, size.width()), std::max(0.01, size.height()));
         if (object->kind == ObjectKind::frame && object->shape && object->shape->placement.isIdentity()) {
-            object->shape->rect = QRectF(object->shape->rect.normalized().topLeft(), size);
-            object->path = object->shape->path();
+            // Its own children follow their constraints; a hugging frame keeps hugging.
+            const LayoutItem sizing = object->layout;
+            m_document.resizeFrame(id, QRectF(object->shape->rect.normalized().topLeft(), size));
+            m_document.find(id)->layout = sizing;
             return true;
         }
         if (object->kind == ObjectKind::path && object->liveShape() && object->shape->placement.isIdentity()) {
@@ -241,7 +246,70 @@ private:
     }
 
     VectorDocument &m_document;
+
+public:
+    // Public for resizeFrame: one object to `target`, resized if it can be, then moved there.
+    bool fit(const QUuid &id, const QRectF &target) { return place(id, target); }
 };
+
+// One axis of a constraint: where [from, to] of the old frame [start, end] lands in the new one.
+std::pair<double, double> constrained(LayoutConstraint constraint, double from, double to, double start, double end, double newStart, double newEnd)
+{
+    switch (constraint) {
+    case LayoutConstraint::start:
+        return {from + newStart - start, to + newStart - start};
+    case LayoutConstraint::end:
+        return {from + newEnd - end, to + newEnd - end};
+    case LayoutConstraint::both:
+        return {from + newStart - start, std::max(from + newStart - start + 0.01, to + newEnd - end)};
+    case LayoutConstraint::center: {
+        const double shift = (newStart + newEnd) / 2 - (start + end) / 2;
+        return {from + shift, to + shift};
+    }
+    case LayoutConstraint::scale: {
+        const double ratio = end - start > 1e-9 ? (newEnd - newStart) / (end - start) : 1;
+        return {newStart + (from - start) * ratio, newStart + (to - start) * ratio};
+    }
+    }
+    return {from, to};
+}
+}
+
+QString rawValue(LayoutConstraint constraint)
+{
+    return nameOf(constraintNames, constraint);
+}
+
+std::optional<LayoutConstraint> layoutConstraint(const QString &raw)
+{
+    return valueOf(constraintNames, raw);
+}
+
+void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box)
+{
+    VectorObject *frame = find(id);
+    if (!frame || frame->kind != ObjectKind::frame || !frame->shape || !frame->shape->placement.isIdentity())
+        return;
+    const QRectF old = frame->shape->rect.normalized();
+    const QRectF fresh = box.normalized();
+    if (!near(fresh.width(), old.width()))
+        frame->layout.width = frame->layout.width == LayoutSizing::hug ? LayoutSizing::fixed : frame->layout.width;
+    if (!near(fresh.height(), old.height()))
+        frame->layout.height = frame->layout.height == LayoutSizing::hug ? LayoutSizing::fixed : frame->layout.height;
+    frame->shape->rect = QRectF(fresh.topLeft(), QSizeF(std::max(0.01, fresh.width()), std::max(0.01, fresh.height())));
+    frame->path = frame->shape->path();
+    const bool flows = frame->autoLayout.has_value();
+    Layouter layouter(*this);
+    for (const QUuid &child : children(id)) {
+        const VectorObject *object = find(child);
+        // Children in a flow are placed by the layout, which runs after.
+        if (!object || (flows && !object->layout.absolute))
+            continue;
+        const QRectF was = bounds(child);
+        const auto [left, right] = constrained(object->layout.horizontal, was.left(), was.right(), old.left(), old.right(), fresh.left(), fresh.right());
+        const auto [top, bottom] = constrained(object->layout.vertical, was.top(), was.bottom(), old.top(), old.bottom(), fresh.top(), fresh.bottom());
+        layouter.fit(child, QRectF(QPointF(left, top), QPointF(right, bottom)));
+    }
 }
 
 QString rawValue(LayoutDirection direction)

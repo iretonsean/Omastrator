@@ -449,6 +449,13 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform, boo
 
 void VectorDocument::transform(const QUuid &id, const QTransform &transform, bool scaleStrokes, bool reflowAreaText, bool scaleCorners)
 {
+    // A box resize (the handles, W and H) on an upright frame is Figma's: the box changes and its
+    // children follow their constraints. The Scale tool and Transform ▸ Scale still scale everything.
+    if (const VectorObject *frame = find(id); reflowAreaText && frame && frame->kind == ObjectKind::frame && frame->shape
+        && frame->shape->placement.isIdentity() && transform.type() <= QTransform::TxScale && transform.m11() > 0 && transform.m22() > 0) {
+        resizeFrame(id, transform.mapRect(frame->shape->rect.normalized()));
+        return;
+    }
     std::vector<QUuid> areas;
     const bool upright = transform.type() <= QTransform::TxScale && transform.m11() > 0 && transform.m22() > 0;
     if (reflowAreaText && upright) {

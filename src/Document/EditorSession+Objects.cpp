@@ -432,6 +432,17 @@ void EditorSession::setAbsolutePosition(bool absolute)
     });
 }
 
+void EditorSession::setConstraint(Qt::Orientation axis, LayoutConstraint constraint)
+{
+    if (!m_document || m_selection.empty())
+        return;
+    const std::vector<QUuid> ids = m_selection;
+    edit(QStringLiteral("Constraints"), [&](VectorDocument &document) {
+        for (const QUuid &id : ids)
+            (axis == Qt::Horizontal ? document.find(id)->layout.horizontal : document.find(id)->layout.vertical) = constraint;
+    });
+}
+
 std::vector<QUuid> EditorSession::selectedFrames() const
 {
     std::vector<QUuid> frames;

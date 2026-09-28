@@ -253,6 +253,8 @@ public:
     // Sizing and Absolute position for every selected object.
     void setLayoutSizing(Qt::Orientation axis, LayoutSizing sizing);
     void setAbsolutePosition(bool absolute);
+    // Constraints for every selected object (docs/AUTO-LAYOUT.md, Figma's constraints).
+    void setConstraint(Qt::Orientation axis, LayoutConstraint constraint);
     // Selected frames, and whether every one clips its content (none selected: false).
     std::vector<QUuid> selectedFrames() const;
     bool selectedFramesClip() const;

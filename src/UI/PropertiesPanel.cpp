@@ -319,7 +319,7 @@ void PropertiesPanel::synchronize()
     show(m_layout, drawn && selected && (!m_session.selectedFrames().empty() || std::any_of(m_session.selection().begin(), m_session.selection().end(), [this](const QUuid &id) {
         const VectorObject *object = m_session.document()->find(id);
         const VectorObject *parent = object && object->parentID ? m_session.document()->find(*object->parentID) : nullptr;
-        return parent && parent->autoLayout;
+        return parent && (parent->autoLayout || parent->kind == ObjectKind::frame);
     })));
     if (!m_layout->isHidden())
         synchronizeLayout();

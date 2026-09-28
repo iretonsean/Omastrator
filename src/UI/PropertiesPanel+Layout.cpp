@@ -173,6 +173,32 @@ PanelSection *PropertiesPanel::layoutSection()
     m_layoutAbsolute->setToolTip(QStringLiteral("Keep it where it is, out of the auto-layout flow"));
     connect(m_layoutAbsolute, &QCheckBox::toggled, this, [this](bool on) { m_session.setAbsolutePosition(on); });
     body->addWidget(m_layoutAbsolute);
+    // Constraints: how a child outside a flow follows its frame's resize.
+    m_layoutConstraints = new QWidget(m_layout);
+    auto *constraints = new QGridLayout(m_layoutConstraints);
+    constraints->setContentsMargins(0, 0, 0, 0);
+    constraints->setHorizontalSpacing(6);
+    m_constraintX = new QComboBox(m_layoutConstraints);
+    m_constraintX->setObjectName(QStringLiteral("constraintX"));
+    m_constraintX->setAccessibleName(QStringLiteral("Horizontal constraint"));
+    m_constraintX->setToolTip(QStringLiteral("What it keeps when its frame is resized across"));
+    m_constraintX->addItems({QStringLiteral("Left"), QStringLiteral("Right"), QStringLiteral("Left & Right"), QStringLiteral("Center"), QStringLiteral("Scale")});
+    m_constraintY = new QComboBox(m_layoutConstraints);
+    m_constraintY->setObjectName(QStringLiteral("constraintY"));
+    m_constraintY->setAccessibleName(QStringLiteral("Vertical constraint"));
+    m_constraintY->setToolTip(QStringLiteral("What it keeps when its frame is resized up or down"));
+    m_constraintY->addItems({QStringLiteral("Top"), QStringLiteral("Bottom"), QStringLiteral("Top & Bottom"), QStringLiteral("Center"), QStringLiteral("Scale")});
+    for (auto [menu, axis] : {std::pair{m_constraintX, Qt::Horizontal}, std::pair{m_constraintY, Qt::Vertical}}) {
+        // The menus list the constraints in LayoutConstraint's order.
+        connect(menu, &QComboBox::activated, this, [this, axis](int index) { m_session.setConstraint(axis, LayoutConstraint(index)); });
+    }
+    constraints->addWidget(caption(QStringLiteral("↔"), m_layoutConstraints), 0, 0);
+    constraints->addWidget(m_constraintX, 0, 1);
+    constraints->addWidget(caption(QStringLiteral("↕"), m_layoutConstraints), 0, 2);
+    constraints->addWidget(m_constraintY, 0, 3);
+    constraints->setColumnStretch(1, 1);
+    constraints->setColumnStretch(3, 1);
+    body->addWidget(m_layoutConstraints);
     m_layoutClip = new QCheckBox(QStringLiteral("Clip content"), m_layout);
     m_layoutClip->setObjectName(QStringLiteral("layoutClip"));
     m_layoutClip->setToolTip(QStringLiteral("Show the frame's children only inside its box"));
@@ -236,6 +262,14 @@ void PropertiesPanel::synchronizeLayout()
     {
         const QSignalBlocker quiet(m_layoutAbsolute);
         m_layoutAbsolute->setChecked(first && first->layout.absolute);
+    }
+    // Constraints apply where no flow places it: in a plain frame, or Absolute in an auto-layout one.
+    const bool constrained = first && parent && parent->kind == ObjectKind::frame && (!parent->autoLayout || first->layout.absolute);
+    m_layoutConstraints->setVisible(constrained);
+    if (constrained) {
+        const QSignalBlocker quietX(m_constraintX), quietY(m_constraintY);
+        m_constraintX->setCurrentIndex(int(first->layout.horizontal));
+        m_constraintY->setCurrentIndex(int(first->layout.vertical));
     }
     m_layoutClip->setVisible(!frames.empty());
     {

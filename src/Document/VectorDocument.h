@@ -306,12 +306,22 @@ struct AutoLayout {
     friend bool operator==(const AutoLayout &, const AutoLayout &) = default;
 };
 
+// Constraints: what a child keeps when its frame is resized. Start is the left or
+// top edge, end the right or bottom, both keeps both (it stretches), center its
+// centre, scale its place and size in proportion.
+enum class LayoutConstraint { start, end, both, center, scale };
+QString rawValue(LayoutConstraint constraint);
+std::optional<LayoutConstraint> layoutConstraint(const QString &rawValue);
+
 // How an object sizes itself, and whether an auto-layout parent flows it.
 struct LayoutItem {
     LayoutSizing width = LayoutSizing::fixed;
     LayoutSizing height = LayoutSizing::fixed;
     // Absolute position: kept where it is, out of the flow.
     bool absolute = false;
+    // Outside a flow (a plain frame, or Absolute), how it follows its frame's resize.
+    LayoutConstraint horizontal = LayoutConstraint::start;
+    LayoutConstraint vertical = LayoutConstraint::start;
     friend bool operator==(const LayoutItem &, const LayoutItem &) = default;
 };
 
@@ -476,6 +486,9 @@ struct VectorDocument {
     // Lays out every auto-layout frame, innermost first, until nothing moves
     // (docs/AUTO-LAYOUT.md). Rotated frames are left as they are.
     void applyAutoLayout();
+    // Figma's resize: the frame's box to `box`, its children outside a flow moved and sized by their
+    // constraints (and theirs, in child frames, in turn). Sized by hand, a hugging frame becomes fixed.
+    void resizeFrame(const QUuid &id, const QRectF &box);
     // Fills every text's `flow` (P2-4): wrap objects above area type in paint order
     // become exclusions, and threadNext chains become frames sharing one story. A
     // no-op, clearing any stale flow, when nothing wraps or threads.

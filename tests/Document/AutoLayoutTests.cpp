@@ -191,6 +191,44 @@ private slots:
         QCOMPARE(read.find(column.frame)->layout, (LayoutItem{LayoutSizing::hug, LayoutSizing::hug, false}));
         QCOMPARE(read.find(read.children(column.frame)[0])->layout, (LayoutItem{LayoutSizing::fill, LayoutSizing::fixed, true}));
     }
+
+    void resizingAFrameMovesItsChildrenByTheirConstraints()
+    {
+        EditorSession session;
+        session.createDocument({600, 600});
+        const QUuid pinned = session.addPath(Shapes::rectangle({110, 110, 20, 20}), QStringLiteral("Pinned"));
+        const QUuid right = session.addPath(Shapes::rectangle({160, 110, 20, 20}), QStringLiteral("Right"));
+        const QUuid stretch = session.addPath(Shapes::rectangle({110, 150, 70, 10}), QStringLiteral("Stretch"));
+        const QUuid centred = session.addPath(Shapes::rectangle({135, 170, 20, 20}), QStringLiteral("Centred"));
+        const QUuid scaled = session.addPath(Shapes::rectangle({100, 100, 45, 45}), QStringLiteral("Scaled"));
+        session.select({pinned, right, stretch, centred, scaled});
+        session.frameSelection();
+        const QUuid frame = session.selection().front();
+        QCOMPARE(session.document()->find(frame)->shape->rect, QRectF(100, 100, 80, 90));
+        const auto constrain = [&](const QUuid &id, LayoutConstraint x, LayoutConstraint y) {
+            session.select({id});
+            session.setConstraint(Qt::Horizontal, x);
+            session.setConstraint(Qt::Vertical, y);
+        };
+        constrain(right, LayoutConstraint::end, LayoutConstraint::start);
+        constrain(stretch, LayoutConstraint::both, LayoutConstraint::start);
+        constrain(centred, LayoutConstraint::center, LayoutConstraint::end);
+        constrain(scaled, LayoutConstraint::scale, LayoutConstraint::scale);
+        // The handles: twice as wide, 10 taller, from the top left.
+        session.select({frame});
+        session.transformSelection(QTransform::fromTranslate(-100, -100) * QTransform::fromScale(2, 100.0 / 90) * QTransform::fromTranslate(100, 100),
+                                   QStringLiteral("Scale"), true);
+        const VectorDocument &document = *session.document();
+        QCOMPARE(document.find(frame)->shape->rect, QRectF(100, 100, 160, 100));
+        QCOMPARE(document.bounds(pinned), QRectF(110, 110, 20, 20));
+        QCOMPARE(document.bounds(right), QRectF(240, 110, 20, 20));
+        QCOMPARE(document.bounds(stretch), QRectF(110, 150, 150, 10));
+        QCOMPARE(document.bounds(centred).topLeft(), QPointF(175, 180));
+        QCOMPARE(document.bounds(scaled).width(), 90.0);
+        // The Scale tool's kind of scaling still scales everything.
+        session.transformSelection(QTransform::fromScale(0.5, 0.5), QStringLiteral("Scale"), false);
+        QCOMPARE(session.document()->bounds(pinned).size(), QSizeF(10, 10));
+    }
 };
 
 QTEST_MAIN(AutoLayoutTests)

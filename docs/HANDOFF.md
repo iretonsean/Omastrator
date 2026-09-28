@@ -61,9 +61,14 @@ with what's here and sets the build order. The first item, frames, is built:
   - SVG export as a clipped `<g>`;
   - the codec (the `frame` kind; the box is required).
 - **Tests:** tests/Document/FramesTests.cpp.
-- **Not done yet:** Figma's resize, where the box's handles resize only the box
-  and the children follow constraints. Scaling a frame today scales its
-  content, as a group does.
+- **Resizing** follows Figma: a box resize on an upright frame changes only
+  the box, and the children move and size by their constraints. A box resize
+  is the handles, or W and H (the `reflowAreaText` flag).
+  - The constraints are Left, Right, Left & Right, Center and Scale; the
+    vertical ones are the same.
+  - They're `LayoutItem::horizontal` and `vertical`, set in the Layout
+    section, via `VectorDocument::resizeFrame`.
+  - The Scale tool and Transform ▸ Scale still scale everything.
 
 Other things still to do for frames:
 
@@ -111,7 +116,9 @@ Not done yet:
 - min and max sizes;
 - a canvas overlay for the gap and padding (Figma's pink handles).
 
-Next in the build order: constraints and resizing, then effects.
+Constraints are built (see Frames above). Next in the build order: effects
+(drop shadow, inner shadow, layer blur, background blur), then live boolean
+groups.
 
 ## The Graphite look (branch feat/graphite-look, off fix/design-mode-escape)
 

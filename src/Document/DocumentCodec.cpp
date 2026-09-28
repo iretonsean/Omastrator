@@ -553,7 +553,8 @@ QJsonObject encode(const VectorObject &object)
     // Additive, optional key: sizing and absolute position, left out at their defaults.
     if (object.layout != LayoutItem{})
         json["layout"] = QJsonObject{{"width", rawValue(object.layout.width)}, {"height", rawValue(object.layout.height)},
-                                     {"absolute", object.layout.absolute}};
+                                     {"absolute", object.layout.absolute},
+                                     {"constraints", QJsonArray{rawValue(object.layout.horizontal), rawValue(object.layout.vertical)}}};
     if (!object.tokenRefs.empty()) {
         QJsonObject refs;
         for (const auto &[key, token] : object.tokenRefs)
@@ -639,6 +640,11 @@ VectorObject decodeObject(const QJsonObject &json)
         object.layout.width = layoutSizing(read["width"].toString()).value_or(LayoutSizing::fixed);
         object.layout.height = layoutSizing(read["height"].toString()).value_or(LayoutSizing::fixed);
         object.layout.absolute = read["absolute"].toBool();
+        const QJsonArray constraints = read["constraints"].toArray();
+        if (constraints.size() == 2) {
+            object.layout.horizontal = layoutConstraint(constraints[0].toString()).value_or(LayoutConstraint::start);
+            object.layout.vertical = layoutConstraint(constraints[1].toString()).value_or(LayoutConstraint::start);
+        }
     }
     if (object.kind == ObjectKind::text) {
         object.text = decodeText(json["text"].toObject());
