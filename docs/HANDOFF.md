@@ -9,28 +9,16 @@ here" just below.**
 That covers the whole stack (the design-mode Esc fix, the Graphite look,
 frames and auto layout, Inspect inside windows) plus today's four branches:
 resizing artboards on the canvas, the shortcuts pass, Send to a device, and
-the dense Properties panel. Only `wip/promo-v3` stays unmerged, and v4
-replaces it.
+the dense Properties panel.
 
-### Your job: the promo v4 storyboard
+### Your job: an animation, from a clean slate
 
-The author wants an animation of the app's features, **v4**. Before anything
-is animated they approve a storyboard:
+Read **`docs/ANIMATION-BRIEF.md`** and follow it. The author wants an
+animation designed from scratch. Earlier animations are deliberately off
+limits: don't open `media/promo/`, the `wip/promo-*` branches, or the
+promo notes further down this file.
 
-1. Read **`media/promo/BRIEF-v4.md`**. It holds the author's interview
-   answers: the story ("pro tool, native home"), the length, what must
-   appear, what's dropped, and the fixed rules.
-2. Write **`media/promo/OUTLINE-v4.md`** in the form of `OUTLINE-v2.md`:
-   numbered screens, what's on each screen (the content inside it), the
-   caption, and the narrative and subtext around the product. It must read
-   as a story. No polish needed. Publish it where the author can read it
-   (a doc or an artifact) and give them the link.
-3. **Stop and wait for the author's approval.** Don't animate before it.
-4. After approval: build `media/promo/promo-v4.html` from v3's machinery
-   (`promo-v3.html` on wip/promo-v3: the reading-time warp, the chapters, and
-   `render.mjs --workers 3`), for review.
-
-### Waiting on the author (not blocking the storyboard)
+### Waiting on the author
 
 - **Installed and live (2026-09-28 10:10):** main is installed in ~/.local,
   and the daemon and Chromium were restarted with the author's OK.
@@ -51,10 +39,9 @@ is animated they approve a storyboard:
 - **Parked until the author is at the Mac:** the Inspect sluggishness, with
   `scripts/profile-design-mode.sh`.
 
-### Queued: easy installs for alpha testers (before the v4 promo ships)
+### Queued: easy installs for alpha testers
 
-The README's Install (alpha) section promises these, and the v4 outro invites
-alpha testers:
+The README's Install (alpha) section promises these:
 
 1. An AUR package, `omastrator-git`: a PKGBUILD with cmake, a Release build
    and `-j$(nproc)`, depending on qt6-base (optdepends: qt6-declarative,
