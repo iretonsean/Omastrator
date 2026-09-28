@@ -105,7 +105,7 @@ Item {
       { id: "clearArt", icon: "clear", tip: "Clear drawings: take everything drawn off every window" },
       { id: "desk", tip: "The Desk: everything sent from any surface" },
       { id: "onboarding", icon: "help", tip: "Tune the suggestions: a few questions about your work" },
-      { id: "done", icon: "close", tip: "Leave design mode (Esc)" }
+      { id: "done", icon: "close", tip: "Leave design mode" }
     ]
   })
 
