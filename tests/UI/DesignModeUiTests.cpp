@@ -4,6 +4,7 @@
 #include "Agent/Island.h"
 #include "Anywhere/AnywhereSettings.h"
 #include "Anywhere/Desk.h"
+#include "Anywhere/DesktopSource.h"
 #include "IO/ProjectStore.h"
 #include "UI/DesignController.h"
 #include "UI/ProjectWorkspaceView.h"
@@ -14,6 +15,8 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -503,6 +506,34 @@ private slots:
     }
 
     // The background app: `omastrator --daemon` owns the socket and the overlays, with no window until asked.
+    // Omastrator's own windows are read in-process: over AT-SPI they'd wait on this very thread.
+    void inspectingOmastratorsOwnWindowReadsItsWidgets()
+    {
+        QWidget window;
+        window.setWindowTitle(QStringLiteral("Own window"));
+        auto *layout = new QVBoxLayout(&window);
+        layout->setContentsMargins(20, 30, 20, 20);
+        auto *button = new QPushButton(QStringLiteral("Export"), &window);
+        button->setFixedSize(100, 40);
+        layout->addWidget(button);
+        layout->addStretch();
+        window.resize(300, 200);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Hyprland::Window own;
+        own.pid = QCoreApplication::applicationPid();
+        own.title = QStringLiteral("Own window");
+        SystemSource source;
+        const auto answer = source.accessible(own, button->geometry().center());
+        QVERIFY(answer);
+        QCOMPARE(answer->value("role").toString(), QStringLiteral("button"));
+        QCOMPARE(answer->value("name").toString(), QStringLiteral("Export"));
+        const QJsonArray rect = answer->value("rect").toArray();
+        QCOMPARE(QRect(rect.at(0).toInt(), rect.at(1).toInt(), rect.at(2).toInt(), rect.at(3).toInt()), button->geometry());
+        own.title = QStringLiteral("Someone else's");
+        QVERIFY(!source.accessible(own, QPoint(5, 5)));
+    }
+
     void theDaemonStartsWithoutAWindow()
     {
         const QString binary = QStringLiteral(OMASTRATOR_BINARY);

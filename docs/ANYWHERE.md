@@ -220,11 +220,25 @@ everywhere) on 2026-09-27.
   arithmetic runs in the page and in the app. Colours are normalised through
   a canvas, so `oklch()` reads right. Another browser's window is a window,
   with "Open in Omastrator's Browser" on the bar.
+- **Other pages in the user's Chromium** (any tab, app windows too) are read
+  through Omastrator's extension when the pointer rests: its worker runs the
+  same page script (`extras/chromium-extension/inspect-page.js`, compiled into
+  the app as well) with `chrome.scripting` in the active tab whose title the
+  window's title starts with. No tab is joined and no debugging bar shows. The
+  answer's element keeps the window as its surface, since only the Live tab's
+  art follows the page. Chromium publishes no AT-SPI tree unless it was
+  started with accessibility on, so this is the way into its pages.
 - **Other apps**: AT-SPI through a small Python helper (`python3` with
   `gi.repository.Atspi`). It reads window coordinates, offset by Hyprland's
   window position, since Wayland gives accessible objects no screen positions.
   The helper gets 1.5 s; a slow or missing tree falls back to the window's
   bounds. The colour under the pointer is one pixel from `grim`.
+  - Qt apps only publish a tree when the a11y bus's `org.a11y.Status.IsEnabled`
+    is on, and they notice when it changes. Design mode turns it on while it
+    runs and back off after, unless it was on already
+    (`SystemSource::wantAccessibility`).
+  - Omastrator's own windows are read in-process through `QAccessible`: the
+    thread that would answer the helper is the one waiting for it.
 - **Distances** are Figma's: the gaps between two boxes apart, the four insets
   of one inside the other, and the near edges of two overlapping. Alt anchors
   on what's hovered (or pinned) and measures to the next thing; the bar's
@@ -316,8 +330,9 @@ everywhere) on 2026-09-27.
 - AT-SPI coverage depends on the app: GTK and Qt apps expose their widgets,
   Flutter and Electron apps coarse panels, and terminals none. The window's
   bounds and the pixel colour always work.
-- Only pages in Omastrator's browser are read as DOM; for the user's own
-  browser, the bar offers to open the page there.
+- Pages in Omastrator's browser and, through the extension, in the user's
+  Chromium are read as DOM. Other browsers, and Electron apps (Chromium
+  without the extension, and no AT-SPI unless started with it), are windows.
 - Overlapping floating windows can show one window's art over another's.
 - Art on a page is anchored to its address, and shows in whichever window
   Omastrator's browser has that page open.

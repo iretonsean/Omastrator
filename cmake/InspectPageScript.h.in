@@ -1,0 +1,5 @@
+#pragma once
+// Generated from extras/chromium-extension/inspect-page.js by CMake; edit that file instead.
+namespace OmastratorAnywhere {
+inline constexpr const char inspectPage[] = R"oma_inspect(@INSPECT_PAGE_SOURCE@)oma_inspect";
+}

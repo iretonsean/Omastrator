@@ -77,8 +77,10 @@ void DesignMode::setOn(bool on, const QString &monitor)
         m_monitor = focused ? focused->name : monitor;
         m_timer.start();
         Island::holdDesignKeys();
+        m_source.wantAccessibility(true);
     } else {
         m_timer.stop();
+        m_source.wantAccessibility(false);
         m_tool = QStringLiteral("point");
         Island::resetKeys();
     }
@@ -248,6 +250,14 @@ Inspection DesignMode::inspect(QPoint point, bool deep)
     std::optional<Inspection> found;
     if (page)
         found = Inspect::fromWeb(*page, surface);
+    if (!found && window && deep && anyPage) {
+        if (const auto answer = anyPage(*window, point - window->rect.topLeft())) {
+            found = Inspect::fromWeb(*answer, surface);
+            // Only the Live tab's art is kept by the page; elsewhere it stays on the window.
+            if (found)
+                found->surface = surface;
+        }
+    }
     if (!found && window && deep) {
         if (const auto answer = m_source.accessible(*window, point - window->rect.topLeft()))
             found = Inspect::fromAccessible(*answer, surface);

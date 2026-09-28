@@ -67,6 +67,10 @@ target_include_directories(oma_live PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated
 # Design mode everywhere (docs/ANYWHERE.md): the desktop's surfaces, inspecting them, the overlays, the Desk and the floating bar.
 oma_library(oma_anywhere src/Anywhere/*.cpp)
 target_link_libraries(oma_anywhere PUBLIC oma_live oma_io)
+# Inspect's page script is shared with the extension; editing it reconfigures.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/extras/chromium-extension/inspect-page.js)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/extras/chromium-extension/inspect-page.js INSPECT_PAGE_SOURCE)
+configure_file(cmake/InspectPageScript.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/Anywhere/InspectPageScript.h @ONLY)
 
 # Design systems (docs/DESIGN-SYSTEMS.md): token files, the global library, site extraction, Omarchy themes and the confirmed sync.
 oma_library(oma_system src/System/*.cpp)

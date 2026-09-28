@@ -128,6 +128,23 @@ void DesignController::setSource(std::unique_ptr<DesktopSource> source)
             return std::nullopt;
         return answer.toObject();
     };
+    // Any other page in the user's Chromium, through the extension (no tab joined, no bar).
+    m_mode->anyPage = [this](const Hyprland::Window &window, QPoint windowPoint) -> std::optional<QJsonObject> {
+        BrowserLink &link = m_bridge.browserLink();
+        if (!link.isConnected() || window.pid != link.chromiumPid())
+            return std::nullopt;
+        QString error;
+        const QJsonObject answer = link.cdp().callAndWait(QStringLiteral("Omastrator.inspect"),
+                                                          {{"title", window.title},
+                                                           {"x", windowPoint.x()},
+                                                           {"y", windowPoint.y()},
+                                                           {"width", window.rect.width()},
+                                                           {"height", window.rect.height()}},
+                                                          {}, &error, 500);
+        if (!error.isEmpty() || answer.isEmpty())
+            return std::nullopt;
+        return answer;
+    };
 }
 
 void DesignController::start()

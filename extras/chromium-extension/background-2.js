@@ -5,8 +5,12 @@
 // One native port to `omastrator browser-host`, which relays to Omastrator. Over it:
 //   - Omastrator's DevTools commands, run with chrome.debugger on the tab Live joined
 //     (its session is "tab-<id>"), and the tab's events back;
+//   - Inspect's reads of a page (Omastrator.inspect), run with chrome.scripting in the
+//     tab a window shows, so no tab has to be joined and no debugging bar shows;
 //   - the side panel's calls to Omastrator, and Omastrator's status to the panel.
 // An open native port also keeps this worker alive.
+
+importScripts("inspect-page.js");
 
 const HOST = "io.github.iretonsean.omastrator";
 
@@ -101,6 +105,7 @@ async function runCommand({ id, method, params = {}, sessionId }) {
       const tab = await activeTab();
       return tab ? answer(id, { tabId: tab.id, url: tab.url || "", title: tab.title || "" }) : answer(id, null, "No tab is open.");
     }
+    if (method === "Omastrator.inspect") return answer(id, await inspect(params));
     if (method === "Omastrator.attach") {
       const tab = params.tabId ? await chrome.tabs.get(params.tabId) : await activeTab();
       if (!tab) return answer(id, null, "No tab is open.");
@@ -127,6 +132,27 @@ async function runCommand({ id, method, params = {}, sessionId }) {
   } catch (error) {
     answer(id, null, error && error.message || error);
   }
+}
+
+// The tab a window shows: each window's active tab, matched to the window's title, which
+// is the tab's title with " - Chromium" after it (an app window's is the title alone).
+async function tabShowing(title) {
+  const tabs = await chrome.tabs.query({ active: true });
+  let best = null;
+  for (const tab of tabs) {
+    if (!tab.title || !title.startsWith(tab.title)) continue;
+    if (!best || tab.title.length > best.title.length) best = tab;
+  }
+  return best;
+}
+
+// Inspect at (x, y) in the window titled `title`, sized `width` × `height`.
+async function inspect({ title = "", x = 0, y = 0, width = 0, height = 0 }) {
+  const tab = await tabShowing(title);
+  if (!tab) throw new Error("No tab shows that window.");
+  const [frame] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: omastratorInspect, args: [x, y, width, height] });
+  if (!frame || !frame.result) throw new Error("The page didn't answer.");
+  return frame.result;
 }
 
 // Lets a tab go; `quietly` when Omastrator is gone and the overlay must come out here.

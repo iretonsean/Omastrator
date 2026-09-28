@@ -213,6 +213,42 @@ private slots:
         QCOMPARE(inspection->summary(), QStringLiteral("button.buy 120 × 40"));
     }
 
+    // Any page in the user's Chromium, through the extension: read when the pointer rests, kept on the window.
+    void otherPagesAreReadThroughTheExtensionWhenThePointerRests()
+    {
+        FakeDesktop desktop;
+        desktop.addWindow(QStringLiteral("chromium"), QRect(100, 50, 1200, 800), 77);
+        DesignMode mode(desktop);
+        int asked = 0;
+        QPoint askedAt;
+        mode.anyPage = [&](const Hyprland::Window &window, QPoint point) -> std::optional<QJsonObject> {
+            ++asked;
+            askedAt = point;
+            if (window.pid != 77)
+                return std::nullopt;
+            return QJsonDocument::fromJson(InspectFixtures::pageAnswer).object();
+        };
+        mode.setOn(true);
+        mode.setTool(QStringLiteral("inspect"));
+        desktop.pointer = QPoint(130, 220);
+        mode.poll();
+        QCOMPARE(asked, 0);
+        QCOMPARE(mode.hover()->source, QStringLiteral("window"));
+        mode.poll();
+        mode.poll();
+        QCOMPARE(asked, 1);
+        QCOMPARE(askedAt, QPoint(30, 170));
+        const Inspection &button = *mode.hover();
+        QCOMPARE(button.source, QStringLiteral("dom"));
+        QCOMPARE(button.name, QStringLiteral("button.buy"));
+        QCOMPARE(button.bounds, QRect(112, 168, 120, 40));
+        QCOMPARE(button.surface.kind, Surface::Kind::window);
+        QCOMPARE(button.surface.key, QStringLiteral("window:chromium"));
+        // The page answered, so the accessibility tree wasn't asked.
+        QCOMPARE(desktop.accessibleCalls, 0);
+        mode.setOn(false);
+    }
+
     // A real page in headless Chromium, read through design mode as it reads Omastrator's browser.
     void aWebElementIsInspectedThroughTheDevToolsProtocol()
     {

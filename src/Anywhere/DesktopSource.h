@@ -20,6 +20,9 @@ public:
     virtual std::optional<QColor> pixel(QPoint point) = 0;
     // The shell's layer surfaces (the bar, the background), for telling the bar from the desktop.
     virtual std::vector<Hyprland::Layer> layers() { return {}; }
+    // Asks apps to publish their accessibility trees while Inspect runs (Qt apps only do
+    // when the a11y bus says so), and puts the bus back as it was after.
+    virtual void wantAccessibility(bool on) { Q_UNUSED(on) }
     // A screenshot of `rect`, for Capture to Desk; null with `error` set when it can't.
     virtual QImage grab(const QRect &rect, QString *error) = 0;
     // The window's whole accessibility tree (Lift::accessibleTree's answer); nullopt with `error` when it has none.
@@ -43,4 +46,10 @@ public:
     std::vector<Hyprland::Layer> layers() override;
     QImage grab(const QRect &rect, QString *error) override;
     std::optional<QJsonObject> accessibleTree(const Hyprland::Window &window, int maxNodes, QString *error) override;
+    void wantAccessibility(bool on) override;
+    ~SystemSource() override { wantAccessibility(false); }
+
+private:
+    // Whether the bus's IsEnabled was turned on here, so turning off leaves others' setting alone.
+    bool m_enabledAccessibility = false;
 };

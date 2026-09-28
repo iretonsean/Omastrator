@@ -136,6 +136,7 @@ public:
 
     // Live mode: a page or project in Omastrator's Chromium. $OMASTRATOR_LIVE_HEADLESS runs it headless, for tests.
     LiveSession &liveSession() { return m_live; }
+    BrowserLink &browserLink() { return m_browserLink; }
     // `command` is an Electron app's command line; `app` opens `url` as an app window.
     QString startLive(const QUrl &url, const QString &folder, const QString &command = QString(), bool app = false);
     // Writes the live edits back: the certain ones directly, the rest through the agent. `agentRequest` gets the

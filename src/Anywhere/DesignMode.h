@@ -21,6 +21,9 @@ public:
 
     // The page under a point of `window`, when that window is Omastrator's browser: webScript's answer, else nullopt.
     std::function<std::optional<QJsonObject>(const Hyprland::Window &window, QPoint windowPoint)> webPage;
+    // The page under a point of any browser window the extension reaches, in the same form.
+    // Asked only when the pointer rests; the surface stays the window's.
+    std::function<std::optional<QJsonObject>(const Hyprland::Window &window, QPoint windowPoint)> anyPage;
 
     // Watches the island's state file and turns on and off with its mode.
     void followIsland();

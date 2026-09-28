@@ -17,7 +17,9 @@ class QLocalSocket;
 //   cdp     both ways: a DevTools message. The extension runs it with
 //           chrome.debugger on a tab; sessions are "tab-<id>". Its own methods:
 //           Omastrator.activeTab, Omastrator.attach {tabId}, Omastrator.detach
-//           {sessionId}, and the event Omastrator.detached {sessionId, reason}.
+//           {sessionId}, Omastrator.inspect {title, x, y, width, height} (Inspect
+//           in the tab a window shows, with chrome.scripting), and the event
+//           Omastrator.detached {sessionId, reason}.
 //   call    extension → here: {id, method, params}, the agent socket's methods,
 //           answered by a reply {id, result} or {id, error}.
 //   status  here → extension: the status stream's object, as it changes.
