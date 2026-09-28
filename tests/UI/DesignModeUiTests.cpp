@@ -222,6 +222,38 @@ private slots:
         QVERIFY(!overlays.surfaces().isEmpty());
     }
 
+    // Audit leftover: the escape hatch when setup never ran --apply (Hyprland has no Omastrator
+    // binds loaded) and the user's attention has moved to another monitor since. The author's
+    // rule: Omastrator never takes over the computer without a way out, Super+Alt+Escape and
+    // `omastrator reset` work in every state, and nothing sits over the bar or the island.
+    void resetIsTheEscapeHatchWithoutHyprlandKeysAndAcrossMonitors()
+    {
+        App app;
+        QFile::remove(m_directory.filePath(QStringLiteral("hyprctl.log")));
+        // This fixture never writes Omastrator's own Hyprland key file, so Setup::designKeysLoaded
+        // is false here already, the same as a real setup that never ran --apply.
+        app.call(QStringLiteral("on"));
+        app.call(QStringLiteral("tool"), {{"tool", "rectangle"}});
+        // Island::holdDesignKeys() checks that first: told to hold a submap Hyprland was never
+        // given, every key in it would go unbound, which is worse than not switching at all.
+        QVERIFY(!read(m_directory.filePath(QStringLiteral("hyprctl.log"))).contains(QLatin1String("dispatch submap omastrator-design")));
+
+        // Art goes on the focused monitor (DP-1); the user's attention then moves to the other one.
+        OverlayStore &overlays = app.design().overlays();
+        app.call(QStringLiteral("draw"), {{"tool", "rectangle"}, {"points", QJsonArray{QJsonArray{200, 150}, QJsonArray{400, 250}}}});
+        QCOMPARE(app.status()["monitor"].toString(), QStringLiteral("DP-1"));
+        QVERIFY(!overlays.surfaces().isEmpty());
+        app.desktop->screens[0].focused = false;
+        app.desktop->screens[1].focused = true;
+
+        // The escape hatch doesn't care which monitor it's called from, or which one the art is
+        // on: `omastrator reset` (what Super+Alt+Escape runs) clears every monitor's art.
+        app.call(QStringLiteral("reset"));
+        QVERIFY(!app.design().mode().isOn());
+        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
+        QVERIFY(overlays.surfaces().isEmpty());
+    }
+
     void workGoesWhereTheUserChoosesAndTheDeskLabelsItsSource()
     {
         App app;

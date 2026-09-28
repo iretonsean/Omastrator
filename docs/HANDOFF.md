@@ -11,7 +11,46 @@ frames and auto layout, Inspect inside windows) plus today's four branches:
 resizing artboards on the canvas, the shortcuts pass, Send to a device, and
 the dense Properties panel.
 
-### Done: the promo animation (2026-09-28)
+### Audit leftovers (2026-09-28, `fix/audit-leftovers`, not yet merged)
+
+Two loose ends from the design-mode Esc audit mentioned just above:
+
+1. **The tray light's tooltip was wrong for an overlay proposal.** It always
+   said "Enter keeps it, Esc discards it" when a result was ready
+   (`shell/omastrator.ai/TrayLight.qml`), but that's only true for an
+   app-window proposal (`ContentView`/`AgentPanels` bind those keys
+   directly). Design mode's Ask proposal is answered with the floating bar's
+   own Keep and Discard chips — never the keyboard, by design, so the
+   proposal card stays visible and clickable even after design mode ends
+   (`shell/omastrator.island/Overlay.qml`'s own comment says so). The
+   island's own activity line already got this right
+   (`Island.qml`'s `designLine`, "… is on the overlay: Keep or Discard it in
+   the bar"); the tray light didn't share that logic. Fixed by adding
+   `readyTooltip(status)` to `OverlayLogic.js` (checks `design.proposal`
+   before the flat `proposal` field) and having `TrayLight.qml` call it;
+   covered in `ShellPluginTests`.
+2. **Design mode without setup's keys, with the island on another
+   monitor: audited, not found broken.** Traced the full escape-hatch path
+   and it already holds: `Island::holdDesignKeys()` checks
+   `Setup::designKeysLoaded()` before telling Hyprland to hold the
+   `omastrator-design` submap, so an unloaded key file never straps Hyprland
+   into a submap with nothing bound in it; `OverlayLogic.js`'s
+   `wantsKeyboard()` still grants the overlay itself the keyboard for a
+   drawing tool or while typing, so Esc reaches it even with no Hyprland
+   keys at all (already tested); the proposal card and its Keep/Discard
+   chips are mouse-reachable independent of design mode's on/off state, and
+   nothing in the overlay ever takes `WlrKeyboardFocus.Exclusive` (already
+   tested); `omastrator reset` (what Super+Alt+Escape runs) tears down
+   every piece of state — waiting, proposal, look/restyle previews,
+   onboarding, every monitor's overlays, the mode, the keys — regardless of
+   which monitor is focused when it runs. That last part (reset from a
+   different monitor than the art was drawn on, with no design keys loaded)
+   had no test before; added
+   `resetIsTheEscapeHatchWithoutHyprlandKeysAndAcrossMonitors` in
+   `tests/UI/DesignModeUiTests.cpp` to lock it in. No code changed for this
+   item — it was already correct.
+
+
 
 The clean-slate promo is finished, approved and posted on X by the author. Its
 brief, source, renderer and video are in `media/animation/` (see the Status
