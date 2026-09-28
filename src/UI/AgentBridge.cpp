@@ -77,6 +77,12 @@ QString endMessage(const AgentRun &run)
 AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject(&window), m_workspace(workspace), m_window(window)
 {
     connect(&m_tools, &AgentTools::proposalChanged, this, &AgentBridge::proposalChanged);
+    connect(&m_tools, &AgentTools::called, this, [this](const QString &method) {
+        if (!m_waiting)
+            return;
+        m_waiting->step = stepFor(method, &m_waiting->edits);
+        emit waitingChanged();
+    });
     m_variationsPanel.onClose = [this] {
         m_variationsPanel.close();
         m_resultsUnseen = false;
@@ -232,13 +238,33 @@ QString AgentBridge::displayName(const QString &agent)
     return names.value(agent, agent.isEmpty() ? QStringLiteral("the agent") : agent);
 }
 
+// A call as the user would say it; edits are counted so the line shows progress.
+QString AgentBridge::stepFor(const QString &method, int *edits)
+{
+    static const QStringList looking{"document_get", "selection_get", "status_get", "select"};
+    static const QStringList editing{"insert_svg", "set_style", "transform", "arrange", "align", "distribute", "group", "ungroup",
+                                     "pathfinder", "delete", "update_object", "replace_objects", "trace_image", "place", "apply_color"};
+    if (looking.contains(method))
+        return QStringLiteral("looking at it");
+    if (editing.contains(method)) {
+        ++*edits;
+        return *edits == 1 ? QStringLiteral("making the first change") : QStringLiteral("%1 changes so far").arg(*edits);
+    }
+    if (method == QLatin1String("render"))
+        return *edits > 0 ? QStringLiteral("checking how it looks") : QStringLiteral("looking at it");
+    if (method == QLatin1String("proposal_finish"))
+        return QStringLiteral("finishing up");
+    return QStringLiteral("working");
+}
+
 QString AgentBridge::waitingText() const
 {
     if (!m_waiting)
         return {};
     const QString text = QStringLiteral("%1 is %2…").arg(displayName(m_waiting->agent), QLatin1String(verb(m_waiting->task)));
     const qint64 seconds = (QDateTime::currentMSecsSinceEpoch() - m_waiting->started) / 1000;
-    return seconds > 0 ? QStringLiteral("%1 %2 s").arg(text).arg(seconds) : text;
+    const QString timed = seconds > 0 ? QStringLiteral("%1 %2 s").arg(text).arg(seconds) : text;
+    return m_waiting->step.isEmpty() ? timed : QStringLiteral("%1 · %2").arg(timed, m_waiting->step);
 }
 
 void AgentBridge::stopWaiting()
@@ -276,7 +302,7 @@ void AgentBridge::dismissBarMessage()
     emit proposalChanged();
 }
 
-QString AgentBridge::launch(const QString &requestId, Task task, const QString &prompt)
+QString AgentBridge::launch(const QString &requestId, Task task, const QString &prompt, const QString &model)
 {
     // An older run's log goes with its message.
     m_logPath.clear();
@@ -286,6 +312,7 @@ QString AgentBridge::launch(const QString &requestId, Task task, const QString &
         return error;
     AgentLauncher::LaunchOptions options;
     options.task = taskName(task);
+    options.model = model;
     options.finished = [bridge = QPointer<AgentBridge>(this), requestId](AgentRun &run) {
         if (bridge)
             bridge->runFinished(requestId, run);

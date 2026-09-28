@@ -136,6 +136,9 @@ private:
     OverlayStore m_overlays;
     QTimer m_placementTimer;
     QJsonArray m_placements;
+    // While the agent works on a surface: its art as it was when asked, shown in place of the half-made edit.
+    QString m_askSurface;
+    QJsonObject m_askFrozen;
     QString m_message;
     bool m_onboardingOpen = false;
     std::optional<Inspection> m_detail;

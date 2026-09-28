@@ -97,7 +97,10 @@ struct Command {
     QStringList environment;
 };
 // The headless command for `agent`, or nothing when it only runs in a terminal. `binary` is Omastrator's own.
-std::optional<Command> headlessCommand(const QString &agent, AgentAccess access, const QString &prompt, const QString &binary);
+std::optional<Command> headlessCommand(const QString &agent, AgentAccess access, const QString &prompt, const QString &binary,
+                                      const QString &model = QString());
+// The model small, watched edits use (overlay asks): $OMASTRATOR_QUICK_MODEL, else "sonnet"; "default" is the agent's own.
+QString quickModel();
 
 struct LaunchOptions {
     AgentAccess access = AgentAccess::omastrator;
@@ -109,6 +112,8 @@ struct LaunchOptions {
     int timeoutSeconds = 0;
     // Called once when a headless run ends, however it ended; the run is deleted afterwards.
     std::function<void(AgentRun &)> finished;
+    // A model for the agent's own --model, where it has one (Claude); empty is the agent's default.
+    QString model = QString();
 };
 // Writes the folder, then launches the agent. `run` gets the headless run, or null in a terminal. Returns why it failed, or empty.
 QString launch(const QString &taskPrompt, const QString &socket, const LaunchOptions &options, QPointer<AgentRun> *run = nullptr);

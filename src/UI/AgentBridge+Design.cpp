@@ -1,4 +1,5 @@
 #include "UI/AgentBridge.h"
+#include "Agent/AgentLauncher.h"
 #include "UI/DesignController.h"
 #include "UI/ProjectWorkspace.h"
 #include <QCoreApplication>
@@ -64,8 +65,12 @@ QString AgentBridge::askOnOverlay(EditorSession &overlay, const QString &request
     if (m_tools.hasProposal())
         return QStringLiteral("Keep or discard the preview that's open first.");
     m_designTarget = &overlay;
-    const QString error = launch(requestId, Task::edit, prompt);
+    // A quick model: an edit on the overlay is small, and the user is watching it.
+    const QString error = launch(requestId, Task::edit, prompt, AgentLauncher::quickModel());
     if (!error.isEmpty())
         m_designTarget = nullptr;
+    else if (m_waiting)
+        // Something to read from the first second, before the agent's first call.
+        m_waiting->step = QStringLiteral("reading the request");
     return error;
 }

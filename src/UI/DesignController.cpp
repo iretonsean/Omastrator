@@ -8,6 +8,7 @@
 #include "UI/ProjectWorkspace.h"
 #include "UI/TaskBarActions.h"
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 
@@ -47,6 +48,21 @@ DesignController::DesignController(AgentBridge &bridge, ProjectWorkspace &worksp
     m_deskSave.setSingleShot(true);
     m_deskSave.setInterval(500);
     connect(&m_deskSave, &QTimer::timeout, this, [this] { autosaveDesk(); });
+    // When the agent stops, the surface shows its answer (or its art again) in one step.
+    connect(&m_bridge, &AgentBridge::waitingChanged, this, [this] {
+        if (!m_bridge.waiting()) {
+            if (!m_askFrozen.isEmpty())
+                QFile::remove(m_askFrozen["png"].toString());
+            m_askSurface.clear();
+            m_askFrozen = {};
+        }
+        updatePlacements();
+    });
+    // The waiting line's seconds count up on the bar while the agent works on the overlay.
+    connect(&m_bridge, &AgentBridge::waitingTick, this, [this] {
+        if (m_bridge.designTarget() == &m_overlays.session())
+            emit changed();
+    });
 }
 
 DesignController::~DesignController()
@@ -181,12 +197,21 @@ void DesignController::updatePlacements()
         return;
     const QStringList keys = m_overlays.surfaces();
     QJsonArray list;
+    // While the agent works on a surface, it shows as it was, marked as being worked on.
+    const bool asking = !m_askSurface.isEmpty() && m_bridge.waiting() && m_bridge.designTarget() == &m_overlays.session();
+    if (asking && !m_askFrozen.isEmpty()) {
+        QJsonObject frozen = m_askFrozen;
+        frozen["working"] = true;
+        list.append(frozen);
+    }
     if (!keys.isEmpty()) {
         // While design mode is on its poll keeps the windows fresh.
         if (!m_mode->isOn())
             m_mode->refresh();
         const QString selected = m_overlays.selectedSurface();
         for (const QString &key : keys) {
+            if (asking && key == m_askSurface)
+                continue;
             const std::optional<Surface> surface = locate(key);
             if (!surface)
                 continue;

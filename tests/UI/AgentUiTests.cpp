@@ -1,3 +1,4 @@
+#include "UI/AgentBridge.h"
 #include "Agent/AgentLauncher.h"
 #include "Agent/AgentProtocol.h"
 #include "Agent/Cli.h"
@@ -68,6 +69,19 @@ private:
     }
 
 private slots:
+    // The waiting line says what the agent is doing from its calls, counting its edits.
+    void theWaitingLineFollowsTheAgentsCalls()
+    {
+        int edits = 0;
+        QCOMPARE(AgentBridge::stepFor(QStringLiteral("selection_get"), &edits), QStringLiteral("looking at it"));
+        QCOMPARE(AgentBridge::stepFor(QStringLiteral("render"), &edits), QStringLiteral("looking at it"));
+        QCOMPARE(AgentBridge::stepFor(QStringLiteral("delete"), &edits), QStringLiteral("making the first change"));
+        QCOMPARE(AgentBridge::stepFor(QStringLiteral("insert_svg"), &edits), QStringLiteral("2 changes so far"));
+        QCOMPARE(AgentBridge::stepFor(QStringLiteral("render"), &edits), QStringLiteral("checking how it looks"));
+        QCOMPARE(AgentBridge::stepFor(QStringLiteral("proposal_finish"), &edits), QStringLiteral("finishing up"));
+        QCOMPARE(edits, 2);
+    }
+
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);

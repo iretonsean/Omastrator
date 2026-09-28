@@ -44,6 +44,8 @@ public:
 signals:
     // A proposal opened, grew or was renamed.
     void proposalChanged();
+    // Each call as it arrives, before it runs: what the agent is doing, for the waiting line.
+    void called(const QString &method);
 
 private:
     EditorSession &session();

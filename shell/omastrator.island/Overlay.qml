@@ -199,6 +199,23 @@ Item {
           cache: false
           smooth: true
 
+          // Being worked on by the agent: shown as it was, with a soft pulse so it's clearly not stuck.
+          Rectangle {
+            visible: !!parent.modelData.working
+            anchors.fill: parent
+            anchors.margins: -4
+            color: "transparent"
+            border.color: root.accent
+            border.width: 2
+            radius: 6
+            SequentialAnimation on opacity {
+              running: !!parent.modelData.working
+              loops: Animation.Infinite
+              NumberAnimation { from: 0.25; to: 0.9; duration: 700; easing.type: Easing.InOutSine }
+              NumberAnimation { from: 0.9; to: 0.25; duration: 700; easing.type: Easing.InOutSine }
+            }
+          }
+
           Rectangle {
             visible: root.on && parent.modelData.selected
             anchors.fill: parent
@@ -642,12 +659,25 @@ Item {
 
 
 
-          Label {
-            visible: text !== ""
-            text: root.design.waiting || root.design.message || ""
-            opacity: 0.75
-            width: Math.min(implicitWidth, Style.space(360))
-            wrapMode: Text.Wrap
+          Row {
+            spacing: Style.space(6)
+            visible: waitingLine.text !== ""
+
+            Label {
+              id: waitingLine
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.design.waiting || root.design.message || ""
+              opacity: 0.75
+              width: Math.min(implicitWidth, Style.space(360))
+              wrapMode: Text.Wrap
+            }
+
+            Chip {
+              visible: !!root.design.waiting
+              label: "Stop"
+              tip: "Stop the agent; what it's working on stays as it was"
+              onClicked: root.run(["island", "ai", "cancel"])
+            }
           }
           }
         }
@@ -659,7 +689,7 @@ Item {
       // the bar is elsewhere) the proposal would sit on the screen with no way to answer it.
       Rectangle {
         id: proposalCard
-        visible: root.proposal !== null && !barCard.visible && root.proposalScreen === window.modelData.name
+        visible: (root.proposal !== null || !!root.design.waiting) && !barCard.visible && root.proposalScreen === window.modelData.name
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Style.space(28)
@@ -678,20 +708,28 @@ Item {
 
           Label {
             anchors.verticalCenter: parent.verticalCenter
-            text: root.proposal ? root.proposal.title : ""
-            width: Math.min(implicitWidth, Style.space(320))
+            text: root.proposal ? root.proposal.title : (root.design.waiting || "")
+            width: Math.min(implicitWidth, Style.space(420))
             elide: Text.ElideRight
           }
 
           Chip {
+            visible: root.proposal !== null
             label: "Keep"
             primary: true
             onClicked: root.run(["design", "keep"])
           }
 
           Chip {
+            visible: root.proposal !== null
             label: "Discard"
             onClicked: root.run(["design", "discard"])
+          }
+
+          Chip {
+            visible: root.proposal === null && !!root.design.waiting
+            label: "Stop"
+            onClicked: root.run(["island", "ai", "cancel"])
           }
         }
       }

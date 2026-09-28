@@ -163,7 +163,7 @@ QString launch(const QString &taskPrompt, const QString &listening, const Launch
         environment.remove(QString::fromLatin1(nested));
     const QString workingDirectory = options.workingDirectory.isEmpty() ? directory : options.workingDirectory;
 
-    const std::optional<Command> command = showTerminal() ? std::nullopt : headlessCommand(agent, options.access, prompt, binary);
+    const std::optional<Command> command = showTerminal() ? std::nullopt : headlessCommand(agent, options.access, prompt, binary, options.model);
     if (!command)
         return launchInTerminal(agent, prompt, workingDirectory, environment);
     const int timeout = (options.timeoutSeconds > 0 ? options.timeoutSeconds : timeoutSeconds(options.access)) * 1000;

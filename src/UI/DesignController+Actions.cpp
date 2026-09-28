@@ -10,6 +10,8 @@
 #include "UI/ProjectWorkspace.h"
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QProcess>
 
@@ -427,11 +429,29 @@ QString DesignController::ask(const QString &prompt, const Target &target, QJson
     overlay.setActiveLayer(layer);
     const QString screenshot = keepScreenshot(shot.intersected(surface.rect.isEmpty() ? shot : surface.rect));
     const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // The art stays in view as it was while the agent works, instead of each half-made edit showing (strokes vanishing
+    // before their replacements arrive). A copy, since the live picture's file is replaced as the overlay changes.
+    m_askSurface = surface.key;
+    m_askFrozen = {};
+    for (const QJsonValue &placed : m_placements) {
+        QJsonObject object = placed.toObject();
+        if (object["key"].toString() != surface.key)
+            continue;
+        const QString copy = QDir(Island::runtimeDirectory()).filePath(QStringLiteral("overlays/asking-%1.png").arg(requestId.left(8)));
+        QDir().mkpath(QFileInfo(copy).absolutePath());
+        if (QFile::copy(object["png"].toString(), copy)) {
+            object["png"] = copy;
+            m_askFrozen = object;
+        }
+    }
     if (const QString failure = m_bridge.askOnOverlay(overlay, requestId, AgentLauncher::surfacePrompt(requestId, prompt, context, screenshot, art));
-        !failure.isEmpty())
+        !failure.isEmpty()) {
+        m_askSurface.clear();
+        m_askFrozen = {};
         return failure;
+    }
     result["requestId"] = requestId;
-    say(QStringLiteral("Asked. The answer shows on the overlay to keep or discard."));
+    say(QStringLiteral("Asked. It stays as it is until the answer is ready to keep or discard."));
     return {};
 }
 

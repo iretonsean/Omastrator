@@ -311,6 +311,17 @@ private slots:
                     ->arguments.contains(QStringLiteral("auto_edit")));
         // Anyone else goes to a terminal.
         QVERIFY(!AgentLauncher::headlessCommand(QStringLiteral("pi"), AgentAccess::omastrator, QStringLiteral("x"), QStringLiteral("/b")));
+        // Quick, watched edits name a model for Claude; the others keep their own.
+        const QStringList quick = AgentLauncher::headlessCommand(QStringLiteral("claude"), AgentAccess::omastrator, QStringLiteral("x"),
+                                                                 QStringLiteral("/b"), QStringLiteral("sonnet"))->arguments;
+        QCOMPARE(quick.mid(quick.indexOf(QStringLiteral("--model")), 2), (QStringList{"--model", "sonnet"}));
+        QVERIFY(!AgentLauncher::headlessCommand(QStringLiteral("claude"), AgentAccess::omastrator, QStringLiteral("x"), QStringLiteral("/b"))
+                     ->arguments.contains(QStringLiteral("--model")));
+        qunsetenv("OMASTRATOR_QUICK_MODEL");
+        QCOMPARE(AgentLauncher::quickModel(), QStringLiteral("sonnet"));
+        qputenv("OMASTRATOR_QUICK_MODEL", "default");
+        QCOMPARE(AgentLauncher::quickModel(), QString());
+        qunsetenv("OMASTRATOR_QUICK_MODEL");
     }
 
     void aFailedRunSaysWhyInItsLastLine()

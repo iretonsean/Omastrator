@@ -61,10 +61,14 @@ public:
         Task task;
         QString agent;
         qint64 started = QDateTime::currentMSecsSinceEpoch();
+        // What it's doing now, in plain words, from the calls it makes; and how many edits so far.
+        QString step = QString();
+        int edits = 0;
     };
     const std::optional<Waiting> &waiting() const { return m_waiting; }
     // "Claude is roasting… 12 s", in the agent's own name.
     QString waitingText() const;
+    static QString stepFor(const QString &method, int *edits);
     // Cancel: stops the agent's background run (with a Live worktree, or the deploy waiting for it); an agent in a
     // terminal may still answer, which lands as usual.
     void stopWaiting();
@@ -258,7 +262,7 @@ signals:
 
 private:
     // Checks for an agent, then launches; `task` starts waiting on success.
-    QString launch(const QString &requestId, Task task, const QString &prompt);
+    QString launch(const QString &requestId, Task task, const QString &prompt, const QString &model = QString());
     // A background run ended; if its answer never came, say so.
     void runFinished(const QString &requestId, AgentRun &run);
     // A project task (Live, Hand to Agent, Deploy with agent) with project access in `directory`; returns why it couldn't start.

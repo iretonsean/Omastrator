@@ -46,6 +46,7 @@ AgentTools::AgentTools(AgentHost &host, QObject *parent) : QObject(parent), m_ho
 
 QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
 {
+    emit called(method);
     using Handler = QJsonObject (AgentTools::*)(const QJsonObject &);
     static const std::vector<std::pair<QString, Handler>> handlers{
         {QStringLiteral("document_get"), &AgentTools::documentGet},

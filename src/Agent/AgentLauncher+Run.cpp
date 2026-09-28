@@ -63,7 +63,15 @@ QString logFolder()
     return QDir(state).filePath(QStringLiteral("omastrator/agent-runs"));
 }
 
-std::optional<Command> headlessCommand(const QString &agent, AgentAccess access, const QString &prompt, const QString &binary)
+QString quickModel()
+{
+    const QString chosen = qEnvironmentVariable("OMASTRATOR_QUICK_MODEL").trimmed();
+    if (chosen == QLatin1String("default"))
+        return {};
+    return chosen.isEmpty() ? QStringLiteral("sonnet") : chosen;
+}
+
+std::optional<Command> headlessCommand(const QString &agent, AgentAccess access, const QString &prompt, const QString &binary, const QString &model)
 {
     const bool project = access == AgentAccess::project;
     // The one command Omastrator's own flows may run: its CLI, by the absolute path the prompt gives.
@@ -83,6 +91,8 @@ std::optional<Command> headlessCommand(const QString &agent, AgentAccess access,
             arguments << QStringLiteral("Bash,Read") << QStringLiteral("--allowedTools") << QStringLiteral("Bash(%1 *)").arg(cli)
                       << QStringLiteral("Read");
         }
+        if (!model.isEmpty())
+            arguments << QStringLiteral("--model") << model;
         return Command{agent, arguments, {}};
     }
     if (name == QLatin1String("codex")) {
