@@ -4,6 +4,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 dir=${1:-build}; jobs=${2:-2}
+scripts/clean-tmp.sh
 cmake -S . -B "$dir" -DCMAKE_BUILD_TYPE=Debug -DOMASTRATOR_WERROR=ON >/dev/null || { echo "CHECK FAIL: configure"; exit 1; }
 if ! cmake --build "$dir" -j"$jobs" >"$dir/build.log" 2>&1; then
     grep -E "error" "$dir/build.log" | head -20; echo "CHECK FAIL: build (see $dir/build.log)"; exit 1

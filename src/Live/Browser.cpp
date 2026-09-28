@@ -74,7 +74,9 @@ QString Browser::start(const Options &options)
     } else {
         arguments << QStringLiteral("--no-first-run") << QStringLiteral("--no-default-browser-check") << QStringLiteral("--disable-sync");
         if (options.headless)
-            arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800");
+            // Headless is tests (docs/OS-SUITE.md): keep the profile small, since it usually lives in a QTemporaryDir.
+            arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800") << QStringLiteral("--disk-cache-size=1")
+                      << QStringLiteral("--media-cache-size=1") << QStringLiteral("--disable-gpu-shader-disk-cache");
         arguments << options.extraArguments;
         arguments << (options.app.isValid() ? QStringLiteral("--app=") + options.app.toString() : QStringLiteral("about:blank"));
     }
