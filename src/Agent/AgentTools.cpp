@@ -8,6 +8,7 @@
 #include "IO/ImageImporter.h"
 #include "IO/SvgExporter.h"
 #include "IO/SvgImporter.h"
+#include "IO/VectorFileImporter.h"
 #include "Rendering/VectorRenderer.h"
 #include <QDir>
 #include <QFileInfo>
@@ -394,7 +395,7 @@ QJsonObject AgentTools::place(const QJsonObject &params)
     const QString name = QFileInfo(path).fileName();
     QUuid id;
     if (ImageImporter::isVector(path)) {
-        id = AgentEdits::insertArt(edited, SvgImporter::read(path), name, *layer);
+        id = AgentEdits::insertArt(edited, VectorFileImporter::readFirstArtboard(path), name, *layer);
         const QRectF bounds = edited.bounds(id);
         const QPointF shift = QPointF(edited.size.width() / 2, edited.size.height() / 2) - bounds.center();
         edited.transform(id, QTransform::fromTranslate(shift.x(), shift.y()));
