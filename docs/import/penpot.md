@@ -78,17 +78,19 @@ at `develop`, 2026-09.
   different result from what the designer actually saw; the child shapes
   named in `shapes` aren't built as separate visible objects (they'd
   duplicate the same geometry the parent's `content` already draws).
-- **No `Components::sync()` for Penpot.** Unlike Sketch, a Penpot
-  instance's children are already fully materialized shapes in the file
-  (each carrying its own `shapeRef` back to the matching master
-  descendant, for Penpot's own override tracking) — not references that
-  need expanding. The importer builds an instance's children directly
-  from what the file gives it and only sets `VectorObject::instance` for
-  the *metadata* (so the app's Components panel can still find and
-  navigate it); it does not call `Components::sync()`, which would
-  overwrite that already-correct content by recopying from the master
-  through this importer's own placement transforms — a step that isn't
-  needed and could disagree with the source file.
+- **Components are synced on import, and copies keep their changes as
+  overrides.** Opening a document runs `Components::sync()`, which rebuilds
+  every copy's children from its main component, so the importer sets
+  each main's and copy's `placement` (its top-left corner: Penpot's
+  coordinates are absolute) and records what a copy changed (text, fill,
+  stroke, visibility, matched by layer name path) as `InstanceOverride`s
+  before the importer's own sync. Layers a copy added, or size changes, follow
+  the main component, with one warning. A copy's `componentId` is the
+  component's id, which the main shape carries too; `shapeRef` and a
+  componentId equal to the main shape's id are fallbacks.
+- **Hostile files:** each shape id is built once (a frame listing itself, or
+  a shape under two parents, warns once), the zero id is never a child, and
+  nesting stops at 256 levels.
 - **Grid layout gets one warning and imports as a plain frame** (its
   children keep their absolute positions, not the grid placement): the
   document model's `AutoLayout` is a single row/column flow (matching

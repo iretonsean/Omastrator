@@ -185,6 +185,59 @@ private slots:
         QVERIFY(reader.read(QStringLiteral("document.json")).isEmpty());
     }
 
+    void refusesADeflateEntryWithAnImpossibleRatio()
+    {
+        // Central directory claims 200 MB from a few bytes of deflate.
+        QByteArray zip = buildZip({{QStringLiteral("a.bin"), QByteArray(64, 'x'), false}});
+        const qsizetype central = zip.indexOf(QByteArrayLiteral("PK\x01\x02"));
+        QVERIFY(central > 0);
+        zip[central + 10] = 8;
+        const quint32 claim = 200u * 1024 * 1024;
+        for (int i = 0; i < 4; ++i)
+            zip[central + 24 + i] = char((claim >> (8 * i)) & 0xff);
+        ZipReader reader(zip);
+        QVERIFY(reader.isValid());
+        QVERIFY(reader.read(QStringLiteral("a.bin")).isEmpty());
+    }
+
+    void refusesAStoredEntryWhoseSizesDisagree()
+    {
+        QByteArray zip = buildZip({{QStringLiteral("a.bin"), QByteArray(64, 'x'), false}});
+        const qsizetype central = zip.indexOf(QByteArrayLiteral("PK\x01\x02"));
+        zip[central + 24] = char(0x7f);
+        zip[central + 27] = char(0x7f);
+        ZipReader reader(zip);
+        QVERIFY(reader.isValid());
+        QVERIFY(reader.read(QStringLiteral("a.bin")).isEmpty());
+    }
+
+    void readsManyEntriesByName()
+    {
+        QList<ZipEntrySpec> specs;
+        for (int i = 0; i < 300; ++i)
+            specs.append({QStringLiteral("objects/%1.json").arg(i), QByteArray::number(i), false});
+        ZipReader reader(buildZip(specs));
+        QVERIFY(reader.isValid());
+        QCOMPARE(reader.entries().size(), 300);
+        QCOMPARE(reader.read(QStringLiteral("objects/299.json")), QByteArrayLiteral("299"));
+        QCOMPARE(reader.read(QStringLiteral("objects/0.json")), QByteArrayLiteral("0"));
+    }
+
+#ifdef OMASTRATOR_HAVE_ZLIB
+    // A reader stops handing out bytes once its total passes the cap, even when each entry is fine.
+    void stopsAtTheTotalLimit()
+    {
+        const QByteArray big(64 * 1024 * 1024, '\0');
+        ZipReader reader(buildZip({{QStringLiteral("zeros.bin"), big, true}}));
+        QVERIFY(reader.isValid());
+        int served = 0;
+        while (served < 64 && !reader.read(QStringLiteral("zeros.bin")).isEmpty())
+            ++served;
+        QVERIFY(served >= 15);
+        QVERIFY(served <= 16);
+    }
+#endif
+
     void garbageIsInvalid()
     {
         ZipReader reader(QByteArrayLiteral("not a zip file"));

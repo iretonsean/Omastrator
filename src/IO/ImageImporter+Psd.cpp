@@ -64,6 +64,12 @@ private:
     qint64 m_pos = 0;
 };
 
+// One byte a pixel per channel, plus the 4-byte-a-pixel result, capped at 2 GB together.
+bool planSizeTooBig(qint64 planeSize, int planeCount)
+{
+    return planeSize * (planeCount + 4) > qint64(2) * 1024 * 1024 * 1024;
+}
+
 // PackBits: n in [0,127] copies the next n+1 bytes; n in [-127,-1] repeats the
 // next byte 1-n times; n == -128 is a no-op.
 void unpackBits(Cursor &cursor, char *out, qint64 outSize)
@@ -142,14 +148,19 @@ QImage readPsdComposite(const QByteArray &data)
     const int baseChannels = isRgb ? 3 : isGray ? 1 : 4;
     const bool hasAlpha = channels > baseChannels;
     const qint64 planeSize = qint64(width) * qint64(height);
-    std::vector<QByteArray> planes(size_t(baseChannels + (hasAlpha ? 1 : 0)));
-    const int planeCount = int(planes.size());
+    const int planeCount = baseChannels + (hasAlpha ? 1 : 0);
+    // The planes and the finished image live together; refuse what won't fit in memory.
+    if (planSizeTooBig(planeSize, planeCount))
+        throw FileError(QStringLiteral("This PSD is too large to place (%1 × %2 pixels).").arg(width).arg(height));
+    std::vector<QByteArray> planes(static_cast<size_t>(planeCount));
 
     if (compression == 0) {
         for (int c = 0; c < planeCount; ++c) {
-            QByteArray plane(int(planeSize), Qt::Uninitialized);
-            std::memcpy(plane.data(), cursor.pointer(), size_t(planeSize));
+            // skip() checks the bounds, so it has to come before the copy.
+            const char *from = cursor.pointer();
             cursor.skip(planeSize);
+            QByteArray plane(int(planeSize), Qt::Uninitialized);
+            std::memcpy(plane.data(), from, size_t(planeSize));
             planes[size_t(c)] = std::move(plane);
         }
     } else {
@@ -172,6 +183,8 @@ QImage readPsdComposite(const QByteArray &data)
     }
 
     QImage image(int(width), int(height), QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull())
+        throw FileError(QStringLiteral("There was not enough memory to place this PSD."));
     for (quint32 y = 0; y < height; ++y) {
         QRgb *row = reinterpret_cast<QRgb *>(image.scanLine(int(y)));
         for (quint32 x = 0; x < width; ++x) {

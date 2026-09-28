@@ -1,4 +1,5 @@
 #include "IO/PenpotImporter.h"
+#include "Document/Components.h"
 #include "Document/PathOperations.h"
 #include "IO/PenpotImporterParts.h"
 #include "IO/ZipReader.h"
@@ -9,12 +10,16 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QtMath>
 #include <algorithm>
+#include <map>
 
 namespace {
 
 constexpr qint64 maximumBytes = qint64(256) << 20;
+// Deeper than any real design nests; a guard beside the visited set.
+constexpr int maximumDepth = 256;
 // Penpot's well-known root id: the page's implicit container, holding the
 // true top-level shape order in its own `shapes` array.
 const QString zeroID = QStringLiteral("00000000-0000-0000-0000-000000000000");
@@ -127,18 +132,30 @@ public:
         // there's no single "build these first" pass to make this moot).
         // Resolved now that every page's shapes are built and builtByShapeID
         // is complete.
-        for (const auto &[objectID, componentID] : pendingInstances) {
-            VectorObject *object = document.find(objectID);
+        for (const PendingInstance &pending : pendingInstances) {
+            VectorObject *object = document.find(pending.object);
             if (!object || !object->instance)
                 continue;
-            const QUuid master = builtByShapeID.value(componentID);
-            if (master.isNull()) {
+            // A copy's componentId is the component's id, which the main shape
+            // carries too; shapeRef (the main shape's id) and, in older or
+            // hand-made files, a componentId that is the shape's id, are fallbacks.
+            QUuid master = mainByComponentID.value(pending.componentID);
+            if (master.isNull())
+                master = builtByShapeID.value(pending.shapeRef);
+            if (master.isNull())
+                master = builtByShapeID.value(pending.componentID);
+            const VectorObject *masterObject = master.isNull() ? nullptr : document.find(master);
+            if (!masterObject || !masterObject->component) {
                 warnings << QStringLiteral("A component instance's original component wasn't found in this file; it stayed a plain group.");
                 object->instance.reset();
             } else {
                 object->instance->master = master;
+                recordOverrides(pending.object, master);
             }
         }
+        // Copies are rebuilt from their main component, as the app does on open;
+        // doing it here keeps what the designer changed in each copy as overrides.
+        Components::sync(document);
 
         std::stable_sort(orderedArtboards.begin(), orderedArtboards.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
         std::vector<Artboard> finalArtboards;
@@ -149,9 +166,68 @@ public:
     }
 
 private:
-    // (instance object id, its Penpot componentId) for a deferred final resolve.
-    std::vector<std::pair<QUuid, QString>> pendingInstances;
+    struct PendingInstance {
+        QUuid object;
+        QString componentID;
+        QString shapeRef;
+    };
+    // Copies wait for a final resolve, once every main component is built.
+    std::vector<PendingInstance> pendingInstances;
     QHash<QString, QUuid> builtByShapeID;
+    QHash<QString, QUuid> mainByComponentID;
+    // Shape ids already built: a hostile file can list a shape under itself or twice.
+    QSet<QString> built;
+    int depth = 0;
+    bool warnedRepeat = false;
+
+    // What a copy changed from its main component, by layer name path. Layers the
+    // main doesn't have, or geometry changes, can't be kept: the copy is rebuilt from the main.
+    void recordOverrides(const QUuid &instanceID, const QUuid &masterID)
+    {
+        const auto masterKeys = Components::keys(document, masterID);
+        const auto copyKeys = Components::keys(document, instanceID);
+        std::map<QString, QUuid> masterByKey(masterKeys.begin(), masterKeys.end());
+        InstanceInfo &info = *document.find(instanceID)->instance;
+        bool lost = masterKeys.size() != copyKeys.size();
+        for (const auto &[key, id] : copyKeys) {
+            const auto match = masterByKey.find(key);
+            if (match == masterByKey.end()) {
+                lost = true;
+                continue;
+            }
+            const VectorObject *copy = document.find(id);
+            const VectorObject *main = document.find(match->second);
+            InstanceOverride change;
+            if (copy->kind == ObjectKind::text && main->kind == ObjectKind::text && copy->text.text != main->text.text)
+                change.text = copy->text.text;
+            if (copy->hasPaint() && main->hasPaint()) {
+                if (copy->fill != main->fill)
+                    change.fill = copy->fill;
+                if (copy->stroke.paint != main->stroke.paint)
+                    change.stroke = copy->stroke.paint;
+            }
+            if (copy->isVisible != main->isVisible)
+                change.visible = copy->isVisible;
+            if (!change.isEmpty())
+                info.overrides[key] = change;
+        }
+        if (lost)
+            warnings << QStringLiteral("Some component copies had layers or sizes that differ from their main component; they follow the main component.");
+    }
+
+    bool claim(const QString &shapeID)
+    {
+        if (shapeID == zeroID || depth >= maximumDepth)
+            return false;
+        if (!shapeID.isEmpty() && built.contains(shapeID)) {
+            if (!warnedRepeat)
+                warnings << QStringLiteral("Some shapes listed themselves or appeared twice; each was imported once.");
+            warnedRepeat = true;
+            return false;
+        }
+        built.insert(shapeID);
+        return true;
+    }
 
     QUuid add(VectorObject object, const QUuid &parent, const QString &shapeID)
     {
@@ -224,7 +300,8 @@ private:
                 const QRectF rect = shapeRect(shape);
                 looseBounds = looseBounds.isNull() ? rect : looseBounds.united(rect);
             }
-            buildItem(shape, shapes, layerID);
+            if (claim(topLevel[i]))
+                buildItem(shape, shapes, layerID);
         }
         if (!looseBounds.isNull() || frameCount == 0) {
             Artboard board;
@@ -252,8 +329,11 @@ private:
     {
         for (const QJsonValue &value : childIDs) {
             const QJsonObject child = shapes.value(value.toString());
-            if (!child.isEmpty())
-                buildItem(child, shapes, parent);
+            if (child.isEmpty() || !claim(value.toString()))
+                continue;
+            ++depth;
+            buildItem(child, shapes, parent);
+            --depth;
         }
     }
 
@@ -288,17 +368,22 @@ private:
     {
         const bool isMain = shape.value(QStringLiteral("componentRoot")).toBool(false) && shape.value(QStringLiteral("mainInstance")).toBool(false);
         const QString componentID = shape.value(QStringLiteral("componentId")).toString();
+        // Children are absolute page coordinates, so a component's frame is just its top-left corner.
+        const QTransform placement = QTransform::fromTranslate(shapeRect(shape).x(), shapeRect(shape).y());
         if (isMain) {
             ComponentInfo info;
             info.set = object.name;
+            info.placement = placement;
             object.component = info;
+            if (!componentID.isEmpty())
+                mainByComponentID[componentID] = object.id;
         } else if (!componentID.isEmpty()) {
             // The master may not be built yet (a different page, or later in this
             // one): resolved for real once every shape exists, in build().
             InstanceInfo info;
-            info.master = builtByShapeID.value(componentID);
+            info.placement = placement;
             object.instance = info;
-            pendingInstances.push_back({object.id, componentID});
+            pendingInstances.push_back({object.id, componentID, shape.value(QStringLiteral("shapeRef")).toString()});
         }
     }
 
