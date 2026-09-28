@@ -45,8 +45,9 @@ target_link_libraries(oma_io PUBLIC oma_core)
 # compression. Both are optional: without them the affected imports report a plain warning.
 find_package(ZLIB)
 if(ZLIB_FOUND)
-    target_link_libraries(oma_io PRIVATE ZLIB::ZLIB)
-    target_compile_definitions(oma_io PRIVATE OMASTRATOR_HAVE_ZLIB)
+    # Public: tests build Kiwi/zip fixtures with zlib directly too.
+    target_link_libraries(oma_io PUBLIC ZLIB::ZLIB)
+    target_compile_definitions(oma_io PUBLIC OMASTRATOR_HAVE_ZLIB)
 endif()
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
