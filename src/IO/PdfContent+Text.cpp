@@ -37,7 +37,10 @@ void Interpreter::appendToLine(const QString &text, const CharacterFormat &forma
         return;
     if (!m_pendingLine.valid) {
         m_pendingLine.valid = true;
-        m_pendingLine.placement = m_textMatrix * m_state.ctm;
+        // TextContent's local glyph space is Qt's own (y-down, ascenders
+        // negative), unlike PDF's own text space (y-up); negate y first so
+        // Tm/CTM (built from PDF's y-up math) land it the right way up.
+        m_pendingLine.placement = QTransform(1, 0, 0, -1, 0, 0) * m_textMatrix * m_state.ctm;
     }
     const int start = int(m_pendingLine.text.length());
     m_pendingLine.text += text;
