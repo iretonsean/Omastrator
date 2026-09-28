@@ -1,6 +1,7 @@
 #pragma once
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 #include <cstring>
 #include <vector>
 #include <zlib.h>
