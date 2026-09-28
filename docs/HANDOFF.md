@@ -92,6 +92,25 @@ The rule behind all of this is in the author's memory notes and in
 `docs/SESSIONS.md`: Omastrator never takes over the computer without an
 obvious, always-working way out.
 
+## Done after the handoff (same branch)
+
+- **The seanireton.com folder bug:** the clone had no `node_modules`, so
+  `npm run dev` died ("vite: command not found"), and the failure flashed for
+  4 s as one cut-off line in the island. The dev server now installs packages
+  first, and Live's steps and failures stay readable. Verified on the
+  installed build: installs, then runs on localhost:5173 (fb8c828).
+- **The island ticker:** a message's first line goes in the pill, and the rest
+  (or the whole line, when the pill cuts it) goes in a wrapped card under it.
+- **Live in your own Chromium** (eb280e6, docs/OS-SUITE.md "Live in your own
+  browser"): an extension plus the `omastrator browser-host` native host plus
+  `BrowserLink`. The side panel is the start panel docked to the window.
+  Setup is applied on the author's machine: the flags line and the host
+  manifest. The daemon was restarted, and the real host answered `folders` and
+  status.
+  - **Not yet seen on a lit screen:** Chromium must be restarted to load the
+    extension. Then its toolbar button opens the panel. Check Start on a
+    seanireton.com localhost tab, the debugging bar's Cancel, and Stop.
+
 ## Queue, in the author's order
 
 1. **Live in the author's own Chromium** (they picked this first).
@@ -109,7 +128,15 @@ obvious, always-working way out.
 2. **Match the installed Omarchy theme** (the author uses Graphite). The
    island, bar, cards and the app window should use the theme's fonts,
    colours and radii. The author called the current look ugly.
-3. **An editable lift from the author's own browser.** Capture or Lift on a
+3. **An editable lift from the author's own browser.** The author says
+   tracing a screenshot of an interface is "horrible": it's fine for small
+   graphics picked with the pointer, not for whole interfaces. Study Paper
+   Snapshot first (installed in their Chromium, id
+   lidfahaahiogmnlccifabccgplofocck). It injects a script, resolves computed
+   styles, and puts `<x-paper-html>…</x-paper-html>` on the clipboard as
+   text/html, which Paper parses into frames with auto layout, text, images
+   and vectors. Build "Copy as layers" into our extension, and an importer.
+   Original note: Capture or Lift on a
    site should give real text layers, groups and shapes on the Desk, like
    paper.design's Chrome extension, not a traced screenshot. This shares the
    way into the user's Chromium with item 1.
