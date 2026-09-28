@@ -1,6 +1,26 @@
-# Handoff (2026-09-27, evening)
+# Handoff (2026-09-27, late evening)
 
-For the next session after a context clear. The author tested the installed
+For the next session after a context clear. **Start with "Next session starts
+here" just below.**
+
+## Next session starts here
+
+1. Ask the author whether they restarted Chromium and tried the Omastrator
+   extension's panel. Ask how "Tidy it up" felt on a drawing too.
+2. If anything in the extension is broken, fix it first: it's the way in for
+   the lift (item 4).
+3. Otherwise, go on with the queue below: **item 2, the Graphite theme**, then
+   **item 3, Figma's design core** (frames, then auto layout, …), then the
+   editable lift.
+4. Merge `fix/design-mode-escape` into main when it's convenient; the steps
+   are under "Where things are". Everything on it passes, 93 of 93.
+
+Product rule from tonight: Omastrator is a **Figma/Illustrator hybrid built
+into Omarchy** (docs/VISION.md). Never call a Figma design feature out of
+scope. Import interfaces as editable layers, never as a traced screenshot
+(tracing is for small graphics only).
+
+The first handoff follows. The author tested the installed
 build on their desktop all evening and reported problems as they found them.
 Everything below is either done and installed, or queued in the author's
 order.
@@ -113,7 +133,8 @@ obvious, always-working way out.
 
 ## Queue, in the author's order
 
-1. **Live in the author's own Chromium** (they picked this first).
+1. **Live in the author's own Chromium**: DONE (see above). All that's left
+   is the author's own check in Chromium. Original notes:
    - Live mode should work in any Chromium window they open, not only in a
      URL typed into Omastrator's window.
    - Omastrator only reads a page's DOM in its own browser
