@@ -1,3 +1,4 @@
+#include "IO/ExcalidrawImporter.h"
 #include "IO/ImageImporter.h"
 #include "IO/ProjectStore.h"
 #include "IO/SvgExporter.h"
@@ -25,6 +26,11 @@ bool samePlace(const std::optional<QString> &path, const QString &other)
 bool hasSuffix(const QString &path, const QString &suffix)
 {
     return QFileInfo(path).suffix().compare(suffix, Qt::CaseInsensitive) == 0;
+}
+
+bool isExcalidraw(const QString &path)
+{
+    return hasSuffix(path, QStringLiteral("excalidraw"));
 }
 
 // A raster image opens on an artboard its size.
@@ -90,6 +96,8 @@ bool ProjectWorkspace::openFile(const QString &path)
             document = ProjectStore::read(path);
         else if (ImageImporter::isVector(path))
             document = SvgImporter::read(path, &warnings);
+        else if (isExcalidraw(path))
+            document = ExcalidrawImporter::read(path, &warnings);
         else
             document = imageDocument(ImageImporter::read(path, &warnings), QFileInfo(path).fileName());
     } catch (const FileError &error) {
@@ -138,15 +146,16 @@ bool ProjectWorkspace::placeFile(const QString &path)
     if (!session.hasDocument())
         return false;
     const QString name = QFileInfo(path).fileName();
+    const bool asDocument = ImageImporter::isVector(path) || isExcalidraw(path);
     try {
-        if (!ImageImporter::isVector(path)) {
+        if (!asDocument) {
             QStringList warnings;
             session.placeImage(ImageImporter::read(path, &warnings), name);
             reportLeftOut(path, warnings);
             return true;
         }
         QStringList warnings;
-        const VectorDocument imported = SvgImporter::read(path, &warnings);
+        const VectorDocument imported = isExcalidraw(path) ? ExcalidrawImporter::read(path, &warnings) : SvgImporter::read(path, &warnings);
         reportLeftOut(path, warnings);
         session.beginEdit(QStringLiteral("Place"));
         VectorObject group;

@@ -29,8 +29,13 @@ importers.
   keeps for compatibility, skipping the colour-mode-data, image-resources
   and layer-and-mask-info sections by their length prefixes. Placed as one
   flattened image, with the warning OPEN.md asked for.
-- **Excalidraw** (`.excalidraw` and the clipboard JSON): see the "Decisions"
-  section below once implemented.
+- **Excalidraw** (`.excalidraw`, Open and Place): rectangle (with roundness
+  → live corner radius), ellipse, diamond, line, arrow (with arrowheads),
+  freedraw (smoothed, not the sketchy wobble), text (font, size, alignment,
+  line height), image (decoded from the `files` map's data URL), frames (as
+  Omastrator frames, holding whatever elements name them by `frameId`), and
+  `groupIds` (nested groups, innermost to outermost). Locked and opacity
+  carry over. `strokeStyle` (dashed/dotted) becomes a dash pattern.
 
 ## What doesn't
 
@@ -45,6 +50,30 @@ importers.
 - PSD CMYK→RGB is a naive `255 - min(255, ink + black)` conversion, not
   colour-managed. Good enough for a flattened preview placement, wrong for
   print-accurate colour; noted so nobody is surprised.
+- Excalidraw's clipboard JSON (paste, not a file) isn't wired to Ctrl+V.
+  `ExcalidrawImporter::parse()`/`canRead()` already accept the clipboard
+  variant's shape (`{type: "excalidraw/clipboard", elements, files}`) byte
+  for byte the same as a `.excalidraw` file, so the capability exists; only
+  the OS-clipboard hookup in the shared UI is missing, which would touch
+  more shared code than this pass's "small, additive" scope allows.
+- Excalidraw grouping inside a frame isn't tracked: elements with a
+  `frameId` become direct children of that frame, dropping their
+  `groupIds`. Full fidelity would need a group stack per frame instead of
+  one shared with the top level; simpler to note than to build for how
+  rarely a frame's contents are also grouped.
+- Excalidraw diamonds are always sharp-cornered; Excalidraw can round them
+  too (`roundness` applies to diamonds as well as rectangles), but nothing
+  in the document model gives a diamond a live shape the way rectangles
+  get `LiveRectangle`, so rounding it would mean hand-building a rounded
+  diamond path. Not worth it for a rarely-rounded shape.
+- Excalidraw text's vertical origin is the top of its bounding box; the
+  document model's text origin is the first baseline. A fixed 0.8 em
+  ascent approximation closes most of the gap without needing the
+  resolved font's real metrics, but it's still an approximation, not
+  exact placement.
+- Excalidraw's arrow/line "bindings" (a line's end following the shape it
+  points at) have no equivalent — only the imported line's fixed geometry
+  survives, which is what a designer sees regardless.
 - Nested Inkscape layers (`<g inkscape:groupmode="layer">` inside another
   layer) still become an ordinary nested group, like any other nested `<g>`,
   not a second Omastrator layer. Omastrator's layers are a flat, top-level
@@ -96,7 +125,43 @@ importers.
   of the automated suite since it depends on those encoders being
   installed.
 
+- **One rotation formula for every Excalidraw element kind.** Excalidraw
+  always gives `x, y, width, height` as the *unrotated* bounding box and
+  `angle` as radians about its centre. Rectangles, ellipses and diamonds
+  build local geometry in `(0,0)-(w,h)`; lines, arrows and freedraw use the
+  local bounding box of their own `points[]` instead (their `x,y` is the
+  first point's position, not necessarily the bbox corner). One helper,
+  `placementFor(originX, originY, localBounds, angle)`, builds the
+  translate→rotate→translate-back `QTransform` either way. Paths bake it
+  straight into their geometry with `VectorPath::transformed()`; text and
+  images carry it as `VectorObject::transform`, matching how
+  `SvgImporter+Content.cpp` already builds its own image transforms
+  (`scale * translate * ctm`, left to right, first term applied first).
+  Verified by placing a rotated diamond, a multi-point arrow and rotated
+  text side by side in `build/omastrator` and comparing the render to what
+  Excalidraw itself would show for the same numbers.
+- **Excalidraw's own current and legacy font names are used directly**
+  (`Excalifont`, `Nunito`, `Comic Shanns Mono`, `Virgil`, `Helvetica`,
+  `Cascadia Code`, …), rather than substituting an installed look-alike.
+  The app already has a general "missing fonts" flow
+  (`EditorSession::missingFonts()`, surfaced after every Open) that flags
+  whichever of these aren't installed and points at Type ▸ Find/Replace
+  Font…, so the importer doesn't need its own font-substitution logic —
+  confirmed working end to end in the manual `build/omastrator` smoke test
+  below, which showed "Missing font: Excalifont" exactly as expected.
+
 ## Report
+
+Manually verified in `build/omastrator` (offscreen, `OMASTRATOR_SNAPSHOT`):
+a rounded rectangle, an ellipse, a rotated diamond, a multi-point arrow with
+a triangle head, and text all opened, rendered and positioned correctly
+from a hand-written `.excalidraw` file, with the Layers panel naming each
+one and the missing-font banner catching the unavailable font by name.
+
+All automated tests pass: `ZipReaderTests` (6), `SvgImportTests` (28, up
+from 26), `ImageImporterTests` (11, up from 3), `ExcalidrawImportTests`
+(14, new), and `ProjectWorkspaceTests` (14, up from 13, covering the new
+Open/Place wiring) — run with `QT_QPA_PLATFORM=offscreen`.
 
 (Filled in as each piece lands; see the end of this document for the final
 state.)
