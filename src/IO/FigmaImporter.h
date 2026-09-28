@@ -30,13 +30,16 @@ struct LinkTarget {
     // The URL's ?node-id=, normalised to Figma's own "1:2" form; empty imports the whole file.
     QString nodeID;
 };
-// Accepts figma.com/design/<key>/… and /file/<key>/…; nullopt if the URL isn't one of those.
+// Accepts figma.com/design/<key>, /file/<key> and /proto/<key>, with or without a
+// trailing path or query; a /branch/<key> link gives the branch's own key.
+// nullopt if the URL isn't one of those.
 std::optional<LinkTarget> parseLink(const QString &url);
 
 // The personal access token, in ~/.config/omastrator/figma.json (mode 0600).
 namespace Token {
 std::optional<QString> load();
-void save(const QString &token);
+// False when the token couldn't be written (unwritable folder, full disk).
+bool save(const QString &token);
 void forget();
 QString settingsPageURL();
 }

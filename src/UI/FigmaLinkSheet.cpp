@@ -82,13 +82,19 @@ void FigmaLinkSheet::startImport()
         fail(QStringLiteral("That doesn’t look like a Figma file link."));
         return;
     }
-    if (!FigmaImporter::Token::load()) {
-        const QString typed = m_tokenField->text().trimmed();
-        if (typed.isEmpty()) {
+    // A typed token is kept only in memory until Figma accepts it, so a mistyped one
+    // is never stored behind a hidden field.
+    m_pendingToken.clear();
+    QString token;
+    if (const std::optional<QString> stored = FigmaImporter::Token::load()) {
+        token = *stored;
+    } else {
+        token = m_tokenField->text().trimmed();
+        if (token.isEmpty()) {
             fail(QStringLiteral("Add a personal access token to import from Figma."));
             return;
         }
-        FigmaImporter::Token::save(typed);
+        m_pendingToken = token;
     }
     setBusy(true);
     QUrl url;
@@ -100,12 +106,16 @@ void FigmaLinkSheet::startImport()
         url.setQuery(QUrlQuery{{QStringLiteral("ids"), target->nodeID}, {QStringLiteral("geometry"), QStringLiteral("paths")}});
     }
     QNetworkRequest request(url);
-    request.setRawHeader("X-Figma-Token", FigmaImporter::Token::load()->toUtf8());
-    m_reply = m_network.get(request);
+    // The token must never leave api.figma.com, even if the API redirects.
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::SameOriginRedirectPolicy);
+    request.setRawHeader("X-Figma-Token", token.toUtf8());
+    QNetworkReply *reply = m_network.get(request);
+    m_reply = reply;
     const QString nodeID = target->nodeID;
-    connect(m_reply, &QNetworkReply::finished, this, [this, nodeID] {
-        if (QNetworkReply *reply = m_reply)
-            finish(reply, nodeID);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, nodeID] {
+        if (m_reply == reply)
+            m_reply.clear();
+        finish(reply, nodeID);
     });
 }
 
@@ -130,6 +140,11 @@ void FigmaLinkSheet::finish(QNetworkReply *reply, const QString &nodeID)
     QStringList warnings;
     try {
         VectorDocument document = FigmaImporter::parseRestFile(json, nodeID, &warnings);
+        if (!m_pendingToken.isEmpty()) {
+            if (!FigmaImporter::Token::save(m_pendingToken))
+                warnings << QStringLiteral("The token couldn’t be saved; it was used for this import only.");
+            m_pendingToken.clear();
+        }
         if (onImported)
             onImported(std::move(document), QStringLiteral("Figma Import"), warnings);
         accept();
