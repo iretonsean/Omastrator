@@ -55,7 +55,7 @@ QStringList nameFilters()
     // Formats this Qt build can read, in the order users look for them.
     const QList<QByteArray> supported = QImageReader::supportedImageFormats();
     const QList<std::pair<QString, QStringList>> known{
-        {QStringLiteral("SVG"), {QStringLiteral("*.svg")}},
+        {QStringLiteral("SVG"), {QStringLiteral("*.svg"), QStringLiteral("*.svgz")}},
         {QStringLiteral("PNG"), {QStringLiteral("*.png")}},
         {QStringLiteral("JPEG"), {QStringLiteral("*.jpg"), QStringLiteral("*.jpeg")}},
         {QStringLiteral("TIFF"), {QStringLiteral("*.tif"), QStringLiteral("*.tiff")}},
@@ -76,6 +76,8 @@ QStringList nameFilters()
 
 bool isVector(const QString &path)
 {
-    return QFileInfo(path).suffix().compare(QLatin1String("svg"), Qt::CaseInsensitive) == 0;
+    const QString suffix = QFileInfo(path).suffix();
+    return suffix.compare(QLatin1String("svg"), Qt::CaseInsensitive) == 0
+           || suffix.compare(QLatin1String("svgz"), Qt::CaseInsensitive) == 0;
 }
 }
