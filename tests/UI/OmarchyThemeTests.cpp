@@ -1,9 +1,12 @@
+#include "UI/OmarchyStyle.h"
 #include "UI/OmarchyTheme.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/ProjectWorkspaceView.h"
 #include <QApplication>
 #include <QDir>
+#include <QFontDatabase>
 #include <QLabel>
+#include <QListWidget>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QTemporaryDir>
@@ -104,6 +107,8 @@ private slots:
     void aBarredStateDirectoryIsWatchedFromAbove();
     void aReadCutShortKeepsThePalette();
     void aSwitchReachesTheWindowsTabsAndPanels();
+    void componentTokensToneThePanelsAndControls();
+    void framedListsBecomeGroupsWithoutOutlines();
 };
 
 void OmarchyThemeTests::theFileParsesIntoColoursAndRefusesWhatIsMissingOrMalformed()
@@ -191,7 +196,7 @@ void OmarchyThemeTests::lightAndDarkThemesFillThePalette()
 void OmarchyThemeTests::withoutAThemeTheBuiltInDarkApplies()
 {
     QTemporaryDir state;
-    // Whatever style the desktop set, the palette needs Fusion.
+    // Whatever style the desktop set, the palette needs Fusion, drawn the theme's way.
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Windows")));
     QCOMPARE(QApplication::style()->objectName(), QString("windows"));
     QTest::ignoreMessage(QtInfoMsg, QRegularExpression("no Omarchy theme at .*colors.toml - built-in dark"));
@@ -201,7 +206,7 @@ void OmarchyThemeTests::withoutAThemeTheBuiltInDarkApplies()
     QCOMPARE(QApplication::palette().color(QPalette::Base), QColor(0x1b, 0x1b, 0x1b));
     QCOMPARE(QApplication::palette().color(QPalette::PlaceholderText), QColor(0x8a, 0x8a, 0x8a));
     QCOMPARE(QApplication::palette().color(QPalette::BrightText), QColor(0xff, 0x9f, 0x0a));
-    QCOMPARE(QApplication::style()->objectName(), QString("fusion"));
+    QCOMPARE(QApplication::style()->objectName(), QString("omarchy"));
     ThemeWell swatch;
     QCOMPARE(swatch.pixel(), qRgb(0x24, 0x24, 0x24));
     // A theme appearing later is taken up, unnamed or not.
@@ -393,3 +398,67 @@ void OmarchyThemeTests::aSwitchReachesTheWindowsTabsAndPanels()
 
 QTEST_MAIN(OmarchyThemeTests)
 #include "OmarchyThemeTests.moc"
+
+// Graphite's colors.toml carries component tokens: the panels, controls and text take them.
+void OmarchyThemeTests::componentTokensToneThePanelsAndControls()
+{
+    const QString graphite = QString::fromLatin1(macchiato) + QStringLiteral(R"toml(
+surface_0 = "#0e0e10"
+surface_1 = "#18181a"
+surface_2 = "#222224"
+surface_3 = "#2c2c2e"
+lift = "#303033"
+text_1 = "#f5f5f7"
+text_2 = "#e5e5e7"
+text_3 = "#98989d"
+text_4 = "#636366"
+accent_soft = "not a colour"
+on_accent = "#0e0e10"
+keycap_edge = "rgba(255,255,255,0.14)"
+)toml");
+    const OmarchyColors colours = OmarchyColors::parse(graphite);
+    QVERIFY(colours.components);
+    QCOMPARE(colours.surface2, QColor(0x22, 0x22, 0x24));
+    // A token that isn't #rrggbb falls back instead of refusing the theme.
+    QCOMPARE(colours.accentSoft, colours.accent);
+    const QPalette palette = colours.palette();
+    QCOMPARE(palette.color(QPalette::Window), QColor(0x18, 0x18, 0x1a));
+    QCOMPARE(palette.color(QPalette::Base), QColor(0x18, 0x18, 0x1a));
+    QCOMPARE(palette.color(QPalette::Dark), QColor(0x0e, 0x0e, 0x10));
+    QCOMPARE(palette.color(QPalette::Button), QColor(0x22, 0x22, 0x24));
+    QCOMPARE(palette.color(QPalette::Text), QColor(0xe5, 0xe5, 0xe7));
+    QCOMPARE(palette.color(QPalette::Disabled, QPalette::Text), QColor(0x63, 0x63, 0x66));
+    // The warning keeps its role.
+    QCOMPARE(palette.color(QPalette::BrightText), QColor(0xee, 0xd4, 0x9f));
+    // Graphite's type, where it's installed.
+    QCOMPARE(colours.labelFamily().isEmpty(), !QFontDatabase::hasFamily(QStringLiteral("SF Pro Text")));
+    // A theme without tokens gets the roles from its own colours, and keeps the desktop's font.
+    const OmarchyColors plain = OmarchyColors::parse(QString::fromLatin1(macchiato));
+    QVERIFY(!plain.components);
+    QCOMPARE(plain.surface2, QColor(0x36, 0x3a, 0x4f));
+    QCOMPARE(plain.text3, QColor(0xb8, 0xc0, 0xe0));
+    QVERIFY(plain.labelFamily().isEmpty());
+}
+
+// No outlines: a framed list is drawn as a rounded group in the group tone, its viewport letting it through.
+void OmarchyThemeTests::framedListsBecomeGroupsWithoutOutlines()
+{
+    QTemporaryDir state;
+    write(state.path() + "/theme/colors.toml", QString::fromLatin1(macchiato));
+    QTest::ignoreMessage(QtInfoMsg, QRegularExpression("Omarchy theme .* dark from"));
+    OmarchyTheme theme(state.path());
+    QListWidget list;
+    list.resize(120, 80);
+    list.show();
+    QVERIFY(list.property("omarchyGroup").toBool());
+    QVERIFY(!list.viewport()->autoFillBackground());
+    const QImage image = list.grab().toImage();
+    // Inside: the group tone. The corner: rounded away, so the window shows.
+    QCOMPARE(image.pixelColor(60, 40), theme.colors().surface2);
+    QCOMPARE(image.pixelColor(0, 0), list.palette().color(QPalette::Window));
+    // A frameless list is left alone.
+    QListWidget bare;
+    bare.setFrameShape(QFrame::NoFrame);
+    bare.show();
+    QVERIFY(!bare.property("omarchyGroup").toBool());
+}

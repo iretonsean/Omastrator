@@ -1,2 +1,5 @@
+singleton Theme 1.0 Theme.qml
 Glyph 1.0 Glyph.qml
+Lift 1.0 Lift.qml
+Panel 1.0 Panel.qml
 Status 1.0 Status.qml

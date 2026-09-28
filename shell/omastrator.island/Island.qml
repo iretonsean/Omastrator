@@ -285,10 +285,7 @@ Item {
   readonly property int buttonSize: Style.space(28)
   readonly property int glyphSize: Style.space(16)
   readonly property int pad: Style.space(4)
-  readonly property color surface: Color.popups.background
-  readonly property color ink: Color.popups.text
-  readonly property color edge: Color.popups.border
-  readonly property color accent: Color.accent
+  readonly property color ink: O.Theme.text2
 
   // The button under the pointer; the tooltip reads its tip live.
   property Item hoveredButton: null
@@ -332,12 +329,11 @@ Item {
     width: label !== "" ? labelText.x + labelText.implicitWidth + Style.space(10) : root.buttonSize
     height: root.buttonSize
 
-    Rectangle {
+    // Lifted under the pointer; the soft accent when chosen or the mode's main action.
+    O.Lift {
       anchors.fill: parent
-      radius: height / 2
-      color: button.primary ? Util.alpha(root.accent, mouse.containsMouse ? 0.42 : 0.28)
-           : button.selected ? Util.alpha(root.accent, 0.28)
-           : mouse.containsMouse ? Util.alpha(root.ink, 0.1) : "transparent"
+      hot: mouse.containsMouse && !button.dim
+      chosen: button.selected || button.primary
     }
 
     O.Glyph {
@@ -346,8 +342,9 @@ Item {
       x: button.label !== "" ? Style.space(8) : (parent.width - width) / 2
       name: button.glyph
       size: root.glyphSize
-      color: button.selected || button.primary ? root.accent : root.ink
+      color: button.selected || button.primary ? O.Theme.onAccent : mouse.containsMouse ? O.Theme.accent : O.Theme.text3
       opacity: button.dim ? 0.5 : 1
+      Behavior on color { ColorAnimation { duration: O.Theme.snap } }
     }
 
     Text {
@@ -356,11 +353,11 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       x: buttonGlyph.x + buttonGlyph.width + Style.space(5)
       text: button.label
-      color: root.ink
+      color: button.selected || button.primary ? O.Theme.onAccent : mouse.containsMouse ? O.Theme.text1 : O.Theme.text2
       opacity: button.dim ? 0.5 : 1
-      font.family: Style.font.family
-      font.pixelSize: Style.font.body
-      font.weight: Font.DemiBold
+      font.family: O.Theme.labelFont
+      font.pixelSize: O.Theme.sizeBody
+      font.weight: Font.Medium
     }
 
     MouseArea {
@@ -407,7 +404,7 @@ Item {
       // Only the pill takes the pointer; the rest of the strip lets clicks through.
       mask: Region { item: pill }
 
-      Rectangle {
+      O.Panel {
         id: pill
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
@@ -415,104 +412,103 @@ Item {
         width: row.implicitWidth + root.pad * 2
         onWidthChanged: if (window.visible) root.pillWidth = width
         Component.onCompleted: if (window.visible) root.pillWidth = width
-        radius: height / 2
-        color: root.surface
-        // Themes whose popups have no border still get an edge on a dark desktop.
-        border.color: root.edge.a > 0.05 && !Qt.colorEqual(Qt.rgba(root.edge.r, root.edge.g, root.edge.b, 1), Qt.rgba(root.surface.r, root.surface.g, root.surface.b, 1))
-                      ? Util.alpha(root.edge, 0.6) : Util.alpha(root.ink, 0.16)
-        border.width: 1
-        // The row takes its new width at once while the pill animates to it.
-        clip: true
+        radius: Math.min(O.Theme.radiusPanel, height / 2)
+        depth: 0.6
 
         Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
-        Row {
-          id: row
-          anchors.centerIn: parent
-          spacing: Style.space(2)
+        // The row takes its new width at once while the pill animates to it; this clips it, not the shadow.
+        Item {
+          anchors.fill: parent
+          clip: true
 
-          IslandButton {
-            visible: root.expanded && root.activityText === ""
-            glyph: "previous"
-            tip: "Previous mode"
-            onClicked: root.stepMode("previous")
-          }
-
-          IslandButton {
-            glyph: root.mode
-            tip: root.modeTips[root.mode] || ""
-            selected: root.expanded && root.mode !== "normal" && root.activityText === ""
-            onClicked: root.toggleExpanded()
-          }
-
-          Text {
-            id: ticker
-            visible: root.showLabel || root.activityText !== ""
-            anchors.verticalCenter: parent.verticalCenter
-            leftPadding: Style.space(2)
-            rightPadding: Style.space(8)
-            text: root.activityText !== "" ? root.activityText : root.modeNames[root.mode]
-            color: root.ink
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            elide: Text.ElideRight
-            width: Math.min(implicitWidth, Style.space(560))
-
-            // While "Heard: …" waits, a click on it cancels, as Esc does. A failed deploy's line opens its log;
-            // a deploy's progress steps aside for the tools.
-            MouseArea {
-              anchors.fill: parent
-              enabled: status.value("dictation", "idle") === "heard" || root.deployFailedShown || root.deploying || root.shownDetail !== ""
-              cursorShape: Qt.PointingHandCursor
-              onClicked: {
-                if (root.deployFailedShown) status.run(["island", "live", "details"])
-                else if (status.value("dictation", "idle") === "heard") status.run(["island", "dictate", "cancel"])
-                else root.activityText = ""
-              }
-            }
-          }
-
-          IslandButton {
-            visible: root.expanded && root.activityText === ""
-            glyph: "next"
-            tip: "Next mode"
-            onClicked: root.stepMode("next")
-          }
-
-          Rectangle {
-            visible: root.expanded && root.activityText === "" && root.tools.length > 0
-            anchors.verticalCenter: parent.verticalCenter
-            width: 1
-            height: root.buttonSize * 0.6
-            color: Util.alpha(root.ink, 0.2)
-          }
-
-          Repeater {
-            model: root.expanded && root.activityText === "" ? root.tools : []
+          Row {
+            id: row
+            anchors.centerIn: parent
+            spacing: Style.space(2)
 
             IslandButton {
-              required property var modelData
-              visible: root.shows(modelData)
-              glyph: modelData.icon || modelData.id
-              label: modelData.label || ""
-              primary: !!modelData.primary
-              tip: modelData.id === "deploy" && root.deploying ? "Deploying: " + (root.live.deploy.message || "")
-                   : modelData.id === "deploy" && root.live.deploy && root.live.deploy.failed ? root.live.deploy.message + " Click the island's message for details."
-                   : modelData.tip
-              selected: (root.mode === "draw" && root.running && root.tool === modelData.id)
-                        || (root.mode === "design" && root.designTool === modelData.id)
-                        || (root.mode === "live" && modelData.id === "element" && root.selecting)
-                        || (modelData.id === "dictate" && status.value("dictation", "idle") === "listening")
-              onHeld: function (down) { if (modelData.id === "dictate") status.run(["island", "dictate", down ? "start" : "stop"]) }
-              dim: modelData.enabled === false || (modelData.id === "deploy" && root.deploying)
-              onClicked: function (mouse) { if (!dim) root.runAction(modelData, mouse) }
+              visible: root.expanded && root.activityText === ""
+              glyph: "previous"
+              tip: "Previous mode"
+              onClicked: root.stepMode("previous")
+            }
+
+            IslandButton {
+              glyph: root.mode
+              tip: root.modeTips[root.mode] || ""
+              selected: root.expanded && root.mode !== "normal" && root.activityText === ""
+              onClicked: root.toggleExpanded()
+            }
+
+            Text {
+              id: ticker
+              visible: root.showLabel || root.activityText !== ""
+              anchors.verticalCenter: parent.verticalCenter
+              leftPadding: Style.space(2)
+              rightPadding: Style.space(8)
+              text: root.activityText !== "" ? root.activityText : root.modeNames[root.mode]
+              color: root.activityText !== "" ? O.Theme.text1 : O.Theme.text2
+              font.family: O.Theme.labelFont
+              font.pixelSize: O.Theme.sizeBody
+              elide: Text.ElideRight
+              width: Math.min(implicitWidth, Style.space(560))
+
+              // While "Heard: …" waits, a click on it cancels, as Esc does. A failed deploy's line opens its log;
+              // a deploy's progress steps aside for the tools.
+              MouseArea {
+                anchors.fill: parent
+                enabled: status.value("dictation", "idle") === "heard" || root.deployFailedShown || root.deploying || root.shownDetail !== ""
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  if (root.deployFailedShown) status.run(["island", "live", "details"])
+                  else if (status.value("dictation", "idle") === "heard") status.run(["island", "dictate", "cancel"])
+                  else root.activityText = ""
+                }
+              }
+            }
+
+            IslandButton {
+              visible: root.expanded && root.activityText === ""
+              glyph: "next"
+              tip: "Next mode"
+              onClicked: root.stepMode("next")
+            }
+
+            // Space, not a line, between the modes and the mode's tools.
+            Item {
+              visible: root.expanded && root.activityText === "" && root.tools.length > 0
+              width: Style.space(8)
+              height: 1
+            }
+
+            Repeater {
+              model: root.expanded && root.activityText === "" ? root.tools : []
+
+              IslandButton {
+                required property var modelData
+                visible: root.shows(modelData)
+                glyph: modelData.icon || modelData.id
+                label: modelData.label || ""
+                primary: !!modelData.primary
+                tip: modelData.id === "deploy" && root.deploying ? "Deploying: " + (root.live.deploy.message || "")
+                     : modelData.id === "deploy" && root.live.deploy && root.live.deploy.failed ? root.live.deploy.message + " Click the island's message for details."
+                     : modelData.tip
+                selected: (root.mode === "draw" && root.running && root.tool === modelData.id)
+                          || (root.mode === "design" && root.designTool === modelData.id)
+                          || (root.mode === "live" && modelData.id === "element" && root.selecting)
+                          || (modelData.id === "dictate" && status.value("dictation", "idle") === "listening")
+                onHeld: function (down) { if (modelData.id === "dictate") status.run(["island", "dictate", down ? "start" : "stop"]) }
+                dim: modelData.enabled === false || (modelData.id === "deploy" && root.deploying)
+                onClicked: function (mouse) { if (!dim) root.runAction(modelData, mouse) }
+              }
             }
           }
         }
       }
 
       // The rest of a long or many-line message, wrapped. A click on the pill's line dismisses both.
-      Rectangle {
+      O.Panel {
         id: detailCard
         visible: root.shownDetail !== "" && root.hoverTip === ""
         anchors.horizontalCenter: pill.horizontalCenter
@@ -520,26 +516,24 @@ Item {
         anchors.topMargin: Style.space(6)
         width: detailText.width + Style.space(20)
         height: detailText.implicitHeight + Style.space(12)
-        radius: Style.space(6)
-        color: Color.tooltip.background
-        border.color: Util.alpha(Color.tooltip.border, 0.4)
-        border.width: 1
+        radius: O.Theme.radiusGroup
+        depth: 0.3
 
         Text {
           id: detailText
           anchors.centerIn: parent
           width: Math.min(implicitWidth, Style.space(560))
           text: root.shownDetail
-          color: Color.tooltip.text
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+          color: O.Theme.text2
+          font.family: O.Theme.labelFont
+          font.pixelSize: O.Theme.sizeValue
           wrapMode: Text.Wrap
           maximumLineCount: 7
           elide: Text.ElideRight
         }
       }
 
-      Rectangle {
+      O.Panel {
         id: tipCard
         visible: root.hoverTip !== ""
         anchors.horizontalCenter: pill.horizontalCenter
@@ -547,18 +541,16 @@ Item {
         anchors.topMargin: Style.space(6)
         width: tipText.implicitWidth + Style.space(16)
         height: tipText.implicitHeight + Style.space(8)
-        radius: Style.space(6)
-        color: Color.tooltip.background
-        border.color: Util.alpha(Color.tooltip.border, 0.4)
-        border.width: 1
+        radius: O.Theme.radiusGroup
+        depth: 0.3
 
         Text {
           id: tipText
           anchors.centerIn: parent
           text: root.hoverTip
-          color: Color.tooltip.text
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+          color: O.Theme.text2
+          font.family: O.Theme.labelFont
+          font.pixelSize: O.Theme.sizeValue
         }
       }
     }

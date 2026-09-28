@@ -3,6 +3,7 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
+import "../omastrator-ui" as O
 import "OverlayLogic.js" as Logic
 
 // Design mode everywhere (docs/ANYWHERE.md): a transparent layer over every
@@ -35,10 +36,8 @@ Item {
   readonly property var lifting: design.lift || null
   readonly property var look: design.look || null
 
-  readonly property color ink: Color.popups.text
-  readonly property color paper: Color.popups.background
-  readonly property color edge: Util.alpha(Color.popups.text, 0.14)
-  readonly property color accent: Color.accent
+  readonly property color ink: O.Theme.text2
+  readonly property color accent: O.Theme.accent
   readonly property color measureColor: Color.urgent
   readonly property int pad: Style.space(6)
 
@@ -76,32 +75,39 @@ Item {
     onTriggered: root.shownBar = root.bar
   }
 
-  component Chip: Rectangle {
+  // A control on the bar: the group tone at rest, lifted under the pointer, the soft accent when chosen or
+  // the answer to give (primary). A suggestion rests like the others, its words in the soft accent.
+  component Chip: Item {
     id: chip
     property string label: ""
     property string tip: ""
     property bool primary: false
     property bool chosen: false
+    property bool suggested: false
     property bool dim: false
     signal clicked
 
-    implicitWidth: chipText.implicitWidth + Style.space(16)
-    implicitHeight: Style.space(24)
-    radius: height / 2
-    color: chip.primary ? Util.alpha(root.accent, chipMouse.containsMouse ? 0.5 : 0.35)
-         : chip.chosen ? Util.alpha(root.accent, 0.22)
-         : chipMouse.containsMouse ? Util.alpha(root.ink, 0.1) : Util.alpha(root.ink, 0.04)
-    border.color: chip.chosen ? root.accent : "transparent"
-    border.width: 1
+    implicitWidth: chipText.implicitWidth + Style.space(20)
+    implicitHeight: Style.space(26)
     opacity: chip.dim ? 0.45 : 1
+
+    O.Lift {
+      anchors.fill: parent
+      hot: chipMouse.containsMouse && !chip.dim
+      chosen: chip.primary || chip.chosen
+      resting: true
+    }
 
     Text {
       id: chipText
       anchors.centerIn: parent
       text: chip.label
-      color: root.ink
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
+      color: chip.primary || chip.chosen ? O.Theme.onAccent
+           : chip.suggested ? O.Theme.accentSoft
+           : chipMouse.containsMouse ? O.Theme.text1 : O.Theme.text2
+      font.family: O.Theme.labelFont
+      font.pixelSize: O.Theme.sizeBody
+      font.weight: chip.primary ? Font.DemiBold : Font.Normal
     }
 
     MouseArea {
@@ -115,8 +121,15 @@ Item {
 
   component Label: Text {
     color: root.ink
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
+    font.family: O.Theme.labelFont
+    font.pixelSize: O.Theme.sizeBody
+  }
+
+  // Values: sizes, colours, names. Mono, in the quieter tone.
+  component Value: Label {
+    color: O.Theme.text3
+    font.family: O.Theme.valueFont
+    font.pixelSize: O.Theme.sizeValue
   }
 
   Variants {
@@ -256,9 +269,9 @@ Item {
           id: sizeText
           anchors.centerIn: parent
           text: Logic.sizeLabel(root.hover)
-          color: Color.popups.background
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+          color: O.Theme.onAccent
+          font.family: O.Theme.valueFont
+          font.pixelSize: O.Theme.sizeMeta
           font.weight: Font.DemiBold
         }
       }
@@ -304,8 +317,8 @@ Item {
               anchors.centerIn: parent
               text: parent.parent.modelData.value
               color: "white"
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
+              font.family: O.Theme.valueFont
+              font.pixelSize: O.Theme.sizeMeta
               font.weight: Font.DemiBold
             }
           }
@@ -393,8 +406,8 @@ Item {
         y: points.length > 0 ? points[0].y - window.place.y : 0
         width: Math.max(Style.space(180), typingField.implicitWidth + Style.space(16))
         height: typingField.implicitHeight + Style.space(10)
-        radius: 4
-        color: root.tool === "note" ? "#ffe88c" : root.paper
+        radius: O.Theme.radiusField
+        color: root.tool === "note" ? "#ffe88c" : O.Theme.surface1
         border.color: root.accent
         border.width: 1
 
@@ -403,8 +416,8 @@ Item {
           anchors.fill: parent
           anchors.margins: Style.space(5)
           color: root.tool === "note" ? "#332b14" : root.ink
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
+          font.family: O.Theme.labelFont
+          font.pixelSize: O.Theme.sizeBody
           Keys.onReturnPressed: {
             if (text.trim() !== "")
               root.run(Logic.drawArgs(root.tool, typing.points, text.trim()))
@@ -426,7 +439,7 @@ Item {
 
       // ------------------------------------------------------------ the floating bar
 
-      Rectangle {
+      O.Panel {
         id: barCard
         readonly property var target: root.shownBar
         readonly property var spot: remembered.pinned
@@ -437,10 +450,8 @@ Item {
         y: spot.y
         width: barColumn.implicitWidth + root.pad * 2
         height: barColumn.implicitHeight + root.pad * 2
-        radius: Style.space(10)
-        color: root.paper
-        border.color: root.edge
-        border.width: 1
+        radius: O.Theme.radiusGroup + root.pad
+        depth: 0.5
 
         HoverHandler {
           onHoveredChanged: {
@@ -463,9 +474,8 @@ Item {
               id: grip
               anchors.verticalCenter: parent.verticalCenter
               text: "⠿"
-              color: root.ink
-              opacity: gripMouse.containsMouse || gripMouse.pressed ? 0.9 : 0.45
-              font.pixelSize: Style.font.body
+              color: gripMouse.containsMouse || gripMouse.pressed ? O.Theme.text1 : O.Theme.text4
+              font.pixelSize: O.Theme.sizeBody
 
               MouseArea {
                 id: gripMouse
@@ -489,7 +499,7 @@ Item {
             Label {
               anchors.verticalCenter: parent.verticalCenter
               text: barCard.target ? barCard.target.label : ""
-              opacity: 0.7
+              color: O.Theme.text3
               elide: Text.ElideRight
               width: Math.min(implicitWidth, Style.space(260))
             }
@@ -585,7 +595,7 @@ Item {
               Chip {
                 required property var modelData
                 label: modelData.label
-                chosen: true
+                suggested: true
                 onClicked: root.run(Logic.chipArgs(barCard.target, modelData))
               }
             }
@@ -593,11 +603,10 @@ Item {
 
           Rectangle {
             width: Math.max(Style.space(280), parent.width)
-            height: Style.space(28)
-            radius: height / 2
-            color: Util.alpha(root.ink, 0.06)
-            border.color: askField.activeFocus ? root.accent : "transparent"
-            border.width: 1
+            height: Style.space(30)
+            radius: O.Theme.radiusRow
+            color: askField.activeFocus ? O.Theme.lift : O.Theme.surface2
+            Behavior on color { ColorAnimation { duration: O.Theme.snap } }
 
             TextInput {
               id: askField
@@ -605,9 +614,10 @@ Item {
               anchors.leftMargin: Style.space(12)
               anchors.rightMargin: Style.space(12)
               verticalAlignment: TextInput.AlignVCenter
-              color: root.ink
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
+              color: O.Theme.text1
+              font.family: O.Theme.labelFont
+              font.pixelSize: O.Theme.sizeBody
+              selectionColor: O.Theme.accent
               clip: true
               Keys.onReturnPressed: {
                 if (text.trim() === "") return
@@ -623,7 +633,7 @@ Item {
               x: Style.space(12)
               visible: askField.text === "" && !askField.activeFocus
               text: barCard.target ? barCard.target.placeholder : "Ask AI…"
-              opacity: 0.5
+              color: O.Theme.text3
             }
           }
 
@@ -634,7 +644,9 @@ Item {
             Label {
               anchors.verticalCenter: parent.verticalCenter
               text: "Send to"
-              opacity: 0.7
+              color: O.Theme.labelTint
+              font.pixelSize: O.Theme.sizeMeta
+              font.weight: Font.DemiBold
             }
 
             Repeater {
@@ -667,7 +679,7 @@ Item {
               id: waitingLine
               anchors.verticalCenter: parent.verticalCenter
               text: root.design.waiting || root.design.message || ""
-              opacity: 0.75
+              color: O.Theme.text3
               width: Math.min(implicitWidth, Style.space(360))
               wrapMode: Text.Wrap
             }
@@ -687,7 +699,7 @@ Item {
 
       // The floating bar carries Keep and Discard while design mode is on. Without it (design mode ended, or
       // the bar is elsewhere) the proposal would sit on the screen with no way to answer it.
-      Rectangle {
+      O.Panel {
         id: proposalCard
         visible: (root.proposal !== null || !!root.design.waiting) && !barCard.visible && root.proposalScreen === window.modelData.name
         anchors.horizontalCenter: parent.horizontalCenter
@@ -695,10 +707,8 @@ Item {
         anchors.bottomMargin: Style.space(28)
         width: proposalRow.implicitWidth + root.pad * 2
         height: proposalRow.implicitHeight + root.pad * 2
-        radius: Style.space(10)
-        color: root.paper
-        border.color: root.edge
-        border.width: 1
+        radius: O.Theme.radiusGroup + root.pad
+        depth: 0.5
 
         Row {
           id: proposalRow
@@ -736,7 +746,7 @@ Item {
 
       // ------------------------------------------------------------ Inspect's card
 
-      Rectangle {
+      O.Panel {
         id: detailCard
         visible: window.mine && root.detail !== null && !root.onboarding.open
         anchors.right: parent.right
@@ -745,10 +755,8 @@ Item {
         anchors.topMargin: Style.space(72)
         width: Style.space(260)
         height: detailColumn.implicitHeight + root.pad * 2
-        radius: Style.space(10)
-        color: root.paper
-        border.color: root.edge
-        border.width: 1
+        radius: O.Theme.radiusGroup + root.pad
+        depth: 0.5
 
         Column {
           id: detailColumn
@@ -759,8 +767,9 @@ Item {
 
           Label {
             text: root.detail ? root.detail.name || root.detail.role : ""
+            color: O.Theme.text1
             font.weight: Font.DemiBold
-            font.pixelSize: Style.font.body
+            font.pixelSize: O.Theme.sizeTitle
             elide: Text.ElideRight
             width: parent.width
           }
@@ -785,26 +794,27 @@ Item {
               required property var modelData
               spacing: Style.space(6)
 
+              Label {
+                text: parent.modelData[0]
+                color: O.Theme.text3
+                width: Style.space(96)
+              }
+
+              // A colour's swatch leads its value, so the values stay in one column.
               Rectangle {
                 visible: String(parent.modelData[1]).charAt(0) === "#"
                 width: Style.space(12)
                 height: Style.space(12)
-                radius: 2
+                radius: 3
                 anchors.verticalCenter: parent.verticalCenter
                 color: visible ? parent.modelData[1] : "transparent"
-                border.color: root.edge
+                border.color: O.Theme.keycapEdge
               }
 
-              Label {
-                text: parent.modelData[0]
-                opacity: 0.6
-                width: Style.space(96)
-              }
-
-              Label {
+              Value {
                 text: parent.modelData[1]
                 elide: Text.ElideRight
-                width: Style.space(130)
+                width: Style.space(String(parent.modelData[1]).charAt(0) === "#" ? 112 : 130)
               }
             }
           }
@@ -828,17 +838,14 @@ Item {
 
       // ------------------------------------------------------------ onboarding
 
-      Rectangle {
+      O.Panel {
         id: onboardingCard
         readonly property var answers: root.onboarding.answers || ({})
         visible: window.mine && !!root.onboarding.open
         anchors.centerIn: parent
         width: Style.space(440)
         height: onboardingColumn.implicitHeight + Style.space(32)
-        radius: Style.space(12)
-        color: root.paper
-        border.color: root.edge
-        border.width: 1
+        depth: 1
 
         function chosen(question, option) {
           var value = answers[question.id]
@@ -867,9 +874,9 @@ Item {
 
           Text {
             text: "Design mode"
-            color: root.ink
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body * 1.2
+            color: O.Theme.text1
+            font.family: O.Theme.labelFont
+            font.pixelSize: O.Theme.sizeTitle
             font.weight: Font.DemiBold
           }
 
@@ -877,7 +884,7 @@ Item {
             width: parent.width
             wrapMode: Text.Wrap
             text: (root.onboarding.note || "") + " A few questions tune the suggestions; change them any time from the island."
-            opacity: 0.8
+            color: O.Theme.text3
           }
 
           Repeater {
@@ -891,7 +898,9 @@ Item {
 
               Label {
                 text: questionColumn.modelData.text
-                font.pixelSize: Style.font.body
+                color: O.Theme.labelTint
+                font.pixelSize: O.Theme.sizeMeta
+                font.weight: Font.DemiBold
               }
 
               Flow {

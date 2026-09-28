@@ -56,8 +56,8 @@ QColor EditorCanvas::State::layerColor(const QUuid &id) const
 
 void EditorCanvas::State::paint(QPainter &painter)
 {
-    // The pasteboard follows the theme; the artboard is paper.
-    painter.fillRect(canvas.rect(), canvas.palette().color(QPalette::Base));
+    // The pasteboard follows the theme in its deepest tone, behind the panels; the artboard is paper.
+    painter.fillRect(canvas.rect(), canvas.palette().color(QPalette::Dark));
     const std::optional<VectorDocument> &document = session.document();
     if (!document)
         return;

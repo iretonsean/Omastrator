@@ -266,7 +266,7 @@ private slots:
         for (const char *anchor : {"anchors.top: true", "anchors.left: true", "anchors.right: true"})
             QVERIFY2(window.contains(QLatin1String(anchor)), anchor);
         // Only the window's own lines count, not its children's.
-        const QString own = window.left(window.indexOf(QStringLiteral("Rectangle {")));
+        const QString own = window.left(window.indexOf(QStringLiteral("O.Panel {")));
         QVERIFY(!own.contains(QStringLiteral("implicitWidth")));
         const QRegularExpression height(QStringLiteral("implicitHeight:([^\\n]*)"));
         const QString heightBinding = height.match(own).captured(1);
@@ -274,6 +274,22 @@ private slots:
         for (const char *hoverDependent : {"tip", "hover", "pill.", "row.", "expanded", "activity"})
             QVERIFY2(!heightBinding.contains(QLatin1String(hoverDependent)), qPrintable(heightBinding));
         QVERIFY(own.contains(QStringLiteral("mask: Region { item: pill }")));
+    }
+
+    // The island and the floating bar take the installed theme's look through one place, O.Theme,
+    // which reads Graphite's tokens when the theme has them.
+    void theIslandAndBarFollowTheThemeTokens()
+    {
+        const QString theme = read(QStringLiteral("omastrator-ui/Theme.qml"));
+        QVERIFY(theme.contains(QStringLiteral("pragma Singleton")));
+        QVERIFY(theme.contains(QStringLiteral("Color.shellValues[\"graphite.\" + name]")));
+        QVERIFY(read(QStringLiteral("omastrator-ui/qmldir")).contains(QStringLiteral("singleton Theme 1.0 Theme.qml")));
+        for (const char *file : {"omastrator.island/Island.qml", "omastrator.island/Overlay.qml"}) {
+            const QString source = read(QString::fromLatin1(file));
+            QVERIFY2(source.contains(QStringLiteral("O.Theme.")), file);
+            QVERIFY2(!source.contains(QStringLiteral("Color.popups")), file);
+            QVERIFY2(!source.contains(QStringLiteral("Style.font.family")), file);
+        }
     }
 
     // A binary that can't start never sends exited; the island would never connect.

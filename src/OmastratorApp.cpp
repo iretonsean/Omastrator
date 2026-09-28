@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QTimer>
 
 int main(int argc, char **argv)
 {
@@ -64,6 +65,17 @@ int main(int argc, char **argv)
         QApplication::setQuitOnLastWindowClosed(false);
     } else {
         window.show();
+    }
+    // `OMASTRATOR_SNAPSHOT=file.png`: a picture of the window once it has settled, then quit. For checking the
+    // look without a screen (with QT_QPA_PLATFORM=offscreen and XDG_RUNTIME_DIR apart from a running Omastrator).
+    if (const QString snapshot = qEnvironmentVariable("OMASTRATOR_SNAPSHOT"); !snapshot.isEmpty()) {
+        window.resize(1440, 900);
+        window.show();
+        QTimer::singleShot(1500, &window, [&window, snapshot] {
+            const bool saved = window.grab().save(snapshot);
+            qCInfo(lcApp).noquote() << "snapshot" << (saved ? "saved to" : "failed:") << snapshot;
+            QApplication::exit(saved ? 0 : 1);
+        });
     }
     // Connected cloud storage, listed in the background for Open and Save As.
     workspace.cloud().refreshRemotes();

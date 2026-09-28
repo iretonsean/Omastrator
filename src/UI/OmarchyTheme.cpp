@@ -1,10 +1,11 @@
 #include "UI/OmarchyTheme.h"
+#include "UI/OmarchyStyle.h"
 #include "Logging.h"
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QFontDatabase>
 #include <QRegularExpression>
-#include <QStyleFactory>
 #include <cerrno>
 #include <cstring>
 #include <stdexcept>
@@ -58,13 +59,52 @@ Assignments assignments(const QString &toml)
     return result;
 }
 
-QColor colour(const Assignments &found, const QString &key)
+const QRegularExpression &hexColour()
 {
     static const QRegularExpression hex(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+    return hex;
+}
+
+QColor colour(const Assignments &found, const QString &key)
+{
     const QString value = found.value(key);
-    if (!hex.match(value).hasMatch())
+    if (!hexColour().match(value).hasMatch())
         throw std::runtime_error("colors.toml: " + key.toStdString() + " is no #rrggbb colour: " + value.toStdString());
     return QColor(value);
+}
+
+// A component token: optional, so one missing or not #rrggbb takes its fallback.
+QColor token(const Assignments &found, const QString &key, const QColor &fallback)
+{
+    const QString value = found.values.value(key);
+    return hexColour().match(value).hasMatch() ? QColor(value) : fallback;
+}
+
+// `over` laid on `under` at `weight`.
+QColor mix(const QColor &over, const QColor &under, double weight)
+{
+    return QColor::fromRgbF(float(over.redF() * weight + under.redF() * (1 - weight)), float(over.greenF() * weight + under.greenF() * (1 - weight)),
+                            float(over.blueF() * weight + under.blueF() * (1 - weight)));
+}
+
+// The component roles from the base colours, then the theme's own tokens over them.
+void fillComponents(OmarchyColors &colors, const Assignments *found)
+{
+    const auto pick = [found](const char *key, const QColor &fallback) {
+        return found ? token(*found, QString::fromLatin1(key), fallback) : fallback;
+    };
+    colors.components = found && found->values.contains(QStringLiteral("surface_1"));
+    colors.surface0 = pick("surface_0", colors.darkerBackground);
+    colors.surface1 = pick("surface_1", colors.background);
+    colors.surface2 = pick("surface_2", colors.lighterBackground);
+    colors.surface3 = pick("surface_3", mix(colors.foreground, colors.background, 0.1));
+    colors.lift = pick("lift", mix(colors.foreground, colors.background, 0.14));
+    colors.text1 = pick("text_1", colors.brightForeground);
+    colors.text2 = pick("text_2", colors.foreground);
+    colors.text3 = pick("text_3", colors.lightForeground);
+    colors.text4 = pick("text_4", colors.darkForeground);
+    colors.accentSoft = pick("accent_soft", colors.accent);
+    colors.onAccent = pick("on_accent", colors.darkerBackground);
 }
 }
 
@@ -75,7 +115,7 @@ OmarchyColors OmarchyColors::parse(const QString &toml)
     const QString mode = values.value(QStringLiteral("mode"));
     if (mode != QLatin1String("dark") && mode != QLatin1String("light"))
         throw std::runtime_error("colors.toml: mode must be dark or light, not " + mode.toStdString());
-    return {.dark = mode == QLatin1String("dark"),
+    OmarchyColors result{.dark = mode == QLatin1String("dark"),
             .accent = colour(values, QStringLiteral("accent")),
             .selection = colour(values, QStringLiteral("selection")),
             .muted = colour(values, QStringLiteral("muted")),
@@ -91,12 +131,14 @@ OmarchyColors OmarchyColors::parse(const QString &toml)
             .warning = colour(values, values.values.contains(QStringLiteral("orange")) || values.malformed.contains(QStringLiteral("orange"))
                                           ? QStringLiteral("orange")
                                           : QStringLiteral("yellow"))};
+    fillComponents(result, &values);
+    return result;
 }
 
 OmarchyColors OmarchyColors::builtInDark()
 {
     // Swift's grays: the window at 0.14, fields at 0.105.
-    return {.dark = true,
+    OmarchyColors result{.dark = true,
             .accent = QColor(0x0a, 0x84, 0xff),
             .selection = QColor(0x3a, 0x3a, 0x3a),
             .muted = QColor(0x4a, 0x4a, 0x4a),
@@ -110,6 +152,19 @@ OmarchyColors OmarchyColors::builtInDark()
             .brightForeground = QColor(0xff, 0xff, 0xff),
             .red = QColor(0xff, 0x45, 0x3a),
             .warning = QColor(0xff, 0x9f, 0x0a)};
+    fillComponents(result, nullptr);
+    return result;
+}
+
+QString OmarchyColors::labelFamily() const
+{
+    // Graphite sets labels in SF Pro and values in SF Mono (its theme-direction brief).
+    return components && QFontDatabase::hasFamily(QStringLiteral("SF Pro Text")) ? QStringLiteral("SF Pro Text") : QString();
+}
+
+QString OmarchyColors::valueFamily() const
+{
+    return components && QFontDatabase::hasFamily(QStringLiteral("SFMono Nerd Font Mono")) ? QStringLiteral("SFMono Nerd Font Mono") : QString();
 }
 
 QPalette OmarchyColors::palette() const
@@ -134,6 +189,26 @@ QPalette OmarchyColors::palette() const
     result.setColor(QPalette::ToolTipText, foreground);
     for (const QPalette::ColorRole role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
         result.setColor(QPalette::Disabled, role, muted);
+    if (!components)
+        return result;
+    // A theme with components: the panel tone for the chrome, the group tone for controls, text in its tones.
+    result.setColor(QPalette::Window, surface1);
+    result.setColor(QPalette::Base, surface1);
+    result.setColor(QPalette::AlternateBase, surface2);
+    result.setColor(QPalette::Button, surface2);
+    result.setColor(QPalette::Light, lift);
+    result.setColor(QPalette::Midlight, surface3);
+    result.setColor(QPalette::Mid, surface3);
+    result.setColor(QPalette::Dark, surface0);
+    result.setColor(QPalette::WindowText, text2);
+    result.setColor(QPalette::Text, text2);
+    result.setColor(QPalette::ButtonText, text2);
+    result.setColor(QPalette::PlaceholderText, text4);
+    result.setColor(QPalette::HighlightedText, onAccent);
+    result.setColor(QPalette::ToolTipBase, lift);
+    result.setColor(QPalette::ToolTipText, text1);
+    for (const QPalette::ColorRole role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
+        result.setColor(QPalette::Disabled, role, text4);
     return result;
 }
 
@@ -143,10 +218,10 @@ QString OmarchyTheme::defaultDirectory()
 }
 
 OmarchyTheme::OmarchyTheme(const QString &directory, QObject *parent)
-    : QObject(parent), m_directory(directory), m_colors(OmarchyColors::builtInDark()), m_watcher(this), m_settle(this)
+    : QObject(parent), m_directory(directory), m_colors(OmarchyColors::builtInDark()), m_style(new OmarchyStyle), m_watcher(this), m_settle(this)
 {
-    // Fusion follows the palette on every desktop.
-    QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+    // Fusion underneath follows the palette on every desktop; the application owns the style.
+    QApplication::setStyle(m_style);
     // A switch removes, moves, writes: one load after the last.
     m_settle.setSingleShot(true);
     m_settle.setInterval(100);
@@ -154,7 +229,7 @@ OmarchyTheme::OmarchyTheme(const QString &directory, QObject *parent)
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_settle, qOverload<>(&QTimer::start));
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_settle, qOverload<>(&QTimer::start));
     // The built-in dark stands until a file is read whole.
-    QApplication::setPalette(m_colors.palette());
+    use(m_colors);
     apply();
 }
 
@@ -191,7 +266,21 @@ void OmarchyTheme::apply()
     if (loaded == m_colors)
         return;
     m_colors = loaded;
-    QApplication::setPalette(m_colors.palette());
+    use(m_colors);
+}
+
+void OmarchyTheme::use(const OmarchyColors &colors)
+{
+    m_style->setColors(colors);
+    // The theme's type where it names one, at the size its rows use; the font the app started with otherwise.
+    static const QFont started = QApplication::font();
+    QFont font = started;
+    if (const QString family = colors.labelFamily(); !family.isEmpty()) {
+        font.setFamilies({family});
+        font.setPixelSize(13);
+    }
+    QApplication::setFont(font);
+    QApplication::setPalette(colors.palette());
 }
 
 void OmarchyTheme::watch()

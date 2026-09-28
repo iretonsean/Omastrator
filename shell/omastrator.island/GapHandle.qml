@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import "../omastrator-ui" as O
 import "OverlayLogic.js" as Logic
 
 // Desktop Look's gap handle (docs/ANYWHERE.md, phase 4): the gap to the right
@@ -38,9 +39,9 @@ Rectangle {
       id: label
       anchors.centerIn: parent
       text: handle.handleData ? handle.handleData.label + " " + handle.value : ""
-      color: Color.popups.background
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
+      color: O.Theme.onAccent
+      font.family: O.Theme.valueFont
+      font.pixelSize: O.Theme.sizeMeta
       font.weight: Font.DemiBold
     }
   }
