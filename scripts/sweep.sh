@@ -5,8 +5,10 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 base=${1:-origin/main}
 user=$(id -un); host=$(uname -n); mail=$(git config --global user.email 2>/dev/null)
-pattern="/home/$user|$HOME|\\b$host\\b|gh[pousr]_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY"
+pattern="/home/$user|$HOME|gh[pousr]_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY"
 [[ -n $user ]] && pattern="$pattern|\\b$user\\b"
+# A stock hostname (archlinux, localhost) names nothing personal and matches the Arch images and AUR.
+[[ -n $host && ! $host =~ ^(archlinux|localhost|arch)$ ]] && pattern="$pattern|\\b$host\\b"
 [[ -n $mail && $mail != *noreply* ]] && pattern="$pattern|$mail"
 hits=$(git diff "$base"...HEAD -- . ':!third_party' | grep -E '^\+' | grep -nE "$pattern" | head -20)
 authors=$(git log --format='%ae' "$base"..HEAD | sort -u | grep -v noreply)
