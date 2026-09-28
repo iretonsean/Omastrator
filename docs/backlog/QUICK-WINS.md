@@ -25,8 +25,11 @@ file with the work. Don't delete finished items.
 - [ ] 9. Browser View and canvas workspaces (high effort, high priority;
       see section 9)
 
-**The queue ends here.** MEDIUM-EFFORT.md and HIGH-EFFORT.md are on hold
-until the author says otherwise.
+**The queue ends here.**
+- MEDIUM-EFFORT.md is on hold until the author says otherwise.
+- HIGH-EFFORT.md isn't scheduled, apart from its item 1, which is item 9
+  here.
+- Effects waits on the author's review of docs/EFFECTS.md.
 
 ## Agents and models (the author, 2026-09-28)
 
