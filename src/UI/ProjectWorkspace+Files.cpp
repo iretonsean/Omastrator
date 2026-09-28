@@ -1,6 +1,7 @@
 #include "IO/ExcalidrawImporter.h"
 #include "IO/ImageImporter.h"
 #include "IO/ProjectStore.h"
+#include "IO/SketchImporter.h"
 #include "IO/SvgExporter.h"
 #include "IO/SvgImporter.h"
 #include "Logging.h"
@@ -31,6 +32,23 @@ bool hasSuffix(const QString &path, const QString &suffix)
 bool isExcalidraw(const QString &path)
 {
     return hasSuffix(path, QStringLiteral("excalidraw"));
+}
+
+bool isSketch(const QString &path)
+{
+    return hasSuffix(path, QStringLiteral("sketch"));
+}
+
+// A format read whole (SVG, Excalidraw, Sketch), or nullopt to fall back to ImageImporter.
+std::optional<VectorDocument> readAsDocument(const QString &path, QStringList &warnings)
+{
+    if (ImageImporter::isVector(path))
+        return SvgImporter::read(path, &warnings);
+    if (isExcalidraw(path))
+        return ExcalidrawImporter::read(path, &warnings);
+    if (isSketch(path))
+        return SketchImporter::read(path, &warnings);
+    return std::nullopt;
 }
 
 // A raster image opens on an artboard its size.
@@ -92,14 +110,13 @@ bool ProjectWorkspace::openFile(const QString &path)
     VectorDocument document;
     QStringList warnings;
     try {
-        if (native)
+        if (native) {
             document = ProjectStore::read(path);
-        else if (ImageImporter::isVector(path))
-            document = SvgImporter::read(path, &warnings);
-        else if (isExcalidraw(path))
-            document = ExcalidrawImporter::read(path, &warnings);
-        else
+        } else if (const auto imported = readAsDocument(path, warnings)) {
+            document = *imported;
+        } else {
             document = imageDocument(ImageImporter::read(path, &warnings), QFileInfo(path).fileName());
+        }
     } catch (const FileError &error) {
         showError(QStringLiteral("Couldn’t open “%1”").arg(QFileInfo(path).fileName()), error.message());
         return false;
@@ -146,16 +163,15 @@ bool ProjectWorkspace::placeFile(const QString &path)
     if (!session.hasDocument())
         return false;
     const QString name = QFileInfo(path).fileName();
-    const bool asDocument = ImageImporter::isVector(path) || isExcalidraw(path);
+    QStringList warnings;
     try {
+        const std::optional<VectorDocument> asDocument = readAsDocument(path, warnings);
         if (!asDocument) {
-            QStringList warnings;
             session.placeImage(ImageImporter::read(path, &warnings), name);
             reportLeftOut(path, warnings);
             return true;
         }
-        QStringList warnings;
-        const VectorDocument imported = isExcalidraw(path) ? ExcalidrawImporter::read(path, &warnings) : SvgImporter::read(path, &warnings);
+        const VectorDocument &imported = *asDocument;
         reportLeftOut(path, warnings);
         session.beginEdit(QStringLiteral("Place"));
         VectorObject group;

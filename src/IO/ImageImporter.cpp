@@ -91,9 +91,10 @@ QStringList nameFilters()
         {QStringLiteral("AVIF"), {QStringLiteral("*.avif")}},
 #endif
         {QStringLiteral("Excalidraw"), {QStringLiteral("*.excalidraw")}},
+        {QStringLiteral("Sketch"), {QStringLiteral("*.sketch")}},
     };
     // Formats this class reads itself, not through QImageReader: always offered.
-    static const QSet<QByteArray> ownFormats{"svg", "psd", "heic", "avif", "excalidraw"};
+    static const QSet<QByteArray> ownFormats{"svg", "psd", "heic", "avif", "excalidraw", "sketch"};
     QStringList all, each;
     for (const auto &[name, patterns] : known) {
         const QByteArray format = patterns.front().mid(2).toLatin1();
