@@ -1,6 +1,8 @@
 #include "Agent/Island.h"
 #include "Anywhere/DesignMode.h"
 #include "FakeDesktop.h"
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -20,8 +22,29 @@ private slots:
     {
         QVERIFY(m_directory.isValid());
         qunsetenv("HYPRLAND_INSTANCE_SIGNATURE");
+        qputenv("HOME", m_directory.filePath(QStringLiteral("home")).toUtf8());
+        qunsetenv("XDG_CONFIG_HOME");
         qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
         qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
+    }
+
+    // The island says "Esc leaves" only where setup's Hyprland keys are loaded (OverlayLogic.designOnLine).
+    void itReportsWhetherTheDesignKeysAreLoaded()
+    {
+        FakeDesktop desktop;
+        DesignMode mode(desktop);
+        QVERIFY(!mode.status()["keysLoaded"].toBool());
+
+        const QString config = m_directory.filePath(QStringLiteral("home/.config"));
+        QVERIFY(QDir().mkpath(config + QStringLiteral("/omastrator")));
+        QVERIFY(QDir().mkpath(config + QStringLiteral("/hypr")));
+        const auto write = [](const QString &path, const QByteArray &text) {
+            QFile file(path);
+            return file.open(QIODevice::WriteOnly) && file.write(text) == text.size();
+        };
+        QVERIFY(write(config + QStringLiteral("/omastrator/hyprland.conf"), "submap = omastrator-design\nbind = , escape, exec, omastrator design off\nsubmap = reset\n"));
+        QVERIFY(write(config + QStringLiteral("/hypr/hyprland.conf"), "source = ~/.config/omastrator/hyprland.conf\n"));
+        QVERIFY(mode.status()["keysLoaded"].toBool());
     }
 
     void itFollowsTheIslandsModeBothWays()

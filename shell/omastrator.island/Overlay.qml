@@ -177,6 +177,8 @@ Item {
         Region { item: proposalCard.visible ? proposalCard : null }
         // The island stays reachable over everything else: its buttons are how to change tool or leave.
         Region { item: islandHole; intersection: Intersection.Subtract }
+        // The Omarchy bar keeps its clicks under a drawing tool: its workspaces, clock and tray light.
+        Region { x: 0; y: 0; width: window.width; height: window.place.reservedTop || 0; intersection: Intersection.Subtract }
       }
 
       Item {

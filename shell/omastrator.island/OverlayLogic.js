@@ -32,6 +32,14 @@ function islandHole(screen, pillWidth, pillHeight, gapsOut) {
            width: pillWidth + 2 * margin, height: pillHeight + 2 * margin }
 }
 
+// What the island says when design mode turns on. Esc only leaves where setup's Hyprland keys are loaded
+// (or under a drawing tool, where the overlay takes the keyboard), so without them it names the click instead.
+function designOnLine(design) {
+  var tail = design && design.keysLoaded === false && !isDrawingTool(design.tool)
+      ? "click the island's Leave (or run `omastrator reset`) to leave" : "Esc leaves"
+  return "Design mode: point at anything. Clicks still reach the app; " + tail
+}
+
 // Typing needs the keyboard: the Ask field, onboarding and the text tools. A drawing tool takes it too, for Esc:
 // the pointer is the overlay's then anyway. Otherwise the apps keep it.
 function wantsKeyboard(design, screen, typing) {
@@ -189,7 +197,7 @@ function liftText(lift) {
 // Enter and Esc, since ContentView and AgentPanels bind those directly.
 function readyTooltip(status) {
   var overlay = status.design && status.design.proposal
-  if (overlay) return overlay.title + " is on the overlay: Keep or Discard it in the bar"
+  if (overlay) return (overlay.title || "A proposal") + " is on the overlay: Keep or Discard it in the bar"
   if (status.proposal) return status.proposal + " is ready: Enter keeps it, Esc discards it"
   var count = status.variations || 0
   if (count > 0) return count + (count === 1 ? " variation ready" : " variations ready")

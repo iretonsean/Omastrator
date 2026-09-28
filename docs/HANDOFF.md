@@ -29,31 +29,34 @@ Two loose ends from the design-mode Esc audit mentioned just above:
    `readyTooltip(status)` to `OverlayLogic.js` (checks `design.proposal`
    before the flat `proposal` field) and having `TrayLight.qml` call it;
    covered in `ShellPluginTests`.
-2. **Design mode without setup's keys, with the island on another
-   monitor: audited, not found broken.** Traced the full escape-hatch path
-   and it already holds: `Island::holdDesignKeys()` checks
-   `Setup::designKeysLoaded()` before telling Hyprland to hold the
-   `omastrator-design` submap, so an unloaded key file never straps Hyprland
-   into a submap with nothing bound in it; `OverlayLogic.js`'s
-   `wantsKeyboard()` still grants the overlay itself the keyboard for a
-   drawing tool or while typing, so Esc reaches it even with no Hyprland
-   keys at all (already tested); the proposal card and its Keep/Discard
-   chips are mouse-reachable independent of design mode's on/off state, and
-   nothing in the overlay ever takes `WlrKeyboardFocus.Exclusive` (already
-   tested); `omastrator reset` (what Super+Alt+Escape runs) tears down
-   every piece of state — waiting, proposal, look/restyle previews,
-   onboarding, every monitor's overlays, the mode, the keys — regardless of
-   which monitor is focused when it runs. That last part (reset from a
-   different monitor than the art was drawn on, with no design keys loaded)
-   had no test before; added
-   `resetIsTheEscapeHatchWithoutHyprlandKeysAndAcrossMonitors` in
-   `tests/UI/DesignModeUiTests.cpp` to lock it in. No code changed for this
-   item — it was already correct.
-
-   **Review (Opus, 2026-09-28) disagrees:** without setup's keys and with
-   the Point or Inspect tool, Esc doesn't leave design mode although the
-   island says it does, and a drawing tool's overlay covers the Omarchy bar.
-   Both are being fixed before this branch merges.
+2. **Design mode without setup's keys: two states the first audit missed,
+   now fixed** (Opus review, 2026-09-28). The parts that held:
+   `Island::holdDesignKeys()` checks `Setup::designKeysLoaded()` before
+   telling Hyprland to hold the `omastrator-design` submap, so an unloaded
+   key file never straps Hyprland into a submap with nothing bound in it;
+   nothing in the overlay takes `WlrKeyboardFocus.Exclusive`; the proposal
+   card's Keep and Discard are mouse-reachable whatever design mode's state;
+   `omastrator reset` tears down every piece of state on whichever monitor
+   is focused (`resetIsTheEscapeHatchWithoutHyprlandKeysAndAcrossMonitors`
+   in `tests/UI/DesignModeUiTests.cpp`). What broke:
+   - **Esc under Point or Inspect, with no keys loaded.** The overlay has no
+     keyboard for a non-drawing tool and the island never takes it, so Esc
+     went to the app under the pointer while the island said "Esc leaves".
+     Super+Alt+Escape doesn't exist in that state either: it lives in the
+     same key file, so it exists only after `omastrator setup --apply`. The
+     design status now carries `keysLoaded` (`DesignMode::status`), and
+     `OverlayLogic.designOnLine` makes the island say "click the island's
+     Leave (or run `omastrator reset`) to leave" when it's false (a drawing
+     tool keeps "Esc leaves": the overlay takes the keyboard there, though
+     on-demand focus may need a first click, unverified on a live Hyprland).
+     The only exits without keys are the island's Leave and `omastrator
+     reset` in a terminal.
+   - **A drawing tool's overlay covered the Omarchy bar.** The input mask
+     was the whole monitor minus the island hole, which starts below
+     `reservedTop`, so clicks on the bar's workspaces, clock and tray light
+     started a shape. `Overlay.qml`'s mask now subtracts the `reservedTop`
+     strip too (a bar at the bottom or a side isn't handled: the status
+     carries only `reservedTop`). Both are pinned in `ShellPluginTests`.
 
 ### Done: the promo animation (2026-09-28)
 
@@ -650,7 +653,7 @@ yet.
    is kept in `PersistentProperties`.
 3. **Escape hatches**, from a two-agent audit:
    - `omastrator reset`, `design reset` and Super+Alt+Escape (bound outside
-     every submap). They stop the agent's overlay work, drop proposals,
+     every submap; it exists only after `omastrator setup --apply`). They stop the agent's overlay work, drop proposals,
      lifts and previews, clear the drawings (undoable) and give the keyboard
      back.
    - Every island mode change goes through `Island::holdKeysFor(mode)`, so no
