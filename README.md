@@ -1,18 +1,28 @@
 # Omastrator
 
-Omastrator is a vector illustration app for Linux, built for
-[Omarchy](https://omarchy.org). It works the way Illustrator does: the same
-tools, the same shortcuts (Ctrl for ⌘) and the same menus. It follows your
-Omarchy theme, hands AI work to the agent you already use, and reaches past its
-own window through Omarchy's shell: an island under the bar, screen capture,
-voice commands and live editing of your websites.
+Omastrator is a pro vector and interface design app built into
+[Omarchy](https://omarchy.org). It has the depth of a professional vector
+tool (pen, shapes, image trace, smart guides, type) and the speed of modern
+interface design (frames, auto layout, constraints, a dense Properties panel,
+the keys designers already know). It follows your Omarchy theme and lives in
+your desktop rather than in a window: an island under the bar, a hotkey away
+from anything, with design mode over every window and live website, so you
+can inspect, measure, mark up and edit what's on screen.
+
+AI is at the core. Your own agent names layers, proposes changes on the real
+page (Enter keeps one, Esc throws it away), roasts a design, and ships a site,
+asking before production.
+
+**Omastrator is in alpha.** Alpha testers are welcome, and so are pull
+requests. See [Install (alpha)](#install-alpha) and
+[Contributing](#contributing).
 
 ![Omastrator with a poster open, the Layers panel and the Properties panel](docs/screenshots/hero.png)
 
 More in [Screenshots](#screenshots).
 
 
-Omastrator's thesis is that it keeps Illustrator's depth, makes it feel like Figma and Paper, and puts AI at the core, so a designer spends their time on the customer, not the menus. More in [docs/VISION.md](docs/VISION.md).
+Omastrator's thesis is that designing should feel as simple as the idea: professional depth, a light touch, and AI at the core, so a designer spends their time on the customer, not the menus. More in [docs/VISION.md](docs/VISION.md).
 
 ## Features
 
