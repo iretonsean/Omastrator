@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 22> toolInfo{{
+const std::array<ToolInfo, 23> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -33,6 +33,7 @@ const std::array<ToolInfo, 22> toolInfo{{
     {Tool::hand, "hand", "Hand"},
     {Tool::zoom, "zoom", "Zoom"},
     {Tool::artboard, "artboard", "Artboard"},
+    {Tool::frame, "frame", "Frame"},
 }};
 }
 
@@ -338,14 +339,20 @@ std::vector<QUuid> EditorSession::selectedLeaves() const
         const VectorObject *object = m_document->find(id);
         if (!object)
             continue;
-        if (!object->isContainer()) {
+        // A frame paints itself: it answers for its own fills, strokes and box, not its children's.
+        if (!object->isContainer() || object->kind == ObjectKind::frame) {
             result.push_back(id);
             continue;
         }
-        for (const QUuid &nested : m_document->descendants(id)) {
-            const VectorObject *leaf = m_document->find(nested);
-            if (leaf && !leaf->isContainer())
-                result.push_back(nested);
+        const std::vector<QUuid> nested = m_document->descendants(id);
+        for (size_t index = 0; index < nested.size(); ++index) {
+            const VectorObject *leaf = m_document->find(nested[index]);
+            if (!leaf || (leaf->isContainer() && leaf->kind != ObjectKind::frame))
+                continue;
+            result.push_back(nested[index]);
+            // Descendants follow their parent: step past the frame's own.
+            while (leaf->kind == ObjectKind::frame && index + 1 < nested.size() && m_document->isAncestor(leaf->id, nested[index + 1]))
+                ++index;
         }
     }
     return result;
@@ -651,7 +658,7 @@ bool EditorSession::canUngroup() const
         return false;
     return std::any_of(m_selection.begin(), m_selection.end(), [&](const QUuid &id) {
         const VectorObject *object = m_document->find(id);
-        return object && object->kind == ObjectKind::group;
+        return object && (object->kind == ObjectKind::group || object->kind == ObjectKind::frame);
     });
 }
 

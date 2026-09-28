@@ -346,6 +346,10 @@ private:
         const VectorObject *object = document.find(id);
         if (!object || !object->isVisible)
             return;
+        if (object->kind == ObjectKind::frame) {
+            writeFrame(*object);
+            return;
+        }
         if (object->hasPaint() && !object->hasSimpleAppearance()) {
             writeStack(*object);
             return;
@@ -364,7 +368,62 @@ private:
         case ObjectKind::image:
             writeImage(*object);
             break;
+        case ObjectKind::frame:
+            break;
         }
+    }
+
+    // Its box as a path: the fills alone or the strokes alone, however many.
+    void writeFrameBox(const VectorObject &frame, bool fills)
+    {
+        VectorObject box = frame;
+        box.kind = ObjectKind::path;
+        box.id = QUuid::createUuid();
+        box.name.clear();
+        box.opacity = 1;
+        box.blendMode = LayerBlendMode::normal;
+        box.component.reset();
+        box.instance.reset();
+        if (fills)
+            box.setStrokes({});
+        else
+            box.setFills({});
+        if (!box.hasVisibleFill() && !box.hasVisibleStroke())
+            return;
+        if (box.hasSimpleAppearance())
+            writePath(box);
+        else
+            writeStack(box);
+    }
+
+    // A frame: a group holding its fills, its children (clipped to the box unless clipping is off) and its strokes.
+    void writeFrame(const VectorObject &frame)
+    {
+        xml.writeStartElement(QStringLiteral("g"));
+        writeCommon(frame);
+        writeFrameBox(frame, true);
+        const std::vector<QUuid> children = document.children(frame.id);
+        if (!children.empty()) {
+            QString clip;
+            if (frame.clipsContent) {
+                clip = definitionID("clip");
+                xml.writeStartElement(QStringLiteral("defs"));
+                xml.writeStartElement(QStringLiteral("clipPath"));
+                xml.writeAttribute(QStringLiteral("id"), clip);
+                xml.writeEmptyElement(QStringLiteral("path"));
+                xml.writeAttribute(QStringLiteral("d"), pathData(frame.path));
+                xml.writeEndElement();
+                xml.writeEndElement();
+            }
+            xml.writeStartElement(QStringLiteral("g"));
+            if (!clip.isEmpty())
+                xml.writeAttribute(QStringLiteral("clip-path"), QStringLiteral("url(#%1)").arg(clip));
+            for (const QUuid &child : children)
+                writeObject(child);
+            xml.writeEndElement();
+        }
+        writeFrameBox(frame, false);
+        xml.writeEndElement();
     }
 
     void writeContainer(const VectorObject &object)

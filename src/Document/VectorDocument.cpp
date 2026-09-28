@@ -7,9 +7,9 @@
 #include <utility>
 
 namespace {
-const std::array<std::pair<ObjectKind, const char *>, 5> kindNames{{
+const std::array<std::pair<ObjectKind, const char *>, 6> kindNames{{
     {ObjectKind::layer, "layer"}, {ObjectKind::group, "group"}, {ObjectKind::path, "path"},
-    {ObjectKind::text, "text"}, {ObjectKind::image, "image"},
+    {ObjectKind::text, "text"}, {ObjectKind::image, "image"}, {ObjectKind::frame, "frame"},
 }};
 
 QRectF strokeBounds(const VectorObject &object)
@@ -106,10 +106,23 @@ QColor nextLayerColor(int index)
     return colors[size_t(std::abs(index)) % colors.size()];
 }
 
+VectorObject VectorObject::frame(const QRectF &rect, const QString &name)
+{
+    VectorObject object;
+    object.kind = ObjectKind::frame;
+    object.name = name;
+    object.shape = LiveRectangle{.rect = rect.normalized(), .placement = {}};
+    object.path = object.shape->path();
+    object.fill = Paint::solid(Qt::white);
+    object.stroke.paint = Paint::none();
+    return object;
+}
+
 QPainterPath VectorObject::outline() const
 {
     switch (kind) {
     case ObjectKind::path:
+    case ObjectKind::frame:
         return path.painterPath();
     case ObjectKind::text:
         return transform.map(text.outline());
@@ -215,6 +228,31 @@ std::optional<QUuid> VectorDocument::topLevelObject(const QUuid &id) const
     return std::nullopt;
 }
 
+std::optional<QUuid> VectorDocument::selectableObject(const QUuid &id) const
+{
+    const std::optional<QUuid> top = topLevelObject(id);
+    const VectorObject *frame = top ? find(*top) : nullptr;
+    if (!frame || frame->kind != ObjectKind::frame || *top == id)
+        return top;
+    for (const VectorObject *object = find(id); object && object->parentID; object = find(*object->parentID)) {
+        if (*object->parentID == *top)
+            return object->id;
+    }
+    return top;
+}
+
+std::vector<QUuid> VectorDocument::clippingFrames(const QUuid &id) const
+{
+    std::vector<QUuid> result;
+    const VectorObject *object = find(id);
+    for (const VectorObject *parent = object && object->parentID ? find(*object->parentID) : nullptr; parent;
+         parent = parent->parentID ? find(*parent->parentID) : nullptr) {
+        if (parent->kind == ObjectKind::frame && parent->clipsContent)
+            result.push_back(parent->id);
+    }
+    return result;
+}
+
 bool VectorDocument::isEffectivelyVisible(const QUuid &id) const
 {
     for (const VectorObject *object = find(id); object; object = object->parentID ? find(*object->parentID) : nullptr) {
@@ -238,6 +276,12 @@ QRectF VectorDocument::bounds(const QUuid &id, bool includeStroke) const
     const VectorObject *object = find(id);
     if (!object)
         return {};
+    if (object->kind == ObjectKind::frame) {
+        // Its box, and with clipping off whatever of its children shows past it.
+        const QRectF box = includeStroke ? strokeBounds(*object) : object->outline().boundingRect();
+        const QRectF content = object->clipsContent ? QRectF() : bounds(children(id), includeStroke);
+        return content.isNull() ? box : box.united(content);
+    }
     if (object->isContainer()) {
         if (object->isClipGroup) {
             const auto kids = children(id);
@@ -274,6 +318,8 @@ QPainterPath VectorDocument::outline(const QUuid &id) const
     if (!object->isContainer())
         return object->outline();
     QPainterPath result;
+    if (object->kind == ObjectKind::frame)
+        result.addPath(object->outline());
     for (const QUuid &child : children(id))
         result.addPath(outline(child));
     return result;
@@ -369,7 +415,15 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform, boo
     VectorObject *object = find(id);
     if (!object)
         return;
-    if (object->kind == ObjectKind::path) {
+    if (object->kind == ObjectKind::frame && object->shape) {
+        // A frame's box is always a rectangle: skewed, it keeps the box around where its corners went.
+        std::optional<LiveRectangle> box = object->shape->transformed(transform, scaleCorners);
+        if (!box)
+            box = LiveRectangle{.rect = transform.map(object->shape->placement.map(QPolygonF(object->shape->rect))).boundingRect(),
+                                .placement = {}, .radii = object->shape->radii, .styles = object->shape->styles};
+        object->shape = box;
+        object->path = box->path();
+    } else if (object->kind == ObjectKind::path) {
         // A live rectangle stays live while it stays a rectangle.
         std::optional<LiveRectangle> live;
         if (const LiveRectangle *shape = object->liveShape())

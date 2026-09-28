@@ -100,6 +100,7 @@ void EditorCanvas::State::paint(QPainter &painter)
         painter.restore();
     }
     drawArtboardLabels(painter);
+    drawFrameLabels(painter);
     drawGuides(painter);
     drawOverlay(painter);
 }

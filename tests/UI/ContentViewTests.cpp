@@ -84,7 +84,7 @@ void ContentViewTests::theRailHoldsEveryToolInGroups()
         QVERIFY(editor.tool(slot.front()).isVisible());
     // Tooltips name the tool a slot shows and its key, if any.
     QCOMPARE(editor.tool(Tool::select).toolTip(), QString("Selection (V)"));
-    QCOMPARE(editor.tool(Tool::artboard).toolTip(), QString("Artboard (Shift+O)"));
+    QCOMPARE(editor.tool(Tool::frame).toolTip(), QString("Frame (F)"));
     // A remapped key shows at once.
     QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord("k")}}));
     QCOMPARE(editor.tool(Tool::pen).toolTip(), QString("Pen (K)"));

@@ -32,6 +32,87 @@ build on their desktop all evening and reported problems as they found them.
 Everything below is either done and installed, or queued in the author's
 order.
 
+## Frames (branch feat/frames, off feat/graphite-look)
+
+Queue item 3 has started. docs/FIGMA-AUDIT.md compares Figma's design core
+with what's here and sets the build order. The first item, frames, is built:
+
+- **The model.** `ObjectKind::frame` is a container with a box of its own:
+  - `shape`, a `LiveRectangle` that's always live, with `path` kept to it;
+  - fills and strokes;
+  - `clipsContent`, on by default.
+
+  The box is painted under the children and clipped to; the strokes go over
+  them. Frames have their own bounds and hit tests, and what a frame clips
+  away can't be clicked.
+- **The Figma click rule:** a top-level frame lets a click through to its own
+  child. A nested frame is picked whole, as a group is.
+  `VectorDocument::selectableObject` holds the rule.
+- **Selection:** a selected frame answers for its own paint (in
+  `selectedLeaves`), so Fill changes the frame, not its children.
+- **Tools and commands:**
+  - the Frame tool (F, in the rail with the artboard);
+  - Object ▸ Frame Selection (Ctrl+Alt+G);
+  - Clip Content;
+  - Ungroup, which removes a frame;
+  - frame names above top-level frames on the canvas (a click on one selects
+    the frame);
+  - the `#` icon in Layers;
+  - SVG export as a clipped `<g>`;
+  - the codec (the `frame` kind; the box is required).
+- **Tests:** tests/Document/FramesTests.cpp.
+- **Not done yet:** Figma's resize, where the box's handles resize only the box
+  and the children follow constraints. Scaling a frame today scales its
+  content, as a group does.
+
+Other things still to do for frames:
+
+- moving objects into or out of a frame by dragging;
+- a Clip content checkbox in the Properties panel;
+- frames in the agent tools and the lift;
+- a frame preset list (phone, desktop), as Figma's Frame tool has.
+
+Next in the build order: auto layout, then constraints.
+
+## The Graphite look (branch feat/graphite-look, off fix/design-mode-escape)
+
+Queue item 2 was done while the author was away from the screen (2026-09-27, about
+22:45). It was checked only in offscreen renders; nobody has seen it on the desktop
+yet.
+
+- **The island, floating bar and cards** read `O.Theme`
+  (shell/omastrator-ui/Theme.qml), which uses Graphite's `[graphite]` shell tokens
+  and falls back to the popup colours on other themes. `O.Panel` is a floating
+  surface with a shadow, a top highlight and no border. `O.Lift` gives the lift
+  under the pointer and the soft-accent fill for what's chosen. Labels are
+  SF Pro Text 13; values (the Inspect card, measurements) are SF Mono.
+- **The app** reads the same component tokens from colors.toml
+  (`OmarchyColors::components`). `OmarchyStyle` (src/UI/OmarchyStyle.cpp, Fusion
+  underneath) draws:
+  - no outlines;
+  - rounded fills;
+  - the lift on hover;
+  - the soft accent for default buttons and chosen list rows;
+  - thumb-only scroll bars;
+  - a 4 px slider;
+  - framed lists as rounded groups.
+
+  The pasteboard uses `QPalette::Dark`. Themes without tokens keep their palette
+  and get the same shapes.
+- **To see the app without a screen:** run
+  `XDG_RUNTIME_DIR=<temp dir> QT_QPA_PLATFORM=offscreen OMASTRATOR_SNAPSHOT=out.png build/omastrator [file]`.
+  It saves a 1440×900 picture and quits.
+- **Installed:** the app (the release build is in ~/.local, and the daemon was
+  restarted on it). **The shell plugins are NOT synced yet:** the session was
+  locked, the lock screen belongs to omarchy-shell, and restarting the shell
+  under a lock could leave a dead lock screen. Once unlocked, run
+  `scripts/install-local.sh --shell`.
+- **Ask the author:** does it look right? The riskiest parts are:
+  - the island's panel tone over dark wallpaper (Graphite panels have no border;
+    the shadow and top highlight separate them);
+  - chosen tools in the tool strip, which lift rather than turn blue, since the
+    accent would drown their icons.
+
 ## Where things are
 
 - **Branch `fix/design-mode-escape`**, off `main`, not merged yet. It holds

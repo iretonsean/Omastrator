@@ -512,6 +512,12 @@ QJsonObject encode(const VectorObject &object)
         if (const LiveRectangle *shape = object.liveShape())
             json["shape"] = encode(*shape);
         break;
+    case ObjectKind::frame:
+        // Additive: a kind older readers refuse by name, and a box.
+        json["shape"] = encode(*object.shape);
+        if (!object.clipsContent)
+            json["clipsContent"] = false;
+        break;
     case ObjectKind::text:
         json["text"] = encode(object.text);
         json["transform"] = transform(object.transform);
@@ -590,6 +596,13 @@ VectorObject decodeObject(const QJsonObject &json)
         // A shape that no longer makes this path was edited elsewhere.
         if (!object.liveShape())
             object.shape.reset();
+    }
+    if (object.kind == ObjectKind::frame) {
+        if (!json.contains("shape"))
+            throw CodecError("a frame has no box");
+        object.shape = decodeShape(json["shape"].toObject());
+        object.path = object.shape->path();
+        object.clipsContent = json["clipsContent"].toBool(true);
     }
     if (object.kind == ObjectKind::text) {
         object.text = decodeText(json["text"].toObject());

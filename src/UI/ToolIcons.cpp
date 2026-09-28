@@ -205,6 +205,15 @@ void width(QPainter &painter)
 }
 
 // Four crop marks at a page's corners, as print marks show an artboard's edge.
+// Figma's frame: a hash, two rails crossing two.
+void frame(QPainter &painter)
+{
+    painter.drawLine(QPointF(6.5, 2.5), QPointF(6.5, 15.5));
+    painter.drawLine(QPointF(11.5, 2.5), QPointF(11.5, 15.5));
+    painter.drawLine(QPointF(2.5, 6.5), QPointF(15.5, 6.5));
+    painter.drawLine(QPointF(2.5, 11.5), QPointF(15.5, 11.5));
+}
+
 void artboard(QPainter &painter)
 {
     constexpr double inset = 3, arm = 4;
@@ -249,6 +258,7 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::hand: hand(painter); break;
     case Tool::zoom: zoom(painter); break;
     case Tool::artboard: artboard(painter); break;
+    case Tool::frame: frame(painter); break;
     }
     painter.restore();
 }

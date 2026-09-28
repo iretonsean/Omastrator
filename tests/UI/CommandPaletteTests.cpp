@@ -323,12 +323,12 @@ private slots:
     void showsRemappedKeys()
     {
         QHash<QString, ShortcutChord> values;
-        values.insert(QStringLiteral("Menus:Group"), ShortcutChord(QStringLiteral("g"), 3));
+        values.insert(QStringLiteral("Menus:Group"), ShortcutChord(QStringLiteral("g"), 11));
         values.insert(QStringLiteral("Menus:Command Palette"), ShortcutChord(QStringLiteral("p"), 3));
         values.insert(QStringLiteral("Canvas & Layers:Pen tool"), ShortcutChord(QStringLiteral("b"), 0));
         QVERIFY(ShortcutSettings::shared().save(values));
         Window w;
-        QCOMPARE(w.command(QStringLiteral("action:group"))->shortcut, key(Qt::CTRL | Qt::ALT | Qt::Key_G));
+        QCOMPARE(w.command(QStringLiteral("action:group"))->shortcut, key(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G));
         QCOMPARE(w.command(QStringLiteral("tool:pen"))->shortcut, QStringLiteral("B"));
         QCOMPARE(w.view.menus()->action(QStringLiteral("commandPalette"))->shortcuts().front(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
         QSettings().remove(QLatin1String(ShortcutSettings::storageKey));

@@ -91,6 +91,7 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     case Tool::typeOnPath:
         typeOnPathPress(view);
         break;
+    case Tool::frame:
     case Tool::line:
     case Tool::rectangle:
     case Tool::roundedRectangle:

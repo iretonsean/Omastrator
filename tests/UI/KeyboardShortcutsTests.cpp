@@ -93,10 +93,10 @@ void KeyboardShortcutsTests::chordsReadKeysAsCocoaDoes()
 void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
-    // Fifty-eight menu entries, eleven type keys, nineteen tools (Type on a Path's
-    // Shift+T, Width and Artboard among them), five keys, eight nudges.
-    QCOMPARE(int(all.size()), 103);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 71);
+    // Fifty-nine menu entries (Frame Selection the last in), eleven type keys, twenty tools (Type on a
+    // Path's Shift+T, Width, Artboard and Frame among them), five keys, eight nudges.
+    QCOMPARE(int(all.size()), 105);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 72);
     QCOMPARE(named("Join").original, ShortcutChord("j", 1));
     QCOMPARE(named("Hide Guides").original, ShortcutChord(";", 1));
     QCOMPARE(named("Scissors tool").original, ShortcutChord("c"));

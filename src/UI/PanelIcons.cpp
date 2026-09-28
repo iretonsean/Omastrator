@@ -51,6 +51,15 @@ void folder(QPainter &painter)
     painter.drawPath(shape);
 }
 
+// A frame: Figma's hash, two rails crossing two.
+void frame(QPainter &painter)
+{
+    painter.drawLine(QPointF(6.5, 3), QPointF(6.5, 16));
+    painter.drawLine(QPointF(11.5, 3), QPointF(11.5, 16));
+    painter.drawLine(QPointF(2.5, 7), QPointF(15.5, 7));
+    painter.drawLine(QPointF(2.5, 12), QPointF(15.5, 12));
+}
+
 // A curve between two anchors, the pen's mark.
 void path(QPainter &painter)
 {
@@ -263,6 +272,7 @@ void PanelIcons::paint(QPainter &painter, PanelIcon icon, QPointF origin, double
     case PanelIcon::chevronDown: chevron(painter, true); break;
     case PanelIcon::layer: layers(painter); break;
     case PanelIcon::group: folder(painter); break;
+    case PanelIcon::frame: frame(painter); break;
     case PanelIcon::path: path(painter); break;
     // The rail's T, a little smaller.
     case PanelIcon::text: ToolIcons::paint(painter, Tool::text, QPointF(1, 1), 16, colour); break;

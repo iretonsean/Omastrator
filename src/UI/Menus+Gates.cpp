@@ -65,6 +65,9 @@ void Menus::synchronize()
     action(QStringLiteral("resetOverrides"))->setEnabled(editing && !s.selectedInstances().empty());
     action(QStringLiteral("selectMainComponent"))->setEnabled(drawn && s.selectedMaster().has_value());
     action(QStringLiteral("ungroup"))->setEnabled(editing && s.canUngroup());
+    action(QStringLiteral("frameSelection"))->setEnabled(editing && s.canGroup());
+    action(QStringLiteral("clipContent"))->setEnabled(editing && !s.selectedFrames().empty());
+    action(QStringLiteral("clipContent"))->setChecked(s.selectedFramesClip());
     action(QStringLiteral("makeCompoundPath"))->setEnabled(editing && s.canCombine());
     action(QStringLiteral("makeClippingMask"))->setEnabled(editing && s.selection().size() >= 2);
     action(QStringLiteral("makeOpacityMask"))->setEnabled(editing && s.selection().size() >= 2);

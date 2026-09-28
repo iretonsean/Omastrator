@@ -12,6 +12,7 @@ PanelIcon kindIcon(ObjectKind kind)
     case ObjectKind::path: return PanelIcon::path;
     case ObjectKind::text: return PanelIcon::text;
     case ObjectKind::image: return PanelIcon::image;
+    case ObjectKind::frame: return PanelIcon::frame;
     }
     return PanelIcon::path;
 }
@@ -137,6 +138,8 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
     if (single && single->kind == ObjectKind::group && !single->isClipGroup)
         local(menu, QStringLiteral("isolateGroup"), QStringLiteral("Isolate Selected Group"), [&canvas, id = single->id] { canvas.isolateGroup(id); });
     share(menu, &menus, "ungroup");
+    share(menu, &menus, "frameSelection");
+    share(menu, &menus, "clipContent");
     if (canvas.isolatedGroup())
         local(menu, QStringLiteral("exitIsolation"), QStringLiteral("Exit Isolation Mode"), [&canvas] { canvas.exitIsolation(); });
     if (single && single->isClipGroup)

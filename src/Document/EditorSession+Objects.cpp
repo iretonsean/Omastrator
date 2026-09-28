@@ -18,6 +18,8 @@ QString nameFor(const VectorObject &object)
         return object.text.text.section(QLatin1Char('\n'), 0, 0).left(40);
     case ObjectKind::image:
         return QStringLiteral("Image");
+    case ObjectKind::frame:
+        return QStringLiteral("Frame");
     default:
         return QStringLiteral("Path");
     }
@@ -73,14 +75,17 @@ QUuid EditorSession::addObject(VectorObject object, const QString &editName)
     return id;
 }
 
-QUuid EditorSession::previewAddObject(VectorObject object)
+QUuid EditorSession::previewAddObject(VectorObject object, std::optional<QUuid> parent)
 {
     if (!m_document || !m_interaction)
         return {};
     if (object.name.isEmpty())
         object.name = nameFor(object);
     const QUuid id = object.id;
-    insertNew(*m_document, std::move(object));
+    if (parent && m_document->find(*parent))
+        m_document->insert(std::move(object), *parent);
+    else
+        insertNew(*m_document, std::move(object));
     notify();
     return id;
 }
@@ -253,6 +258,75 @@ void EditorSession::groupSelection()
     });
 }
 
+void EditorSession::frameSelection()
+{
+    if (!m_document || m_selection.empty())
+        return;
+    const std::vector<QUuid> members = selectionInOrder();
+    const QRectF box = m_document->bounds(members);
+    if (box.isEmpty() && box.topLeft().isNull())
+        return;
+    VectorObject frame = VectorObject::frame(box, m_document->uniqueName(QStringLiteral("Frame")));
+    const QUuid frameID = frame.id;
+    edit(QStringLiteral("Frame Selection"), [&](VectorDocument &document) {
+        const QUuid top = members.back();
+        const QUuid parent = *document.find(top)->parentID;
+        document.insert(frame, parent, top);
+        for (const QUuid &id : members)
+            document.move(id, frameID, -1);
+        m_selection = {frameID};
+    });
+}
+
+std::vector<QUuid> EditorSession::selectedFrames() const
+{
+    std::vector<QUuid> frames;
+    for (const QUuid &id : m_selection) {
+        const VectorObject *object = m_document ? m_document->find(id) : nullptr;
+        if (object && object->kind == ObjectKind::frame)
+            frames.push_back(id);
+    }
+    return frames;
+}
+
+bool EditorSession::selectedFramesClip() const
+{
+    const std::vector<QUuid> frames = selectedFrames();
+    return !frames.empty() && std::all_of(frames.begin(), frames.end(), [&](const QUuid &id) { return m_document->find(id)->clipsContent; });
+}
+
+void EditorSession::setClipsContent(bool clips)
+{
+    const std::vector<QUuid> frames = selectedFrames();
+    if (frames.empty())
+        return;
+    edit(clips ? QStringLiteral("Clip Content") : QStringLiteral("Show Content Past the Frame"), [&](VectorDocument &document) {
+        for (const QUuid &id : frames)
+            document.find(id)->clipsContent = clips;
+    });
+}
+
+QUuid EditorSession::addFrame(const QRectF &rect)
+{
+    VectorObject frame = VectorObject::frame(rect, m_document ? m_document->uniqueName(QStringLiteral("Frame")) : QStringLiteral("Frame 1"));
+    const QUuid id = frame.id;
+    edit(QStringLiteral("Frame"), [&](VectorDocument &document) {
+        // Drawn inside a frame, it nests in the innermost one there, as Figma's do.
+        std::optional<QUuid> host;
+        for (const VectorObject &object : document.objects) {
+            if (object.kind == ObjectKind::frame && document.isEffectivelyVisible(object.id) && !document.isEffectivelyLocked(object.id)
+                && object.path.painterPath().contains(rect.normalized()))
+                host = object.id;
+        }
+        if (host)
+            document.insert(frame, *host);
+        else
+            insertNew(document, frame);
+        m_selection = {id};
+    });
+    return id;
+}
+
 void EditorSession::ungroupSelection()
 {
     if (!canUngroup())
@@ -261,7 +335,8 @@ void EditorSession::ungroupSelection()
         std::vector<QUuid> released;
         for (const QUuid &id : selectionInOrder()) {
             const VectorObject *group = document.find(id);
-            if (!group || group->kind != ObjectKind::group) {
+            // A frame lets go of its children too (Figma's Remove Frame), its box going with it.
+            if (!group || (group->kind != ObjectKind::group && group->kind != ObjectKind::frame)) {
                 released.push_back(id);
                 continue;
             }

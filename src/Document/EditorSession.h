@@ -37,11 +37,12 @@ enum class Tool {
     hand,            // H
     zoom,            // Z
     artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
+    frame,           // F: Figma's frame, after the artboard for the same reason
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::typeOnPath, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
-                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard};
+                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -142,7 +143,7 @@ public:
     // Runs the last Select menu command again.
     void reselect();
     bool canReselect() const { return bool(m_lastSelect); }
-    // Leaf paths, texts and images under the selection.
+    // Leaf paths, texts and images under the selection, and frames (without their children).
     std::vector<QUuid> selectedLeaves() const;
     // Direct selection: the anchors picked on each path.
     struct PickedNode {
@@ -203,7 +204,8 @@ public:
     // The object as the interaction found it.
     const VectorObject *originalObject(const QUuid &id) const;
     // Adds or removes an object within the interaction, as drawing tools preview.
-    QUuid previewAddObject(VectorObject object);
+    // Into `parent` when given, else where new objects go.
+    QUuid previewAddObject(VectorObject object, std::optional<QUuid> parent = std::nullopt);
     void previewRemoveObject(const QUuid &id);
     // Alt-drag: copies the selection in place and selects them; later previews move the copies.
     void previewDuplicateSelection();
@@ -233,7 +235,16 @@ public:
     void transformAgain();
     bool canTransformAgain() const { return m_lastTransform.has_value() && hasSelection(); }
     void groupSelection();
+    // Ungroup releases groups and frames alike (a frame's box goes).
     void ungroupSelection();
+    // Object ▸ Frame Selection (Ctrl+Alt+G): the selection inside a new frame its size.
+    void frameSelection();
+    // The Frame tool: a frame over `rect`, inside the innermost frame that holds it. Selected.
+    QUuid addFrame(const QRectF &rect);
+    // Selected frames, and whether every one clips its content (none selected: false).
+    std::vector<QUuid> selectedFrames() const;
+    bool selectedFramesClip() const;
+    void setClipsContent(bool clips);
     // Object ▸ Clipping Mask ▸ Make: the topmost object clips the rest.
     void makeClippingMask();
     void releaseClippingMask();

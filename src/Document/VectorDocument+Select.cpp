@@ -60,10 +60,17 @@ std::vector<QUuid> VectorDocument::hitTestAll(QPointF point, double tolerance, s
     std::vector<QUuid> result;
     for (auto it = objects.rbegin(); it != objects.rend() && result.size() < limit; ++it) {
         const VectorObject &object = *it;
-        if (object.isContainer() || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id))
+        if ((object.isContainer() && object.kind != ObjectKind::frame) || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id))
+            continue;
+        // What a frame clips away can't be clicked.
+        const std::vector<QUuid> clips = clippingFrames(object.id);
+        if (std::any_of(clips.begin(), clips.end(), [&](const QUuid &frame) { return !find(frame)->path.painterPath().contains(point); }))
             continue;
         bool hit = false;
-        if (object.kind == ObjectKind::path) {
+        if (object.kind == ObjectKind::frame) {
+            // Its whole box, filled or not, as Figma's frames answer.
+            hit = object.path.painterPath().contains(point) || object.path.distanceToOutline(point) <= tolerance;
+        } else if (object.kind == ObjectKind::path) {
             const double reach = tolerance + (object.stroke.isVisible() ? object.stroke.width / 2 : 0);
             hit = object.path.distanceToOutline(point) <= reach;
             if (!hit && object.fill.isVisible())

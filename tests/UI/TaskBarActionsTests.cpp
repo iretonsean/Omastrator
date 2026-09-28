@@ -169,9 +169,9 @@ private slots:
         QCOMPARE(group->accessibleName(), QStringLiteral("Group"));
         QCOMPARE(tip(group), QStringLiteral("Group (%1)").arg(QKeySequence(Qt::CTRL | Qt::Key_G).toString(QKeySequence::NativeText)));
         QHash<QString, ShortcutChord> values;
-        values.insert(QStringLiteral("Menus:Group"), ShortcutChord(QStringLiteral("g"), 3));
+        values.insert(QStringLiteral("Menus:Group"), ShortcutChord(QStringLiteral("g"), 11));
         QVERIFY(ShortcutSettings::shared().save(values));
-        QCOMPARE(tip(group), QStringLiteral("Group (%1)").arg(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_G).toString(QKeySequence::NativeText)));
+        QCOMPARE(tip(group), QStringLiteral("Group (%1)").arg(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G).toString(QKeySequence::NativeText)));
         QCOMPARE(tip(w.item(QStringLiteral("taskBarShapeBuilder"))), QStringLiteral("Shape Builder (Shift+M)"));
         // A button follows its entry's state.
         QVERIFY(group->isEnabled());

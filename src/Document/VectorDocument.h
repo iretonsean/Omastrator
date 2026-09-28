@@ -22,7 +22,9 @@
 #include <vector>
 
 // Layers are groups at the top of the tree; every other object sits in one.
-enum class ObjectKind { layer, group, path, text, image };
+// A frame is a container with a box of its own (Figma's frame): fills and strokes,
+// corner radii, and its children clipped to it unless clipping is off.
+enum class ObjectKind { layer, group, path, text, image, frame };
 QString rawValue(ObjectKind kind);
 std::optional<ObjectKind> objectKind(const QString &rawValue);
 
@@ -309,8 +311,11 @@ struct VectorObject {
     bool isClipGroup = false;
     // Groups: set makes this an opacity mask group (P2-9); the top child is the mask.
     std::optional<OpacityMask> mask;
-    // Rectangles: the live shape, while the path is still what it makes.
+    // Rectangles: the live shape, while the path is still what it makes. Frames: their
+    // box, always set, with `path` kept to what it makes.
     std::optional<LiveRectangle> shape;
+    // Frames: children show only inside the box.
+    bool clipsContent = true;
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
     // applying changes back to the source.
     QString liftedFrom;
@@ -323,8 +328,10 @@ struct VectorObject {
     std::optional<ComponentInfo> component;
     std::optional<InstanceInfo> instance;
 
-    bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group; }
-    bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text; }
+    bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group || kind == ObjectKind::frame; }
+    bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text || kind == ObjectKind::frame; }
+    // A frame around `rect`, in document coordinates, with a white fill as Figma's new frames have.
+    static VectorObject frame(const QRectF &rect, const QString &name = QStringLiteral("Frame"));
     // The whole stack, bottom to top; setting an empty list leaves one none.
     std::vector<Paint> fills() const;
     std::vector<StrokeStyle> strokes() const;
@@ -377,8 +384,13 @@ struct VectorDocument {
     bool isAncestor(const QUuid &ancestor, const QUuid &of) const;
     // The layer an object sits in (a layer is its own).
     std::optional<QUuid> layerOf(const QUuid &id) const;
-    // The child of a layer that holds `id`, which a click selects.
+    // The child of a layer that holds `id`.
     std::optional<QUuid> topLevelObject(const QUuid &id) const;
+    // What a click on `id` selects: the top-level object, except that a top-level frame
+    // lets the click through to its own child that holds `id`, as Figma's do.
+    std::optional<QUuid> selectableObject(const QUuid &id) const;
+    // Every frame above `id` that clips its content, nearest first.
+    std::vector<QUuid> clippingFrames(const QUuid &id) const;
     // Visible and unlocked, counting every ancestor.
     bool isEffectivelyVisible(const QUuid &id) const;
     bool isEffectivelyLocked(const QUuid &id) const;

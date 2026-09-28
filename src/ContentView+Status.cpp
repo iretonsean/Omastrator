@@ -75,6 +75,7 @@ QString ContentView::hint(Tool tool)
     case Tool::width: return QStringLiteral("Drag on the stroke to add or move a width point · Alt-drag moves one side · Delete removes it");
     case Tool::hand: return QStringLiteral("Drag to pan · Space pans from any tool");
     case Tool::zoom: return QStringLiteral("Click to zoom in · Alt-click to zoom out");
+    case Tool::frame: return QStringLiteral("Drag to draw a frame · Inside a frame it nests · Shift squares · Alt draws from the centre");
     case Tool::artboard: return QStringLiteral("Drag to draw an artboard · Drag to move or resize · Alt-drag duplicates · Delete removes it");
     }
     return QString();

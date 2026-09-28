@@ -68,6 +68,30 @@ VectorPath EditorCanvas::State::shapePath(QPointF from, QPointF to, Qt::Keyboard
     }
 }
 
+// The Frame tool: a frame over the drag, nested in the innermost frame under the press, as Figma's are.
+void EditorCanvas::State::dragFrame(const QRectF &rect)
+{
+    if (!drag->interacting) {
+        const VectorDocument &document = *session.document();
+        std::optional<QUuid> host;
+        for (const VectorObject &object : document.objects) {
+            if (object.kind == ObjectKind::frame && document.isEffectivelyVisible(object.id) && !document.isEffectivelyLocked(object.id)
+                && object.path.painterPath().contains(drag->pressDocument))
+                host = object.id;
+        }
+        session.beginInteraction(QStringLiteral("Draw Frame"));
+        drag->object = session.previewAddObject(VectorObject::frame(rect, document.uniqueName(QStringLiteral("Frame"))), host);
+        drag->interacting = true;
+        return;
+    }
+    const VectorObject *current = session.document()->find(drag->object);
+    if (!current)
+        return;
+    VectorObject object = *current;
+    EditorSession::reshape(object, LiveRectangle{.rect = rect, .placement = {}, .radii = current->shape->radii, .styles = current->shape->styles});
+    session.previewObject(object);
+}
+
 void EditorCanvas::State::dragShape(QPointF view, Qt::KeyboardModifiers modifiers)
 {
     if (!drag->started)
@@ -78,6 +102,10 @@ void EditorCanvas::State::dragShape(QPointF view, Qt::KeyboardModifiers modifier
     if (modifiers.testFlag(Qt::ShiftModifier) && session.tool() != Tool::line)
         clearGuides();
     const VectorPath path = shapePath(drag->pressDocument, to, modifiers);
+    if (session.tool() == Tool::frame) {
+        dragFrame(path.bounds());
+        return;
+    }
     // Rectangles stay live, so their corners can change later.
     const auto place = [&](VectorObject &object) {
         object.path = path;

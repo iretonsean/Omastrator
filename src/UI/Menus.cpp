@@ -242,6 +242,12 @@ void Menus::buildObject(QMenuBar &bar)
     object->addSeparator();
     add(object, QStringLiteral("group"), QStringLiteral("Group"), QKeySequence(Qt::CTRL | Qt::Key_G), [this] { session().groupSelection(); });
     add(object, QStringLiteral("ungroup"), QStringLiteral("Ungroup"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G), [this] { session().ungroupSelection(); });
+    // Figma's frames: the selection in a frame its size, and whether a frame shows what lies past its box.
+    add(object, QStringLiteral("frameSelection"), QStringLiteral("Frame Selection"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_G),
+        [this] { session().frameSelection(); });
+    add(object, QStringLiteral("clipContent"), QStringLiteral("Clip Content"), QKeySequence(), [this] {
+        session().setClipsContent(!session().selectedFramesClip());
+    })->setCheckable(true);
     object->addSeparator();
     // Components (docs/DESIGN-SYSTEMS.md): Figma's keys for Make and Detach.
     QMenu *components = object->addMenu(QStringLiteral("Components"));

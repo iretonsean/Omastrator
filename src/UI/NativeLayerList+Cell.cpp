@@ -15,6 +15,7 @@ PanelIcon kindIcon(ObjectKind kind)
     case ObjectKind::path: return PanelIcon::path;
     case ObjectKind::text: return PanelIcon::text;
     case ObjectKind::image: return PanelIcon::image;
+    case ObjectKind::frame: return PanelIcon::frame;
     }
     return PanelIcon::path;
 }

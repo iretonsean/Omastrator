@@ -96,11 +96,11 @@ struct ToolKey {
     const char *key;
     int modifiers = 0;
 };
-const std::array<ToolKey, 19> toolKeys{{
+const std::array<ToolKey, 20> toolKeys{{
     {Tool::select, "v"}, {Tool::directSelect, "a"}, {Tool::pen, "p"}, {Tool::pencil, "n"}, {Tool::text, "t"}, {Tool::line, "\\"},
     {Tool::rectangle, "m"}, {Tool::ellipse, "l"}, {Tool::rotate, "r"}, {Tool::scale, "s"}, {Tool::eyedropper, "i"}, {Tool::hand, "h"},
     {Tool::zoom, "z"}, {Tool::shapeBuilder, "m", 8}, {Tool::gradient, "g"}, {Tool::scissors, "c"}, {Tool::typeOnPath, "t", 8},
-    {Tool::width, "w", 8}, {Tool::artboard, "o", 8},
+    {Tool::width, "w", 8}, {Tool::artboard, "o", 8}, {Tool::frame, "f"},
 }};
 
 QJsonObject encoded(const QHash<QString, ShortcutChord> &values)
@@ -154,6 +154,7 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             entry("Select All", "a", 1, true), entry("Deselect", "a", 9, true), entry("Move", "m", 9, true),
             entry("Bring to Front", "]", 9, true), entry("Bring Forward", "]", 1, true), entry("Send Backward", "[", 1, true),
             entry("Send to Back", "[", 9, true), entry("Group", "g", 1, true), entry("Ungroup", "g", 9, true),
+            entry("Frame Selection", "g", 3, true),
             entry("Lock Selection", "2", 1, true), entry("Unlock All", "2", 3, true), entry("Hide Selection", "3", 1, true),
             entry("Show All", "3", 3, true), entry("Make Clipping Mask", "7", 1, true), entry("Release Clipping Mask", "7", 3, true),
             entry("Make Compound Path", "8", 1, true), entry("Release Compound Path", "8", 11, true),

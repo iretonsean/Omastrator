@@ -182,6 +182,10 @@ struct EditorCanvas::State {
     void drawArtboardTool(QPainter &painter) const;
     // Every artboard's name, drawn above its top-left corner.
     void drawArtboardLabels(QPainter &painter) const;
+    // Top-level frames' names above their corner, as Figma shows them; a click on one selects its frame.
+    std::vector<std::pair<QUuid, QRectF>> frameLabels() const;
+    void drawFrameLabels(QPainter &painter) const;
+    std::optional<QUuid> frameLabelAt(QPointF view) const;
 
     // Scissors (C) ------------------------------------------------------------------
     void scissorsPress(QPointF view);
@@ -240,6 +244,7 @@ struct EditorCanvas::State {
     // Shapes ------------------------------------------------------------------
     void shapePress(QPointF view);
     void dragShape(QPointF view, Qt::KeyboardModifiers modifiers);
+    void dragFrame(const QRectF &rect);
     VectorPath shapePath(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers) const;
 
     // Shape Builder (Shift-M) -------------------------------------------------

@@ -5,7 +5,7 @@
 
 // The panels' icons, drawn as the tool rail's are.
 enum class PanelIcon {
-    eye, eyeSlash, lock, unlock, chevronRight, chevronDown, layer, group, path, text, image, newLayer, trash, layers,
+    eye, eyeSlash, lock, unlock, chevronRight, chevronDown, layer, group, frame, path, text, image, newLayer, trash, layers,
     alignLeft, alignHorizontalCenter, alignRight, alignTop, alignVerticalCenter, alignBottom,
     distributeHorizontal, distributeVertical, distributeLeft, distributeRight, distributeTop, distributeBottom, spaceHorizontal, spaceVertical,
     cornerRadius, unite, minusFront, intersect, exclude, rotate, link, unlink, more, leading, tracking,

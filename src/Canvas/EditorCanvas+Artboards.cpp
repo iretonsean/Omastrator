@@ -196,6 +196,56 @@ void EditorCanvas::State::drawArtboardTool(QPainter &painter) const
     painter.restore();
 }
 
+std::vector<std::pair<QUuid, QRectF>> EditorCanvas::State::frameLabels() const
+{
+    std::vector<std::pair<QUuid, QRectF>> labels;
+    if (!session.hasDocument())
+        return labels;
+    const VectorDocument &document = *session.document();
+    QFont font = canvas.font();
+    font.setPixelSize(11);
+    const QFontMetricsF metrics(font);
+    for (const QUuid &layer : document.layers()) {
+        for (const QUuid &id : document.children(layer)) {
+            const VectorObject *object = document.find(id);
+            if (!object || object->kind != ObjectKind::frame || !document.isEffectivelyVisible(id))
+                continue;
+            const QRectF box = object->path.painterPath().boundingRect();
+            const QPointF at = toView(box.topLeft()) - QPointF(0, 5);
+            const double width = std::min(metrics.horizontalAdvance(object->name) + 2, std::max(24.0, toView(box.topRight()).x() - at.x()));
+            labels.emplace_back(id, QRectF(at.x(), at.y() - metrics.height(), width, metrics.height()));
+        }
+    }
+    return labels;
+}
+
+void EditorCanvas::State::drawFrameLabels(QPainter &painter) const
+{
+    const auto labels = frameLabels();
+    if (labels.empty())
+        return;
+    QFont font = canvas.font();
+    font.setPixelSize(11);
+    painter.save();
+    painter.setFont(font);
+    for (const auto &[id, rect] : labels) {
+        painter.setPen(session.isSelected(id) ? accent() : canvas.palette().color(QPalette::PlaceholderText));
+        const QString name = QFontMetricsF(font).elidedText(session.document()->find(id)->name, Qt::ElideRight, rect.width());
+        painter.drawText(rect, Qt::AlignLeft | Qt::AlignBottom, name);
+    }
+    painter.restore();
+}
+
+std::optional<QUuid> EditorCanvas::State::frameLabelAt(QPointF view) const
+{
+    const auto labels = frameLabels();
+    for (auto it = labels.rbegin(); it != labels.rend(); ++it) {
+        if (it->second.adjusted(-2, -2, 2, 2).contains(view) && !session.document()->isEffectivelyLocked(it->first))
+            return it->first;
+    }
+    return std::nullopt;
+}
+
 void EditorCanvas::State::drawArtboardLabels(QPainter &painter) const
 {
     if (!session.hasDocument())

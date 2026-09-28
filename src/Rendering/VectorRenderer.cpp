@@ -195,6 +195,24 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
     const auto children = document.children(container.id);
     size_t first = 0;
     painter.save();
+    if (container.kind == ObjectKind::frame) {
+        // A frame: its fills under its children, clipped to its box unless clipping is off, its strokes over them.
+        const QPainterPath box = container.path.painterPath();
+        if (options.outlineMode)
+            drawLeaf(painter, container, options);
+        else
+            drawPaints(painter, container, box, box.boundingRect(), true, false);
+        painter.save();
+        if (container.clipsContent)
+            painter.setClipPath(box, Qt::IntersectClip);
+        for (const QUuid &child : children)
+            VectorRenderer::drawObject(painter, document, child, options);
+        painter.restore();
+        if (!options.outlineMode)
+            drawPaints(painter, container, box, box.boundingRect(), false, true);
+        painter.restore();
+        return;
+    }
     if (container.isClipGroup && !children.empty()) {
         // The bottom child is the clip; it draws nothing itself.
         const VectorObject *clip = document.find(children.front());

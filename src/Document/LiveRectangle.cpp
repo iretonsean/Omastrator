@@ -121,6 +121,9 @@ std::optional<LiveRectangle> LiveRectangle::transformed(const QTransform &transf
 
 const LiveRectangle *VectorObject::liveShape() const
 {
+    // A frame's box is always live.
+    if (kind == ObjectKind::frame && shape)
+        return &*shape;
     if (kind != ObjectKind::path || !shape)
         return nullptr;
     const VectorPath made = shape->path();

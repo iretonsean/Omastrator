@@ -123,7 +123,7 @@ std::optional<QUuid> EditorCanvas::State::selectableTarget(const QUuid &leaf) co
             id = *object->parentID;
         }
     }
-    return document.topLevelObject(leaf);
+    return document.selectableObject(leaf);
 }
 
 std::optional<QRectF> EditorCanvas::State::selectionBox() const
@@ -241,8 +241,12 @@ void EditorCanvas::State::selectPress(QPointF view, Qt::KeyboardModifiers modifi
         drag->center = selectionBox()->center();
         return;
     }
-    const std::optional<QUuid> leaf = hitLeaf(document);
-    const std::optional<QUuid> target = leaf ? selectableTarget(*leaf) : std::nullopt;
+    // A frame's name on the canvas picks the frame itself.
+    std::optional<QUuid> target = frameLabelAt(view);
+    if (!target) {
+        const std::optional<QUuid> leaf = hitLeaf(document);
+        target = leaf ? selectableTarget(*leaf) : std::nullopt;
+    }
     if (!target) {
         if (!modifiers.testFlag(Qt::ShiftModifier))
             session.deselectAll();

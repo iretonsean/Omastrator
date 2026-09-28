@@ -368,6 +368,10 @@ struct Filler {
             });
             row.addWidget(isolate);
             swatches();
+        } else if (kind == QLatin1String("frame")) {
+            swatches();
+            action("clipContent");
+            action("ungroup", QStringLiteral("Remove Frame"));
         } else if (kind == QLatin1String("clipGroup")) {
             action("releaseClippingMask", QStringLiteral("Release Clipping Mask"));
             action("ungroup");
@@ -392,6 +396,7 @@ QString TaskBarActions::kind(const EditorSession &session)
         case ObjectKind::text: return object->text.area ? QStringLiteral("text:area") : QStringLiteral("text:point");
         case ObjectKind::image: return QStringLiteral("image");
         case ObjectKind::path: return QStringLiteral("path");
+        case ObjectKind::frame: return QStringLiteral("frame");
         case ObjectKind::layer: return {};
         }
         return {};
