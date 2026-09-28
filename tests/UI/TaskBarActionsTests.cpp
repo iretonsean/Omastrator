@@ -220,6 +220,23 @@ private slots:
         QVERIFY(w.bar()->isVisible());
     }
 
+    // Letters typed into Ask AI are words, never the canvas's tool keys.
+    void askAIKeepsItsKeys()
+    {
+        Window w;
+        w.box(20);
+        auto *ask = w.item<QLineEdit>(QStringLiteral("taskBarAsk"));
+        QTest::mouseClick(ask, Qt::LeftButton, {}, QPoint(20, ask->height() / 2));
+        QTRY_COMPARE(QApplication::focusWidget(), ask);
+        for (const QChar letter : QStringLiteral("pvmx1")) {
+            QWidget *target = QApplication::focusWidget();
+            QTest::keyClick(target ? target : ask, letter.toLatin1());
+        }
+        QCOMPARE(ask->text(), QStringLiteral("pvmx1"));
+        QCOMPARE(w.session().tool(), Tool::select);
+        QCOMPARE(w.session().selection().size(), size_t(1));
+    }
+
     void askAISaysWhyItCouldNot()
     {
         qputenv("FAKE_AGENT", "");

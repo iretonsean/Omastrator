@@ -158,7 +158,10 @@ Item {
       color: "transparent"
       WlrLayershell.layer: WlrLayer.Overlay
       WlrLayershell.namespace: "omastrator-overlay"
-      WlrLayershell.keyboardFocus: Logic.wantsKeyboard(root.design, place, askField.activeFocus || onboardingCard.visible || typing.visible)
+      // A click in Ask sets `asking` first: the field can only take focus once the surface has the keyboard,
+      // so waiting for its activeFocus left the keys with the window underneath.
+      property bool asking: false
+      WlrLayershell.keyboardFocus: Logic.wantsKeyboard(root.design, place, asking || askField.activeFocus || onboardingCard.visible || typing.visible)
                                    ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
       // Click-through by default: nothing in the mask. The bar and cards join it while shown; a drawing tool takes it all.
@@ -446,6 +449,7 @@ Item {
                                     ? Logic.clampBar(remembered.pinX, remembered.pinY, width, height, window.place, window.topClear)
                                     : target ? Logic.barPosition(target.bounds, width, height, window.place, Style.space(10), window.topClear) : ({ x: 0, y: 0 })
         visible: window.mine && !window.drawing && target !== null && !root.onboarding.open
+        onVisibleChanged: if (!visible) window.asking = false
         x: spot.x
         y: spot.y
         width: barColumn.implicitWidth + root.pad * 2
@@ -624,8 +628,33 @@ Item {
                 root.run(Logic.askArgs(barCard.target, text.trim()))
                 text = ""
                 focus = false
+                window.asking = false
               }
-              Keys.onEscapePressed: focus = false
+              Keys.onEscapePressed: {
+                focus = false
+                window.asking = false
+              }
+              // Focus that came and went (a click elsewhere) hands the keyboard back.
+              property bool hadFocus: false
+              onActiveFocusChanged: {
+                if (activeFocus)
+                  hadFocus = true
+                else if (hadFocus) {
+                  hadFocus = false
+                  window.asking = false
+                }
+              }
+            }
+
+            // Claims the keyboard on the press, then lets the press through to place the cursor.
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.IBeamCursor
+              onPressed: function (mouse) {
+                window.asking = true
+                askField.forceActiveFocus()
+                mouse.accepted = false
+              }
             }
 
             Label {

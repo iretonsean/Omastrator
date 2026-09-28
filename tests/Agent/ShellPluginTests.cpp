@@ -292,6 +292,18 @@ private slots:
         }
     }
 
+    // A click in the floating bar's Ask must take the keyboard itself: the field only gets focus once the
+    // surface has the keyboard, so waiting for its focus sent every letter to the window underneath.
+    void askingTakesTheKeyboardOnTheClick()
+    {
+        const QString overlay = read(QStringLiteral("omastrator.island/Overlay.qml"));
+        const QRegularExpression focus(QStringLiteral("keyboardFocus: Logic\\.wantsKeyboard\\([^\\n]*asking"));
+        QVERIFY(focus.match(overlay).hasMatch());
+        const QString ask = overlay.mid(overlay.indexOf(QStringLiteral("id: askField")));
+        QVERIFY(ask.contains(QStringLiteral("window.asking = true")));
+        QVERIFY(ask.contains(QStringLiteral("mouse.accepted = false")));
+    }
+
     // A binary that can't start never sends exited; the island would never connect.
     void theStatusStreamRetriesAFailedStart()
     {
