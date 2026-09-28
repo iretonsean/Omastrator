@@ -5,7 +5,7 @@ here" just below.**
 
 ## Next session starts here
 
-**State at 2026-09-28 ~10:30:** everything is merged into `main` and pushed.
+**State at 2026-09-28 ~09:50:** everything is merged into `main` and pushed.
 That covers the whole stack (the design-mode Esc fix, the Graphite look,
 frames and auto layout, Inspect inside windows) plus today's four branches:
 resizing artboards on the canvas, the shortcuts pass, Send to a device, and
