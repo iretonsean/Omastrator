@@ -41,22 +41,31 @@ target_include_directories(oma_core PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated
 oma_library(oma_io src/IO/*.cpp)
 target_include_directories(oma_io PRIVATE third_party)
 target_link_libraries(oma_io PUBLIC oma_core)
-# ZipReader (.fig, .sketch) and the Kiwi container both use deflate; zstd is Kiwi's other
-# compression. Both are optional: without them the affected imports report a plain warning.
+# ZipReader's deflate entries (Sketch, Penpot, .fig are all zips of JSON) and the Kiwi container
+# need zlib; zstd is Kiwi's other compression. All optional: without them the affected imports
+# report a plain warning.
 find_package(ZLIB)
 if(ZLIB_FOUND)
-    # Public: tests build Kiwi/zip fixtures with zlib directly too.
+    # PUBLIC: tests build Kiwi/zip fixtures with zlib directly and need OMASTRATOR_HAVE_ZLIB too.
     target_link_libraries(oma_io PUBLIC ZLIB::ZLIB)
     target_compile_definitions(oma_io PUBLIC OMASTRATOR_HAVE_ZLIB)
 endif()
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
-    pkg_check_modules(ZSTD libzstd)
+    pkg_check_modules(ZSTD QUIET libzstd)
+    pkg_check_modules(LIBHEIF QUIET libheif)
 endif()
 if(ZSTD_FOUND)
     target_include_directories(oma_io PRIVATE ${ZSTD_INCLUDE_DIRS})
     target_link_libraries(oma_io PRIVATE ${ZSTD_LIBRARIES})
     target_compile_definitions(oma_io PRIVATE OMASTRATOR_HAVE_ZSTD)
+endif()
+# HEIC/AVIF Place and Open, dynamically linked (LGPL).
+if(LIBHEIF_FOUND)
+    target_link_libraries(oma_io PRIVATE ${LIBHEIF_LIBRARIES})
+    target_include_directories(oma_io PRIVATE ${LIBHEIF_INCLUDE_DIRS})
+    # PUBLIC: tests branch on whether HEIC/AVIF decoding is compiled in.
+    target_compile_definitions(oma_io PUBLIC OMASTRATOR_HAVE_LIBHEIF)
 endif()
 
 # Cloud storage through rclone: remotes, browsing, the cache and background uploads.

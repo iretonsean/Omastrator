@@ -394,7 +394,7 @@ QJsonObject AgentTools::place(const QJsonObject &params)
         throw Error(AgentProtocol::busy, QStringLiteral("Every layer is locked or hidden, so there is nowhere to place it."));
     const QString name = QFileInfo(path).fileName();
     QUuid id;
-    if (ImageImporter::isVector(path)) {
+    if (VectorFileImporter::canRead(path)) {
         id = AgentEdits::insertArt(edited, VectorFileImporter::readFirstArtboard(path), name, *layer);
         const QRectF bounds = edited.bounds(id);
         const QPointF shift = QPointF(edited.size.width() / 2, edited.size.height() / 2) - bounds.center();

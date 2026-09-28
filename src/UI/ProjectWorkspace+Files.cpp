@@ -1,4 +1,3 @@
-#include "IO/FigmaImporter.h"
 #include "IO/ImageImporter.h"
 #include "IO/ProjectStore.h"
 #include "IO/SvgExporter.h"
@@ -27,6 +26,15 @@ bool samePlace(const std::optional<QString> &path, const QString &other)
 bool hasSuffix(const QString &path, const QString &suffix)
 {
     return QFileInfo(path).suffix().compare(suffix, Qt::CaseInsensitive) == 0;
+}
+
+// Every file that becomes layers rather than pixels, or nullopt for a raster
+// image. File > Place takes only the first page or artboard.
+std::optional<VectorDocument> readAsDocument(const QString &path, QStringList &warnings, bool firstArtboardOnly = false)
+{
+    if (!VectorFileImporter::canRead(path))
+        return std::nullopt;
+    return firstArtboardOnly ? VectorFileImporter::readFirstArtboard(path, &warnings) : VectorFileImporter::read(path, &warnings);
 }
 
 // A raster image opens on an artboard its size.
@@ -89,14 +97,13 @@ bool ProjectWorkspace::openFile(const QString &path)
     VectorDocument document;
     QStringList warnings;
     try {
-        if (native)
+        if (native) {
             document = ProjectStore::read(path);
-        else if (FigmaImporter::canRead(path))
-            document = FigmaImporter::read(path, &warnings);
-        else if (ImageImporter::isVector(path))
-            document = VectorFileImporter::read(path, &warnings);
-        else
-            document = imageDocument(ImageImporter::read(path), QFileInfo(path).fileName());
+        } else if (const auto imported = readAsDocument(path, warnings)) {
+            document = *imported;
+        } else {
+            document = imageDocument(ImageImporter::read(path, &warnings), QFileInfo(path).fileName());
+        }
     } catch (const FileError &error) {
         showError(QStringLiteral("Couldn’t open “%1”").arg(QFileInfo(path).fileName()), error.message());
         return false;
@@ -155,36 +162,15 @@ bool ProjectWorkspace::placeFile(const QString &path)
     if (!session.hasDocument())
         return false;
     const QString name = QFileInfo(path).fileName();
+    QStringList warnings;
     try {
-        if (FigmaImporter::canRead(path)) {
-            QStringList warnings;
-            const VectorDocument imported = FigmaImporter::read(path, &warnings);
+        const std::optional<VectorDocument> asDocument = readAsDocument(path, warnings, true);
+        if (!asDocument) {
+            session.placeImage(ImageImporter::read(path, &warnings), name);
             reportLeftOut(path, warnings);
-            session.beginEdit(QStringLiteral("Place"));
-            VectorObject group;
-            group.kind = ObjectKind::group;
-            group.name = name;
-            const QUuid groupID = session.addObject(group, QStringLiteral("Place"));
-            for (const VectorObject &object : imported.objects) {
-                if (object.kind == ObjectKind::layer)
-                    continue;
-                const QUuid parent = imported.find(object.parentID.value())->kind == ObjectKind::layer ? groupID : object.parentID.value();
-                const QUuid id = session.addObject(object, QStringLiteral("Place"));
-                session.moveObject(id, parent, -1);
-            }
-            session.select({groupID});
-            const QPointF middle(session.document()->size.width() / 2, session.document()->size.height() / 2);
-            const QPointF shift = middle - session.selectionBounds().center();
-            session.transformSelection(QTransform::fromTranslate(shift.x(), shift.y()), QStringLiteral("Place"));
-            session.endEdit();
             return true;
         }
-        if (!ImageImporter::isVector(path)) {
-            session.placeImage(ImageImporter::read(path), name);
-            return true;
-        }
-        QStringList warnings;
-        const VectorDocument imported = VectorFileImporter::readFirstArtboard(path, &warnings);
+        const VectorDocument &imported = *asDocument;
         reportLeftOut(path, warnings);
         session.beginEdit(QStringLiteral("Place"));
         VectorObject group;

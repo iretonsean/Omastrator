@@ -24,12 +24,18 @@ quint32 le32(const char *p)
     return qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(p));
 }
 
+// Tools that pack on Windows sometimes name entries with backslashes.
+QString normalizeName(QString name)
+{
+    return name.replace(QLatin1Char('\\'), QLatin1Char('/'));
+}
+
 #ifdef OMASTRATOR_HAVE_ZLIB
 QByteArray inflateRaw(const char *src, quint32 compressedSize, quint32 uncompressedSize)
 {
-    QByteArray out(int(uncompressedSize), Qt::Uninitialized);
     if (uncompressedSize == 0)
         return {};
+    QByteArray out(qsizetype(uncompressedSize), Qt::Uninitialized);
     z_stream stream{};
     // Negative window bits: raw deflate, no zlib header (what zip entries use).
     if (inflateInit2(&stream, -15) != Z_OK)
@@ -42,6 +48,7 @@ QByteArray inflateRaw(const char *src, quint32 compressedSize, quint32 uncompres
     inflateEnd(&stream);
     if (result != Z_STREAM_END)
         return {};
+    out.truncate(qsizetype(stream.total_out));
     return out;
 }
 #endif
@@ -102,8 +109,9 @@ bool ZipReader::readCentralDirectory()
         entry.localHeaderOffset = le32(data.constData() + at + 42);
         if (at + 46 + nameLength > data.size())
             return false;
-        entry.name = QString::fromUtf8(data.constData() + at + 46, nameLength);
-        items.push_back(entry);
+        entry.name = normalizeName(QString::fromUtf8(data.constData() + at + 46, nameLength));
+        if (!entry.name.isEmpty() && !entry.name.endsWith(QLatin1Char('/')))
+            items.push_back(entry);
         at += 46 + nameLength + extraLength + commentLength;
     }
     return true;
@@ -113,9 +121,10 @@ QByteArray ZipReader::read(const QString &name) const
 {
     if (!valid)
         return {};
+    const QString wanted = normalizeName(name);
     const Entry *found = nullptr;
     for (const Entry &entry : items) {
-        if (entry.name == name) {
+        if (entry.name == wanted) {
             found = &entry;
             break;
         }
@@ -130,9 +139,13 @@ QByteArray ZipReader::read(const QString &name) const
     const qsizetype dataStart = header + 30 + nameLength + extraLength;
     if (dataStart + found->compressedSize > data.size())
         return {};
+    if (found->uncompressedSize > maximumEntrySize || found->compressedSize > maximumEntrySize) {
+        qCWarning(lcIO) << "zip entry" << name << "claims" << found->uncompressedSize << "bytes; refusing it";
+        return {};
+    }
     const char *compressed = data.constData() + dataStart;
     if (found->method == 0)
-        return QByteArray(compressed, int(found->compressedSize));
+        return QByteArray(compressed, qsizetype(found->compressedSize));
     if (found->method == 8) {
 #ifdef OMASTRATOR_HAVE_ZLIB
         return inflateRaw(compressed, found->compressedSize, found->uncompressedSize);

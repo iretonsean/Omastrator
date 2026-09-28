@@ -42,6 +42,11 @@ void write(const QString &path, const QByteArray &data)
 const QByteArray svg = "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='80' viewBox='0 0 100 80'>"
                        "<rect x='10' y='10' width='30' height='20' fill='#ff0000'/><circle cx='70' cy='40' r='15' fill='#0000ff'/></svg>";
 
+const QByteArray excalidraw = "{\"type\":\"excalidraw\",\"version\":2,\"elements\":["
+                              "{\"id\":\"r1\",\"type\":\"rectangle\",\"x\":0,\"y\":0,\"width\":30,\"height\":20,\"angle\":0,"
+                              "\"strokeColor\":\"#1e1e1e\",\"backgroundColor\":\"transparent\",\"strokeWidth\":1,\"opacity\":100,"
+                              "\"groupIds\":[],\"locked\":false,\"isDeleted\":false}],\"files\":{}}";
+
 // A document with one box, as a user draws it.
 void drawBox(EditorSession &session)
 {
@@ -67,6 +72,7 @@ private slots:
     void savingWritesTheDocumentAndClearsTheDot();
     void openingTheSamePathSelectsItsTab();
     void svgsAndPicturesOpenAsDocuments();
+    void excalidrawOpensAndPlaces();
     void aBadFileAlertsAndAddsNoTab();
     void placingAddsAGroupOrAnImage();
     void exportsWriteEachFormat();
@@ -254,6 +260,28 @@ void ProjectWorkspaceTests::svgsAndPicturesOpenAsDocuments()
     QCOMPARE(document.bounds(placed->id), QRectF(0, 0, 40, 30));
     QVERIFY(!photo.session.isModified());
     QCOMPARE(ProjectWorkspace::recentFiles(), (QStringList{picture, drawing}));
+}
+
+void ProjectWorkspaceTests::excalidrawOpensAndPlaces()
+{
+    const QString drawing = m_dir->filePath("Sketch.excalidraw");
+    write(drawing, excalidraw);
+    ProjectWorkspace workspace;
+    workspace.receive({drawing});
+    QCOMPARE(int(workspace.tabs().size()), 1);
+    const ProjectTab &opened = workspace.current();
+    QCOMPARE(opened.title(), QString("Sketch"));
+    QCOMPARE(leaves(opened.session.document().value(), ObjectKind::path), 1);
+
+    workspace.createDocument(QSizeF(400, 300));
+    EditorSession &session = workspace.current().session;
+    const size_t before = session.document().value().objects.size();
+    QVERIFY(workspace.placeFile(drawing));
+    const VectorDocument &document = session.document().value();
+    QCOMPARE(document.objects.size(), before + 2);
+    const VectorObject &group = *document.find(session.selection().front());
+    QCOMPARE(group.kind, ObjectKind::group);
+    QCOMPARE(group.name, QString("Sketch.excalidraw"));
 }
 
 void ProjectWorkspaceTests::aBadFileAlertsAndAddsNoTab()

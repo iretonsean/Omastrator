@@ -6,6 +6,9 @@
 #include <QHash>
 #include <QSet>
 #include <memory>
+#ifdef OMASTRATOR_HAVE_ZLIB
+#include <zlib.h>
+#endif
 
 // nanosvg is a single-header C library; its warnings are not ours.
 #pragma GCC diagnostic push
@@ -37,6 +40,41 @@ LayerBlendMode blendMode(const QString &css)
 
 const QSet<QString> shapeTags{QStringLiteral("path"),     QStringLiteral("rect"),    QStringLiteral("circle"), QStringLiteral("ellipse"),
                               QStringLiteral("line"),     QStringLiteral("polyline"), QStringLiteral("polygon")};
+
+bool isGzip(const QByteArray &data)
+{
+    return data.size() >= 2 && quint8(data[0]) == 0x1f && quint8(data[1]) == 0x8b;
+}
+
+#ifdef OMASTRATOR_HAVE_ZLIB
+// .svgz is a plain gzip stream; decode it whatever the file's given extension.
+QByteArray gunzip(const QByteArray &data)
+{
+    z_stream stream{};
+    // 16 + MAX_WBITS: expect a gzip header, not a raw deflate or zlib stream.
+    if (inflateInit2(&stream, 16 + MAX_WBITS) != Z_OK)
+        return {};
+    QByteArray output;
+    QByteArray chunk(64 * 1024, Qt::Uninitialized);
+    stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(data.constData()));
+    stream.avail_in = static_cast<uInt>(data.size());
+    int result = Z_OK;
+    while (result != Z_STREAM_END) {
+        stream.next_out = reinterpret_cast<Bytef *>(chunk.data());
+        stream.avail_out = static_cast<uInt>(chunk.size());
+        result = inflate(&stream, Z_NO_FLUSH);
+        if (result != Z_OK && result != Z_STREAM_END) {
+            inflateEnd(&stream);
+            return {};
+        }
+        output.append(chunk.constData(), chunk.size() - int(stream.avail_out));
+        if (result != Z_STREAM_END && stream.avail_in == 0)
+            break;
+    }
+    inflateEnd(&stream);
+    return result == Z_STREAM_END ? output : QByteArray();
+}
+#endif
 // Elements whose children draw into their parent's place.
 const QSet<QString> passThrough{QStringLiteral("a"), QStringLiteral("switch"), QStringLiteral("svg")};
 
@@ -263,6 +301,8 @@ private:
         }
         object.blendMode = blendMode(source.property(element, QStringLiteral("mix-blend-mode")));
         object.isVisible = !source.isHidden(element);
+        // Inkscape's per-layer lock, from the XML editor / Layers panel.
+        object.isLocked = source.attribute(element, QStringLiteral("sodipodi:insensitive")) == QLatin1String("true");
         const auto used = [&](const char *name) {
             const QString value = source.property(element, QLatin1String(name));
             return !value.isEmpty() && value != QLatin1String("none");
@@ -442,9 +482,19 @@ private:
 
 thread_local QStringList lastWarningList;
 
-VectorDocument import(const QByteArray &svg, const QString &folder, const QString &layerName, QStringList *warnings)
+VectorDocument import(const QByteArray &svgOrGzip, const QString &folder, const QString &layerName, QStringList *warnings)
 {
     lastWarningList.clear();
+    QByteArray svg = svgOrGzip;
+    if (isGzip(svg)) {
+#ifdef OMASTRATOR_HAVE_ZLIB
+        svg = gunzip(svg);
+        if (svg.isEmpty())
+            throw FileError(QStringLiteral("This .svgz could not be decompressed."));
+#else
+        throw FileError(QStringLiteral("Reading a compressed .svgz needs zlib, which this build doesn’t have."));
+#endif
+    }
     if (!svg.contains("<svg"))
         throw FileError(QStringLiteral("This is not an SVG file."));
     QString decoded = QString::fromUtf8(svg);

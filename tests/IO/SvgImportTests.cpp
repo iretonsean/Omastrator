@@ -3,6 +3,9 @@
 #include <QDir>
 #include <QTemporaryDir>
 #include <QTest>
+#ifdef OMASTRATOR_HAVE_ZLIB
+#include <zlib.h>
+#endif
 
 class SvgImportTests : public QObject {
     Q_OBJECT
@@ -203,6 +206,35 @@ private slots:
         QCOMPARE(document.find(document.layers().front())->name, QStringLiteral("Logo Mark"));
     }
 
+#ifdef OMASTRATOR_HAVE_ZLIB
+    void svgzIsGunzippedBeforeParsing()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("compressed.svgz"));
+        const QByteArray svg = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>"
+                                "<rect width='5' height='5'/></svg>";
+        QByteArray gzip;
+        gzip.resize(svg.size() + 128);
+        z_stream stream{};
+        deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY);
+        stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(svg.constData()));
+        stream.avail_in = static_cast<uInt>(svg.size());
+        stream.next_out = reinterpret_cast<Bytef *>(gzip.data());
+        stream.avail_out = static_cast<uInt>(gzip.size());
+        QCOMPARE(deflate(&stream, Z_FINISH), Z_STREAM_END);
+        gzip.resize(static_cast<int>(stream.total_out));
+        deflateEnd(&stream);
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(gzip);
+        file.close();
+        const VectorDocument document = SvgImporter::read(path);
+        QCOMPARE(document.size, QSizeF(10, 10));
+        QCOMPARE(paths(document).size(), size_t(1));
+    }
+#endif
+
     void topLevelGroupsBecomeLayers()
     {
         const VectorDocument document = SvgImporter::parse("<svg xmlns='http://www.w3.org/2000/svg' "
@@ -229,6 +261,26 @@ private slots:
         // Shapes without an id don't take their group's.
         QCOMPARE(face[0]->name, QStringLiteral("Path"));
         QCOMPARE(face[1]->name, QStringLiteral("Path"));
+    }
+
+    void inkscapeLayerAttributesSetLockAndVisibility()
+    {
+        const VectorDocument document = SvgImporter::parse("<svg xmlns='http://www.w3.org/2000/svg' "
+            "xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' "
+            "xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd' width='100' height='100'>"
+            "<g inkscape:groupmode='layer' inkscape:label='Locked' sodipodi:insensitive='true'>"
+            "<rect width='10' height='10'/></g>"
+            "<g inkscape:groupmode='layer' inkscape:label='Hidden' style='display:none'>"
+            "<rect width='10' height='10'/></g>"
+            "<g inkscape:groupmode='layer' inkscape:label='Open'><rect width='10' height='10'/></g></svg>");
+        const std::vector<QUuid> layers = document.layers();
+        QCOMPARE(layers.size(), size_t(3));
+        QVERIFY(document.find(layers[0])->isLocked);
+        QVERIFY(document.find(layers[0])->isVisible);
+        QVERIFY(!document.find(layers[1])->isLocked);
+        QVERIFY(!document.find(layers[1])->isVisible);
+        QVERIFY(!document.find(layers[2])->isLocked);
+        QVERIFY(document.find(layers[2])->isVisible);
     }
 
     void groupOpacityStaysOnTheGroup()
