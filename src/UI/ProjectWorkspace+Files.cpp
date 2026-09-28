@@ -91,7 +91,7 @@ bool ProjectWorkspace::openFile(const QString &path)
         else if (ImageImporter::isVector(path))
             document = SvgImporter::read(path, &warnings);
         else
-            document = imageDocument(ImageImporter::read(path), QFileInfo(path).fileName());
+            document = imageDocument(ImageImporter::read(path, &warnings), QFileInfo(path).fileName());
     } catch (const FileError &error) {
         showError(QStringLiteral("Couldn’t open “%1”").arg(QFileInfo(path).fileName()), error.message());
         return false;
@@ -140,7 +140,9 @@ bool ProjectWorkspace::placeFile(const QString &path)
     const QString name = QFileInfo(path).fileName();
     try {
         if (!ImageImporter::isVector(path)) {
-            session.placeImage(ImageImporter::read(path), name);
+            QStringList warnings;
+            session.placeImage(ImageImporter::read(path, &warnings), name);
+            reportLeftOut(path, warnings);
             return true;
         }
         QStringList warnings;

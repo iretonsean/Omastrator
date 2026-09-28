@@ -1,6 +1,8 @@
 #include "IO/ImageImporter.h"
+#include "IO/ImageImporterParts.h"
 #include "Logging.h"
 #include <QColorSpace>
+#include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
 #include <QSet>
@@ -18,12 +20,33 @@ QString fileName(const QString &path)
 }
 
 namespace ImageImporter {
-QImage read(const QString &path)
+QImage read(const QString &path, QStringList *warnings)
 {
     static const bool raised = (QImageReader::setAllocationLimit(allocationLimitMB), true);
     Q_UNUSED(raised)
     if (isVector(path))
         throw FileError(QStringLiteral("“%1” is an SVG: it is placed as paths, not pixels.").arg(fileName(path)));
+
+    QFile probe(path);
+    if (probe.open(QIODevice::ReadOnly)) {
+        const QByteArray content = probe.readAll();
+        if (ImageImport::isPsd(content)) {
+            QImage image = ImageImport::readPsdComposite(content);
+            if (warnings)
+                *warnings << QStringLiteral("Layers were left out; the PSD was placed as a flattened image.");
+            qCInfo(lcIO).noquote() << "placed PSD composite" << path << image.width() << "x" << image.height();
+            return image;
+        }
+        if (ImageImport::isHeicOrAvif(content)) {
+            QImage image = ImageImport::readHeicOrAvif(path, content);
+            if (image.colorSpace().isValid() && image.colorSpace() != QColorSpace::SRgb)
+                image.convertToColorSpace(QColorSpace::SRgb);
+            image = std::move(image).convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            qCInfo(lcIO).noquote() << "placed HEIC/AVIF" << path << image.width() << "x" << image.height();
+            return image;
+        }
+    }
+
     QImageReader reader(path);
     // EXIF orientation: photos come in upright.
     reader.setAutoTransform(true);
@@ -62,11 +85,18 @@ QStringList nameFilters()
         {QStringLiteral("WebP"), {QStringLiteral("*.webp")}},
         {QStringLiteral("GIF"), {QStringLiteral("*.gif")}},
         {QStringLiteral("BMP"), {QStringLiteral("*.bmp")}},
+        {QStringLiteral("PSD"), {QStringLiteral("*.psd"), QStringLiteral("*.psb")}},
+#ifdef OMASTRATOR_HAVE_LIBHEIF
+        {QStringLiteral("HEIC"), {QStringLiteral("*.heic"), QStringLiteral("*.heif")}},
+        {QStringLiteral("AVIF"), {QStringLiteral("*.avif")}},
+#endif
     };
+    // Formats this class reads itself, not through QImageReader: always offered.
+    static const QSet<QByteArray> ownFormats{"svg", "psd", "heic", "avif"};
     QStringList all, each;
     for (const auto &[name, patterns] : known) {
         const QByteArray format = patterns.front().mid(2).toLatin1();
-        if (format != "svg" && !supported.contains(format))
+        if (!ownFormats.contains(format) && !supported.contains(format))
             continue;
         all << patterns;
         each << QStringLiteral("%1 (%2)").arg(name, patterns.join(QLatin1Char(' ')));
