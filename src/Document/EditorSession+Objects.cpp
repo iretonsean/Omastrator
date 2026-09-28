@@ -1325,11 +1325,33 @@ void EditorSession::cut()
     deleteObjects(m_selection);
 }
 
+namespace {
+EditorSession::ExternalPasteHandler &externalPasteHandler()
+{
+    static EditorSession::ExternalPasteHandler handler;
+    return handler;
+}
+}
+
+void EditorSession::setExternalPasteHandler(ExternalPasteHandler handler)
+{
+    externalPasteHandler() = std::move(handler);
+}
+
 bool EditorSession::canPaste() const
 {
     const QMimeData *data = QApplication::clipboard()->mimeData();
-    return m_document && data
-        && (data->hasFormat(QString::fromLatin1(DocumentCodec::clipboardMimeType)) || data->hasImage());
+    if (!m_document || !data)
+        return false;
+    if (data->hasFormat(QString::fromLatin1(DocumentCodec::clipboardMimeType)) || data->hasImage())
+        return true;
+    if (!externalPasteHandler())
+        return false;
+    try {
+        return externalPasteHandler()(*data).has_value();
+    } catch (...) {
+        return false;
+    }
 }
 
 void EditorSession::paste(bool inPlace)
@@ -1344,20 +1366,32 @@ void EditorSession::paste(PastePosition position)
     const QMimeData *data = QApplication::clipboard()->mimeData();
     if (!data)
         return;
-    if (!data->hasFormat(QString::fromLatin1(DocumentCodec::clipboardMimeType))) {
+    std::vector<VectorObject> objects;
+    if (data->hasFormat(QString::fromLatin1(DocumentCodec::clipboardMimeType))) {
+        try {
+            objects = DocumentCodec::decodeObjects(
+                QJsonDocument::fromJson(data->data(QString::fromLatin1(DocumentCodec::clipboardMimeType))).array());
+        } catch (const CodecError &) {
+            return;
+        }
+    } else if (externalPasteHandler()) {
+        try {
+            if (auto external = externalPasteHandler()(*data))
+                objects = std::move(*external);
+        } catch (...) {
+            return;
+        }
+    }
+    if (objects.empty()) {
         if (data->hasImage())
             placeImage(qvariant_cast<QImage>(data->imageData()), QStringLiteral("Pasted Image"));
         return;
     }
-    std::vector<VectorObject> objects;
-    try {
-        objects = DocumentCodec::decodeObjects(
-            QJsonDocument::fromJson(data->data(QString::fromLatin1(DocumentCodec::clipboardMimeType))).array());
-    } catch (const CodecError &) {
-        return;
-    }
-    if (objects.empty())
-        return;
+    pasteObjects(std::move(objects), position);
+}
+
+void EditorSession::pasteObjects(std::vector<VectorObject> objects, PastePosition position)
+{
     const double shift = position == PastePosition::offset ? 10.0 * ++m_pasteCount : 0;
     static const char *names[] = {"Paste", "Paste in Place", "Paste in Front", "Paste in Back"};
     // Front and back stack against the selection, inside its parent.
