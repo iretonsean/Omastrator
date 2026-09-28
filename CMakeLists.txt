@@ -41,6 +41,25 @@ target_include_directories(oma_core PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated
 oma_library(oma_io src/IO/*.cpp)
 target_include_directories(oma_io PRIVATE third_party)
 target_link_libraries(oma_io PUBLIC oma_core)
+# ZipReader's deflate entries (Sketch, Penpot, .fig are all zips of JSON) need zlib; without it
+# those importers still parse stored-only archives and report ordinary deflated ones unreadable.
+find_package(ZLIB)
+if(ZLIB_FOUND)
+    # PUBLIC: tests build zip fixtures with zlib directly and need OMASTRATOR_HAVE_ZLIB too.
+    target_link_libraries(oma_io PUBLIC ZLIB::ZLIB)
+    target_compile_definitions(oma_io PUBLIC OMASTRATOR_HAVE_ZLIB)
+endif()
+# HEIC/AVIF Place and Open, dynamically linked (LGPL).
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(LIBHEIF QUIET libheif)
+endif()
+if(LIBHEIF_FOUND)
+    target_link_libraries(oma_io PRIVATE ${LIBHEIF_LIBRARIES})
+    target_include_directories(oma_io PRIVATE ${LIBHEIF_INCLUDE_DIRS})
+    # PUBLIC: tests branch on whether HEIC/AVIF decoding is compiled in.
+    target_compile_definitions(oma_io PUBLIC OMASTRATOR_HAVE_LIBHEIF)
+endif()
 
 # Cloud storage through rclone: remotes, browsing, the cache and background uploads.
 oma_library(oma_cloud src/Cloud/*.cpp)
