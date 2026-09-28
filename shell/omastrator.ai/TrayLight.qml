@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "../omastrator-ui" as O
+import "../omastrator.island/OverlayLogic.js" as Logic
 
 // The tray light (docs/OS-SUITE.md): one glyph in the bar with four states.
 // A click opens the island in AI mode; there is never a second AI menu.
@@ -20,13 +21,7 @@ BarWidget {
   readonly property string statusText: {
     if (root.state === "error") return status.value("error", "")
     if (root.state === "working") return status.value("waiting", "")
-    if (root.state === "ready") {
-      var proposal = status.value("proposal", "")
-      if (proposal) return proposal + " is ready: Enter keeps it, Esc discards it"
-      var count = status.value("variations", 0)
-      if (count > 0) return count + (count === 1 ? " variation ready" : " variations ready")
-      return "Results ready in Omastrator"
-    }
+    if (root.state === "ready") return Logic.readyTooltip(status.status)
     return status.connected ? "Omastrator AI: nothing running" : "Omastrator isn't installed or can't start"
   }
 
