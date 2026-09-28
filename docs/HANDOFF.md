@@ -5,8 +5,15 @@ here" just below.**
 
 ## Next session starts here
 
-1. Ask the author whether they restarted Chromium and tried the Omastrator
-   extension's panel. Ask how "Tidy it up" felt on a drawing too.
+1. Chromium was started with the extension, and the whole path worked on the
+   real machine (2026-09-27 22:19): the extension linked,
+   `live start --tab --folder ~/Projects/seanireton.com` joined the
+   localhost:5173 tab (not a mock-up), a page screenshot came back through
+   chrome.debugger, and Stop released the tab. The screen was asleep, so
+   nobody has looked at the side panel UI or the debugging bar yet: ask the
+   author to open the panel (the toolbar button) and try Start, Cancel on the
+   bar, and Stop. The site's `npm run dev` was left running (Vite, :5173).
+   Ask how "Tidy it up" felt on a drawing too.
 2. If anything in the extension is broken, fix it first: it's the way in for
    the lift (item 4).
 3. Otherwise, go on with the queue below: **item 2, the Graphite theme**, then
