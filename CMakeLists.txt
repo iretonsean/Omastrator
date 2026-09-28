@@ -41,6 +41,22 @@ target_include_directories(oma_core PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated
 oma_library(oma_io src/IO/*.cpp)
 target_include_directories(oma_io PRIVATE third_party)
 target_link_libraries(oma_io PUBLIC oma_core)
+# ZipReader (.fig, .sketch) and the Kiwi container both use deflate; zstd is Kiwi's other
+# compression. Both are optional: without them the affected imports report a plain warning.
+find_package(ZLIB)
+if(ZLIB_FOUND)
+    target_link_libraries(oma_io PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(oma_io PRIVATE OMASTRATOR_HAVE_ZLIB)
+endif()
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(ZSTD libzstd)
+endif()
+if(ZSTD_FOUND)
+    target_include_directories(oma_io PRIVATE ${ZSTD_INCLUDE_DIRS})
+    target_link_libraries(oma_io PRIVATE ${ZSTD_LIBRARIES})
+    target_compile_definitions(oma_io PRIVATE OMASTRATOR_HAVE_ZSTD)
+endif()
 
 # Cloud storage through rclone: remotes, browsing, the cache and background uploads.
 oma_library(oma_cloud src/Cloud/*.cpp)
