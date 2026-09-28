@@ -181,3 +181,17 @@ function liftText(lift) {
     text += " " + lift.done + " of " + lift.total
   return text
 }
+
+// The tray light's tooltip (shell/omastrator.ai) when its state is "ready": `status` is the
+// whole status stream object. An overlay proposal (design mode's Ask) is kept and discarded with
+// the bar's own chips, not the keyboard, so it needs its own wording — the same one the island's
+// own activity line uses for it (Island.qml's designLine). An app-window proposal really is
+// Enter and Esc, since ContentView and AgentPanels bind those directly.
+function readyTooltip(status) {
+  var overlay = status.design && status.design.proposal
+  if (overlay) return overlay.title + " is on the overlay: Keep or Discard it in the bar"
+  if (status.proposal) return status.proposal + " is ready: Enter keeps it, Esc discards it"
+  var count = status.variations || 0
+  if (count > 0) return count + (count === 1 ? " variation ready" : " variations ready")
+  return "Results ready in Omastrator"
+}

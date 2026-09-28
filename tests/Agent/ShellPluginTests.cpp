@@ -234,6 +234,19 @@ private slots:
         QCOMPARE(call("gapAfterDrag", {gap, -40}).toInt(), 0);
         QCOMPARE(call("gapArgs", {gap, 10}).toStringList(), (QStringList{"design", "look", "gapsIn=10"}));
         QVERIFY(call("gapHandle", {QVariantMap{{"handles", false}}, QVariantList{0, 0, 10, 10}, screen}).isNull());
+
+        // The tray light's tooltip (shell/omastrator.ai/TrayLight.qml) when a result is ready: an
+        // overlay proposal is answered with the bar's own Keep and Discard, never the keyboard, so
+        // it reads differently from an app-window one, which really is Enter and Esc.
+        QCOMPARE(call("readyTooltip", {QVariantMap{{"design", QVariantMap{{"proposal", QVariantMap{{"title", "AI: Palette"}}}}},
+                                                    {"proposal", "AI: Something else"}}})
+                     .toString(),
+                 QStringLiteral("AI: Palette is on the overlay: Keep or Discard it in the bar"));
+        QCOMPARE(call("readyTooltip", {QVariantMap{{"proposal", "AI: Mock-up"}}}).toString(),
+                 QStringLiteral("AI: Mock-up is ready: Enter keeps it, Esc discards it"));
+        QCOMPARE(call("readyTooltip", {QVariantMap{{"variations", 3}}}).toString(), QStringLiteral("3 variations ready"));
+        QCOMPARE(call("readyTooltip", {QVariantMap{{"variations", 1}}}).toString(), QStringLiteral("1 variation ready"));
+        QCOMPARE(call("readyTooltip", {QVariantMap()}).toString(), QStringLiteral("Results ready in Omastrator"));
 #endif
     }
 
