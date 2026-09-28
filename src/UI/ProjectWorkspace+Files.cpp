@@ -1,5 +1,6 @@
 #include "IO/ExcalidrawImporter.h"
 #include "IO/ImageImporter.h"
+#include "IO/PenpotImporter.h"
 #include "IO/ProjectStore.h"
 #include "IO/SketchImporter.h"
 #include "IO/SvgExporter.h"
@@ -39,7 +40,12 @@ bool isSketch(const QString &path)
     return hasSuffix(path, QStringLiteral("sketch"));
 }
 
-// A format read whole (SVG, Excalidraw, Sketch), or nullopt to fall back to ImageImporter.
+bool isPenpot(const QString &path)
+{
+    return hasSuffix(path, QStringLiteral("penpot"));
+}
+
+// A format read whole (SVG, Excalidraw, Sketch, Penpot), or nullopt to fall back to ImageImporter.
 std::optional<VectorDocument> readAsDocument(const QString &path, QStringList &warnings)
 {
     if (ImageImporter::isVector(path))
@@ -48,6 +54,8 @@ std::optional<VectorDocument> readAsDocument(const QString &path, QStringList &w
         return ExcalidrawImporter::read(path, &warnings);
     if (isSketch(path))
         return SketchImporter::read(path, &warnings);
+    if (isPenpot(path))
+        return PenpotImporter::read(path, &warnings);
     return std::nullopt;
 }
 
