@@ -2,6 +2,7 @@
 #include "IO/ProjectStore.h"
 #include "IO/SvgExporter.h"
 #include "IO/SvgImporter.h"
+#include "IO/VectorFileImporter.h"
 #include "Logging.h"
 #include "UI/ExportSheet.h"
 #include "UI/ProjectWorkspace.h"
@@ -89,7 +90,7 @@ bool ProjectWorkspace::openFile(const QString &path)
         if (native)
             document = ProjectStore::read(path);
         else if (ImageImporter::isVector(path))
-            document = SvgImporter::read(path, &warnings);
+            document = VectorFileImporter::read(path, &warnings);
         else
             document = imageDocument(ImageImporter::read(path), QFileInfo(path).fileName());
     } catch (const FileError &error) {
@@ -144,7 +145,7 @@ bool ProjectWorkspace::placeFile(const QString &path)
             return true;
         }
         QStringList warnings;
-        const VectorDocument imported = SvgImporter::read(path, &warnings);
+        const VectorDocument imported = VectorFileImporter::readFirstArtboard(path, &warnings);
         reportLeftOut(path, warnings);
         session.beginEdit(QStringLiteral("Place"));
         VectorObject group;

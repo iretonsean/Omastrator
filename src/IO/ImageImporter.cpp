@@ -23,7 +23,7 @@ QImage read(const QString &path)
     static const bool raised = (QImageReader::setAllocationLimit(allocationLimitMB), true);
     Q_UNUSED(raised)
     if (isVector(path))
-        throw FileError(QStringLiteral("“%1” is an SVG: it is placed as paths, not pixels.").arg(fileName(path)));
+        throw FileError(QStringLiteral("“%1” is a vector file: it is placed as paths, not pixels.").arg(fileName(path)));
     QImageReader reader(path);
     // EXIF orientation: photos come in upright.
     reader.setAutoTransform(true);
@@ -56,6 +56,9 @@ QStringList nameFilters()
     const QList<QByteArray> supported = QImageReader::supportedImageFormats();
     const QList<std::pair<QString, QStringList>> known{
         {QStringLiteral("SVG"), {QStringLiteral("*.svg")}},
+        {QStringLiteral("PDF"), {QStringLiteral("*.pdf")}},
+        {QStringLiteral("Adobe Illustrator"), {QStringLiteral("*.ai")}},
+        {QStringLiteral("EPS"), {QStringLiteral("*.eps"), QStringLiteral("*.ps")}},
         {QStringLiteral("PNG"), {QStringLiteral("*.png")}},
         {QStringLiteral("JPEG"), {QStringLiteral("*.jpg"), QStringLiteral("*.jpeg")}},
         {QStringLiteral("TIFF"), {QStringLiteral("*.tif"), QStringLiteral("*.tiff")}},
@@ -63,10 +66,12 @@ QStringList nameFilters()
         {QStringLiteral("GIF"), {QStringLiteral("*.gif")}},
         {QStringLiteral("BMP"), {QStringLiteral("*.bmp")}},
     };
+    // Formats read by our own importers rather than a QImageReader plugin.
+    static const QSet<QByteArray> ownFormats{"svg", "pdf", "ai", "eps", "ps"};
     QStringList all, each;
     for (const auto &[name, patterns] : known) {
         const QByteArray format = patterns.front().mid(2).toLatin1();
-        if (format != "svg" && !supported.contains(format))
+        if (!ownFormats.contains(format) && !supported.contains(format))
             continue;
         all << patterns;
         each << QStringLiteral("%1 (%2)").arg(name, patterns.join(QLatin1Char(' ')));
@@ -76,6 +81,8 @@ QStringList nameFilters()
 
 bool isVector(const QString &path)
 {
-    return QFileInfo(path).suffix().compare(QLatin1String("svg"), Qt::CaseInsensitive) == 0;
+    static const QSet<QString> vectorSuffixes{QStringLiteral("svg"), QStringLiteral("pdf"), QStringLiteral("ai"), QStringLiteral("eps"),
+                                               QStringLiteral("ps")};
+    return vectorSuffixes.contains(QFileInfo(path).suffix().toLower());
 }
 }

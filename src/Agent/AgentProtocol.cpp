@@ -106,7 +106,7 @@ constexpr const char *methodTable = R"json([
    "title": {"type": "string", "description": "A short name; the undo step becomes \"AI: <title>\"."},
    "summary": {"type": "string", "description": "One or two sentences on what changed."}}}},
 {"name": "open", "group": "files",
- "description": "Opens a document, SVG or image in a new tab.",
+ "description": "Opens a document, SVG, PDF, Illustrator, EPS or image in a new tab.",
  "inputSchema": {"type": "object", "required": ["path"], "properties": {
    "path": {"type": "string"}}}},
 {"name": "save", "group": "files",
@@ -122,7 +122,7 @@ constexpr const char *methodTable = R"json([
    "quality": {"type": "integer", "minimum": 0, "maximum": 100, "description": "JPEG quality. Default 90."},
    "transparent": {"type": "boolean", "description": "PNG without the artboard's paper."}}}},
 {"name": "place", "group": "files",
- "description": "Places an image or SVG file on the artboard, into the proposal. Returns the new object's id.",
+ "description": "Places an image, SVG, PDF, Illustrator or EPS file on the artboard, into the proposal. Returns the new object's id.",
  "inputSchema": {"type": "object", "required": ["path"], "properties": {
    "path": {"type": "string"}}}},
 {"name": "show_variations", "group": "panels",
