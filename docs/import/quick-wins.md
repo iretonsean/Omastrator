@@ -36,6 +36,12 @@ importers.
   Omastrator frames, holding whatever elements name them by `frameId`), and
   `groupIds` (nested groups, innermost to outermost). Locked and opacity
   carry over. `strokeStyle` (dashed/dotted) becomes a dash pattern.
+- **tldraw (.tldr) wasn't attempted.** OPEN.md lists it explicitly as "a
+  stretch goal, for the same kinds of shapes if time allows," last in
+  priority order after Sketch, Penpot and the other quick wins. Between
+  those, this pass ran out of the time a sixth format needs to be built
+  and tested to the same standard as the rest, rather than added as a
+  shallower, less-verified afterthought.
 
 ## What doesn't
 
