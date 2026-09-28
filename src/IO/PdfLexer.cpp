@@ -197,7 +197,7 @@ Token Lexer::lex()
     if (c == '<') {
         if (m_pos + 1 < m_data.size() && m_data[m_pos + 1] == '<') {
             m_pos += 2;
-            return {TokenKind::dictStart};
+            return {TokenKind::dictStart, {}};
         }
         ++m_pos;
         return {TokenKind::string, lexHexString()};
@@ -205,18 +205,18 @@ Token Lexer::lex()
     if (c == '>') {
         if (m_pos + 1 < m_data.size() && m_data[m_pos + 1] == '>') {
             m_pos += 2;
-            return {TokenKind::dictEnd};
+            return {TokenKind::dictEnd, {}};
         }
         ++m_pos; // a stray '>' outside a hex string; skip and keep going
         return lex();
     }
     if (c == '[') {
         ++m_pos;
-        return {TokenKind::arrayStart};
+        return {TokenKind::arrayStart, {}};
     }
     if (c == ']') {
         ++m_pos;
-        return {TokenKind::arrayEnd};
+        return {TokenKind::arrayEnd, {}};
     }
     if (c == '/') {
         ++m_pos;
