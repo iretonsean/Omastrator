@@ -54,7 +54,7 @@ QString designHelp()
         "of any window, page or the desktop. Clicks still reach the apps underneath.\n\n"
         "  on [--monitor NAME] | off | toggle\n"
         "                     Start or leave design mode on the focused monitor.\n"
-        "  tool <inspect|pen|rectangle|ellipse|line|arrow|text|note>\n"
+        "  tool <point|inspect|pen|rectangle|ellipse|line|arrow|text|note>\n"
         "                     What the overlay does with the pointer. Inspect leaves\n"
         "                     it click-through; the others draw on the surface.\n"
         "  alt on|off         Hold to measure from what's hovered to the next thing.\n"
@@ -134,7 +134,7 @@ int runDesign(const QStringList &args, QTextStream &out, QTextStream &err)
         return call(QStringLiteral("design"), params, out, err, true);
     if (verb == QLatin1String("tool")) {
         if (rest.size() != 1)
-            return failed(err, QStringLiteral("Name one tool: inspect, pen, rectangle, ellipse, line, arrow, text or note."));
+            return failed(err, QStringLiteral("Name one tool: point, inspect, pen, rectangle, ellipse, line, arrow, text or note."));
         params["tool"] = rest[0];
     } else if (verb == QLatin1String("alt")) {
         params["on"] = rest.value(0) != QLatin1String("off");

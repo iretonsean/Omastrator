@@ -124,6 +124,8 @@ private slots:
         App app;
         QVERIFY(!app.window.isVisible());
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         QVERIFY(app.design().mode().isOn());
         QCOMPARE(Island::read().mode, QStringLiteral("design"));
         // The first run asks about the designer's work, plainly saying what stays local.
@@ -202,12 +204,14 @@ private slots:
 
         // Reset is the escape hatch from any state: drawing, with art up, design mode on.
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.call(QStringLiteral("tool"), {{"tool", "rectangle"}});
         app.call(QStringLiteral("draw"), {{"tool", "rectangle"}, {"points", QJsonArray{QJsonArray{200, 150}, QJsonArray{400, 250}}}});
         QVERIFY(!overlays.surfaces().isEmpty());
         app.call(QStringLiteral("reset"));
         QVERIFY(!app.design().mode().isOn());
-        QCOMPARE(app.status()["tool"].toString(), QStringLiteral("inspect"));
+        QCOMPARE(app.status()["tool"].toString(), QStringLiteral("point"));
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
         QVERIFY(overlays.surfaces().isEmpty());
         // Undo brings the drawings back.
@@ -219,6 +223,8 @@ private slots:
     {
         App app;
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.call(QStringLiteral("draw"), {{"tool", "arrow"}, {"points", QJsonArray{QJsonArray{150, 100}, QJsonArray{300, 100}}}});
         const QString time = QTime::currentTime().toString(QStringLiteral("HH:mm"));
         // To the Desk: a frame with the window's screenshot and the art, labelled with where it came from.
@@ -290,6 +296,8 @@ private slots:
     {
         App app;
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.call(QStringLiteral("onboarding"), {{"finish", false}});
         const QJsonObject tree{{"root", QJsonObject{{"role", "frame"}, {"name", "Terminal"}, {"rect", QJsonArray{0, 0, 800, 600}},
                                                    {"children", QJsonArray{QJsonObject{{"role", "label"}, {"rect", QJsonArray{10, 10, 200, 20}},
@@ -369,6 +377,8 @@ private slots:
     {
         App app;
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.call(QStringLiteral("onboarding"), {{"finish", true}});
         // A page stands in for Omastrator's browser: the web inspector answers for the terminal's pid.
         app.design().mode().webPage = [](const Hyprland::Window &, QPoint) -> std::optional<QJsonObject> {
@@ -417,6 +427,8 @@ private slots:
     {
         App app;
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.desktop->pointer = QPoint(300, 300);
         app.design().mode().poll();
         auto first = [&] { return app.status()["bar"].toObject()["suggestions"].toArray().first().toObject()["id"].toString(); };
@@ -437,6 +449,8 @@ private slots:
         // It doesn't open by itself again; the island's help opens it.
         app.call(QStringLiteral("off"));
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         QVERIFY(!app.status()["onboarding"].toObject()["open"].toBool());
         app.call(QStringLiteral("onboarding"), {{"open", true}});
         QVERIFY(app.status()["onboarding"].toObject()["open"].toBool());
@@ -450,6 +464,8 @@ private slots:
         App app;
         QCOMPARE(app.bridge().startServer(m_directory.filePath(QStringLiteral("ask.sock"))), QString());
         app.call(QStringLiteral("on"));
+        // Hover only inspects with Inspect chosen; design mode starts on Point.
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.desktop->pointer = QPoint(300, 300);
         app.design().mode().poll();
         const int target = app.status()["bar"].toObject()["target"].toInt();

@@ -29,7 +29,8 @@ public:
     void setOn(bool on, const QString &monitor = QString());
     QString monitor() const { return m_monitor; }
 
-    // "inspect" (hover only, click-through) or a drawing tool the overlay takes the pointer for.
+    // "point" (click-through, inspects nothing; where design mode starts), "inspect" (hover, click-through),
+    // or a drawing tool the overlay takes the pointer for.
     static const QStringList &tools();
     QString tool() const { return m_tool; }
     // Returns why it can't, or empty.
@@ -79,7 +80,7 @@ private:
     DesktopSource &m_source;
     bool m_on = false;
     QString m_monitor;
-    QString m_tool = QStringLiteral("inspect");
+    QString m_tool = QStringLiteral("point");
     QTimer m_timer;
     QFileSystemWatcher m_watcher;
     std::vector<Hyprland::Window> m_windows;

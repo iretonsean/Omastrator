@@ -213,7 +213,7 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
 QString DesignController::draw(const QJsonObject &params, QJsonObject &result)
 {
     const QString tool = params["tool"].toString(m_mode->tool());
-    if (tool == QLatin1String("inspect") || !DesignMode::tools().contains(tool))
+    if (tool == QLatin1String("inspect") || tool == QLatin1String("point") || !DesignMode::tools().contains(tool))
         return QStringLiteral("Draw with pen, rectangle, ellipse, line, arrow, text or note.");
     OverlayStore::Stroke stroke;
     stroke.tool = tool;

@@ -239,6 +239,7 @@ private slots:
         qputenv("OMASTRATOR_SOCKET", (desktop.home() + QStringLiteral("/runtime/app.sock")).toUtf8());
         App app;
         app.call(QStringLiteral("on"), {});
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.call(QStringLiteral("onboarding"), {{"finish", false}});
         app.desktop->pointer = QPoint(40, 10);
         app.design().mode().poll();
@@ -306,6 +307,7 @@ private slots:
             return described;
         };
         app.call(QStringLiteral("on"), {});
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
         app.call(QStringLiteral("onboarding"), {{"finish", false}});
         app.desktop->pointer = QPoint(300, 300);
         app.design().mode().poll();

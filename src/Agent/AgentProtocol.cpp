@@ -236,7 +236,7 @@ constexpr const char *methodTable = R"json([
                                          "action", "ask", "keep", "discard", "send", "undo", "redo", "clear", "onboarding", "desk",
                                          "lift", "look", "restyle", "reset"]},
    "monitor": {"type": "string", "description": "on, toggle: the monitor; default the focused one."},
-   "tool": {"type": "string", "enum": ["inspect", "pen", "rectangle", "ellipse", "line", "arrow", "text", "note"]},
+   "tool": {"type": "string", "enum": ["point", "inspect", "pen", "rectangle", "ellipse", "line", "arrow", "text", "note"]},
    "on": {"type": "boolean", "description": "alt: whether Alt is held. measure: start or stop measuring."},
    "target": {"type": "integer", "description": "An inspection's id from the status, for select, measure, action, ask and send."},
    "surface": {"type": "string", "description": "A surface's key (web:…, window:…, desktop:…) for selectArt, clear and send."},

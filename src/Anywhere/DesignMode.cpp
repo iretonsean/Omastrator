@@ -31,7 +31,7 @@ DesignMode::DesignMode(DesktopSource &source, QObject *parent) : QObject(parent)
 
 const QStringList &DesignMode::tools()
 {
-    static const QStringList all{QStringLiteral("inspect"), QStringLiteral("pen"),  QStringLiteral("rectangle"), QStringLiteral("ellipse"),
+    static const QStringList all{QStringLiteral("point"), QStringLiteral("inspect"), QStringLiteral("pen"),  QStringLiteral("rectangle"), QStringLiteral("ellipse"),
                                  QStringLiteral("line"),    QStringLiteral("arrow"), QStringLiteral("text"),     QStringLiteral("note")};
     return all;
 }
@@ -79,7 +79,7 @@ void DesignMode::setOn(bool on, const QString &monitor)
         Island::holdDesignKeys();
     } else {
         m_timer.stop();
-        m_tool = QStringLiteral("inspect");
+        m_tool = QStringLiteral("point");
         Island::resetKeys();
     }
     // The island's mode is the switch the hotkey, the island and Esc all flip.
@@ -100,6 +100,8 @@ QString DesignMode::setTool(const QString &tool)
     if (tool == m_tool)
         return {};
     m_tool = tool;
+    // The next poll reads what's under a resting pointer at once, instead of waiting for it to move.
+    m_cursor.reset();
     emit changed();
     return {};
 }
@@ -139,6 +141,14 @@ void DesignMode::pollOnce()
     const auto monitor = Hyprland::monitorNamed(m_monitor, m_monitors);
     if (monitor && !monitor->rect.contains(*cursor)) {
         // Design mode covers its own monitor only.
+        if (m_hover) {
+            m_hover.reset();
+            emit changed();
+        }
+        return;
+    }
+    // Point, design mode's resting tool, inspects nothing until Alt measures: no outlines, no bar.
+    if (m_tool == QLatin1String("point") && !m_alt) {
         if (m_hover) {
             m_hover.reset();
             emit changed();

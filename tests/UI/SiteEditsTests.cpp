@@ -350,6 +350,7 @@ private slots:
         QJsonObject result;
         design.run(QStringLiteral("onboarding"), {{"finish", false}}, result);
         design.run(QStringLiteral("on"), {}, result);
+        design.run(QStringLiteral("tool"), {{"tool", "inspect"}}, result);
         // A settings window lifted from its accessibility tree, then a note drawn beside it.
         desktop->trees.insert(4242, QJsonObject{{"root", QJsonObject{{"role", "frame"}, {"name", "Settings"}, {"rect", QJsonArray{0, 0, 800, 600}},
                                                                      {"children", QJsonArray{QJsonObject{{"role", "push button"}, {"name", "Save"},
@@ -397,6 +398,7 @@ private slots:
         QJsonObject result;
         design.run(QStringLiteral("onboarding"), {{"finish", false}}, result);
         design.run(QStringLiteral("on"), {}, result);
+        design.run(QStringLiteral("tool"), {{"tool", "inspect"}}, result);
 
         // The heading, lifted onto the overlay from the page.
         desktop->pointer = QPoint(40, 60);

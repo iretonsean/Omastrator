@@ -38,7 +38,8 @@ private slots:
         QTRY_VERIFY(mode.isOn());
         QCOMPARE(toggled.count(), 1);
         QCOMPARE(mode.monitor(), QStringLiteral("DP-1"));
-        QCOMPARE(mode.tool(), QStringLiteral("inspect"));
+        // It starts on Point: nothing is inspected until Inspect is chosen.
+        QCOMPARE(mode.tool(), QStringLiteral("point"));
         // Esc (design off) sets it back; so does anything that turns it off here.
         mode.setOn(false);
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
@@ -61,8 +62,8 @@ private slots:
         QVERIFY(mode.setTool(QStringLiteral("shapeBuilder")).contains(QLatin1String("inspect")));
         mode.setOn(true);
         mode.setOn(false);
-        // Leaving puts the pointer back to inspecting, so the overlay is click-through next time.
-        QCOMPARE(mode.tool(), QStringLiteral("inspect"));
+        // Leaving puts the pointer back to Point, so the overlay is click-through and quiet next time.
+        QCOMPARE(mode.tool(), QStringLiteral("point"));
     }
 
     void hoverInspectsTheWindowThenItsAccessibleElementOnceThePointerRests()
@@ -73,6 +74,11 @@ private slots:
         desktop.accessibility.insert(200, QJsonObject{{"role", "push button"}, {"name", "Equals"}, {"rect", QJsonArray{300, 400, 80, 40}}});
         DesignMode mode(desktop);
         mode.setOn(true);
+        // Point, where design mode starts, inspects nothing; Inspect does.
+        desktop.pointer = QPoint(1350, 520);
+        mode.poll();
+        QVERIFY(!mode.hover());
+        mode.setTool(QStringLiteral("inspect"));
         QSignalSpy changed(&mode, &DesignMode::changed);
 
         desktop.pointer = QPoint(1350, 520);
@@ -116,6 +122,7 @@ private slots:
         FakeDesktop desktop;
         DesignMode mode(desktop);
         mode.setOn(true);
+        mode.setTool(QStringLiteral("inspect"));
         desktop.pointer = QPoint(500, 500);
         mode.poll();
         QCOMPARE(mode.hover()->source, QStringLiteral("screen"));
@@ -135,6 +142,7 @@ private slots:
         desktop.addWindow(QStringLiteral("thunar"), QRect(900, 0, 600, 600), 101);
         DesignMode mode(desktop);
         mode.setOn(true);
+        mode.setTool(QStringLiteral("inspect"));
         desktop.pointer = QPoint(100, 100);
         mode.poll();
         const int foot = mode.hover()->id;

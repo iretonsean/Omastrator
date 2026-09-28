@@ -24,7 +24,7 @@ Item {
   // Design mode everywhere (docs/ANYWHERE.md): the click-through overlay on every monitor.
   Overlay { status: status; islandWidth: root.pillWidth; islandHeight: root.pillHeight }
 
-  readonly property string designTool: (status.value("design", {}) || {}).tool || "inspect"
+  readonly property string designTool: (status.value("design", {}) || {}).tool || "point"
 
   readonly property string mode: status.value("mode", "normal")
   readonly property bool expanded: status.value("expanded", false)
@@ -92,13 +92,14 @@ Item {
       { id: "stop", tip: "Stop Live", runningOnly: true }
     ],
     design: [
-      { id: "inspect", tip: "Inspect: point at anything for its size, colours and font; Alt measures. Clicks still reach the app" },
+      { id: "point", icon: "select", tip: "Point: clicks go to the apps and nothing is inspected; hold Alt to measure" },
       { id: "pen", icon: "pencil", tip: "Pen: draw freehand on the window or page under it" },
       { id: "rectangle", tip: "Rectangle" },
       { id: "ellipse", tip: "Ellipse" },
       { id: "arrow", tip: "Arrow" },
       { id: "text", tip: "Text: click, type, then Enter" },
       { id: "note", tip: "Note: click or drag, type, then Enter" },
+      { id: "inspect", tip: "Inspect: point at anything for its size, colours and font; Alt measures. Clicks still reach the app" },
       { id: "undoArt", icon: "undo", tip: "Undo on the overlay" },
       { id: "clearArt", icon: "clear", tip: "Clear drawings: take everything drawn off every window" },
       { id: "desk", tip: "The Desk: everything sent from any surface" },

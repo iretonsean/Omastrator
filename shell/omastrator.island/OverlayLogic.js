@@ -9,10 +9,15 @@
 //   "none"   nothing: every click reaches the apps underneath (the default)
 //   "panels" only the floating bar and the cards on show
 //   "full"   the whole monitor, while a drawing tool is chosen
+// Point and Inspect leave the pointer to the apps; every other tool draws.
+function isDrawingTool(tool) {
+  return !!tool && tool !== "point" && tool !== "inspect"
+}
+
 function maskMode(design, screen, panelsShown) {
   if (!design || !design.on || design.monitor !== screen.name)
     return "none"
-  if (design.tool && design.tool !== "inspect")
+  if (isDrawingTool(design.tool))
     return "full"
   return panelsShown ? "panels" : "none"
 }
@@ -32,7 +37,7 @@ function islandHole(screen, pillWidth, pillHeight, gapsOut) {
 function wantsKeyboard(design, screen, typing) {
   if (!design || !design.on || design.monitor !== screen.name)
     return false
-  return !!typing || (!!design.tool && design.tool !== "inspect")
+  return !!typing || isDrawingTool(design.tool)
 }
 
 // A layout rectangle in the overlay's own coordinates on `screen`.

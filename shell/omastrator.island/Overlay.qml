@@ -31,7 +31,7 @@ Item {
   readonly property var proposal: design.proposal || null
   // Where a proposal waits when the floating bar isn't up: the design monitor, else the first.
   readonly property string proposalScreen: design.monitor || (Quickshell.screens.length ? Quickshell.screens[0].name : "")
-  readonly property string tool: design.tool || "inspect"
+  readonly property string tool: design.tool || "point"
   readonly property var lifting: design.lift || null
   readonly property var look: design.look || null
 
@@ -128,7 +128,7 @@ Item {
       required property var modelData
       readonly property var place: root.placeOf(modelData)
       readonly property bool mine: root.on && root.design.monitor === modelData.name
-      readonly property bool drawing: mine && root.tool !== "inspect"
+      readonly property bool drawing: mine && Logic.isDrawingTool(root.tool)
       readonly property bool panelsShown: barCard.visible || onboardingCard.visible || detailCard.visible || typing.visible || gapGrip.visible
       readonly property string maskMode: Logic.maskMode(root.design, place, panelsShown)
       readonly property var myArt: root.overlays.filter(function (each) { return each.monitor === window.modelData.name })

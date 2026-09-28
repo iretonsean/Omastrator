@@ -249,6 +249,7 @@ private slots:
             return live.evaluate(Inspect::webScript(point, window.rect.size())).toObject();
         };
         mode.setOn(true);
+        mode.setTool(QStringLiteral("inspect"));
         desktop.pointer = QPoint(500 + 100, 100 + 80);
         mode.poll();
         QVERIFY(mode.hover());
