@@ -4,6 +4,7 @@
 #include "Agent/Island.h"
 #include "Logging.h"
 #include "UI/DesignController.h"
+#include "UI/FigmaPasteHandler.h"
 #include "UI/OmarchyTheme.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/ProjectWorkspaceView.h"
@@ -53,6 +54,8 @@ int main(int argc, char **argv)
     OmarchyTheme theme;
     // Slider knobs snap to a click on the track.
     SliderSnap::install();
+    // Edit ▸ Paste recognises Figma's clipboard data ahead of plain images (docs/import/figma.md).
+    FigmaPasteHandler::install();
     ProjectWorkspace workspace;
     ProjectWorkspaceView window(workspace);
     // Agents reach the open document here; a second Omastrator reports why it can't in Help ▸ Connect an Agent….
