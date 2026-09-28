@@ -1,2 +1,9 @@
 build*/
 .claude/
+# makepkg's working files and output, from testing the AUR PKGBUILDs locally.
+packaging/aur/*/src/
+packaging/aur/*/pkg/
+packaging/aur/*/*.pkg.tar.*
+packaging/aur/*/*.log
+# makepkg's local mirror of a VCS source, named after the package (omastrator-git's own PKGBUILD).
+packaging/aur/omastrator-git/omastrator-git/
