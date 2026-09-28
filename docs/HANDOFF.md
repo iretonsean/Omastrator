@@ -11,14 +11,13 @@ suites pass). It's stacked on `feat/graphite-look`, which is stacked on
 
 - **Installed:** the app, from `feat/frames` at 0b8bbb3, in ~/.local. The shell
   plugins are synced too (the author ran `omarchy restart shell` at 08:01).
-- **Not restarted:** the background daemon, which is also the app window the
-  author works in, still runs the build from 23:30.
-  - Restart it only when the author says so, since it closes their open
-    window: find it with `pgrep -x omastrator -a`, kill that PID, and start it
-    with `systemd-run --user … omastrator --daemon`.
-  - Never use `pkill -f 'omastrator --daemon'`: it matches and kills its own
-    shell.
-  - Until the restart, Name with AI (below) isn't in the running app.
+- **The daemon** (the app window the author works in) was restarted on the
+  08:15 build at the author's OK (08:30), so Name with AI is live.
+  - For later restarts: find it with `pgrep -x omastrator -a`, kill that PID,
+    and start it with `systemd-run --user … omastrator --daemon`. Ask first
+    when the author is at the Mac.
+  - Never `pkill -f` a pattern that's in your own command line: it kills your
+    own shell.
 - **Done this morning:**
   - The floating bar's Ask took no keys: typing P picked the Pen underneath.
     The overlay now claims the keyboard on the click (`window.asking` in
