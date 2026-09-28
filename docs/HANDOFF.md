@@ -13,8 +13,9 @@ the dense Properties panel.
 
 ### Your job: an animation, from a clean slate
 
-Read **`docs/ANIMATION-BRIEF.md`** and follow it. The author wants an
-animation designed from scratch. Earlier animations are deliberately off
+Read **`docs/ANIMATION-BRIEF.md`** and follow it. The author wants a promo
+animation designed from scratch, and it starts with you interviewing them
+as a newly hired designer. Earlier animations are deliberately off
 limits: don't open `media/promo/`, the `wip/promo-*` branches, or the
 promo notes further down this file.
 
