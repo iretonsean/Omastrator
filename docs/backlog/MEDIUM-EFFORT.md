@@ -1,5 +1,9 @@
 # Medium effort (2026-09-28)
 
+**On hold (the author, 2026-09-28):** this list is here for the record.
+Don't start any of it until the author says so. The next session's queue
+ends with item 9 in QUICK-WINS.md.
+
 Features that take an agent a few days each. They touch the document model
 or the renderer, or add a panel. The order is roughly value for effort.
 Demand figures come from docs/research/unbuilt-features-2026-09.md and the

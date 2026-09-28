@@ -50,7 +50,7 @@ their panes are closed. Their session IDs are in
    yet.** Ask before building. It's built in phases on `feat/effects` after
    the merge.
 4. **Browser View and canvas workspaces:** now item 9 of the quick-win queue (above).
-5. **After that:** pick from `docs/backlog/MEDIUM-EFFORT.md`, where spell check, Pages and image fills lead.
+5. **Then stop.** `docs/backlog/MEDIUM-EFFORT.md` is **on hold**: it's noted for later, and the author will say when to start it.
 6. **The author's own steps:**
    - publish to the AUR and cut the first tagged release, per
      docs/RELEASING.md;
