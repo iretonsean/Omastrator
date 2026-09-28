@@ -27,12 +27,27 @@ QRectF shapeRect(const QJsonObject &shape)
 
 // Rotates the shape's own box about its centre; Penpot's x/y/width/height
 // are always the unrotated bounding box, rotation degrees about its middle.
+// Places a shape whose geometry is built in local (0,0)-(w,h) space (rect,
+// circle, frame, text, image) at its own absolute position.
 QTransform shapeTransform(const QRectF &rect, double rotationDegrees)
 {
     QTransform t;
     t.translate(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
     t.rotate(rotationDegrees);
     t.translate(-rect.width() / 2, -rect.height() / 2);
+    return t;
+}
+
+// Rotation only, no translation: for path/bool content, whose points are
+// already absolute page coordinates and so need no repositioning, only
+// rotation about the shape's own centre.
+QTransform rotateAboutCenter(const QRectF &rect, double rotationDegrees)
+{
+    QTransform t;
+    const QPointF center = rect.center();
+    t.translate(center.x(), center.y());
+    t.rotate(rotationDegrees);
+    t.translate(-center.x(), -center.y());
     return t;
 }
 
@@ -106,6 +121,25 @@ public:
         for (int p = 0; p < int(pages.size()); ++p)
             buildPage(pages[size_t(p)], pagesPrefix, p, orderedArtboards);
 
+        // A component copy can be built before, or on an earlier page than,
+        // the main component it refers to (unlike Sketch's symbolMasters, a
+        // Penpot main component is an ordinary shape anywhere in the tree, so
+        // there's no single "build these first" pass to make this moot).
+        // Resolved now that every page's shapes are built and builtByShapeID
+        // is complete.
+        for (const auto &[objectID, componentID] : pendingInstances) {
+            VectorObject *object = document.find(objectID);
+            if (!object || !object->instance)
+                continue;
+            const QUuid master = builtByShapeID.value(componentID);
+            if (master.isNull()) {
+                warnings << QStringLiteral("A component instance's original component wasn't found in this file; it stayed a plain group.");
+                object->instance.reset();
+            } else {
+                object->instance->master = master;
+            }
+        }
+
         std::stable_sort(orderedArtboards.begin(), orderedArtboards.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
         std::vector<Artboard> finalArtboards;
         for (auto &entry : orderedArtboards)
@@ -115,6 +149,8 @@ public:
     }
 
 private:
+    // (instance object id, its Penpot componentId) for a deferred final resolve.
+    std::vector<std::pair<QUuid, QString>> pendingInstances;
     QHash<QString, QUuid> builtByShapeID;
 
     QUuid add(VectorObject object, const QUuid &parent, const QString &shapeID)
@@ -188,7 +224,7 @@ private:
                 const QRectF rect = shapeRect(shape);
                 looseBounds = looseBounds.isNull() ? rect : looseBounds.united(rect);
             }
-            buildItem(shape, shapes, layerID, QTransform());
+            buildItem(shape, shapes, layerID);
         }
         if (!looseBounds.isNull() || frameCount == 0) {
             Artboard board;
@@ -212,33 +248,36 @@ private:
         return board;
     }
 
-    void buildChildren(const QJsonArray &childIDs, const QHash<QString, QJsonObject> &shapes, const QUuid &parent, const QTransform &ctm)
+    void buildChildren(const QJsonArray &childIDs, const QHash<QString, QJsonObject> &shapes, const QUuid &parent)
     {
         for (const QJsonValue &value : childIDs) {
             const QJsonObject child = shapes.value(value.toString());
             if (!child.isEmpty())
-                buildItem(child, shapes, parent, ctm);
+                buildItem(child, shapes, parent);
         }
     }
 
-    void buildItem(const QJsonObject &shape, const QHash<QString, QJsonObject> &shapes, const QUuid &parent, const QTransform &parentCTM)
+    // No parent transform is composed in here: every shape's x/y/width/height
+    // are its own absolute page position regardless of nesting (confirmed from
+    // source, see docs/import/penpot.md), so each build* function below places
+    // itself from its own rect and rotation alone.
+    void buildItem(const QJsonObject &shape, const QHash<QString, QJsonObject> &shapes, const QUuid &parent)
     {
         const QString type = shape.value(QStringLiteral("type")).toString();
-        const QTransform ctm = shapeTransform(shapeRect(shape), shape.value(QStringLiteral("rotation")).toDouble(0)) * parentCTM;
         if (type == QLatin1String("frame"))
-            buildFrame(shape, shapes, parent, ctm);
+            buildFrame(shape, shapes, parent);
         else if (type == QLatin1String("group"))
-            buildGroup(shape, shapes, parent, ctm);
+            buildGroup(shape, shapes, parent);
         else if (type == QLatin1String("rect"))
-            buildRect(shape, parent, ctm);
+            buildRect(shape, parent);
         else if (type == QLatin1String("circle"))
-            buildCircle(shape, parent, ctm);
+            buildCircle(shape, parent);
         else if (type == QLatin1String("path") || type == QLatin1String("bool"))
-            buildPath(shape, parent, ctm);
+            buildPath(shape, parent);
         else if (type == QLatin1String("text"))
-            buildText(shape, parent, ctm);
+            buildText(shape, parent);
         else if (type == QLatin1String("image"))
-            buildImage(shape, parent, ctm);
+            buildImage(shape, parent);
         else if (type == QLatin1String("svg-raw"))
             warnings << QStringLiteral("Embedded raw SVG content was left out.");
         else if (!type.isEmpty())
@@ -254,17 +293,18 @@ private:
             info.set = object.name;
             object.component = info;
         } else if (!componentID.isEmpty()) {
+            // The master may not be built yet (a different page, or later in this
+            // one): resolved for real once every shape exists, in build().
             InstanceInfo info;
             info.master = builtByShapeID.value(componentID);
-            if (info.master.isNull())
-                warnings << QStringLiteral("A component instance's original component wasn't found in this file; it stayed a plain group.");
-            else
-                object.instance = info;
+            object.instance = info;
+            pendingInstances.push_back({object.id, componentID});
         }
     }
 
-    void buildFrame(const QJsonObject &shape, const QHash<QString, QJsonObject> &shapes, const QUuid &parent, const QTransform &ctm)
+    void buildFrame(const QJsonObject &shape, const QHash<QString, QJsonObject> &shapes, const QUuid &parent)
     {
+        const QTransform ctm = shapeTransform(shapeRect(shape), shape.value(QStringLiteral("rotation")).toDouble(0));
         LiveRectangle live = PenpotImport::rectangleShape(shape, shapeRect(shape).size());
         live.placement = ctm;
         VectorObject object;
@@ -284,21 +324,22 @@ private:
             warnings << QStringLiteral("Grid layout was left out; its content kept its absolute position.");
         applyComponent(shape, object);
         const QUuid id = add(std::move(object), parent, shape.value(QStringLiteral("id")).toString());
-        buildChildren(shape.value(QStringLiteral("shapes")).toArray(), shapes, id, ctm);
+        buildChildren(shape.value(QStringLiteral("shapes")).toArray(), shapes, id);
     }
 
-    void buildGroup(const QJsonObject &shape, const QHash<QString, QJsonObject> &shapes, const QUuid &parent, const QTransform &ctm)
+    void buildGroup(const QJsonObject &shape, const QHash<QString, QJsonObject> &shapes, const QUuid &parent)
     {
         VectorObject object;
         object.kind = ObjectKind::group;
         describeCommon(shape, object);
         applyComponent(shape, object);
         const QUuid id = add(std::move(object), parent, shape.value(QStringLiteral("id")).toString());
-        buildChildren(shape.value(QStringLiteral("shapes")).toArray(), shapes, id, ctm);
+        buildChildren(shape.value(QStringLiteral("shapes")).toArray(), shapes, id);
     }
 
-    void buildRect(const QJsonObject &shape, const QUuid &parent, const QTransform &ctm)
+    void buildRect(const QJsonObject &shape, const QUuid &parent)
     {
+        const QTransform ctm = shapeTransform(shapeRect(shape), shape.value(QStringLiteral("rotation")).toDouble(0));
         LiveRectangle live = PenpotImport::rectangleShape(shape, shapeRect(shape).size());
         live.placement = ctm;
         VectorObject object;
@@ -310,8 +351,9 @@ private:
         add(std::move(object), parent, shape.value(QStringLiteral("id")).toString());
     }
 
-    void buildCircle(const QJsonObject &shape, const QUuid &parent, const QTransform &ctm)
+    void buildCircle(const QJsonObject &shape, const QUuid &parent)
     {
+        const QTransform ctm = shapeTransform(shapeRect(shape), shape.value(QStringLiteral("rotation")).toDouble(0));
         VectorObject object;
         object.kind = ObjectKind::path;
         describeCommon(shape, object);
@@ -320,20 +362,22 @@ private:
         add(std::move(object), parent, shape.value(QStringLiteral("id")).toString());
     }
 
-    void buildPath(const QJsonObject &shape, const QUuid &parent, const QTransform &ctm)
+    void buildPath(const QJsonObject &shape, const QUuid &parent)
     {
+        // Rotation only: the content's points are already absolute page
+        // coordinates, so (unlike rect/circle) they need no repositioning.
+        const QTransform ctm = rotateAboutCenter(shapeRect(shape), shape.value(QStringLiteral("rotation")).toDouble(0));
         VectorObject object;
         object.kind = ObjectKind::path;
         describeCommon(shape, object);
-        // Absolute page coordinates already: no shape-local transform to bake in
-        // beyond `ctm`, which for a plain (unrotated) path is the identity.
         object.path = PenpotImport::contentGeometry(shape.value(QStringLiteral("content")).toArray()).transformed(ctm);
         PenpotImport::applyStyle(shape, object, warnings);
         add(std::move(object), parent, shape.value(QStringLiteral("id")).toString());
     }
 
-    void buildText(const QJsonObject &shape, const QUuid &parent, const QTransform &ctm)
+    void buildText(const QJsonObject &shape, const QUuid &parent)
     {
+        const QTransform ctm = shapeTransform(shapeRect(shape), shape.value(QStringLiteral("rotation")).toDouble(0));
         VectorObject object;
         object.kind = ObjectKind::text;
         describeCommon(shape, object);
@@ -344,9 +388,10 @@ private:
         add(std::move(object), parent, shape.value(QStringLiteral("id")).toString());
     }
 
-    void buildImage(const QJsonObject &shape, const QUuid &parent, const QTransform &ctm)
+    void buildImage(const QJsonObject &shape, const QUuid &parent)
     {
         const QRectF rect = shapeRect(shape);
+        const QTransform ctm = shapeTransform(rect, shape.value(QStringLiteral("rotation")).toDouble(0));
         const QString mediaID = shape.value(QStringLiteral("metadata")).toObject().value(QStringLiteral("id")).toString();
         QImage image;
         bool found = false;

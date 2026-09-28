@@ -236,6 +236,43 @@ private slots:
         QCOMPARE(blob->path.nodeCount(), 3);
     }
 
+    void pathContentIsAlreadyAbsoluteNotRelativeToTheShapesOwnXY()
+    {
+        // The shape's own x/y (340,30) must NOT be added again on top of the
+        // content's own absolute points, which already include that offset.
+        const QString id = newID();
+        QJsonObject path = baseShape(id, "path", 340, 30, 90, 90);
+        path["name"] = "Triangle";
+        path["content"] = QJsonArray{QJsonObject{{"command", "move-to"}, {"params", QJsonObject{{"x", 385}, {"y", 30}}}},
+                                      QJsonObject{{"command", "line-to"}, {"params", QJsonObject{{"x", 430}, {"y", 120}}}},
+                                      QJsonObject{{"command", "line-to"}, {"params", QJsonObject{{"x", 340}, {"y", 120}}}},
+                                      QJsonObject{{"command", "close-path"}, {"params", QJsonObject()}}};
+        path["fills"] = QJsonArray{solidFill("#f59f00")};
+        const VectorDocument document = PenpotImporter::parse(penpotFile({path}, {id}));
+        const VectorObject *triangle = named(document, QStringLiteral("Triangle"));
+        QVERIFY(triangle);
+        QCOMPARE(triangle->path.bounds(), QRectF(340, 30, 90, 90));
+    }
+
+    void nestedShapeKeepsItsOwnAbsolutePosition()
+    {
+        // A board's child carries its own absolute page position too, not one
+        // relative to the board -- the same "no parent composition" rule.
+        const QString boardID = newID(), childID = newID();
+        QJsonObject board = baseShape(boardID, "frame", 100, 100, 200, 200);
+        board["name"] = "Board";
+        board["shapes"] = QJsonArray{childID};
+        QJsonObject child = baseShape(childID, "rect", 150, 160, 40, 40);
+        child["name"] = "Child";
+        child["parentId"] = boardID;
+        child["frameId"] = boardID;
+
+        const VectorDocument document = PenpotImporter::parse(penpotFile({board, child}, {boardID}));
+        const VectorObject *node = named(document, QStringLiteral("Child"));
+        QVERIFY(node);
+        QCOMPARE(node->path.bounds(), QRectF(150, 160, 40, 40));
+    }
+
     void boolShapeUsesItsOwnContentNotItsChildren()
     {
         const QString boolID = newID(), childID = newID();
@@ -343,6 +380,33 @@ private slots:
         // Each keeps the geometry the file gave it (no Components::sync() rebuild).
         QCOMPARE(card->path.bounds(), QRectF(0, 0, 80, 40));
         QCOMPARE(copy->path.bounds(), QRectF(200, 0, 80, 40));
+    }
+
+    void instanceBeforeItsComponentStillResolves()
+    {
+        // The copy is listed, and so built, before the main component that
+        // defines it -- plausible in a real file (z-order, or a component on
+        // a later page), unlike componentRootAndInstanceKeepTheirOwnGeometry
+        // above where the master happens to build first.
+        const QString mainID = newID(), instanceID = newID();
+        QJsonObject main = baseShape(mainID, "frame", 0, 0, 80, 40);
+        main["name"] = "Card";
+        main["componentRoot"] = true;
+        main["mainInstance"] = true;
+        main["componentId"] = mainID;
+        main["shapes"] = QJsonArray();
+
+        QJsonObject instance = baseShape(instanceID, "frame", 200, 0, 80, 40);
+        instance["name"] = "Card Copy";
+        instance["componentId"] = mainID;
+        instance["shapes"] = QJsonArray();
+
+        const VectorDocument document = PenpotImporter::parse(penpotFile({main, instance}, {instanceID, mainID}));
+        const VectorObject *card = named(document, QStringLiteral("Card"));
+        const VectorObject *copy = named(document, QStringLiteral("Card Copy"));
+        QVERIFY(card && copy);
+        QVERIFY(copy->instance.has_value());
+        QCOMPARE(copy->instance->master, card->id);
     }
 
     void missingManifestIsAFileError() { QVERIFY_THROWS_EXCEPTION(FileError, PenpotImporter::parse(QByteArrayLiteral("not a zip"))); }

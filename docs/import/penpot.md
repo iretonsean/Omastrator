@@ -136,6 +136,34 @@ at `develop`, 2026-09.
   shapes need a home" gap and a second file-order bug (real boards were
   using a separate "boards seen so far" counter instead of their actual
   file position) were fixed.
+- **No parent transform is composed into a child's placement at all** —
+  a shape's own `x`/`y`/`rotation` place it in absolute page space by
+  themselves, full stop, whether it's a top-level shape or nested three
+  boards deep. An earlier version of this importer built each shape's
+  placement as `shapeTransform(ownRect, ownRotation) * parentCTM`,
+  mirroring the Sketch and Excalidraw importers' parent-relative
+  composition — wrong for Penpot, since (per the source-confirmed schema
+  above) coordinates are absolute at *every* nesting level, not relative
+  to the parent the way Sketch's `frame`/Excalidraw's `x,y` are. That
+  double-applied every ancestor's position on top of already-absolute
+  coordinates, compounding with depth: a top-level rotated-0° path landed
+  offset by its own `x,y` (confirmed with a path at `x:340,y:30` landing
+  at `340,60` — no, at `680,60`, exactly double), and a board's child
+  landed offset by the board's own position on top of its own already-
+  correct one. Fixed by dropping the parent-transform parameter
+  everywhere: `buildRect`/`buildCircle`/`buildFrame`/`buildText`/
+  `buildImage` (whose geometry is built in local `(0,0)`-`(w,h)` space)
+  place themselves with `shapeTransform(ownRect, ownRotation)` alone, and
+  `buildPath`/`buildBool` (whose `content` points are already absolute)
+  use a rotation-only transform, `rotateAboutCenter()`, since translating
+  already-absolute points again would reintroduce the same bug. Caught by
+  an independent review pass, not the manual smoke tests run while
+  building this importer (which happened to use fixtures that made the
+  bug invisible: a path at the page origin, and nested shapes given
+  parent-relative test coordinates instead of Penpot's real absolute
+  ones) — both `pathContentIsAlreadyAbsoluteNotRelativeToTheShapesOwnXY`
+  and `nestedShapeKeepsItsOwnAbsolutePosition` in the test suite exist
+  specifically to keep this fixed.
 
 ## What imports
 
@@ -178,28 +206,33 @@ left to right like Sketch's.
 
 ## Report
 
-All 13 `PenpotImporterTests` pass: manifest detection, a board (frame +
+All 16 `PenpotImporterTests` pass: manifest detection, a board (frame +
 artboard + background fill), a rectangle with per-corner radii and a
 linear gradient fill (start/end converted to the model's fractions),
 path content (curve-to's control points read correctly, a closed
 contour), a `bool` shape using its own baked `content` rather than
 recombining its children, flex layout → `AutoLayout`, grid layout's
-warning, text (font, size, weight → face, alignment), and a component
-root paired with an instance that keeps its own file-given position
-rather than being repositioned by a `Components::sync()` rebuild. The
-full project's test suite still passes unchanged (102/102 via `ctest`,
-up from 101 with `PenpotImporterTests` added).
+warning, text (font, size, weight → face, alignment), a component root
+paired with an instance that keeps its own file-given position rather
+than being repositioned by a `Components::sync()` rebuild, a component
+copy built *before* the main component it refers to still resolving,
+and the absolute-position regression tests described under Decisions
+(a rotated-0° path away from the origin, and a nested shape under a
+positioned board). The full project's test suite still passes unchanged
+(102/102 via `ctest`).
 
-Manually verified in `build/omastrator` (offscreen, `OMASTRATOR_SNAPSHOT`),
-reading a real DEFLATE-compressed zip built with Python's `zipfile` in
-the actual manifest/files/pages/shapes-per-file structure this importer
-expects: a rounded, stroked rectangle; a linear-gradient circle; a
-9-point star path; text (with the missing-font banner correctly naming
-"Work Sans"); and a flex-layout board with two coloured chips, gap and
-padding all rendering as the source described. Two real bugs were caught
-and fixed this way, both described under Decisions above: loose
-top-level shapes losing their artboard entirely when a board was also
-present, and — after fixing that — the artboard order not following the
-file when a board happened to build before the loose content next to it.
-
-(filled in once done)
+Manually verified in `build/omastrator` (offscreen, `OMASTRATOR_SNAPSHOT`)
+twice: once reading a real DEFLATE-compressed zip built with Python's
+`zipfile` in the actual manifest/files/pages/shapes-per-file structure
+this importer expects (a rounded, stroked rectangle; a linear-gradient
+circle; a path shape; text with the missing-font banner correctly naming
+"Work Sans"; and a flex-layout board with two coloured chips), and a
+second time after the parent-transform fix above, confirming a shape
+away from the page origin now renders in the right place both at the
+top level and nested inside a positioned board — the second round is
+what actually caught the parent-transform bug, since the first round's
+fixtures happened to avoid triggering it. Three real bugs were caught
+and fixed this way: loose top-level shapes losing their artboard
+entirely when a board was also present, the artboard order not
+following the file once that was fixed, and the parent-transform
+double-positioning bug (all described under Decisions above).
