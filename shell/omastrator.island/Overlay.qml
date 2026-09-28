@@ -55,6 +55,16 @@ Item {
 
   // The bar holds still while the pointer is on it, and settles a moment before following a new target,
   // so crossing other things on the way to it doesn't move it.
+  // The floating bar's own state, kept across shell reloads: folded down, and pinned where it was dragged.
+  PersistentProperties {
+    id: remembered
+    reloadableId: "omastratorFloatingBar"
+    property bool collapsed: false
+    property bool pinned: false
+    property real pinX: 0
+    property real pinY: 0
+  }
+
   property var shownBar: null
   property bool barHeld: false
   onBarChanged: if (!barHeld) settle.restart()
@@ -120,6 +130,8 @@ Item {
       readonly property bool panelsShown: barCard.visible || onboardingCard.visible || detailCard.visible || typing.visible || gapGrip.visible
       readonly property string maskMode: Logic.maskMode(root.design, place, panelsShown)
       readonly property var myArt: root.overlays.filter(function (each) { return each.monitor === window.modelData.name })
+      // Below the bar's reserved space and the island: the floating bar never covers them.
+      readonly property int topClear: (place.reservedTop || 0) + Style.gapsOut + root.islandHeight + Style.space(12)
 
       screen: modelData
       visible: mine || myArt.length > 0
@@ -380,7 +392,9 @@ Item {
       Rectangle {
         id: barCard
         readonly property var target: root.shownBar
-        readonly property var spot: target ? Logic.barPosition(target.bounds, width, height, window.place, Style.space(10)) : ({ x: 0, y: 0 })
+        readonly property var spot: remembered.pinned
+                                    ? Logic.clampBar(remembered.pinX, remembered.pinY, width, height, window.place, window.topClear)
+                                    : target ? Logic.barPosition(target.bounds, width, height, window.place, Style.space(10), window.topClear) : ({ x: 0, y: 0 })
         visible: window.mine && !window.drawing && target !== null && !root.onboarding.open
         x: spot.x
         y: spot.y
@@ -407,6 +421,34 @@ Item {
           Row {
             spacing: Style.space(6)
 
+            // The grip: drag the bar anywhere; once dragged it stays there until Unpin.
+            Text {
+              id: grip
+              anchors.verticalCenter: parent.verticalCenter
+              text: "⠿"
+              color: root.ink
+              opacity: gripMouse.containsMouse || gripMouse.pressed ? 0.9 : 0.45
+              font.pixelSize: Style.font.body
+
+              MouseArea {
+                id: gripMouse
+                anchors.fill: parent
+                anchors.margins: -Style.space(6)
+                hoverEnabled: true
+                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                property point grab
+                onPressed: function (mouse) { grab = Qt.point(mouse.x, mouse.y) }
+                onPositionChanged: function (mouse) {
+                  if (!pressed) return
+                  var at = mapToItem(barCard.parent, mouse.x - grab.x, mouse.y - grab.y)
+                  var spot = Logic.clampBar(at.x - grip.x - barColumn.x, at.y - grip.y - barColumn.y, barCard.width, barCard.height, window.place, window.topClear)
+                  remembered.pinned = true
+                  remembered.pinX = spot.x
+                  remembered.pinY = spot.y
+                }
+              }
+            }
+
             Label {
               anchors.verticalCenter: parent.verticalCenter
               text: barCard.target ? barCard.target.label : ""
@@ -420,7 +462,24 @@ Item {
               visible: !!barCard.target && (barCard.target.kind.indexOf("art:") === 0 || !!root.design.selected)
               onClicked: root.run(["design", "deselect"])
             }
+
+            Chip {
+              visible: remembered.pinned
+              label: "Unpin"
+              tip: "Follow what you point at again"
+              onClicked: remembered.pinned = false
+            }
+
+            Chip {
+              label: remembered.collapsed ? "Expand" : "Collapse"
+              tip: remembered.collapsed ? "Show the actions, suggestions and Ask" : "Fold the bar down to this line"
+              onClicked: remembered.collapsed = !remembered.collapsed
+            }
           }
+
+          Column {
+            spacing: Style.space(5)
+            visible: !remembered.collapsed
 
           Row {
             spacing: Style.space(4)
@@ -566,6 +625,7 @@ Item {
             opacity: 0.75
             width: Math.min(implicitWidth, Style.space(360))
             wrapMode: Text.Wrap
+          }
           }
         }
       }

@@ -45,16 +45,27 @@ function onScreen(rect, screen) {
 }
 
 // The floating bar next to `bounds`: centred under it, above when there's no room, inside the screen.
-function barPosition(bounds, barWidth, barHeight, screen, gap) {
+function barPosition(bounds, barWidth, barHeight, screen, gap, topClear) {
+  var top = Math.max(gap, topClear || 0)
   var box = local(bounds, screen)
   var x = box.x + box.width / 2 - barWidth / 2
+  // Something as big as the screen, such as the desktop itself: the bar waits at the bottom, out of the way.
+  if (box.width >= screen.width * 0.9 && box.height >= screen.height * 0.8)
+    return clampBar(x, screen.height - barHeight - 3 * gap, barWidth, barHeight, screen, top)
   var y = box.y + box.height + gap
   if (y + barHeight > screen.height - gap)
     y = box.y - gap - barHeight
-  if (y < gap)
-    y = Math.min(screen.height - barHeight - gap, Math.max(gap, box.y + gap))
+  if (y < top)
+    y = Math.min(screen.height - barHeight - gap, Math.max(top, box.y + gap))
   x = Math.max(gap, Math.min(x, screen.width - barWidth - gap))
   return { x: Math.round(x), y: Math.round(y) }
+}
+
+// Keeps the bar on the screen and below the bar and island (topClear).
+function clampBar(x, y, barWidth, barHeight, screen, topClear) {
+  var margin = 4
+  return { x: Math.round(Math.max(margin, Math.min(x, screen.width - barWidth - margin))),
+           y: Math.round(Math.max(topClear || margin, Math.min(y, screen.height - barHeight - margin))) }
 }
 
 // The label under a hovered box: "button.primary  120 × 40".

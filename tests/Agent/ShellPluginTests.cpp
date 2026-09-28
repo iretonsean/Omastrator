@@ -181,6 +181,23 @@ private slots:
         spot = call("barPosition", {QVariantList{3700, 1000, 100, 60}, 300, 60, screen, 10}).toMap();
         QCOMPARE(spot["x"].toInt(), 1610);
         QCOMPARE(spot["y"].toInt(), 930);
+        // Never over the bar and island: a thing at the very top puts the bar below topClear.
+        spot = call("barPosition", {QVariantList{2400, 0, 300, 40}, 300, 60, screen, 10, 80}).toMap();
+        QCOMPARE(spot["y"].toInt(), 80);
+        spot = call("barPosition", {QVariantList{2400, 0, 300, 1070}, 300, 60, screen, 10, 80}).toMap();
+        QVERIFY(spot["y"].toInt() >= 80);
+        // Something as big as the screen (the desktop): the bar waits at the bottom, centred.
+        spot = call("barPosition", {QVariantList{1920, 0, 1920, 1080}, 300, 60, screen, 10, 80}).toMap();
+        QCOMPARE(spot["x"].toInt(), 810);
+        QCOMPARE(spot["y"].toInt(), 990);
+        // Dragged or pinned, it stays on the screen and below the island.
+        spot = call("clampBar", {-50, 10, 300, 60, screen, 80}).toMap();
+        QCOMPARE(spot["x"].toInt(), 4);
+        QCOMPARE(spot["y"].toInt(), 80);
+        spot = call("clampBar", {5000, 5000, 300, 60, screen, 80}).toMap();
+        QCOMPARE(spot["x"].toInt(), 1616);
+        QCOMPARE(spot["y"].toInt(), 1016);
+
         // A lift's progress reads plainly on the bar.
         QCOMPARE(call("liftText", {QVariantMap{{"label", "div.card"}, {"stage", "Fetching pictures…"}, {"done", 3}, {"total", 8}}}).toString(),
                  QStringLiteral("Lifting div.card: Fetching pictures… 3 of 8"));
