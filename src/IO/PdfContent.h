@@ -85,6 +85,10 @@ private:
     QPainterPath m_path; // built in document space (CTM already applied per point)
     QPointF m_currentPoint;
     QPointF m_subpathStart;
+    // QPainterPath::isEmpty() stays true for a path holding only a moveTo, so
+    // this (not isEmpty()) is what l/c/v/y ask before deciding to fall back
+    // to a moveTo of their own.
+    bool m_hasOpenSubpath = false;
     PendingClip m_pendingClip;
 
     QTransform m_textMatrix;

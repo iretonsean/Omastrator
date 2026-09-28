@@ -99,6 +99,7 @@ void Interpreter::runPage(const QByteArray &content, const Dict &resources, cons
     m_state.insertionParent = pageLayer;
     m_state.clipBounds = pageBounds;
     m_path = QPainterPath();
+    m_hasOpenSubpath = false;
     m_pendingClip = PendingClip();
     m_pendingLine = PendingLine();
     m_textMatrix = QTransform();
@@ -216,36 +217,45 @@ void Interpreter::runContent(const QByteArray &content, const Dict &resources)
             m_currentPoint = m_state.ctm.map(QPointF(operands[operands.size() - 2].toReal(), operands.last().toReal()));
             m_subpathStart = m_currentPoint;
             m_path.moveTo(m_currentPoint);
+            m_hasOpenSubpath = true;
         } else if (op == "l" && operands.size() >= 2) {
             m_currentPoint = m_state.ctm.map(QPointF(operands[operands.size() - 2].toReal(), operands.last().toReal()));
-            if (m_path.isEmpty())
+            if (!m_hasOpenSubpath) {
                 m_path.moveTo(m_currentPoint);
-            else
+                m_hasOpenSubpath = true;
+            } else {
                 m_path.lineTo(m_currentPoint);
+            }
         } else if (op == "c" && operands.size() >= 6) {
             const QPointF c1 = m_state.ctm.map(QPointF(operands[0].toReal(), operands[1].toReal()));
             const QPointF c2 = m_state.ctm.map(QPointF(operands[2].toReal(), operands[3].toReal()));
             const QPointF end = m_state.ctm.map(QPointF(operands[4].toReal(), operands[5].toReal()));
-            if (m_path.isEmpty())
+            if (!m_hasOpenSubpath) {
                 m_path.moveTo(c1);
+                m_hasOpenSubpath = true;
+            }
             m_path.cubicTo(c1, c2, end);
             m_currentPoint = end;
         } else if (op == "v" && operands.size() >= 4) {
             const QPointF c2 = m_state.ctm.map(QPointF(operands[0].toReal(), operands[1].toReal()));
             const QPointF end = m_state.ctm.map(QPointF(operands[2].toReal(), operands[3].toReal()));
-            if (m_path.isEmpty())
+            if (!m_hasOpenSubpath) {
                 m_path.moveTo(m_currentPoint);
+                m_hasOpenSubpath = true;
+            }
             m_path.cubicTo(m_currentPoint, c2, end);
             m_currentPoint = end;
         } else if (op == "y" && operands.size() >= 4) {
             const QPointF c1 = m_state.ctm.map(QPointF(operands[0].toReal(), operands[1].toReal()));
             const QPointF end = m_state.ctm.map(QPointF(operands[2].toReal(), operands[3].toReal()));
-            if (m_path.isEmpty())
+            if (!m_hasOpenSubpath) {
                 m_path.moveTo(c1);
+                m_hasOpenSubpath = true;
+            }
             m_path.cubicTo(c1, end, end);
             m_currentPoint = end;
         } else if (op == "h") {
-            if (!m_path.isEmpty())
+            if (m_hasOpenSubpath)
                 m_path.closeSubpath();
             m_currentPoint = m_subpathStart;
         } else if (op == "re" && operands.size() >= 4) {
@@ -258,6 +268,7 @@ void Interpreter::runContent(const QByteArray &content, const Dict &resources)
             m_path.closeSubpath();
             m_currentPoint = p0;
             m_subpathStart = p0;
+            m_hasOpenSubpath = true;
         } else if (op == "S") {
             paintPath(false, true, Qt::WindingFill, resources);
         } else if (op == "s") {
@@ -463,6 +474,7 @@ void Interpreter::paintPath(bool fill, bool stroke, Qt::FillRule rule, const Dic
     }
     applyPendingClip();
     m_path = QPainterPath();
+    m_hasOpenSubpath = false;
 }
 
 void Interpreter::applyPendingClip()
@@ -548,7 +560,9 @@ void Interpreter::runForm(const Object &formObject, const Dict &callerResources)
     const Dict &dict = formObject.toDict();
     const GraphicsState savedState = m_state;
     const QPainterPath savedPath = m_path;
+    const bool savedHasOpenSubpath = m_hasOpenSubpath;
     m_path = QPainterPath();
+    m_hasOpenSubpath = false;
 
     const Array matrixArray = m_document.resolve(dict.value(QStringLiteral("Matrix"))).toArray();
     if (matrixArray.size() == 6) {
@@ -582,6 +596,7 @@ void Interpreter::runForm(const Object &formObject, const Dict &callerResources)
 
     m_state = savedState;
     m_path = savedPath;
+    m_hasOpenSubpath = savedHasOpenSubpath;
     --m_formDepth;
 }
 

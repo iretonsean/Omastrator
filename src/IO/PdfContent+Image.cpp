@@ -107,12 +107,15 @@ QImage Interpreter::decodeImageObject(const Object &imageObject, const Dict &res
     const Object smaskObject = m_document.resolve(dict.value(QStringLiteral("SMask")));
     const Object maskObject = m_document.resolve(dict.value(QStringLiteral("Mask")));
     QImage alphaSource;
-    if (smaskObject.isStream())
+    bool alphaIsLuminosity = false; // /SMask's gray value is the alpha; a stencil /Mask's own alpha channel is
+    if (smaskObject.isStream()) {
         alphaSource = decodeImageObject(smaskObject, resources);
-    else if (maskObject.isStream())
+        alphaIsLuminosity = true;
+    } else if (maskObject.isStream()) {
         alphaSource = decodeImageObject(maskObject, resources);
-    else if (maskObject.isArray())
+    } else if (maskObject.isArray()) {
         warnOnce(QStringLiteral("colorkey-mask"), QStringLiteral("A color-key mask was left out."));
+    }
 
     if (!alphaSource.isNull() && !image.isNull()) {
         if (alphaSource.size() != image.size())
@@ -121,7 +124,7 @@ QImage Interpreter::decodeImageObject(const Object &imageObject, const Dict &res
             for (int x = 0; x < image.width(); ++x) {
                 QColor pixel = image.pixelColor(x, y);
                 const QColor alphaPixel = alphaSource.pixelColor(x, y);
-                pixel.setAlpha(alphaSource.hasAlphaChannel() ? alphaPixel.alpha() : alphaPixel.red());
+                pixel.setAlpha(alphaIsLuminosity ? alphaPixel.red() : alphaPixel.alpha());
                 image.setPixelColor(x, y, pixel);
             }
         }
