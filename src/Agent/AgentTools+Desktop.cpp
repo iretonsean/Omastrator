@@ -244,7 +244,7 @@ QJsonObject AgentTools::quitApp(const QJsonObject &)
 QJsonObject AgentTools::live(const QJsonObject &params)
 {
     static const QStringList actions{"start", "stop", "select", "edit", "status", "screenshot", "writeBack", "ask", "agentDone", "review", "discard",
-                                     "save", "deploy", "cancel", "history", "restore", "details", "remember", "github", "handoff"};
+                                     "save", "deploy", "cancel", "history", "restore", "details", "remember", "github", "handoff", "folders"};
     const QString action = actions.value(*choice(params, QStringLiteral("action"), actions, true));
     if (action == QLatin1String("edit")) {
         requiredString(params, QStringLiteral("selector"));

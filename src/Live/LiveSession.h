@@ -1,11 +1,13 @@
 #pragma once
 #include "Live/Browser.h"
+#include "Live/BrowserLink.h"
 #include "Live/DevServer.h"
 #include "Live/EditSets.h"
 #include "Live/Tokens.h"
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
+#include <QPointer>
 #include <QUrl>
 #include <optional>
 #include <vector>
@@ -48,6 +50,9 @@ public:
         // An Electron app's command line, relaunched with debugging in a dedicated profile.
         QString command;
         QString profile;
+        // The user's own Chromium, through Omastrator's extension: this tab, or 0 for the
+        // active tab of its last focused window. The page is used as it is: nothing is opened or reloaded.
+        int tab = -1;
     };
 
     explicit LiveSession(QObject *parent = nullptr);
@@ -67,6 +72,13 @@ public:
     const TokenSet &tokens() const { return m_tokens; }
     const DevServer &devServer() const { return m_devServer; }
     Browser &browser() { return m_browser; }
+    // The user's Chromium; Live in a tab needs it connected.
+    void setBrowserLink(BrowserLink *link);
+    bool inUserBrowser() const { return m_inTab; }
+    // The process whose windows show the page: Omastrator's browser, or the user's Chromium. 0 when not running.
+    qint64 browserProcessId() const;
+    // The page's title, which its window's title starts with.
+    QString pageTitle() const { return m_title; }
     // The page's DevTools session, for input the tests and native apps send.
     QString pageSession() const { return m_page ? m_page->sessionId : QString(); }
     // For the status stream's "live" key.
@@ -124,7 +136,16 @@ private:
     void describeSite();
     void record(const QJsonObject &element, const TokenSet::Resolution &resolution, const QJsonObject &applied, const QString &textBefore);
 
+    // Live in the user's tab: its DevTools messages go through the extension.
+    CdpConnection &cdp() { return m_inTab && m_link ? m_link->cdp() : m_browser.cdp(); }
+    void runInTab(const Target &target);
+    // Takes the overlay out of the user's tab and lets the tab go.
+    void leaveTab();
+
     Browser m_browser;
+    QPointer<BrowserLink> m_link;
+    bool m_inTab = false;
+    QString m_title;
     DevServer m_devServer;
     std::optional<Browser::Page> m_page;
     State m_state = State::off;

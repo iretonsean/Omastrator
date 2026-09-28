@@ -49,12 +49,45 @@ LiveSession::LiveSession(QObject *parent) : QObject(parent)
         if (m_state == State::running || m_state == State::starting)
             setState(State::off, QStringLiteral("The browser closed."));
     });
+    connect(&m_devServer, &DevServer::step, this, [this](const QString &message) {
+        if (m_state == State::starting)
+            setState(State::starting, message);
+    });
+}
+
+void LiveSession::setBrowserLink(BrowserLink *link)
+{
+    if (m_link)
+        m_link->disconnect(this), m_link->cdp().disconnect(this);
+    m_link = link;
+    if (!link)
+        return;
+    connect(&link->cdp(), &CdpConnection::event, this, &LiveSession::onEvent);
+    connect(link, &BrowserLink::connectedChanged, this, [this] {
+        if (m_inTab && m_link && !m_link->isConnected() && (m_state == State::running || m_state == State::starting)) {
+            ++m_generation;
+            m_page.reset();
+            m_inTab = false;
+            setState(State::off, QStringLiteral("Chromium closed, or its Omastrator extension stopped."));
+        }
+    });
+}
+
+qint64 LiveSession::browserProcessId() const
+{
+    if (m_state != State::running)
+        return 0;
+    if (m_inTab)
+        return m_link ? m_link->chromiumPid() : 0;
+    return m_browser.processId();
 }
 
 LiveSession::~LiveSession()
 {
     m_browser.disconnect(this);
     m_browser.cdp().disconnect(this);
+    if (m_link)
+        m_link->disconnect(this), m_link->cdp().disconnect(this);
     stop();
 }
 
@@ -67,6 +100,22 @@ QString LiveSession::start(const Target &target)
 {
     if (m_state == State::starting)
         return QStringLiteral("Live is already starting.");
+    if (target.tab >= 0) {
+        if (!m_link || !m_link->isConnected())
+            return QStringLiteral("Omastrator's Chromium extension isn't connected. Run `omastrator setup`, then restart Chromium.");
+        if (!target.folder.isEmpty() && !QFileInfo(target.folder).isDir())
+            return QStringLiteral("%1 isn't a folder.").arg(target.folder);
+        stop();
+        m_edits.clear();
+        m_selection = {};
+        setState(State::starting, QStringLiteral("Joining your tab…"));
+        const int generation = m_generation;
+        QTimer::singleShot(0, this, [this, target, generation] {
+            if (generation == m_generation)
+                runInTab(target);
+        });
+        return {};
+    }
     if (target.url.isEmpty() && target.folder.isEmpty() && target.command.trimmed().isEmpty())
         return QStringLiteral("Choose a page, an app or a project folder.");
     if (!target.command.trimmed().isEmpty() && QProcess::splitCommand(target.command).isEmpty())
@@ -176,10 +225,64 @@ void LiveSession::run(Target target)
     pageLoaded();
 }
 
+void LiveSession::runInTab(const Target &target)
+{
+    const int generation = m_generation;
+    auto cancelled = [&] { return generation != m_generation; };
+    m_inTab = true;
+    QString error;
+    const QJsonObject attached = cdp().callAndWait(QStringLiteral("Omastrator.attach"), {{"tabId", target.tab}}, {}, &error);
+    if (cancelled())
+        return;
+    if (!error.isEmpty())
+        return fail(QStringLiteral("Couldn't join the tab: %1").arg(error));
+    m_page = Browser::Page{QStringLiteral("tab-%1").arg(attached["tabId"].toInt()), attached["sessionId"].toString()};
+    m_url = QUrl(attached["url"].toString());
+    m_title = attached["title"].toString();
+    for (const char *domain : {"Page.enable", "Runtime.enable"}) {
+        cdp().callAndWait(QLatin1String(domain), {}, m_page->sessionId, &error);
+        if (cancelled())
+            return;
+        if (!error.isEmpty())
+            return fail(QStringLiteral("Couldn't join the tab: %1").arg(error));
+    }
+    if (const QString failure = prepare(); !failure.isEmpty())
+        return cancelled() ? void() : fail(failure);
+    // The page is already loaded: the overlay goes in now, and prepare() brings it back after each navigation.
+    evaluate(overlayScript(), &error);
+    if (cancelled())
+        return;
+    if (!error.isEmpty())
+        return fail(QStringLiteral("Couldn't add the overlay to the page: %1").arg(error));
+    QString folder = target.folder;
+    if (!folder.isEmpty() && (m_url.scheme() == QLatin1String("http") || m_url.scheme() == QLatin1String("https"))) {
+        if (const QString failure = ProjectRegistry::remember(m_url, folder); !failure.isEmpty())
+            return fail(failure);
+    } else if (folder.isEmpty()) {
+        folder = ProjectRegistry::folderFor(m_url).value_or(QString());
+    }
+    m_project = folder.isEmpty() ? QString() : QFileInfo(folder).canonicalFilePath();
+    setState(State::running, isMockup() ? QStringLiteral("Not your site: changes stay on this machine.") : QString());
+    pageLoaded();
+}
+
+void LiveSession::leaveTab()
+{
+    if (!m_inTab)
+        return;
+    if (m_page && m_link && m_link->isConnected()) {
+        // Short waits: leaving never hangs on a browser that has stopped answering.
+        cdp().callAndWait(QStringLiteral("Runtime.evaluate"), {{"expression", "window.__oma && window.__oma.leave()"}}, m_page->sessionId, nullptr, 2000);
+        cdp().call(QStringLiteral("Omastrator.detach"), {{"sessionId", m_page->sessionId}}, {});
+    }
+    m_inTab = false;
+    m_title.clear();
+}
+
 QString LiveSession::prepare()
 {
     QString error;
-    CdpConnection &cdp = m_browser.cdp();
+    CdpConnection &cdp = this->cdp();
     cdp.callAndWait(QStringLiteral("Runtime.addBinding"), {{"name", "omastratorSend"}}, m_page->sessionId, &error);
     if (error.isEmpty())
         cdp.callAndWait(QStringLiteral("Page.addScriptToEvaluateOnNewDocument"), {{"source", overlayScript()}}, m_page->sessionId, &error);
@@ -188,6 +291,7 @@ QString LiveSession::prepare()
 
 void LiveSession::fail(const QString &message)
 {
+    leaveTab();
     m_browser.stop();
     m_devServer.stop();
     m_page.reset();
@@ -197,6 +301,7 @@ void LiveSession::fail(const QString &message)
 void LiveSession::stop()
 {
     ++m_generation;
+    leaveTab();
     m_page.reset();
     m_browser.stop();
     m_devServer.stop();
@@ -229,7 +334,9 @@ QJsonObject LiveSession::status() const
             {"edits", int(m_edits.size())},
             {"selection", int(m_selection.size())},
             {"message", m_message},
-            {"server", m_devServer.url().isEmpty() ? QString() : m_devServer.command().description}};
+            {"server", m_devServer.url().isEmpty() ? QString() : m_devServer.command().description},
+            {"tab", m_inTab},
+            {"extension", m_link && m_link->isConnected()}};
 }
 
 QJsonValue LiveSession::evaluate(const QString &expression, QString *error)
@@ -240,7 +347,7 @@ QJsonValue LiveSession::evaluate(const QString &expression, QString *error)
         return {};
     }
     QString failure;
-    const QJsonObject result = m_browser.cdp().callAndWait(QStringLiteral("Runtime.evaluate"),
+    const QJsonObject result = cdp().callAndWait(QStringLiteral("Runtime.evaluate"),
                                                            {{"expression", expression}, {"returnByValue", true}, {"awaitPromise", true}},
                                                            m_page->sessionId, &failure);
     if (failure.isEmpty() && result.contains("exceptionDetails"))
@@ -266,8 +373,19 @@ void LiveSession::rescanTokens()
 
 void LiveSession::onEvent(const QString &method, const QJsonObject &params, const QString &sessionId)
 {
-    if (!m_page || sessionId != m_page->sessionId)
+    if (!m_page || sessionId != m_page->sessionId) {
+        // Chromium's "is debugging this browser" bar was cancelled, or the tab closed: Live ends there.
+        if (m_page && m_inTab && method == QLatin1String("Omastrator.detached") && params["sessionId"].toString() == m_page->sessionId) {
+            ++m_generation;
+            m_page.reset();
+            m_inTab = false;
+            m_title.clear();
+            setState(State::off, params["reason"].toString() == QLatin1String("canceled_by_user")
+                                     ? QStringLiteral("You ended Live from Chromium's bar.")
+                                     : QStringLiteral("The tab closed, so Live ended."));
+        }
         return;
+    }
     if (method == QLatin1String("Runtime.bindingCalled") && params["name"].toString() == QLatin1String("omastratorSend")) {
         handle(QJsonDocument::fromJson(params["payload"].toString().toUtf8()).object());
     } else if (method == QLatin1String("Page.loadEventFired") && m_state == State::running) {
@@ -412,7 +530,7 @@ QString LiveSession::screenshot(const QString &path, const QString &selector)
         params["captureBeyondViewport"] = true;
     }
     QString error;
-    const QJsonObject shot = m_browser.cdp().callAndWait(QStringLiteral("Page.captureScreenshot"), params, m_page->sessionId, &error);
+    const QJsonObject shot = cdp().callAndWait(QStringLiteral("Page.captureScreenshot"), params, m_page->sessionId, &error);
     if (!error.isEmpty())
         return QStringLiteral("Couldn't take a screenshot of the page: %1").arg(error);
     QFile file(path);
@@ -426,6 +544,8 @@ void LiveSession::pageLoaded()
     if (!m_page)
         return;
     const QUrl now(evaluate(QStringLiteral("location.href")).toString());
+    if (m_inTab)
+        m_title = evaluate(QStringLiteral("document.title")).toString();
     if (now.isValid() && !now.isEmpty() && now != m_url) {
         m_url = now;
         emit changed();

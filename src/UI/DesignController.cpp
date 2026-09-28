@@ -16,6 +16,16 @@
 // (docs/ANYWHERE.md). The actions are in DesignController+Actions.cpp.
 
 namespace {
+// A window of the browser Live runs in. In the user's own Chromium, only the window whose title is the Live tab's:
+// its other windows show other tabs.
+bool showsLivePage(const LiveSession &live, const Hyprland::Window &window)
+{
+    const qint64 browser = live.browserProcessId();
+    if (browser <= 0 || window.pid != browser)
+        return false;
+    return !live.inUserBrowser() || live.pageTitle().isEmpty() || window.title.startsWith(live.pageTitle());
+}
+
 QJsonArray rectArray(const QRectF &rect)
 {
     const QRect whole = rect.toAlignedRect();
@@ -110,7 +120,7 @@ void DesignController::setSource(std::unique_ptr<DesktopSource> source)
     // Pages in Omastrator's browser are read through the DevTools Protocol.
     m_mode->webPage = [this](const Hyprland::Window &window, QPoint windowPoint) -> std::optional<QJsonObject> {
         LiveSession &live = m_bridge.liveSession();
-        if (live.state() != LiveSession::State::running || live.browser().processId() <= 0 || window.pid != live.browser().processId())
+        if (!showsLivePage(live, window))
             return std::nullopt;
         QString error;
         const QJsonValue answer = live.evaluate(Inspect::webScript(windowPoint, window.rect.size()), &error);
@@ -157,11 +167,10 @@ std::optional<Surface> DesignController::locate(const QString &key)
         return surface;
     }
     const Hyprland::Window *best = nullptr;
-    const qint64 browser = m_bridge.liveSession().state() == LiveSession::State::running ? m_bridge.liveSession().browser().processId() : 0;
     for (const Hyprland::Window &window : windows) {
         if (!Hyprland::isShown(window, monitors))
             continue;
-        const bool matches = kind == QLatin1String("window") ? window.className == rest : (browser > 0 && window.pid == browser);
+        const bool matches = kind == QLatin1String("window") ? window.className == rest : showsLivePage(m_bridge.liveSession(), window);
         if (matches && (!best || window.focusHistory < best->focusHistory))
             best = &window;
     }

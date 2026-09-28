@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Omastrator Live</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --fg: #1b1c22; --muted: #6b6c74; --line: #dcdad4; --field: #ffffff;
+    --accent: #3d5afe; --accent-fg: #ffffff; --bad: #c62828; --radius: 8px;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17181e; --fg: #ecebe6; --muted: #9a9ba3; --line: #2e2f37; --field: #202129; --accent: #7088ff; --bad: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 13px/1.45 system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  header img { width: 20px; height: 20px; border-radius: 5px; }
+  header h1 { font-size: 14px; font-weight: 600; margin: 0; }
+  section { margin-bottom: 14px; }
+  .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .page { overflow-wrap: anywhere; }
+  .page .url { color: var(--muted); font-size: 12px; }
+  .note { color: var(--muted); font-size: 12px; }
+  .error { color: var(--bad); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .message { white-space: pre-wrap; overflow-wrap: anywhere; }
+  label.choice { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; cursor: pointer; overflow-wrap: anywhere; }
+  label.choice input { margin-top: 2px; flex: none; }
+  label.choice .why { display: block; color: var(--muted); font-size: 12px; }
+  input[type=text] { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--fg); font: inherit; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--field); color: var(--fg); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button:disabled { opacity: .5; cursor: default; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  footer { border-top: 1px solid var(--line); padding-top: 10px; color: var(--muted); font-size: 12px; }
+  code { font-size: 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header><img src="app-icon-32.png" alt=""><h1>Omastrator Live</h1></header>
+
+<section id="offline" hidden>
+  <p id="offlineText" class="message"></p>
+  <div class="buttons"><button id="wake" class="primary" hidden>Start Omastrator</button></div>
+</section>
+
+<section id="start" hidden>
+  <div class="label">This tab</div>
+  <div class="page"><div id="title"></div><div id="url" class="url"></div></div>
+  <p id="cannot" class="note" hidden>Chromium keeps extensions off its own pages. Open a website or a local dev server.</p>
+  <div id="code">
+    <div class="label" style="margin-top: 12px">Its code</div>
+    <div id="folders"></div>
+    <label class="choice"><input type="radio" name="folder" value="other"><span>Another folder<input id="otherFolder" type="text" placeholder="~/Projects/site" spellcheck="false"></span></label>
+    <label class="choice"><input type="radio" name="folder" value=""><span>None: a mock-up<span class="why">Changes stay in this browser.</span></span></label>
+  </div>
+  <div class="buttons" style="margin-top: 10px"><button id="begin" class="primary">Start Live on this tab</button></div>
+</section>
+
+<section id="running" hidden>
+  <div class="label">Live</div>
+  <dl class="facts">
+    <dt>Page</dt><dd id="liveUrl"></dd>
+    <dt>Code</dt><dd id="liveProject"></dd>
+    <dt>Edits</dt><dd id="liveEdits"></dd>
+  </dl>
+  <p id="liveMessage" class="message"></p>
+  <div class="buttons" id="liveButtons">
+    <button id="writeBack">Write back</button>
+    <button id="save">Save</button>
+    <button id="deploy" class="primary">Deploy</button>
+  </div>
+  <div class="buttons" style="margin-top: 8px"><button id="stop">Stop Live</button></div>
+</section>
+
+<section id="elsewhere" hidden>
+  <p id="elsewhereText" class="message"></p>
+  <div class="buttons"><button id="stopElsewhere">Stop it</button></div>
+</section>
+
+<p id="error" class="error" hidden></p>
+
+<footer>
+  Click things on the page to select them; Esc clears the selection. Chromium's “started debugging this browser” bar is
+  Omastrator's: its Cancel ends Live, and so does Super+Alt+Escape.
+</footer>
+<script src="panel.js"></script>
+</body>
+</html>

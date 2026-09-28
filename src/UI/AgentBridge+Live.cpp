@@ -3,6 +3,7 @@
 #include "Document/EditorSession.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
+#include "Live/Registry.h"
 #include "UI/LivePanel.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -237,6 +238,28 @@ QString AgentBridge::live(const QString &action, const QJsonObject &params, QJso
     auto forward = [this] {
         bringForward();
     };
+    if (action == QLatin1String("start") && params.contains("tab")) {
+        LiveSession::Target target;
+        target.tab = std::max(0, params["tab"].toInt());
+        target.folder = params["folder"].toString().trimmed();
+        // The extension's panel takes a typed path.
+        if (target.folder == QLatin1String("~") || target.folder.startsWith(QLatin1String("~/")))
+            target.folder = QDir::homePath() + target.folder.mid(1);
+        return m_live.start(target);
+    }
+    // For the extension's panel: where this page's code probably is, as the Live sheet lists it.
+    if (action == QLatin1String("folders")) {
+        const QUrl page = QUrl::fromUserInput(params["url"].toString());
+        QJsonArray folders;
+        const auto registered = ProjectRegistry::folderFor(page);
+        if (registered)
+            folders.append(QJsonObject{{"folder", *registered}, {"reason", QStringLiteral("registered for this site")}, {"registered", true}});
+        for (const auto &suggestion : ProjectRegistry::suggest(page))
+            if (!registered || suggestion.folder != *registered)
+                folders.append(QJsonObject{{"folder", suggestion.folder}, {"reason", suggestion.reason}});
+        result["folders"] = folders;
+        return {};
+    }
     if (action == QLatin1String("start")) {
         const QUrl url = QUrl::fromUserInput(params["url"].toString());
         const QString folder = params["folder"].toString();

@@ -214,6 +214,43 @@ the user's other entries.
   - Write-back is only offered when the page maps to a registered local
     folder.
 
+#### Live in your own browser
+
+Live also joins a tab in the user's own Chromium, as it is, without
+reloading it or opening a second browser.
+
+- **The extension** (`extras/chromium-extension`, id
+  `gmanolpmdkmgccoeiogpdhjifdkdjfap` from the key in its manifest) is loaded
+  the way Omarchy loads its own: `omastrator setup` adds its folder to
+  `--load-extension` in `~/.config/chromium-flags.conf`, and `--remove` takes
+  it out. Its toolbar button opens a side panel, which is Live's start panel
+  docked to the window. The panel shows the tab, its likely code folders (the
+  Live sheet's list, from `live folders`) and Start. While Live runs, it shows
+  the edits, Write back, Save, Deploy and Stop.
+- **The way in** is a native messaging host. Setup writes
+  `~/.config/chromium/NativeMessagingHosts/io.github.iretonsean.omastrator.json`,
+  pointing at the omastrator binary. Chromium starts it with the extension's
+  origin, which runs `omastrator browser-host`: a relay between Chromium's
+  framed stdio and `$XDG_RUNTIME_DIR/omastrator-browser.sock`
+  (`BrowserLink`). Its parent is Chromium's browser process, whose pid design
+  mode uses to find the window, together with the tab's title.
+- **DevTools through `chrome.debugger`.** The extension runs Omastrator's
+  CDP commands on the joined tab, so the overlay, tokens, write-back,
+  screenshots and the agent path are the same code as in Omastrator's own
+  browser. The overlay is evaluated into the page already loaded, and
+  registered for later navigations.
+- **Ways out.** Chromium's "started debugging this browser" bar stays up
+  while Live is in a tab, and its Cancel ends Live. So do Stop in the panel,
+  `omastrator reset` and Super+Alt+Escape, closing the tab, and Chromium or
+  Omastrator quitting. The extension takes the overlay out itself when
+  Omastrator goes away. Leaving calls `__oma.leave()`, which disables the
+  overlay's listeners and removes its layer, and then the debugger lets the
+  tab go.
+- **What's not the same:** the page is used at its own address. A
+  registered production URL writes back to its folder, but doesn't switch to
+  the dev server; open the dev server's localhost tab to see changes as they
+  are written.
+
 ### 6. Native apps (last phase)
 
 - **Electron, Tauri and Omarchy web apps:** relaunch with remote debugging in

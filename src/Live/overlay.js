@@ -297,7 +297,7 @@
   }
 
   function attach() {
-    if (!host.isConnected) document.documentElement.appendChild(host);
+    if (!left && !host.isConnected) document.documentElement.appendChild(host);
   }
 
   function paintTheme() {
@@ -589,8 +589,20 @@
 
   // ------------------------------------------------------------ what Omastrator calls
 
-  window.__oma = {
+  // Live left a tab it didn't open (the user's own Chromium): the page goes back to how it behaves without Omastrator.
+  // The listeners stay but do nothing; a later Live injects a fresh overlay.
+  let left = false;
+  function leave() {
+    left = true;
+    state.enabled = false;
+    state.selection = [];
+    host.remove();
+    if (window.__oma === api) delete window.__oma;
+  }
+
+  const api = window.__oma = {
     version: 1,
+    leave,
     scan,
     info: (selector) => { const element = document.querySelector(selector); return element ? info(element) : null; },
     selectorFor,

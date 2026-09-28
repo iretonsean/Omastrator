@@ -113,6 +113,9 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
         m_overlays.save();
         m_mode->setOn(false);
         Island::resetKeys();
+        // Live in the user's own tab takes that page's clicks: the tab goes back to them. Omastrator's own browser stays.
+        if (m_bridge.liveSession().inUserBrowser())
+            m_bridge.liveSession().stop();
         say(surfaces.isEmpty() ? QStringLiteral("Reset. Design mode is off and nothing is left on the screen.")
                                : QStringLiteral("Reset. Design mode is off and the drawings are cleared; Undo on the island brings them back."));
         return {};

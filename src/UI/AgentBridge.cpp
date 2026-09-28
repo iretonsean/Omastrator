@@ -110,6 +110,21 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
     connect(&m_live, &LiveSession::changed, &m_server, &AgentServer::statusMayHaveChanged);
     connect(this, &AgentBridge::liveReviewChanged, &m_server, &AgentServer::statusMayHaveChanged);
     wireDeploy();
+    // The extension's side panel runs the agent socket's methods and follows the same status.
+    m_live.setBrowserLink(&m_browserLink);
+    m_browserLink.setCaller([this](const QString &method, const QJsonObject &params, QString *error) {
+        try {
+            return m_tools.call(method, params);
+        } catch (const AgentProtocol::Error &failure) {
+            *error = failure.message();
+        } catch (const std::exception &failure) {
+            *error = QString::fromUtf8(failure.what());
+        }
+        return QJsonObject();
+    });
+    m_browserLink.setStatus([this] { return m_tools.status(); });
+    connect(&m_server, &AgentServer::statusMayChange, &m_browserLink, &BrowserLink::statusMayHaveChanged);
+    connect(&m_browserLink, &BrowserLink::connectedChanged, &m_server, &AgentServer::statusMayHaveChanged);
     m_design = std::make_unique<DesignController>(*this, m_workspace, m_window);
     connect(m_design.get(), &DesignController::changed, &m_server, &AgentServer::statusMayHaveChanged);
     // "Ask AI…" in the page; a refusal is said in the page's own bar.
@@ -189,6 +204,10 @@ QString AgentBridge::startServer(const QString &path)
     m_serverError = path.isEmpty() ? m_server.listen() : m_server.listen(path);
     if (!m_serverError.isEmpty())
         qCWarning(lcApp).noquote() << "agent bridge not listening:" << m_serverError;
+    // Only the one Omastrator on the default socket (or a test that names its own) answers the browser.
+    else if (path.isEmpty() || qEnvironmentVariableIsSet("OMASTRATOR_BROWSER_SOCKET"))
+        if (const QString failure = m_browserLink.listen(); !failure.isEmpty())
+            qCWarning(lcApp).noquote() << "browser link not listening:" << failure;
     return m_serverError;
 }
 

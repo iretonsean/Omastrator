@@ -216,6 +216,9 @@ QString helpText()
         "       | select on|off | status | handoff [FOLDER] [NOTES]\n"
         "                     Live mode: edit a page in Omastrator's Chromium. start\n"
         "                     with neither option opens the Live sheet.\n"
+        "  live start --tab [ID] [--folder PATH]\n"
+        "                     Live in your own Chromium's tab (its active tab without\n"
+        "                     ID), through Omastrator's extension.\n"
         "  live deploy [--confirm [--remember]] [--github NAME | --no-github]\n"
         "       [--folder PATH]\n"
         "                     Write the live edits into the code, commit, push, and\n"
@@ -391,19 +394,27 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         };
         if (action == QLatin1String("start")) {
             const QStringList options = args.mid(2);
-            for (qsizetype at = 0; at + 1 < options.size(); at += 2) {
+            for (qsizetype at = 0; at < options.size(); ++at) {
                 if (options[at] == QLatin1String("--app")) {
                     // A bare flag: the page opens as an app window.
                     params["app"] = true;
-                    --at;
+                    continue;
+                }
+                if (options[at] == QLatin1String("--tab")) {
+                    // The user's own Chromium: a tab id, or its active tab.
+                    bool number = false;
+                    const int tab = options.value(at + 1).toInt(&number);
+                    params["tab"] = number ? tab : 0;
+                    at += number ? 1 : 0;
                     continue;
                 }
                 if (options[at] != QLatin1String("--url") && options[at] != QLatin1String("--folder") && options[at] != QLatin1String("--command"))
                     return failed(QStringLiteral("Unknown option %1.").arg(options[at]));
+                if (at + 1 >= options.size())
+                    return failed(QStringLiteral("%1 needs a value.").arg(options[at]));
                 params[options[at].mid(2)] = options[at] == QLatin1String("--folder") ? QFileInfo(options[at + 1]).absoluteFilePath() : options[at + 1];
+                ++at;
             }
-            if ((options.size() - options.count(QStringLiteral("--app"))) % 2)
-                return failed(QStringLiteral("%1 needs a value.").arg(options.last()));
         } else if (action == QLatin1String("select")) {
             params["on"] = args.value(2) != QLatin1String("off");
         } else if (action == QLatin1String("handoff")) {

@@ -22,6 +22,8 @@ struct Environment {
     // What the generated keys and menu entries run: "omastrator", or this binary's path when that isn't on PATH.
     QString command;
     QString binary;
+    // Omastrator's Chromium extension (Live in your own browser), next to the shell folder; empty when missing.
+    QString extension;
 
     // From $HOME, $XDG_CONFIG_HOME, $OMARCHY_PATH and $OMASTRATOR_SHELL_DIR.
     static Environment current();
@@ -31,6 +33,9 @@ struct Environment {
     QString menu() const;
     QString hyprDirectory() const;
     QString record() const;
+    // Chromium's per-user native messaging host manifest, and the flags file its launcher reads.
+    QString browserHostManifest() const;
+    QString chromiumFlags() const;
 };
 
 // One file setup writes, removes or edits. `before` and `after` are nullopt for a file that is absent.
@@ -70,6 +75,13 @@ QByteArray withoutMenuBlock(const QByteArray &current, bool removeComma);
 
 // Lines of `edited` that jq only re-encoded (a "\u2014" written as "—") take `original`'s bytes back.
 QByteArray keepEscapes(const QByteArray &original, const QByteArray &edited);
+
+// The extension's stable id, from the public key in its manifest.
+inline constexpr const char *extensionId = "gmanolpmdkmgccoeiogpdhjifdkdjfap";
+QByteArray browserHostManifest(const QString &binary);
+// chromium-flags.conf with `folder` in its --load-extension list (a line of its own when there is none), and without it.
+QByteArray withExtension(const QByteArray &flags, const QString &folder);
+QByteArray withoutExtension(const QByteArray &flags, const QString &folder);
 // Runs jq's `filter` on `input`: jq keeps the key order and layout the shell writes, and keepEscapes the escapes.
 std::optional<QByteArray> jq(const QByteArray &input, const QString &filter, QString *error);
 // `diff -u` style, computed here.

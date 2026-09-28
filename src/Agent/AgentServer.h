@@ -29,6 +29,10 @@ public:
     // Sends the status now to each follower it changed for.
     void publishStatus();
 
+signals:
+    // statusMayHaveChanged() was called: other listeners (the browser link) follow the same changes.
+    void statusMayChange();
+
 private:
     void accept();
     void read(QLocalSocket *socket);

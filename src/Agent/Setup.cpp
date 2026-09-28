@@ -1,4 +1,5 @@
 #include "Agent/Setup.h"
+#include "Agent/BrowserHost.h"
 #include "Agent/Vocabulary.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -58,6 +59,10 @@ struct Record {
     bool menuCreated = false;
     QString sourcePath;
     QByteArray sourceText;
+    // chromium-flags.conf: the extension folder setup added to it, and whether setup made the file.
+    QString flagsPath;
+    QString flagsExtension;
+    bool flagsCreated = false;
 
     static Record read(const QString &path)
     {
@@ -75,9 +80,15 @@ struct Record {
         record.menuCreated = json["menu"]["created"].toBool();
         record.sourcePath = json["hyprSource"]["path"].toString();
         record.sourceText = json["hyprSource"]["text"].toString().toUtf8();
+        record.flagsPath = json["chromiumFlags"]["path"].toString();
+        record.flagsExtension = json["chromiumFlags"]["extension"].toString();
+        record.flagsCreated = json["chromiumFlags"]["created"].toBool();
         return record;
     }
-    bool isEmpty() const { return files.isEmpty() && directories.isEmpty() && !island && !bar && !menu && sourcePath.isEmpty(); }
+    bool isEmpty() const
+    {
+        return files.isEmpty() && directories.isEmpty() && !island && !bar && !menu && sourcePath.isEmpty() && flagsPath.isEmpty();
+    }
     QByteArray toJson() const
     {
         return QJsonDocument(QJsonObject{
@@ -87,6 +98,7 @@ struct Record {
                                  {"shellJson", QJsonObject{{"island", island}, {"bar", bar}, {"created", shellJsonCreated}}},
                                  {"menu", QJsonObject{{"block", menu}, {"comma", menuComma}, {"created", menuCreated}}},
                                  {"hyprSource", QJsonObject{{"path", sourcePath}, {"text", QString::fromUtf8(sourceText)}}},
+                                 {"chromiumFlags", QJsonObject{{"path", flagsPath}, {"extension", flagsExtension}, {"created", flagsCreated}}},
                              })
             .toJson(QJsonDocument::Indented);
     }
@@ -144,6 +156,12 @@ Environment Environment::current()
     const QString onPath = QStandardPaths::findExecutable(QStringLiteral("omastrator"));
     const bool same = !onPath.isEmpty() && QFileInfo(onPath).canonicalFilePath() == QFileInfo(environment.binary).canonicalFilePath();
     environment.command = same ? QStringLiteral("omastrator") : environment.binary;
+    // Installed as share/omastrator/extras next to share/omastrator/shell; in the repo, extras/ next to shell/.
+    if (!environment.shellSource.isEmpty()) {
+        const QString extension = QDir::cleanPath(QDir(environment.shellSource).filePath(QStringLiteral("../extras/chromium-extension")));
+        if (QFileInfo::exists(QDir(extension).filePath(QStringLiteral("manifest.json"))))
+            environment.extension = extension;
+    }
     return environment;
 }
 
@@ -153,6 +171,57 @@ QString Environment::shellJson() const { return QDir(configHome).filePath(QStrin
 QString Environment::menu() const { return QDir(configHome).filePath(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc")); }
 QString Environment::hyprDirectory() const { return QDir(configHome).filePath(QStringLiteral("hypr")); }
 QString Environment::record() const { return QDir(omastratorConfig()).filePath(QStringLiteral("setup.json")); }
+QString Environment::browserHostManifest() const
+{
+    return QDir(configHome).filePath(QStringLiteral("chromium/NativeMessagingHosts/%1.json").arg(QLatin1String(BrowserHost::name)));
+}
+QString Environment::chromiumFlags() const { return QDir(configHome).filePath(QStringLiteral("chromium-flags.conf")); }
+
+QByteArray browserHostManifest(const QString &binary)
+{
+    // Chromium runs `path` with the extension's origin as its argument, which the CLI takes as `browser-host`.
+    return QJsonDocument(QJsonObject{{"name", QLatin1String(BrowserHost::name)},
+                                     {"description", QStringLiteral("Omastrator: Live in your own Chromium")},
+                                     {"path", binary},
+                                     {"type", QStringLiteral("stdio")},
+                                     {"allowed_origins", QJsonArray{QStringLiteral("chrome-extension://%1/").arg(QLatin1String(extensionId))}}})
+        .toJson(QJsonDocument::Indented);
+}
+
+QByteArray withExtension(const QByteArray &flags, const QString &folder)
+{
+    const QByteArray flag = "--load-extension=";
+    QList<QByteArray> lines = flags.split('\n');
+    for (QByteArray &line : lines) {
+        if (!line.trimmed().startsWith(flag))
+            continue;
+        const QList<QByteArray> folders = line.trimmed().mid(flag.size()).split(',');
+        if (folders.contains(folder.toUtf8()))
+            return flags;
+        line = line.trimmed() + (folders.size() == 1 && folders.front().isEmpty() ? "" : ",") + folder.toUtf8();
+        return lines.join('\n');
+    }
+    return flags + (flags.isEmpty() || flags.endsWith('\n') ? "" : "\n") + flag + folder.toUtf8() + '\n';
+}
+
+QByteArray withoutExtension(const QByteArray &flags, const QString &folder)
+{
+    const QByteArray flag = "--load-extension=";
+    QList<QByteArray> lines = flags.split('\n');
+    for (qsizetype at = 0; at < lines.size(); ++at) {
+        if (!lines[at].trimmed().startsWith(flag))
+            continue;
+        QList<QByteArray> folders = lines[at].trimmed().mid(flag.size()).split(',');
+        if (!folders.removeOne(folder.toUtf8()))
+            continue;
+        if (folders.isEmpty())
+            lines.removeAt(at);
+        else
+            lines[at] = flag + folders.join(',');
+        return lines.join('\n');
+    }
+    return flags;
+}
 
 HyprFormat hyprFormat(const Environment &environment)
 {
@@ -241,6 +310,18 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
         notes->append(QStringLiteral("To use the island's keys, add this to %1 (or run `omastrator setup --apply`):%2")
                           .arg(hypr, QString::fromUtf8(source).chopped(1)));
     }
+
+    // Live in your own Chromium: the host its extension talks to, and the extension loaded the way Omarchy loads its own.
+    const QString host = environment.browserHostManifest();
+    plan.push_back({QStringLiteral("browserHost"), QStringLiteral("Let Omastrator's Chromium extension reach Omastrator (a native messaging host)"),
+                    host, readFile(host), browserHostManifest(environment.binary)});
+    if (environment.extension.isEmpty()) {
+        notes->append(QStringLiteral("Omastrator's Chromium extension wasn't found next to the shell folder, so Live can't join your own Chromium."));
+    } else {
+        const auto flags = readFile(environment.chromiumFlags());
+        plan.push_back({QStringLiteral("extension"), QStringLiteral("Load Omastrator's extension in Chromium (restart Chromium after)"),
+                        environment.chromiumFlags(), flags, withExtension(flags.value_or(QByteArray()), environment.extension)});
+    }
     return plan;
 }
 
@@ -276,6 +357,13 @@ std::vector<Change> removalPlan(const Environment &environment, QStringList *not
             const bool empty = QByteArray(edited).replace('{', "").replace('}', "").trimmed().isEmpty();
             plan.push_back({QStringLiteral("menu"), QStringLiteral("Take the Omastrator group out of the Omarchy menu"), environment.menu(), menu,
                             record.menuCreated && empty ? std::nullopt : std::optional(edited)});
+        }
+    }
+    if (!record.flagsPath.isEmpty()) {
+        if (const auto flags = readFile(record.flagsPath)) {
+            const QByteArray edited = withoutExtension(*flags, record.flagsExtension);
+            plan.push_back({QStringLiteral("flags"), QStringLiteral("Stop loading Omastrator's extension in Chromium"), record.flagsPath, flags,
+                            record.flagsCreated && edited.trimmed().isEmpty() ? std::nullopt : std::optional(edited)});
         }
     }
     if (!record.sourcePath.isEmpty()) {
@@ -399,7 +487,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                 QFile::remove(change->path);
             }
             if (!removing && !change->before && after && !record.files.contains(change->path)
-                && (key == QLatin1String("plugins") || key == QLatin1String("keys") || key == QLatin1String("vocabulary") || key == QLatin1String("binary")))
+                && (key == QLatin1String("plugins") || key == QLatin1String("keys") || key == QLatin1String("vocabulary") || key == QLatin1String("binary")
+                    || key == QLatin1String("browserHost")))
                 record.files << change->path;
         }
         if (removing) {
@@ -411,6 +500,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                 record.menu = false;
             if (key == QLatin1String("source"))
                 record.sourcePath.clear();
+            if (key == QLatin1String("flags"))
+                record.flagsPath.clear(), record.flagsExtension.clear(), record.flagsCreated = false;
         } else {
             if (key == QLatin1String("island"))
                 record.island = true;
@@ -426,6 +517,11 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             if (key == QLatin1String("source")) {
                 record.sourcePath = step.front()->path;
                 record.sourceText = sourceBlock(hyprFormat(environment));
+            }
+            if (key == QLatin1String("extension")) {
+                record.flagsCreated = record.flagsCreated || !step.front()->before;
+                record.flagsPath = step.front()->path;
+                record.flagsExtension = environment.extension;
             }
         }
         reloadShell = reloadShell || key == QLatin1String("plugins") || key == QLatin1String("island") || key == QLatin1String("bar")

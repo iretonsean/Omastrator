@@ -1,5 +1,6 @@
 #include "Agent/Cli.h"
 #include "Agent/AgentClient.h"
+#include "Agent/BrowserHost.h"
 #include "Agent/DesignCli.h"
 #include "Agent/Island.h"
 #include "Agent/Setup.h"
@@ -8,9 +9,19 @@
 #include <cstring>
 
 namespace Cli {
+namespace {
+// Chromium starts a native messaging host with the extension's origin as its first argument.
+bool fromChromium(const char *argument)
+{
+    return std::strncmp(argument, "chrome-extension://", 19) == 0;
+}
+}
+
 bool handles(const char *command)
 {
-    for (const char *each : {"agent", "--mcp", "status", "island", "setup", "design", "desk", "daemon", "reset"}) {
+    if (fromChromium(command))
+        return true;
+    for (const char *each : {"agent", "--mcp", "status", "island", "setup", "design", "desk", "daemon", "reset", "browser-host"}) {
         if (std::strcmp(command, each) == 0)
             return true;
     }
@@ -24,6 +35,9 @@ int run(const QStringList &args)
         return AgentClient::runMcp();
     if (command == QLatin1String("agent"))
         return AgentClient::runCli(args.mid(1));
+    // Started by Chromium for Omastrator's extension: stdout carries its messages only.
+    if (command == QLatin1String("browser-host") || fromChromium(command.toUtf8().constData()))
+        return BrowserHost::run();
     QTextStream out(stdout);
     QTextStream err(stderr);
     if (command == QLatin1String("status"))

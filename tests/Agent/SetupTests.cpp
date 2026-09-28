@@ -119,6 +119,21 @@ private slots:
         QVERIFY(entries.contains("omastrator.mode.draw") && entries.contains("omastrator.connect"));
     }
 
+    void extensionFlagsKeepTheUsersOwn()
+    {
+        const QString ours = QStringLiteral("/opt/oma/ext");
+        const QByteArray omarchy = "--ozone-platform=wayland\n--load-extension=/usr/share/a,/usr/share/b\n--password-store=basic\n";
+        const QByteArray added = Setup::withExtension(omarchy, ours);
+        QCOMPARE(added, QByteArray("--ozone-platform=wayland\n--load-extension=/usr/share/a,/usr/share/b,/opt/oma/ext\n--password-store=basic\n"));
+        QCOMPARE(Setup::withExtension(added, ours), added);
+        QCOMPARE(Setup::withoutExtension(added, ours), omarchy);
+        // No list yet: a line of its own, taken out whole.
+        const QByteArray plain = "--ozone-platform=wayland\n";
+        QCOMPARE(Setup::withExtension(plain, ours), QByteArray("--ozone-platform=wayland\n--load-extension=/opt/oma/ext\n"));
+        QCOMPARE(Setup::withoutExtension(Setup::withExtension(plain, ours), ours), plain);
+        QCOMPARE(Setup::withExtension({}, ours), QByteArray("--load-extension=/opt/oma/ext\n"));
+    }
+
     void escapesSurviveJq()
     {
         // The shell may have written an em dash as an escape; jq would write it raw.
@@ -164,6 +179,10 @@ private slots:
         QCOMPARE(shell["bar"].toObject()["layout"].toObject()["right"].toArray()[0].toObject()["id"].toString(), QStringLiteral("omastrator.ai"));
         QVERIFY(read(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc"))).contains("\"omastrator.connect\""));
         QVERIFY(read(config(QStringLiteral("hypr/hyprland.lua"))).startsWith(userHypr + "\n-- Omastrator's island keys"));
+        // Live in your own Chromium: the host its extension starts, and the extension loaded next to Omarchy's.
+        const QJsonObject host = QJsonDocument::fromJson(read(config(QStringLiteral("chromium/NativeMessagingHosts/io.github.iretonsean.omastrator.json")))).object();
+        QCOMPARE(host["allowed_origins"].toArray().first().toString(), QStringLiteral("chrome-extension://gmanolpmdkmgccoeiogpdhjifdkdjfap/"));
+        QVERIFY(read(config(QStringLiteral("chromium-flags.conf"))).contains("--load-extension=" OMASTRATOR_SOURCE_DIR "/extras/chromium-extension\n"));
 
         const QStringList installed = snapshot(m_home.path());
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);

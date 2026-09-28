@@ -302,6 +302,8 @@ private:
     QPointer<QWidget> m_variationsContent;
     QPointer<QWidget> m_roastContent;
     Swatches m_swatches;
+    // The user's Chromium, through Omastrator's extension (Live in a tab).
+    BrowserLink m_browserLink;
     LiveSession m_live;
     std::vector<WriteBack::Review> m_reviews;
     // The project last opened in Live, which Deploy, Save and History keep acting on after Live stops.

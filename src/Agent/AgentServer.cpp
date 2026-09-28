@@ -71,6 +71,7 @@ void AgentServer::close()
 
 void AgentServer::statusMayHaveChanged()
 {
+    emit statusMayChange();
     if (!m_followers.isEmpty() && !m_statusTimer.isActive())
         m_statusTimer.start();
 }

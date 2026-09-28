@@ -8,14 +8,34 @@ CdpConnection::CdpConnection(QObject *parent) : QObject(parent)
 {
     connect(&m_socket, &WebSocketClient::textReceived, this, &CdpConnection::receive);
     connect(&m_socket, &WebSocketClient::disconnected, this, [this] {
-        // Whoever waits hears that nothing is coming.
-        const auto waiting = std::exchange(m_replies, {});
-        for (const Reply &reply : waiting) {
-            if (reply)
-                reply({}, QStringLiteral("The browser closed the connection."));
-        }
+        dropReplies();
         emit closed();
     });
+}
+
+void CdpConnection::dropReplies()
+{
+    const auto waiting = std::exchange(m_replies, {});
+    for (const Reply &reply : waiting) {
+        if (reply)
+            reply({}, QStringLiteral("The browser closed the connection."));
+    }
+}
+
+void CdpConnection::setTransport(std::function<void(const QString &text)> send)
+{
+    m_transport = std::move(send);
+}
+
+void CdpConnection::setTransportOpen(bool open)
+{
+    if (m_transportOpen == open)
+        return;
+    m_transportOpen = open;
+    if (!open) {
+        dropReplies();
+        emit closed();
+    }
 }
 
 void CdpConnection::open(const QUrl &url)
@@ -57,9 +77,18 @@ void CdpConnection::call(const QString &method, const QJsonObject &params, const
     QJsonObject message{{"id", id}, {"method", method}, {"params", params}};
     if (!sessionId.isEmpty())
         message["sessionId"] = sessionId;
+    if (m_transport && !m_transportOpen) {
+        if (reply)
+            reply({}, QStringLiteral("The browser isn't connected."));
+        return;
+    }
     if (reply)
         m_replies.insert(id, std::move(reply));
-    m_socket.sendText(QString::fromUtf8(QJsonDocument(message).toJson(QJsonDocument::Compact)));
+    const QString text = QString::fromUtf8(QJsonDocument(message).toJson(QJsonDocument::Compact));
+    if (m_transport)
+        m_transport(text);
+    else
+        m_socket.sendText(text);
 }
 
 QJsonObject CdpConnection::callAndWait(const QString &method, const QJsonObject &params, const QString &sessionId, QString *error, int timeoutMs)
