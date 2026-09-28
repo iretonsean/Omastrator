@@ -71,12 +71,32 @@ The README's Install (alpha) section promises these:
 3. After install, `omastrator setup` stays the single step that wires the
    shell, the keys, the menu and the extension.
 
+**Update 2026-09-28: built on `feat/alpha-installs`, not yet published.**
+`omastrator-git` and `omastrator-bin` PKGBUILDs (with `.install` files),
+`.github/workflows/release.yml` and `ci.yml`, and
+`scripts/update-bin-pkgbuild.sh` are all written and, where they can be
+without a real release to test against, tested locally (`makepkg` for
+`omastrator-git` built and packaged cleanly on this aarch64 machine). See
+[docs/RELEASING.md](RELEASING.md) for the author's remaining steps (tag, wait
+for the workflow, run the update script, push to the two AUR repositories)
+and the design decisions, including one open item: the aarch64 release job's
+Arch Linux ARM container image is a community one, unverified since no
+GitHub Actions run has happened yet.
+
 ### Memory hygiene (the machine has 15 GB and /tmp is in RAM)
 
 - Test runs leave `/tmp/LiveReviewTests-*` folders of about 143 MB each. The
   author's machine ran out of memory on 2026-09-28 partly because of them.
-  Make LiveReviewTests clean up after itself (a QTemporaryDir, or removing its
-  folder in cleanup), and delete stale ones before big builds.
+  **Fixed on `feat/alpha-installs`:** `LiveReviewTests` now asserts its
+  `QTemporaryDir` actually removed itself in `cleanupTestCase` (it always
+  should on a clean run; this catches it if it silently doesn't), and its
+  headless Chromium runs with a capped disk/media cache so a leaked profile
+  is smaller. Neither of those can save a folder from an out-of-memory kill,
+  which is likely what actually happened — the real backstop is
+  `scripts/clean-tmp.sh` (new), which removes any `<TestBinary>-XXXXXX`
+  folder over an hour old; `scripts/check.sh` runs it before every build.
+  Grepped every other test for temp paths it doesn't clean up: none found,
+  they all already use `QTemporaryDir`.
 - Old Claude scratch folders were moved to
   `~/.local/share/claude-scratch-archive/2026-09-28/`.
 - Build with at most -j2 and one build at a time
