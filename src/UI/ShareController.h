@@ -1,4 +1,5 @@
 #pragma once
+#include "UI/DeviceSend.h"
 #include "UI/Share.h"
 #include "UI/ShareJob.h"
 #include <QObject>
@@ -76,8 +77,19 @@ public:
     QString connectCloud();
     QString connectGitHub();
 
+    // Send to a device: AirDrops the selection (else the artboard) to a nearby Apple device.
+    DeviceSend &device() { return m_device; }
+    // The device and format last used, remembered across sessions; the device is matched by address, else name.
+    std::optional<DeviceSend::Device> lastDevice() const;
+    Share::Format deviceFormat() const;
+    void setDeviceFormat(Share::Format format);
+    // Returns why it couldn't start, or empty; the result arrives as the notice.
+    QString sendToDevice(const DeviceSend::Device &device, Share::Format format);
+
     ShareJob &job() { return m_job; }
-    bool running() const { return m_job.running(); }
+    bool running() const { return m_job.running() || m_device.sending(); }
+    // Stops whichever is running.
+    void cancel();
 
     // The toast: progress, the link, a failure, or what to connect.
     struct Notice {
@@ -101,6 +113,9 @@ signals:
 
 private:
     QString start(const Options &options);
+    // Renders the selection (else the artboard) into a fresh temporary folder as `baseName.<format>`; returns why not.
+    QString render(Share::Format format, const QString &baseName, QString *file);
+    void connectDevice();
     void finished(bool ok);
     void setNotice(Notice::Kind kind, const QString &text, const QString &detail = QString(), const QString &link = QString());
     void noticeShared(const Share::Record &record);
@@ -112,10 +127,12 @@ private:
     const QPointer<AgentBridge> m_agent;
     QWidget &m_window;
     ShareJob m_job;
+    DeviceSend m_device;
     // What the running job is: a share into `m_jobKey`, or the Unshare of `m_unsharing`.
     QString m_jobKey;
     QString m_unsharing;
     QString m_jobDetail;
+    QString m_jobDeviceName;
     std::unique_ptr<QTemporaryDir> m_folder;
     std::optional<Options> m_pending;
     bool m_listedRemotes = false;

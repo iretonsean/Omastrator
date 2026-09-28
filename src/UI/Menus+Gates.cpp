@@ -38,6 +38,7 @@ void Menus::synchronize()
     const bool site = m_share && !m_share->liveProject().isEmpty();
     for (const char *name : {"shareWithClient", "shareOptions"})
         action(QString::fromLatin1(name))->setEnabled(m_share && free && !m_share->running() && (drawn || site));
+    action(QStringLiteral("sendToDevice"))->setEnabled(m_share && free && !m_share->running() && drawn);
     action(QStringLiteral("sharedLinks"))->setEnabled(m_share != nullptr);
     action(QStringLiteral("undo"))->setText(!field && s.canUndo() ? QStringLiteral("Undo %1").arg(s.undoName()) : QStringLiteral("Undo"));
     action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && s.canUndo()));

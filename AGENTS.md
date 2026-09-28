@@ -81,7 +81,9 @@ Each folder builds as its own static library:
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,
   sheets, shortcuts and the Omarchy theme. Share with client
   (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and
-  `SharePanels`; its tests use the fake rclone and a fake `gh`.
+  `SharePanels`; its tests use the fake rclone and a fake `gh`. Send to a device
+  (AirDrop) is `DeviceSend` and `ShareController+Device.cpp`, tested against a
+  fake omdrop and omadrop.
 - `src/OmastratorApp.cpp` holds `main`. `omastrator --daemon` runs the app in the
   background with no window until one is asked for (`show_window`); a second
   `omastrator` hands its files to the running one.
@@ -110,7 +112,7 @@ Each folder builds as its own static library:
   config. Setup tests run in a temporary `HOME`; outside programs are replaced
   through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
   `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
-  `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL`, `OMASTRATOR_RCLONE`,
+  `OMASTRATOR_OMDROP`, `OMASTRATOR_OMADROP`, `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL`, `OMASTRATOR_RCLONE`,
   `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_ATSPI`,
   `OMASTRATOR_ATSPI_TREE`, `OMASTRATOR_WL_COPY` and `OMASTRATOR_GIT`. Design
   system tests use temporary projects, a temporary `HOME` for themes and

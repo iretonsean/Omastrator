@@ -63,6 +63,7 @@ QString keywordsFor(const QString &name)
         {"contextualTaskBar", "task bar toolbar floating"},
         {"shareWithClient", "share client link send upload publish copy link"},
         {"shareOptions", "share client link format destination"},
+        {"sendToDevice", "airdrop iphone phone ipad mac apple send share device"},
         {"sharedLinks", "shared links unshare client feedback"},
         {"exportPNG", "save image"},
         {"exportSVG", "save vector"},

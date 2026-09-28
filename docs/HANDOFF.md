@@ -84,6 +84,32 @@ keys, every conflict and the choice made are in docs/SHORTCUTS.md.
   matches what they know (it came from cheat sheets, not a running Figma).
   Saved remaps of "Add auto layout" from the last day are dropped (the key
   moved to the Menus group); nothing else is affected.
+**Update 2026-09-28: queued item 3 (Share ▸ Send to a device) is built** on
+`feat/share-device` (off `feat/frames`). It's in File ▸ Send to a Device…,
+Ctrl+K ("AirDrop") and the Share popover. The full description is in
+docs/SHARE.md ("Send to a device").
+
+- **What it does:** renders the selection (else the artboard) as PNG at 2×,
+  PDF or SVG to a temporary file, lists nearby Apple devices with
+  `omdrop peers --json` (turning AirDrop on for 5 minutes with `omdrop on 5m`
+  if it's off), lets the author pick one (the last one used is chosen first,
+  in QSettings), and sends with `omadrop send --quiet --to <address> …` (omdrop
+  alone if omadrop isn't installed). Progress and the result use the Share
+  toast, with Cancel. Missing omdrop, no devices, declined, a phone that
+  didn't wake and other failures each have their own plain line.
+- **Verified:** `DeviceShareTests` (14 cases) against a fake omdrop and omadrop
+  (`OMASTRATOR_OMDROP`, `OMASTRATOR_OMADROP`), so no test touched the radio;
+  the popover and toast were grabbed headlessly and look right.
+- **Not verified, needs the author:** a real send. Nothing was sent to a
+  device, and `omdrop` was never turned on. Things to check with the phone:
+  1. The device list and names (`peers -n --json --stream` takes 15 to 20 s;
+     the names fill in as they arrive).
+  2. That an iPhone accepts a PNG, a PDF and an SVG the same way.
+  3. That `omdrop on 5m` from the popover is what they want: it makes the Mac
+     visible to nearby devices for five minutes (omadrop's own send does the
+     same).
+- It doesn't touch omadrop's remembered device (its `device` file);
+  Omastrator keeps its own last device.
 
 **Update 2026-09-28 ~08:45: queued item 1 (Inspect inside windows) is built**
 on `feat/inspect-inside` (off `feat/frames`, pushed, 95/95). It's installed in
@@ -170,7 +196,7 @@ Next, in the author's order:
    - Some items are waiting on the author: the frame resize default, and
      picking a panel design from the options.
    - Others can go ahead without them: Inspect reaching inside windows (turn
-     on AT-SPI), Share to a device, the shortcuts pass, and resizing artboards
+     on AT-SPI), Share to a device (built, see above), the shortcuts pass, and resizing artboards
      on the canvas.
 2. docs/FIGMA-AUDIT.md's build order, with effects next.
 3. The Inspect sluggishness, when the author is at the Mac and says they're
@@ -205,7 +231,7 @@ after the author has seen the look.
    The alternative is that everything scales. Constraints live in
    `LayoutItem`; the resize is `VectorDocument::resizeFrame` in
    src/Document/AutoLayout.cpp.
-3. **Share ▸ Send to a device.** Send the selection to the author's iPhone
+3. **(Built on feat/share-device; see the update at the top.) Share ▸ Send to a device.** Send the selection to the author's iPhone
    through the AirDrop plugin installed in Omarchy (see the omadrop project,
    `omdrop-awdl`).
 4. **The panels are bloated.** There's too much vertical scrolling. Keep every

@@ -103,7 +103,7 @@ ShareToast::ShareToast(ShareController &share, QWidget &window)
     connect(m_open, &QPushButton::clicked, this, [this] { m_share.openLink(m_share.notice().link); });
     connect(m_copy, &QPushButton::clicked, this, [this] { m_share.copyLink(m_share.notice().link); });
     connect(m_details, &QPushButton::clicked, this, [this] { AgentSheets::deployLog(&m_window, m_share.notice().log); });
-    connect(m_cancel, &QPushButton::clicked, this, [this] { m_share.job().cancel(); });
+    connect(m_cancel, &QPushButton::clicked, this, [this] { m_share.cancel(); });
     connect(m_connectCloud, &QPushButton::clicked, this, [this] {
         m_share.dismissNotice();
         m_share.connectCloud();
@@ -161,7 +161,8 @@ SharePopover::SharePopover(ShareController &share, QWidget *parent)
       m_destination(new QComboBox(this)), m_note(faint(QStringLiteral("shareNote"), this)), m_nowhere(new QWidget(this)),
       m_latest(pushButton(QStringLiteral("shareLatest"), QStringLiteral("Copy Latest Deploy"), this)),
       m_go(pushButton(QStringLiteral("shareGo"), QStringLiteral("Share"), this)),
-      m_shared(pushButton(QStringLiteral("shareShowShared"), QStringLiteral("Shared…"), this))
+      m_shared(pushButton(QStringLiteral("shareShowShared"), QStringLiteral("Shared…"), this)),
+      m_device(pushButton(QStringLiteral("shareToDevice"), QStringLiteral("Send to a Device…"), this))
 {
     popover(this, QStringLiteral("sharePopover"));
     setFixedWidth(340);
@@ -208,6 +209,7 @@ SharePopover::SharePopover(ShareController &share, QWidget *parent)
     column->addWidget(m_nowhere);
     column->addWidget(m_note);
     column->addWidget(m_latest, 0, Qt::AlignLeft);
+    column->addWidget(m_device, 0, Qt::AlignLeft);
     auto *buttons = new QHBoxLayout;
     buttons->addWidget(m_shared);
     buttons->addStretch();
@@ -245,6 +247,12 @@ SharePopover::SharePopover(ShareController &share, QWidget *parent)
             return;
         }
         close();
+    });
+    connect(m_device, &QPushButton::clicked, this, [this] {
+        QWidget *window = parentWidget() ? parentWidget()->window() : nullptr;
+        close();
+        if (window)
+            SharePanels::showDevices(m_share, *window);
     });
     connect(m_shared, &QPushButton::clicked, this, [this] {
         QWidget *window = parentWidget() ? parentWidget()->window() : nullptr;
@@ -287,6 +295,7 @@ void SharePopover::synchronize()
         m_latest->setToolTip(latest->url);
     m_go->setText(site ? QStringLiteral("Preview Deploy") : QStringLiteral("Share"));
     m_go->setEnabled(!nowhere && !m_share.running() && (site || m_share.hasDocument()));
+    m_device->setEnabled(!m_share.running() && m_share.hasDocument());
     const size_t count = m_share.sharedList().size();
     m_shared->setText(count ? QStringLiteral("Shared (%1)…").arg(count) : QStringLiteral("Shared…"));
     adjustSize();
