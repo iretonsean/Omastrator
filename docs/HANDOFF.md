@@ -11,13 +11,31 @@ frames and auto layout, Inspect inside windows) plus today's four branches:
 resizing artboards on the canvas, the shortcuts pass, Send to a device, and
 the dense Properties panel.
 
-### Your job: an animation, from a clean slate
+### Done: the promo animation (2026-09-28)
 
-Read **`docs/ANIMATION-BRIEF.md`** and follow it. The author wants a promo
-animation designed from scratch, and it starts with you interviewing them
-as a newly hired designer. Earlier animations are deliberately off
-limits: don't open `media/promo/`, the `wip/promo-*` branches, or the
-promo notes further down this file.
+The clean-slate promo is finished, approved and posted on X by the author. Its
+brief, source, renderer and video are in `media/animation/` (see the Status
+note at the top of `media/animation/BRIEF.md`).
+
+### In progress: import formats (2026-09-28)
+
+Three Sonnet 5 agents work in Herdr panes, each in its own worktree off
+`main`. The briefs are in `~/Projects/.omastrator-import-briefs/`:
+
+- `feat/import-pdf`: an in-tree PDF reader (no Poppler: the repo is MIT and
+  Poppler is GPL), then Illustrator .ai through its PDF part, then EPS/PS
+  through Ghostscript run as a program.
+- `feat/import-figma`: Paste from Figma, Import from Figma Link… (REST API)
+  and .fig files (best effort).
+- `feat/import-open`: Sketch, Penpot v3, Inkscape layers and .svgz,
+  HEIC/AVIF, placing PSD flattened, and Excalidraw.
+
+The agents commit on their branches and never push or merge. The next step
+is to merge all three. They touch the same few lines in Open/Place, the file
+filters and drag-and-drop, and two of them write the same
+`src/IO/ZipReader`, so keep one copy. Then update the README's Files list and
+ask the author before pushing. Figma needs checking against the author's real
+files.
 
 ### Waiting on the author
 
