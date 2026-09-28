@@ -30,6 +30,31 @@ The app (feat/frames) is installed and the daemon is running on it.
 5. **Merging:** fix/design-mode-escape, then feat/graphite-look, then
    feat/frames, with `scripts/merge-branch.sh` each time.
 
+### The author's feedback on the desktop (2026-09-28), queued and not started
+
+1. **Inspect should reach inside windows.** It should read the content in a
+   window (its controls and text, down the AT-SPI tree or the DOM), not only
+   the window's bounds and Omarchy's own elements.
+2. **A path in a frame should resize with the frame, keeping its
+   proportions.** Today paths default to the Left/Top constraints and stay put.
+   Decide the default: Scale with the aspect ratio locked for vector paths,
+   probably.
+3. **Share ▸ Send to a device.** Send the selection to the author's iPhone
+   through the AirDrop plugin installed in Omarchy (see the omadrop project,
+   `omdrop-awdl`).
+4. **The panels are bloated.** There's too much vertical scrolling. Keep every
+   feature, but design a new UX that frees up vertical space without hiding
+   everything behind a ••• button. The layouts inside the sections need design
+   work too. Do a design pass first and show the author options.
+5. **Keyboard shortcuts feel missing.** Check the keys against Figma's.
+   - Shift+A is there, as a canvas key, and needs a selection and canvas
+     focus. Find out why the author didn't find it working, or didn't find it
+     at all.
+   - Then close the gaps and make the keys easy to discover: in menus,
+     tooltips and the Ctrl+K palette.
+6. **Resize an artboard on the canvas as you would a frame,** with the Select
+   tool, not only with the Artboard tool.
+
 The earlier notes follow.
 
 1. Chromium was started with the extension, and the whole path worked on the
