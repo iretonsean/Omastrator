@@ -517,6 +517,15 @@ closer to Figma and Illustrator on your desktop.
 - Add Qt tests for new behaviour, and make sure `scripts/check.sh` passes.
 - Keep commits free of personal data (`scripts/sweep.sh` checks).
 
+## Support
+
+Omastrator is free and made by one person. Sponsorships pay for the Claude
+subscription that most of the code is written with, and for the time to keep
+working on it. Sponsor through
+[GitHub Sponsors](https://github.com/sponsors/iretonsean), or use
+Help ▸ Support Omastrator in the app. Bug reports, pull requests and telling
+other people about it help just as much.
+
 ## Credits
 
 Omastrator reuses code from other open-source projects:

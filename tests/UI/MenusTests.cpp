@@ -43,6 +43,7 @@ private slots:
     void typeMenuConvertsPointAndArea();
     void figmaKeysWorkFromAnyPanel();
     void figmaKeysSitBesideIllustratorsOnTheirEntries();
+    void supportEntryIsAlwaysAvailable();
 };
 
 void MenusTests::initTestCase()
@@ -424,6 +425,16 @@ void MenusTests::figmaKeysSitBesideIllustratorsOnTheirEntries()
     QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Menus:Lock Selection"), ShortcutChord("l", 3)}}));
     QCOMPARE(menus.action("lockSelection")->shortcuts().first(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_L));
     QCOMPARE(menus.action("lockSelection")->shortcuts().last(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L));
+}
+
+void MenusTests::supportEntryIsAlwaysAvailable()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    QAction *support = window.menus()->action("support");
+    QVERIFY(support);
+    QCOMPARE(support->text(), QStringLiteral("Support Omastrator…"));
+    QVERIFY(support->isEnabled());
 }
 
 QTEST_MAIN(MenusTests)

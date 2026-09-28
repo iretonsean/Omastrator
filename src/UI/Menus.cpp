@@ -15,6 +15,7 @@
 #include "UI/DesignSystemPanel.h"
 #include <QApplication>
 #include <QClipboard>
+#include <QDesktopServices>
 #include <QFileInfo>
 #include <QMenu>
 #include <QMessageBox>
@@ -545,6 +546,8 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
                                           "Built on OmaPhoto, the Linux port of Compositor.")
                                .arg(QApplication::applicationVersion()));
     })->setMenuRole(QAction::AboutRole);
+    add(help, QStringLiteral("support"), QStringLiteral("Support Omastrator…"), QKeySequence(),
+        [] { QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/sponsors/iretonsean"))); });
 }
 
 DesignSystemPanel *Menus::designSystem() const

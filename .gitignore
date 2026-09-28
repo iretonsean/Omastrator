@@ -1,2 +1,5 @@
 build*/
 .claude/
+
+# Private notes and strategy; never commit
+/private/
