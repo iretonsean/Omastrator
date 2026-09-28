@@ -73,10 +73,14 @@ public:
     bool saveTo(ProjectTab &tab, const QString &path);
     bool placeFile(const QString &path);
     bool exportTo(const QString &path, DocumentExporter::Format format, const RasterOptions &options = {});
+    // A document that isn't from a file (File ▸ Import from Figma Link…): a new tab, unsaved.
+    void openDocument(VectorDocument document, const QString &title, const QStringList &warnings = {});
     // The dialogs in front of those.
     void open();
     void save(QUuid id, bool asNew = false, std::function<void(bool)> done = {});
     void place();
+    // File ▸ Import from Figma Link…
+    void importFigmaLink();
     void exportAs(DocumentExporter::Format format);
     // Each `done` runs from the event loop, never inline.
     void close(QUuid id, std::function<void()> done = {});

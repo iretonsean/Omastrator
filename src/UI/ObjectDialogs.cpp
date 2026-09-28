@@ -1,5 +1,6 @@
 #include "UI/ObjectDialogs.h"
 #include "Canvas/EditorCanvas.h"
+#include "IO/FigmaImporter.h"
 #include "UI/KeyboardShortcuts.h"
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -178,6 +179,13 @@ QDialog *ObjectDialogs::preferences(QWidget *window)
     history->setFixedWidth(120);
     history->setToolTip(QStringLiteral("How many steps each document can undo. Past it, the oldest go first."));
     form->addRow(QStringLiteral("History states:"), history);
+    auto *forgetToken = new QPushButton(QStringLiteral("Forget Access Token"), dialog);
+    forgetToken->setEnabled(FigmaImporter::Token::load().has_value());
+    QObject::connect(forgetToken, &QPushButton::clicked, forgetToken, [forgetToken] {
+        FigmaImporter::Token::forget();
+        forgetToken->setEnabled(false);
+    });
+    form->addRow(QStringLiteral("Figma:"), forgetToken);
     finish(dialog, form, [increment, history] {
         EditorCanvas::setKeyboardIncrement(increment->value());
         EditorSession::setHistoryLimit(history->value());

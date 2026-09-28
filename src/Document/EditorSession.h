@@ -13,6 +13,8 @@
 #include <optional>
 #include <vector>
 
+class QMimeData;
+
 // The toolbar, top to bottom. Keys follow Illustrator's.
 enum class Tool {
     select,          // V
@@ -520,6 +522,11 @@ public:
     void paste(bool inPlace = false);
     void paste(PastePosition position);
     bool canPaste() const;
+    // Set once by the app: another clipboard format, tried before the plain-image
+    // fallback (Figma's paste; docs/import/figma.md). Returns the objects it
+    // decoded, or nullopt when it doesn't recognise this clipboard.
+    using ExternalPasteHandler = std::function<std::optional<std::vector<VectorObject>>(const QMimeData &)>;
+    static void setExternalPasteHandler(ExternalPasteHandler handler);
 
     // View -------------------------------------------------------------------
     CanvasViewport viewport;
@@ -582,6 +589,8 @@ signals:
 private:
     void notify(bool documentToo = true);
     void edit(const QString &name, const std::function<void(VectorDocument &)> &change);
+    // The shared tail of paste(): renumbers ids, places the objects and selects them.
+    void pasteObjects(std::vector<VectorObject> objects, PastePosition position);
     void insertNew(VectorDocument &document, VectorObject object);
     void restore(const DocumentHistory::Snapshot &snapshot);
     void pruneSelection();

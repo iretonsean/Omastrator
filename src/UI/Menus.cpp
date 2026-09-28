@@ -101,6 +101,7 @@ void Menus::buildFile(QMenuBar &bar)
         [this] { m_workspace.save(m_workspace.current().id, true); });
     file->addSeparator();
     add(file, QStringLiteral("place"), QStringLiteral("Place…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), [this] { m_workspace.place(); });
+    add(file, QStringLiteral("importFigmaLink"), QStringLiteral("Import from Figma Link…"), QKeySequence(), [this] { m_workspace.importFigmaLink(); });
     add(file, QStringLiteral("handToAgent"), QStringLiteral("Hand to Agent…"), QKeySequence(), [this] {
         if (m_agent)
             AgentSheets::handoff(*m_agent, &m_window);

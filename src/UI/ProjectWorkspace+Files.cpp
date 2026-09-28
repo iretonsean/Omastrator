@@ -1,3 +1,4 @@
+#include "IO/FigmaImporter.h"
 #include "IO/ImageImporter.h"
 #include "IO/ProjectStore.h"
 #include "IO/SvgExporter.h"
@@ -45,6 +46,7 @@ QStringList ProjectWorkspace::openFilters()
 {
     QStringList filters{QStringLiteral("Omastrator documents (*.%1)").arg(QLatin1String(ProjectStore::extension))};
     filters << ImageImporter::nameFilters();
+    filters << QStringLiteral("Figma (*.fig)");
     // One filter with every pattern comes first.
     QStringList patterns;
     static const QRegularExpression inside(QStringLiteral("\\(([^)]*)\\)"));
@@ -89,6 +91,8 @@ bool ProjectWorkspace::openFile(const QString &path)
     try {
         if (native)
             document = ProjectStore::read(path);
+        else if (FigmaImporter::canRead(path))
+            document = FigmaImporter::read(path, &warnings);
         else if (ImageImporter::isVector(path))
             document = VectorFileImporter::read(path, &warnings);
         else
@@ -114,6 +118,18 @@ bool ProjectWorkspace::openFile(const QString &path)
     return true;
 }
 
+void ProjectWorkspace::openDocument(VectorDocument document, const QString &title, const QStringList &warnings)
+{
+    const auto opened = std::make_shared<ProjectTab>(title);
+    opened->session.loadDocument(std::move(document));
+    adopt(opened);
+    reportLeftOut(title, warnings);
+    if (const QStringList missing = opened->session.missingFonts(); !missing.isEmpty())
+        setNotice(QStringLiteral("Missing %1: %2. Type ▸ Find/Replace Font… replaces %3.")
+                      .arg(missing.size() == 1 ? QStringLiteral("font") : QStringLiteral("fonts"), missing.join(QStringLiteral(", ")),
+                           missing.size() == 1 ? QStringLiteral("it") : QStringLiteral("them")));
+}
+
 bool ProjectWorkspace::saveTo(ProjectTab &tab, const QString &path)
 {
     if (!tab.session.hasDocument())
@@ -132,7 +148,7 @@ bool ProjectWorkspace::saveTo(ProjectTab &tab, const QString &path)
     return true;
 }
 
-// SVG arrives as one group; pictures as image objects.
+// SVG and Figma files arrive as one group; pictures as image objects.
 bool ProjectWorkspace::placeFile(const QString &path)
 {
     EditorSession &session = current().session;
@@ -140,6 +156,29 @@ bool ProjectWorkspace::placeFile(const QString &path)
         return false;
     const QString name = QFileInfo(path).fileName();
     try {
+        if (FigmaImporter::canRead(path)) {
+            QStringList warnings;
+            const VectorDocument imported = FigmaImporter::read(path, &warnings);
+            reportLeftOut(path, warnings);
+            session.beginEdit(QStringLiteral("Place"));
+            VectorObject group;
+            group.kind = ObjectKind::group;
+            group.name = name;
+            const QUuid groupID = session.addObject(group, QStringLiteral("Place"));
+            for (const VectorObject &object : imported.objects) {
+                if (object.kind == ObjectKind::layer)
+                    continue;
+                const QUuid parent = imported.find(object.parentID.value())->kind == ObjectKind::layer ? groupID : object.parentID.value();
+                const QUuid id = session.addObject(object, QStringLiteral("Place"));
+                session.moveObject(id, parent, -1);
+            }
+            session.select({groupID});
+            const QPointF middle(session.document()->size.width() / 2, session.document()->size.height() / 2);
+            const QPointF shift = middle - session.selectionBounds().center();
+            session.transformSelection(QTransform::fromTranslate(shift.x(), shift.y()), QStringLiteral("Place"));
+            session.endEdit();
+            return true;
+        }
         if (!ImageImporter::isVector(path)) {
             session.placeImage(ImageImporter::read(path), name);
             return true;
@@ -282,7 +321,8 @@ void ProjectWorkspace::place()
             });
         }
     };
-    if (!offerCloud(CloudBrowser::Mode::place, suffixesOf(ImageImporter::nameFilters()), QString(), [this] { placeHere(); }, chosen, {}))
+    if (!offerCloud(CloudBrowser::Mode::place, suffixesOf(ImageImporter::nameFilters() << QStringLiteral("Figma (*.fig)")), QString(), [this] { placeHere(); },
+                    chosen, {}))
         placeHere();
 }
 
@@ -291,7 +331,7 @@ void ProjectWorkspace::placeHere()
     auto *panel = new QFileDialog(window, QStringLiteral("Place"));
     panel->setAttribute(Qt::WA_DeleteOnClose);
     panel->setFileMode(QFileDialog::ExistingFiles);
-    panel->setNameFilters(ImageImporter::nameFilters());
+    panel->setNameFilters(ImageImporter::nameFilters() << QStringLiteral("Figma (*.fig)"));
     connect(panel, &QDialog::finished, this, [this, panel](int result) {
         if (result != QDialog::Accepted)
             return;
