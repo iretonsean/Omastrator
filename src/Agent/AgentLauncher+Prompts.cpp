@@ -65,6 +65,10 @@ QString instructions(const QString &binary)
         "- **Coordinates** are points, with the origin at the artboard's top left and y going down. `document_get` "
         "gives the artboard's `width` and `height`. Objects are listed bottom to top; children follow their parent.\n"
         "- **Scope.** When something is selected, work on the selection; methods that take `ids` default to it.\n"
+        "- **Names.** Every object you make or change gets a name that says what it is, as a designer would name it in "
+        "the Layers panel: \"Bolt\", \"Icon background\", \"Highlight\", \"Sign-up button\", never Path, Group or "
+        "Shape 3. In SVG give each element and `<g>` an `id` (it becomes the layer name); rename existing objects with "
+        "`rename` {\"names\": {\"<id>\": \"<name>\"}}, all in one call.\n"
         "- **Files.** Never call `save` or `export` unless the user asked for it. Nothing else writes files.\n"
         "- **SVG.** Write complete SVG documents with a `viewBox`. Paths, basic shapes, groups, solid fills, strokes, "
         "opacity and linear or radial gradients import as editable paths; `<g>` becomes a group, `<text>` with `<tspan>` "
@@ -178,6 +182,26 @@ QString editPrompt(const QString &requestId, const QString &instruction, bool ha
         "Carry it out with the edit methods (set_style, transform, align, distribute, arrange, group, ungroup, pathfinder, "
         "update_object, replace_objects, insert_svg, delete). Render again to check the result. Then call proposal_finish "
         "{\"title\": \"…\", \"summary\": \"…\"} with a short title such as \"Recolor\" and what you changed. Do not save.");
+    return text;
+}
+
+QString namePrompt(const QString &requestId, const QString &convention, bool hasSelection)
+{
+    QString text = header(QStringLiteral("Name Layers"), requestId);
+    text += hasSelection ? QStringLiteral("Name the layers in the selection and everything inside it: call selection_get for its objects, and "
+                                          "render {\"selectionOnly\": true} to see them.\n\n")
+                         : QStringLiteral("Name every object in the document (not the layers at the top, which the user named): call "
+                                          "document_get, and render to see it.\n\n");
+    text += convention.trimmed().isEmpty()
+        ? QStringLiteral("Name each object for what it is, as a careful designer would in the Layers panel: short, specific, in "
+                         "sentence case (\"Bolt\", \"Icon background\", \"Highlight\", \"Card / Title\"). A group is named for the "
+                         "thing it makes up, its children for their part in it. Keep names the user clearly chose themselves.\n\n")
+        : QStringLiteral("Follow the user's naming convention exactly:\n%1\n\n").arg(convention.trimmed());
+    text += QStringLiteral(
+        "Look closely at each object's shape, colour, position and text before naming it; where two are alike, tell them "
+        "apart by role or position (\"Star, left\"). Rename them all with one rename call, {\"names\": {\"<id>\": \"<name>\"}}. "
+        "Change nothing else. Then call proposal_finish {\"title\": \"Name Layers\", \"summary\": \"…\"} with how many you "
+        "named. Do not save.");
     return text;
 }
 

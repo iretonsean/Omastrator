@@ -132,6 +132,8 @@ struct Round {
 QString generatePrompt(const QString &requestId, const QString &brief, int count, std::optional<QRectF> fitTo,
                        const std::vector<Round> &history = {});
 QString editPrompt(const QString &requestId, const QString &instruction, bool hasSelection);
+// Name Layers: rename the selection's objects (or the document's) for what they are, or by the user's `convention`.
+QString namePrompt(const QString &requestId, const QString &convention, bool hasSelection);
 // Ask in design mode's floating bar (docs/ANYWHERE.md): the agent works on the overlay drawn over a surface.
 // `context` describes the surface and what is pointed at; `screenshot` is a PNG of it, or empty.
 QString surfacePrompt(const QString &requestId, const QString &instruction, const QString &context, const QString &screenshot,

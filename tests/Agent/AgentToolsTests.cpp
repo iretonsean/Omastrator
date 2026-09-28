@@ -248,6 +248,24 @@ private slots:
         QCOMPARE(host.editor.undoName(), QStringLiteral("AI: Replace"));
     }
 
+    // Name with AI's one call: every name at once, one proposal, one undo step.
+    void renameNamesManyAtOnce()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({200, 200});
+        const QUuid a = rectangle(host.editor, {0, 0, 20, 20});
+        const QUuid b = rectangle(host.editor, {40, 0, 20, 20});
+        AgentTools tools(host);
+        const QJsonObject result = tools.call(QStringLiteral("rename"), {{"names", QJsonObject{{a.toString(), "  Icon   background "}, {b.toString(), "Bolt"}}}});
+        QCOMPARE(result["renamed"].toInt(), 2);
+        QCOMPARE(host.editor.document()->find(a)->name, QStringLiteral("Icon background"));
+        QCOMPARE(host.editor.document()->find(b)->name, QStringLiteral("Bolt"));
+        QCOMPARE(failure(tools, QStringLiteral("rename"), {{"names", QJsonObject{{QUuid::createUuid().toString(), "Ghost"}}}}), int(AgentProtocol::invalidParams));
+        QCOMPARE(failure(tools, QStringLiteral("rename"), {{"names", QJsonObject{{a.toString(), " "}}}}), int(AgentProtocol::invalidParams));
+        host.editor.commitInteraction();
+        QCOMPARE(host.editor.undoName(), QStringLiteral("AI: Rename"));
+    }
+
     void pathfinderGroupArrangeAlignAndDelete()
     {
         FakeAgentHost host;

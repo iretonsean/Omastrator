@@ -52,6 +52,9 @@ public:
     // Another round from the chosen variation.
     QString refine(const QString &instruction);
     QString editWithInstruction(const QString &instruction);
+    // Layers ▸ Name with AI: the agent renames the selection's layers (or the document's) for what they are, or by
+    // `convention`; the names arrive as a proposal. An error to show, or empty once the agent is on its way.
+    QString nameLayers(const QString &convention = {});
     QString vectorize(AgentLauncher::TraceMode mode);
     QString roast();
 

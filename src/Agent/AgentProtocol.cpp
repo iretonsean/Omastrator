@@ -63,6 +63,10 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "required": ["axis"], "properties": {
    "ids": {"type": "array", "items": {"type": "string"}, "description": "Object ids. Default: the selection."},
    "axis": {"type": "string", "enum": ["horizontal", "vertical"]}}}},
+{"name": "rename", "group": "edit",
+ "description": "Renames objects in the Layers panel in one step: names maps ids to names. Name things for what they are (\"Bolt\", \"Icon background\", \"Sign-up button\"), never Path or Group.",
+ "inputSchema": {"type": "object", "required": ["names"], "properties": {
+   "names": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Object id to its new name."}}}},
 {"name": "group", "group": "edit",
  "description": "Groups objects above the topmost of them. Returns the group's id.",
  "inputSchema": {"type": "object", "required": ["ids"], "properties": {

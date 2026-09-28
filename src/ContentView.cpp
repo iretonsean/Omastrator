@@ -383,6 +383,8 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     split->setHandleWidth(9);
     split->addWidget(m_propertiesPanel);
     split->addWidget(m_layersPanel);
+    if (m_agent)
+        m_layersPanel->setNamer([agent = m_agent](const QString &convention) { return agent ? agent->nameLayers(convention) : QString(); });
     // Properties holds more fields; it takes the larger share until moved.
     split->setStretchFactor(0, 3);
     split->setStretchFactor(1, 2);

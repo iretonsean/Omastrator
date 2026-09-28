@@ -72,6 +72,7 @@ private:
     QJsonObject distribute(const QJsonObject &params);
     QJsonObject group(const QJsonObject &params);
     QJsonObject ungroup(const QJsonObject &params);
+    QJsonObject rename(const QJsonObject &params);
     QJsonObject pathfinder(const QJsonObject &params);
     QJsonObject remove(const QJsonObject &params);
     QJsonObject select(const QJsonObject &params);

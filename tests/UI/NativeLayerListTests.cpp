@@ -59,6 +59,7 @@ std::unique_ptr<QMimeData> dragOf(const NativeLayerList &list, const QUuid &id)
 class NativeLayerListTests : public QObject {
     Q_OBJECT
 private slots:
+    void nameWithAIAsksTheAgent();
     void initTestCase();
     void rowsListLayersTopDownAndFoldClosedGroups();
     void selectionKeepsTheRowsThemselves();
@@ -317,6 +318,24 @@ void NativeLayerListTests::panelButtonsAddAndDelete()
     QVERIFY(!f.session.document()->find(f.layer1));
     QVERIFY(!f.session.document()->find(f.a));
     QCOMPARE(count->text(), QString("2"));
+}
+
+// Name with AI: hidden without an agent; a click asks for names for what things are, no convention.
+void NativeLayerListTests::nameWithAIAsksTheAgent()
+{
+    Fixture f;
+    LayersPanel panel(f.session);
+    panel.show();
+    auto *button = panel.findChild<QToolButton *>("nameLayersWithAI");
+    QVERIFY(button && !button->isVisible());
+    QStringList asked;
+    panel.setNamer([&asked](const QString &convention) {
+        asked << convention;
+        return QString();
+    });
+    QVERIFY(button->isVisible() && button->isEnabled());
+    button->click();
+    QCOMPARE(asked, QStringList{QString()});
 }
 
 QTEST_MAIN(NativeLayerListTests)

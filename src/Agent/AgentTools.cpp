@@ -87,6 +87,7 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("design"), &AgentTools::design},
         {QStringLiteral("show_window"), &AgentTools::showWindow},
         {QStringLiteral("quit_app"), &AgentTools::quitApp},
+        {QStringLiteral("rename"), &AgentTools::rename},
     };
     try {
         if (method == QLatin1String("selection_get"))

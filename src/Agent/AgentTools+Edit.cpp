@@ -255,6 +255,29 @@ QJsonObject AgentTools::ungroup(const QJsonObject &params)
     return {{"ids", idArray(released)}};
 }
 
+QJsonObject AgentTools::rename(const QJsonObject &params)
+{
+    const QJsonObject names = params.value(QStringLiteral("names")).toObject();
+    if (names.isEmpty())
+        fail(QStringLiteral("names maps object ids to their new names."));
+    VectorDocument edited = draft();
+    std::vector<QUuid> renamed;
+    for (auto entry = names.begin(); entry != names.end(); ++entry) {
+        const QUuid id = QUuid::fromString(entry.key());
+        VectorObject *object = id.isNull() ? nullptr : edited.find(id);
+        if (!object)
+            fail(QStringLiteral("No object has the id %1.").arg(entry.key()));
+        const QString name = entry.value().toString().simplified();
+        if (name.isEmpty())
+            fail(QStringLiteral("%1's new name is empty.").arg(entry.key()));
+        // A locked object's name is only a label: renaming it changes nothing drawn.
+        object->name = name.left(120);
+        renamed.push_back(id);
+    }
+    propose(QStringLiteral("Rename"), edited, renamed);
+    return {{"renamed", int(renamed.size())}};
+}
+
 QJsonObject AgentTools::pathfinder(const QJsonObject &params)
 {
     const int operation = *choice(params, QStringLiteral("operation"),

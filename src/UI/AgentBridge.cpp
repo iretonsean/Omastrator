@@ -262,7 +262,8 @@ QString AgentBridge::stepFor(const QString &method, int *edits)
 {
     static const QStringList looking{"document_get", "selection_get", "status_get", "select"};
     static const QStringList editing{"insert_svg", "set_style", "transform", "arrange", "align", "distribute", "group", "ungroup",
-                                     "pathfinder", "delete", "update_object", "replace_objects", "trace_image", "place", "apply_color"};
+                                     "pathfinder", "delete", "update_object", "replace_objects", "trace_image", "place", "apply_color",
+                                     "rename"};
     if (looking.contains(method))
         return QStringLiteral("looking at it");
     if (editing.contains(method)) {
@@ -512,6 +513,14 @@ QString AgentBridge::editWithInstruction(const QString &instruction)
         return QStringLiteral("Describe the change.");
     const QString requestId = newRequestId();
     return launch(requestId, Task::edit, AgentLauncher::editPrompt(requestId, instruction.trimmed(), session()->hasSelection()));
+}
+
+QString AgentBridge::nameLayers(const QString &convention)
+{
+    if (!session() || !session()->hasDocument())
+        return QStringLiteral("Open a document to name its layers.");
+    const QString requestId = newRequestId();
+    return launch(requestId, Task::edit, AgentLauncher::namePrompt(requestId, convention, session()->hasSelection()));
 }
 
 QString AgentBridge::vectorize(AgentLauncher::TraceMode mode)

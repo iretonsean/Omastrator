@@ -435,6 +435,14 @@ private slots:
         QVERIFY(edit.contains(QLatin1String("req-3")) && edit.contains(QLatin1String("Recolor to teal")));
         QVERIFY(edit.contains(QLatin1String("selection_get")) && edit.contains(QLatin1String("proposal_finish")));
         QVERIFY(AgentLauncher::editPrompt(QStringLiteral("r"), QStringLiteral("x"), false).contains(QLatin1String("whole document")));
+        // Name Layers: for what things are by default, or the user's convention word for word; one rename call.
+        const QString naming = AgentLauncher::namePrompt(QStringLiteral("req-9"), QString(), true);
+        QVERIFY(naming.contains(QLatin1String("req-9")) && naming.contains(QLatin1String("selection_get")) && naming.contains(QLatin1String("rename")));
+        QVERIFY(naming.contains(QLatin1String("what it is")));
+        const QString kebab = AgentLauncher::namePrompt(QStringLiteral("r"), QStringLiteral("kebab-case"), false);
+        QVERIFY(kebab.contains(QLatin1String("kebab-case")) && kebab.contains(QLatin1String("document_get")));
+        // Every task's instructions ask for real names.
+        QVERIFY(AgentLauncher::instructions(QStringLiteral("/bin/omastrator")).contains(QLatin1String("never Path, Group")));
 
         const QString logo = AgentLauncher::smartTracePrompt(QStringLiteral("req-4"), QStringLiteral("group-id"), QStringLiteral("/tmp/scan.png"),
                                                              AgentLauncher::TraceMode::logo);

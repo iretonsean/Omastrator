@@ -4,6 +4,10 @@
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QInputDialog>
+#include <QMenu>
+#include <QSettings>
+#include <QToolTip>
 #include <QVBoxLayout>
 
 namespace {
@@ -50,6 +54,21 @@ LayersPanel::LayersPanel(EditorSession &session, QWidget *parent)
     footer->setSpacing(0);
     m_newLayer = footerButton(QStringLiteral("newLayer"), QStringLiteral("New layer"), [this] { m_session.addLayer(); });
     footer->addWidget(m_newLayer);
+    // Name with AI: the agent names the layers for what they are; the arrow asks for a naming convention.
+    m_name = footerButton(QStringLiteral("nameLayersWithAI"), QStringLiteral("Name layers with AI"), [this] { nameWithAI(false); });
+    m_name->setText(QStringLiteral("Name with AI"));
+    m_name->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    // Words, not an icon: free width, the footer's height.
+    m_name->setMinimumSize(0, 28);
+    m_name->setMaximumSize(QWIDGETSIZE_MAX, 32);
+    m_name->setPopupMode(QToolButton::MenuButtonPopup);
+    auto *ways = new QMenu(m_name);
+    ways->addAction(QStringLiteral("Name for what they are"), this, [this] { nameWithAI(false); })->setObjectName(QStringLiteral("nameLayersPlain"));
+    ways->addAction(QStringLiteral("Use a naming convention…"), this, [this] { nameWithAI(true); })->setObjectName(QStringLiteral("nameLayersConvention"));
+    m_name->setMenu(ways);
+    m_name->hide();
+    footer->addSpacing(4);
+    footer->addWidget(m_name);
     footer->addStretch(1);
     m_delete = footerButton(QStringLiteral("deleteLayer"), QStringLiteral("Delete selection"), [this] { deleteTarget(); });
     footer->addWidget(m_delete);
@@ -57,6 +76,43 @@ LayersPanel::LayersPanel(EditorSession &session, QWidget *parent)
     applyIcons();
     connect(&m_session, &EditorSession::changed, this, &LayersPanel::synchronize);
     synchronize();
+}
+
+void LayersPanel::setNamer(std::function<QString(const QString &convention)> namer)
+{
+    m_namer = std::move(namer);
+    m_name->setVisible(bool(m_namer));
+    synchronize();
+}
+
+void LayersPanel::nameWithAI(bool ask)
+{
+    if (!m_namer)
+        return;
+    QString convention = QSettings().value(QStringLiteral("layerNamingConvention")).toString();
+    if (ask) {
+        bool ok = false;
+        const QStringList examples{convention,
+                                   QStringLiteral("Sentence case, named for what each thing is (Icon background, Bolt)"),
+                                   QStringLiteral("Component / Part, slash-separated (Card / Title, Card / Avatar)"),
+                                   QStringLiteral("kebab-case (icon-background, bolt)"),
+                                   QStringLiteral("BEM: block__element--modifier (card__title--active)")};
+        QStringList choices;
+        for (const QString &each : examples) {
+            if (!each.isEmpty() && !choices.contains(each))
+                choices << each;
+        }
+        convention = QInputDialog::getItem(this, QStringLiteral("Name layers with AI"),
+                                           QStringLiteral("How should the layers be named? Pick one or describe your own:"), choices, 0, true, &ok);
+        if (!ok)
+            return;
+        QSettings().setValue(QStringLiteral("layerNamingConvention"), convention.trimmed());
+    } else {
+        convention.clear();
+    }
+    const QString failure = m_namer(convention.trimmed());
+    if (!failure.isEmpty())
+        QToolTip::showText(m_name->mapToGlobal(QPoint(0, -m_name->height())), failure, m_name);
 }
 
 void LayersPanel::deleteTarget()
@@ -100,6 +156,9 @@ void LayersPanel::synchronize()
     m_count->setText(QString::number(document ? document->layers().size() : 0));
     m_newLayer->setEnabled(document.has_value());
     m_delete->setEnabled(document.has_value());
+    m_name->setEnabled(document.has_value() && !m_session.isInteracting());
+    m_name->setToolTip(m_session.hasSelection() ? QStringLiteral("Name the selected layers with AI, for what they are")
+                                                : QStringLiteral("Name every layer with AI, for what it is"));
     const QString what = m_session.hasSelection() ? QStringLiteral("Delete selection") : QStringLiteral("Delete layer");
     m_delete->setToolTip(what);
     m_delete->setAccessibleName(what);
