@@ -33,7 +33,9 @@ suites pass). It's stacked on `feat/graphite-look`, which is stacked on
       `layerNamingConvention`.
     - `AgentLauncher::namePrompt` and `AgentBridge::nameLayers` drive it.
 - **Open investigation: Inspect makes the desktop sluggish** (the author,
-  08:05). Nothing is fixed yet.
+  08:05). Nothing is fixed yet. **Parked until the author says they're ready**
+  (08:25): it needs them at the Mac to reproduce, so don't start it on your
+  own. When they're ready, run the profiler with them.
   - What's measured so far: each Inspect step is cheap on its own, under
     0.1 s. That covers the AT-SPI helper, grim for 1 px, and hyprctl. The
     status payload is 1.3 KB. When idle, the daemon uses 0.3% CPU.
@@ -54,9 +56,15 @@ suites pass). It's stacked on `feat/graphite-look`, which is stacked on
 
 Next, in the author's order:
 
-1. The sluggishness above.
-2. The queued feedback below.
-3. docs/FIGMA-AUDIT.md's build order, with effects next.
+1. The queued feedback below.
+   - Some items are waiting on the author: the frame resize default, and
+     picking a panel design from the options.
+   - Others can go ahead without them: Inspect reaching inside windows (turn
+     on AT-SPI), Share to a device, the shortcuts pass, and resizing artboards
+     on the canvas.
+2. docs/FIGMA-AUDIT.md's build order, with effects next.
+3. The Inspect sluggishness, when the author is at the Mac and says they're
+   ready.
 
 **Merging:** fix/design-mode-escape, then feat/graphite-look, then
 feat/frames, each with `scripts/merge-branch.sh`. Merge when convenient,
