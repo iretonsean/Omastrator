@@ -284,6 +284,50 @@ private slots:
         QFile::remove(QDir(environment.omastratorConfig()).filePath(QStringLiteral("anywhere.json")));
     }
 
+    // GNUInstallDirs puts bindir and datadir at "bin" and "share" under any prefix, /usr or
+    // ~/.local alike, so a package's shell plugins are always found the same way relative to
+    // the binary (docs/RELEASING.md, AGENTS.md's "Also on this branch: the /tmp leak" sibling).
+    void installedShellSourceIsBinaryRelative()
+    {
+        QCOMPARE(Setup::installedShellSource(QStringLiteral("/usr/bin/omastrator")), QStringLiteral("/usr/share/omastrator/shell"));
+        QCOMPARE(Setup::installedShellSource(m_home.filePath(QStringLiteral(".local/bin/omastrator"))),
+                 m_home.filePath(QStringLiteral(".local/share/omastrator/shell")));
+    }
+
+    void locateShellFindsAPackageInstall()
+    {
+        QTemporaryDir prefix;
+        QVERIFY(prefix.isValid());
+        const QString binary = prefix.filePath(QStringLiteral("bin/omastrator"));
+        write(binary, QByteArray());
+        write(prefix.filePath(QStringLiteral("share/omastrator/shell/omastrator.island/manifest.json")), "{}");
+        write(prefix.filePath(QStringLiteral("share/omastrator/extras/chromium-extension/manifest.json")), "{}");
+
+        const QByteArray previous = qgetenv("OMASTRATOR_SHELL_DIR");
+        qunsetenv("OMASTRATOR_SHELL_DIR");
+        const Setup::ShellLocation location = Setup::locateShell(binary);
+        qputenv("OMASTRATOR_SHELL_DIR", previous);
+
+        QCOMPARE(location.source, prefix.filePath(QStringLiteral("share/omastrator/shell")));
+        QCOMPARE(location.extension, prefix.filePath(QStringLiteral("share/omastrator/extras/chromium-extension")));
+    }
+
+    void locateShellPrefersTheOverride()
+    {
+        QTemporaryDir prefix, override;
+        QVERIFY(prefix.isValid() && override.isValid());
+        const QString binary = prefix.filePath(QStringLiteral("bin/omastrator"));
+        write(binary, QByteArray());
+        write(prefix.filePath(QStringLiteral("share/omastrator/shell/x")), QByteArray());
+
+        const QByteArray previous = qgetenv("OMASTRATOR_SHELL_DIR");
+        qputenv("OMASTRATOR_SHELL_DIR", override.path().toUtf8());
+        const Setup::ShellLocation location = Setup::locateShell(binary);
+        qputenv("OMASTRATOR_SHELL_DIR", previous);
+
+        QCOMPARE(location.source, override.path());
+    }
+
     void hyprlandAcceptsTheKeys()
     {
         const QString hyprland = QStandardPaths::findExecutable(QStringLiteral("Hyprland"));

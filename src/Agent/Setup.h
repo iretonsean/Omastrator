@@ -38,6 +38,20 @@ struct Environment {
     QString chromiumFlags() const;
 };
 
+// Where the shell plugins live next to a binary, and Omastrator's Chromium extension next to
+// those (empty when either isn't found).
+struct ShellLocation {
+    QString source;
+    QString extension;
+};
+// `binary`'s ../share/omastrator/shell: where a package for any prefix (/usr, ~/.local, …)
+// puts the shell plugins, since GNUInstallDirs' bindir and datadir are always "bin" and
+// "share" relative to the prefix. Doesn't check it exists.
+QString installedShellSource(const QString &binary);
+// $OMASTRATOR_SHELL_DIR if set, else `installedShellSource(binary)` if that exists, else (in a
+// build from source) the repo's own shell/ folder.
+ShellLocation locateShell(const QString &binary);
+
 // One file setup writes, removes or edits. `before` and `after` are nullopt for a file that is absent.
 struct Change {
     QString key;
