@@ -44,6 +44,9 @@ bool appIsRunning();
 void resetKeys();
 // Holds design mode's submap, where Escape leaves, however design mode was turned on; only when Hyprland defines it.
 void holdDesignKeys();
+// Holds `mode`'s submap when Hyprland defines it, else gives the keys back; normal always gives them back.
+// Every mode change goes through this, so a mode left by a click never keeps its letters bound.
+void holdKeysFor(const QString &mode);
 
 // `omastrator island <verb> …`. Returns the exit code.
 int runCli(const QStringList &args, QTextStream &out, QTextStream &err);

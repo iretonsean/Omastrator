@@ -35,6 +35,7 @@ DesignController::DesignController(AgentBridge &bridge, ProjectWorkspace &worksp
     : m_bridge(bridge), m_workspace(workspace), m_window(window)
 {
     setSource(std::make_unique<SystemSource>());
+    recoverLookPreview();
     m_placementTimer.setInterval(500);
     connect(&m_placementTimer, &QTimer::timeout, this, [this] { updatePlacements(); });
     connect(&m_overlays, &OverlayStore::changed, this, [this] {
@@ -56,6 +57,18 @@ DesignController::~DesignController()
     m_overlays.save();
     if (m_deskSave.isActive())
         autosaveDesk(false);
+    // The app is going: no preview may stay on the desktop.
+    endDesignSession();
+}
+
+void DesignController::endDesignSession()
+{
+    if (m_lift && m_lift->isRunning())
+        m_lift->cancel();
+    m_gapHandles = false;
+    QJsonObject ignored;
+    look({{"op", "discard"}}, ignored);
+    restyle({{"op", "discard"}}, ignored);
 }
 
 void DesignController::setSource(std::unique_ptr<DesktopSource> source)
@@ -74,6 +87,7 @@ void DesignController::setSource(std::unique_ptr<DesktopSource> source)
             m_onboardingOpen = false;
             if (!m_overlays.session().isInteracting())
                 m_overlays.session().deselectAll();
+            endDesignSession();
         }
         updatePlacements();
     });

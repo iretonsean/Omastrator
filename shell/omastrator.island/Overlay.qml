@@ -29,6 +29,8 @@ Item {
   readonly property var onboarding: design.onboarding || ({})
   readonly property var detail: design.detail || null
   readonly property var proposal: design.proposal || null
+  // Where a proposal waits when the floating bar isn't up: the design monitor, else the first.
+  readonly property string proposalScreen: design.monitor || (Quickshell.screens.length ? Quickshell.screens[0].name : "")
   readonly property string tool: design.tool || "inspect"
   readonly property var lifting: design.lift || null
   readonly property var look: design.look || null
@@ -134,7 +136,7 @@ Item {
       readonly property int topClear: (place.reservedTop || 0) + Style.gapsOut + root.islandHeight + Style.space(12)
 
       screen: modelData
-      visible: mine || myArt.length > 0
+      visible: mine || myArt.length > 0 || (root.proposal !== null && root.proposalScreen === modelData.name)
       anchors.top: true
       anchors.left: true
       anchors.right: true
@@ -155,6 +157,8 @@ Item {
         Region { item: window.maskMode === "panels" && onboardingCard.visible ? onboardingCard : null }
         Region { item: window.maskMode === "panels" && typing.visible ? typing : null }
         Region { item: window.maskMode === "panels" && gapGrip.visible ? gapGrip : null }
+        // A proposal left waiting keeps its own Keep and Discard, with or without design mode.
+        Region { item: proposalCard.visible ? proposalCard : null }
         // The island stays reachable over everything else: its buttons are how to change tool or leave.
         Region { item: islandHole; intersection: Intersection.Subtract }
       }
@@ -162,6 +166,13 @@ Item {
       Item {
         id: everything
         anchors.fill: parent
+      }
+
+      // Esc leaves design mode from the overlay itself, so it works even where Hyprland has no design keys.
+      Item {
+        id: escapeKeys
+        focus: window.drawing && !typing.visible
+        Keys.onEscapePressed: root.run(["design", "off"])
       }
 
       Item {
@@ -352,6 +363,15 @@ Item {
         id: typing
         property var points: []
         visible: false
+        // Esc goes to Hyprland's design keys first, so the field's own Esc may never run: close with the mode.
+        Connections {
+          target: window
+          function onMineChanged() { if (!window.mine) typing.visible = false }
+        }
+        Connections {
+          target: root
+          function onToolChanged() { typing.visible = false }
+        }
         x: points.length > 0 ? points[0].x - window.place.x : 0
         y: points.length > 0 ? points[0].y - window.place.y : 0
         width: Math.max(Style.space(180), typingField.implicitWidth + Style.space(16))
@@ -477,6 +497,47 @@ Item {
             }
           }
 
+          // Always shown, even folded down: a waiting proposal and a running lift keep their answers.
+          Row {
+            spacing: Style.space(4)
+            visible: root.proposal !== null
+
+            Label {
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.proposal ? root.proposal.title + (root.proposal.summary ? ": " + root.proposal.summary : "") : ""
+              width: Math.min(implicitWidth, Style.space(240))
+              elide: Text.ElideRight
+            }
+
+            Chip {
+              label: "Keep"
+              primary: true
+              onClicked: root.run(["design", "keep"])
+            }
+
+            Chip {
+              label: "Discard"
+              onClicked: root.run(["design", "discard"])
+            }
+          }
+
+          Row {
+            spacing: Style.space(4)
+            visible: root.lifting !== null
+
+            Label {
+              anchors.verticalCenter: parent.verticalCenter
+              text: Logic.liftText(root.lifting)
+              width: Math.min(implicitWidth, Style.space(280))
+              elide: Text.ElideRight
+            }
+
+            Chip {
+              label: "Cancel"
+              onClicked: root.run(["design", "lift", "cancel"])
+            }
+          }
+
           Column {
             spacing: Style.space(5)
             visible: !remembered.collapsed
@@ -579,45 +640,7 @@ Item {
             }
           }
 
-          Row {
-            spacing: Style.space(4)
-            visible: root.proposal !== null
 
-            Label {
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.proposal ? root.proposal.title + (root.proposal.summary ? ": " + root.proposal.summary : "") : ""
-              width: Math.min(implicitWidth, Style.space(240))
-              elide: Text.ElideRight
-            }
-
-            Chip {
-              label: "Keep"
-              primary: true
-              onClicked: root.run(["design", "keep"])
-            }
-
-            Chip {
-              label: "Discard"
-              onClicked: root.run(["design", "discard"])
-            }
-          }
-
-          Row {
-            spacing: Style.space(4)
-            visible: root.lifting !== null
-
-            Label {
-              anchors.verticalCenter: parent.verticalCenter
-              text: Logic.liftText(root.lifting)
-              width: Math.min(implicitWidth, Style.space(280))
-              elide: Text.ElideRight
-            }
-
-            Chip {
-              label: "Cancel"
-              onClicked: root.run(["design", "lift", "cancel"])
-            }
-          }
 
           Label {
             visible: text !== ""
@@ -626,6 +649,49 @@ Item {
             width: Math.min(implicitWidth, Style.space(360))
             wrapMode: Text.Wrap
           }
+          }
+        }
+      }
+
+      // ------------------------------------------------------------ a proposal left waiting
+
+      // The floating bar carries Keep and Discard while design mode is on. Without it (design mode ended, or
+      // the bar is elsewhere) the proposal would sit on the screen with no way to answer it.
+      Rectangle {
+        id: proposalCard
+        visible: root.proposal !== null && !barCard.visible && root.proposalScreen === window.modelData.name
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(28)
+        width: proposalRow.implicitWidth + root.pad * 2
+        height: proposalRow.implicitHeight + root.pad * 2
+        radius: Style.space(10)
+        color: root.paper
+        border.color: root.edge
+        border.width: 1
+
+        Row {
+          id: proposalRow
+          x: root.pad
+          y: root.pad
+          spacing: Style.space(6)
+
+          Label {
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.proposal ? root.proposal.title : ""
+            width: Math.min(implicitWidth, Style.space(320))
+            elide: Text.ElideRight
+          }
+
+          Chip {
+            label: "Keep"
+            primary: true
+            onClicked: root.run(["design", "keep"])
+          }
+
+          Chip {
+            label: "Discard"
+            onClicked: root.run(["design", "discard"])
           }
         }
       }

@@ -10,7 +10,7 @@
 namespace Cli {
 bool handles(const char *command)
 {
-    for (const char *each : {"agent", "--mcp", "status", "island", "setup", "design", "desk", "daemon"}) {
+    for (const char *each : {"agent", "--mcp", "status", "island", "setup", "design", "desk", "daemon", "reset"}) {
         if (std::strcmp(command, each) == 0)
             return true;
     }
@@ -34,6 +34,8 @@ int run(const QStringList &args)
         return DesignCli::runDesign(args.mid(1), out, err);
     if (command == QLatin1String("desk"))
         return DesignCli::runDesk(args.mid(1), out, err);
+    if (command == QLatin1String("reset"))
+        return DesignCli::runReset(out, err);
     if (command == QLatin1String("daemon"))
         return DesignCli::runDaemon(args.mid(1), out, err);
     if (command == QLatin1String("setup")) {

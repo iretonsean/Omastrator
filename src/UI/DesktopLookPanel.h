@@ -27,6 +27,12 @@ public:
 
     // "windows", "bar", "font", "wallpaper", "colours" or "app"; shows and raises the panel.
     void showSection(const QString &section);
+
+protected:
+    // Closing drops the unsaved preview and the gap handles: the desktop goes back to how it was.
+    void closeEvent(QCloseEvent *event) override;
+
+public:
     // Reads the desktop and the pending edit again.
     void reload();
 

@@ -2,6 +2,9 @@
 #include "Agent/AgentClient.h"
 #include "Agent/AgentProtocol.h"
 #include <QCoreApplication>
+#include <csignal>
+#include <sys/prctl.h>
+#include <unistd.h>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -121,6 +124,10 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         return 0;
     }
     if (args.contains(QStringLiteral("--follow"))) {
+        // Goes when whatever reads it goes (the shell restarting), instead of lingering as an orphan.
+        ::prctl(PR_SET_PDEATHSIG, SIGTERM);
+        if (::getppid() == 1)
+            return 0;
         Follower follower(out);
         follower.start();
         return QCoreApplication::exec();

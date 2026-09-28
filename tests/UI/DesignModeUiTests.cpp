@@ -199,6 +199,20 @@ private slots:
         app.call(QStringLiteral("clear"), {{"surface", "all"}});
         QVERIFY(overlays.surfaces().isEmpty());
         QTRY_VERIFY(app.status()["overlays"].toArray().isEmpty());
+
+        // Reset is the escape hatch from any state: drawing, with art up, design mode on.
+        app.call(QStringLiteral("on"));
+        app.call(QStringLiteral("tool"), {{"tool", "rectangle"}});
+        app.call(QStringLiteral("draw"), {{"tool", "rectangle"}, {"points", QJsonArray{QJsonArray{200, 150}, QJsonArray{400, 250}}}});
+        QVERIFY(!overlays.surfaces().isEmpty());
+        app.call(QStringLiteral("reset"));
+        QVERIFY(!app.design().mode().isOn());
+        QCOMPARE(app.status()["tool"].toString(), QStringLiteral("inspect"));
+        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
+        QVERIFY(overlays.surfaces().isEmpty());
+        // Undo brings the drawings back.
+        app.call(QStringLiteral("undo"));
+        QVERIFY(!overlays.surfaces().isEmpty());
     }
 
     void workGoesWhereTheUserChoosesAndTheDeskLabelsItsSource()

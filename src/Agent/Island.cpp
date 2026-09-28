@@ -156,6 +156,16 @@ void resetKeys()
     Hyprland::dispatch(QStringLiteral("hl.dispatch(hl.dsp.submap(\"reset\"))"), QStringLiteral("submap reset"));
 }
 
+void holdKeysFor(const QString &mode)
+{
+    const QString submap = QStringLiteral("omastrator-") + mode;
+    if (mode == QLatin1String("normal") || !Setup::submapDefined(Setup::Environment::current(), submap)) {
+        resetKeys();
+        return;
+    }
+    Hyprland::dispatch(QStringLiteral("hl.dispatch(hl.dsp.submap(\"%1\"))").arg(submap), QStringLiteral("submap ") + submap);
+}
+
 void holdDesignKeys()
 {
     if (!Setup::designKeysLoaded(Setup::Environment::current()))
@@ -259,15 +269,13 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         const QString mode = resolveMode(args.value(1), state.mode);
         if (mode.isEmpty())
             return failed(QStringLiteral("Choose a mode: %1, next or previous.").arg(modes().join(QStringLiteral(", "))));
-        const bool leftDesign = state.mode == QLatin1String("design") && mode != QLatin1String("design");
         state.mode = mode;
         // Normal rests; every other mode opens on its tools.
         state.expanded = mode != QLatin1String("normal");
         if (const int code = save(state); code != 0)
             return code;
-        // The design keys (Esc, Alt) go back to the apps however design mode was left.
-        if (leftDesign)
-            resetKeys();
+        // The keys follow the mode however it changed: a mode left by a click keeps none of its letters.
+        holdKeysFor(mode);
         // Design mode is kept by the background app, which starts it if it isn't running.
         if (mode == QLatin1String("draw") || mode == QLatin1String("design")) {
             if (const QString failure = ensureAppRunning(); !failure.isEmpty())

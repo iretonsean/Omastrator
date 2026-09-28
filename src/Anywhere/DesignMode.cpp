@@ -1,5 +1,6 @@
 #include "Anywhere/DesignMode.h"
 #include "Agent/Island.h"
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -37,6 +38,15 @@ const QStringList &DesignMode::tools()
 
 void DesignMode::followIsland()
 {
+    // Design mode left on by an app that didn't end cleanly doesn't come back on by itself at the next start.
+    const QFileInfo state(Island::statePath());
+    if (Island::read().mode == QLatin1String("design") && state.exists() && state.lastModified().secsTo(QDateTime::currentDateTime()) > 15) {
+        Island::State normal = Island::read();
+        normal.mode = QStringLiteral("normal");
+        normal.expanded = false;
+        Island::write(normal);
+        Island::resetKeys();
+    }
     const QString folder = QFileInfo(Island::statePath()).absolutePath();
     QDir().mkpath(folder);
     m_watcher.addPath(folder);

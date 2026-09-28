@@ -27,11 +27,12 @@ function islandHole(screen, pillWidth, pillHeight, gapsOut) {
            width: pillWidth + 2 * margin, height: pillHeight + 2 * margin }
 }
 
-// Typing needs the keyboard: the Ask field, onboarding and the text tools. Otherwise the apps keep it.
+// Typing needs the keyboard: the Ask field, onboarding and the text tools. A drawing tool takes it too, for Esc:
+// the pointer is the overlay's then anyway. Otherwise the apps keep it.
 function wantsKeyboard(design, screen, typing) {
   if (!design || !design.on || design.monitor !== screen.name)
     return false
-  return !!typing || design.tool === "text" || design.tool === "note"
+  return !!typing || (!!design.tool && design.tool !== "inspect")
 }
 
 // A layout rectangle in the overlay's own coordinates on `screen`.

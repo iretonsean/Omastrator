@@ -145,6 +145,7 @@ QString DesignController::look(const QJsonObject &params, QJsonObject &result)
         if (const QString problem = DesktopLook::validate(merged); !problem.isEmpty())
             return problem;
         m_lookEdits = merged;
+        rememberLookEdits();
         const QString failed = runAll(DesktopLook::previewCommands(m_lookEdits, DesktopLook::read(paths, false), paths));
         result["pending"] = m_lookEdits;
         result["note"] = DesktopLook::previewNote(m_lookEdits, paths);
@@ -156,8 +157,14 @@ QString DesignController::look(const QJsonObject &params, QJsonObject &result)
         if (m_lookEdits.isEmpty())
             return {};
         const QString failed = runAll(DesktopLook::discardCommands(m_lookEdits, DesktopLook::read(paths, false), paths));
+        // A discard that didn't finish keeps the edits, so it can be tried again.
+        if (!failed.isEmpty()) {
+            say(QStringLiteral("The preview couldn't all be undone: ") + failed + QStringLiteral(" Try Discard again."));
+            return {};
+        }
         m_lookEdits = {};
-        say(failed.isEmpty() ? QStringLiteral("Preview discarded. The desktop is as it was.") : QStringLiteral("Preview discarded, but ") + failed);
+        rememberLookEdits();
+        say(QStringLiteral("Preview discarded. The desktop is as it was."));
         emit lookChanged();
         return {};
     }
@@ -174,6 +181,7 @@ QString DesignController::look(const QJsonObject &params, QJsonObject &result)
         if (!failed.isEmpty())
             return failed + QStringLiteral(" The backup is in %1.").arg(plan.backupFolder);
         m_lookEdits = {};
+        rememberLookEdits();
         say(QStringLiteral("Saved to your desktop's config. Revert is in Desktop Look's history."));
         emit lookChanged();
         return {};
@@ -327,4 +335,34 @@ QJsonObject DesignController::lookStatus()
     status["rounding"] = m_lookEdits.value(QLatin1String("rounding")).toInt(now.rounding);
     status["handles"] = true;
     return status;
+}
+
+QString DesignController::pendingLookPath()
+{
+    return QDir(Island::runtimeDirectory()).filePath(QStringLiteral("look-pending.json"));
+}
+
+void DesignController::rememberLookEdits()
+{
+    const QString path = pendingLookPath();
+    if (m_lookEdits.isEmpty()) {
+        QFile::remove(path);
+        return;
+    }
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        file.write(QJsonDocument(m_lookEdits).toJson(QJsonDocument::Compact));
+}
+
+void DesignController::recoverLookPreview()
+{
+    // A preview left by an app that didn't end cleanly: put the desktop back from its saved config.
+    QFile file(pendingLookPath());
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+    m_lookEdits = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    QJsonObject ignored;
+    look({{"op", "discard"}}, ignored);
 }

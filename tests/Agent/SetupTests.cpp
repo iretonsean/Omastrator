@@ -151,6 +151,8 @@ private slots:
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.ai/TrayLight.qml"))));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator-ui/Status.qml"))));
         QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("hl.define_submap(\"omastrator-draw\""));
+        // The escape hatch is bound outside every submap.
+        QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("hl.bind(\"SUPER + ALT + Escape\", hl.dsp.exec_cmd(omastrator .. \" reset\")"));
         // Labels are UTF-8 once, not read as Latin-1 and encoded again.
         QVERIFY(QString::fromUtf8(read(config(QStringLiteral("omastrator/hyprland.lua")))).contains(QStringLiteral("\"Open a page\u2026\"")));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/vocabulary.txt"))));

@@ -64,6 +64,8 @@ Item {
     onRunningChanged: {
       if (running) return
       root.connected = false
+      // Its last line is out of date: showing it would keep art and cards the app already removed.
+      root.status = ({})
       restart.start()
       // Backs off to a minute, so a missing binary doesn't fill the shell's log.
       restart.interval = Math.min(restart.interval * 2, 60000)

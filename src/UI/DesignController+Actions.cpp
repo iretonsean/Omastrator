@@ -2,6 +2,7 @@
 #include "Agent/AgentLauncher.h"
 #include "Agent/Capture.h"
 #include "Agent/Island.h"
+#include "UI/DesktopLookPanel.h"
 #include "Anywhere/AnywhereSettings.h"
 #include "Document/PathOperations.h"
 #include "UI/AgentBridge.h"
@@ -91,6 +92,27 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
         if (!m_mode->isOn())
             m_mode->setOn(true);
         result["tool"] = m_mode->tool();
+        return {};
+    }
+    if (action == QLatin1String("reset")) {
+        // The escape hatch: everything Omastrator put on the screen or holds goes, whatever state it was in.
+        // The agent's work for the overlay stops, so nothing arrives after the screen is clear.
+        if (m_bridge.designTarget() == &overlay && m_bridge.waiting())
+            m_bridge.stopWaiting();
+        if (m_bridge.hasProposalIn(overlay))
+            m_bridge.discardProposal();
+        endDesignSession();
+        if (m_lookPanel)
+            m_lookPanel->close();
+        m_onboardingOpen = false;
+        const QStringList surfaces = m_overlays.surfaces();
+        for (const QString &key : surfaces)
+            m_overlays.clear(key);
+        m_overlays.save();
+        m_mode->setOn(false);
+        Island::resetKeys();
+        say(surfaces.isEmpty() ? QStringLiteral("Reset. Design mode is off and nothing is left on the screen.")
+                               : QStringLiteral("Reset. Design mode is off and the drawings are cleared; Undo on the island brings them back."));
         return {};
     }
     if (action == QLatin1String("alt")) {

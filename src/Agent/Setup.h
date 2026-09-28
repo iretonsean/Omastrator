@@ -76,6 +76,8 @@ std::optional<QByteArray> jq(const QByteArray &input, const QString &filter, QSt
 // Whether Hyprland loads setup's design keys: Omastrator's key file defines the design submap and Hyprland's
 // config sources it. Entering a submap Hyprland doesn't define would leave the user with no keybindings.
 bool designKeysLoaded(const Environment &environment);
+// The same for any of Omastrator's submaps (omastrator-draw, -capture, -ai, -live, -heard, -design).
+bool submapDefined(const Environment &environment, const QString &submap);
 QString unifiedDiff(const QString &path, const std::optional<QByteArray> &before, const std::optional<QByteArray> &after);
 // "grim (sudo pacman -S grim)" for each program Omastrator's desktop features need and can't find.
 QStringList missingTools();

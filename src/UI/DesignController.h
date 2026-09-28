@@ -118,6 +118,11 @@ private:
     // A screenshot of `rect` kept in the captures folder; empty when grim can't.
     QString keepScreenshot(const QRect &rect, QImage *image = nullptr);
     void say(const QString &line);
+    static QString pendingLookPath();
+    void rememberLookEdits();
+    void recoverLookPreview();
+    // Everything design mode shows or previews on the desktop goes when it ends.
+    void endDesignSession();
     QJsonObject lookStatus();
     void stopStylePreview();
     // `mark`: the tab shows as saved (not while the window is being torn down).

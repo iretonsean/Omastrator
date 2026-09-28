@@ -290,7 +290,11 @@ private slots:
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
         QFile log(m_hyprctl + QStringLiteral(".log"));
         QVERIFY(log.open(QIODevice::ReadOnly));
-        QCOMPARE(QString::fromUtf8(log.readAll()).trimmed(), QStringLiteral("dispatch submap reset"));
+        // Without setup's keys no submap is ever held, only given back: the last word is a reset.
+        const QStringList dispatched = QString::fromUtf8(log.readAll()).trimmed().split(QLatin1Char('\n'));
+        QVERIFY(!dispatched.isEmpty());
+        for (const QString &line : dispatched)
+            QCOMPARE(line, QStringLiteral("dispatch submap reset"));
         // Toggle turns it on and off again.
         QCOMPARE(DesignCli::runDesign({QStringLiteral("toggle")}, out, err), 0);
         QCOMPARE(Island::read().mode, QStringLiteral("design"));

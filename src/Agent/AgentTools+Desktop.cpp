@@ -211,7 +211,7 @@ const QStringList &AgentTools::designActions()
 {
     static const QStringList actions{"on",     "off",    "toggle", "status", "tool", "alt",  "select", "selectArt", "deselect", "measure", "draw",
                                      "action", "ask",    "keep",   "discard", "send", "undo", "redo",   "clear",     "onboarding", "desk",
-                                     "lift",   "look",   "restyle"};
+                                     "lift",   "look",   "restyle", "reset"};
     return actions;
 }
 

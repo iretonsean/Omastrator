@@ -76,6 +76,8 @@ QString designHelp()
         "  send <overlay|desk|document|source|agent> [--surface KEY] [--target N]\n"
         "       [--prompt WORDS]\n"
         "                     Where a surface's work goes; remembered per surface.\n"
+        "  reset              End design mode, discard previews and lifts, clear the drawings\n"
+        "                     and give the keyboard back. Also `omastrator reset` and Super+Alt+Escape.\n"
         "  undo | redo | clear KEY|all\n"
         "                     The overlay's history, and taking a surface's art away (all: every surface's).\n"
         "  onboarding [open|close|done|skip] | onboarding QUESTION VALUE…\n"
@@ -271,6 +273,26 @@ int runDesk(const QStringList &args, QTextStream &out, QTextStream &err)
     if (!QStringList{"show", "window", "toggle", "hide"}.contains(how))
         return failed(err, QStringLiteral("Choose show, window, toggle or hide."));
     return call(QStringLiteral("design"), {{"action", "desk"}, {"how", how}}, out, err);
+}
+
+int runReset(QTextStream &out, QTextStream &err)
+{
+    // The island and the keyboard first: they need nothing from the app.
+    Island::State state = Island::read();
+    state.mode = QStringLiteral("normal");
+    state.expanded = false;
+    Island::write(state);
+    Island::resetKeys();
+    if (Island::appIsRunning()) {
+        try {
+            AgentClient::Connection connection;
+            connection.call(QStringLiteral("design"), {{"action", "reset"}}, 10'000);
+        } catch (const AgentProtocol::Error &failure) {
+            return failed(err, QStringLiteral("The island is back to normal, but the app didn't answer: ") + failure.message());
+        }
+    }
+    out << "Reset.\n";
+    return 0;
 }
 
 int runDaemon(const QStringList &args, QTextStream &out, QTextStream &err)

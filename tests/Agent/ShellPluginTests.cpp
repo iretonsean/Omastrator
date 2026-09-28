@@ -117,6 +117,8 @@ private slots:
         QCOMPARE(parts, 5);
         // Even a drawing tool leaves the island reachable: its buttons change the tool and leave design mode.
         QVERIFY(mask.contains(QStringLiteral("Region { item: islandHole; intersection: Intersection.Subtract }")));
+        // A proposal left waiting keeps its Keep and Discard reachable, with or without design mode.
+        QVERIFY(mask.contains(QStringLiteral("Region { item: proposalCard.visible ? proposalCard : null }")));
         // The keyboard stays with the apps unless something is being typed.
         QVERIFY(window.contains(QStringLiteral("WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None")));
         QVERIFY(!overlay.contains(QStringLiteral("WlrKeyboardFocus.Exclusive")));
@@ -157,7 +159,8 @@ private slots:
         // A drawing tool takes the monitor until Inspect gives it back.
         design["tool"] = "rectangle";
         QCOMPARE(call("maskMode", {design, screen, false}).toString(), QStringLiteral("full"));
-        QVERIFY(!call("wantsKeyboard", {design, screen, false}).toBool());
+        // A drawing tool takes the keyboard too, so Esc reaches the overlay without Hyprland's keys.
+        QVERIFY(call("wantsKeyboard", {design, screen, false}).toBool());
         design["tool"] = "text";
         QVERIFY(call("wantsKeyboard", {design, screen, false}).toBool());
         design["tool"] = "inspect";

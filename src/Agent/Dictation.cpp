@@ -457,10 +457,15 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         out << command.description << '\n';
         out.flush();
         if (!immediate) {
-            hyprSubmap(QStringLiteral("omastrator-heard"));
+            // A submap Hyprland doesn't define would leave no keybindings at all.
+            const bool held = Setup::submapDefined(Setup::Environment::current(), QStringLiteral("omastrator-heard"));
+            if (held)
+                hyprSubmap(QStringLiteral("omastrator-heard"));
             for (int waited = 0; waited < confirmMs && !readJson(statePath())["cancelled"].toBool(); waited += 100)
                 QThread::msleep(100);
-            hyprSubmap(QStringLiteral("reset"));
+            // Back to the mode's own keys, so design mode's Esc still works afterwards.
+            if (held)
+                Island::holdKeysFor(Island::read().mode);
             if (readJson(statePath())["cancelled"].toBool()) {
                 writeJson(statePath(), {{"state", "idle"}});
                 Island::setActivity(QStringLiteral("Cancelled."), 2);

@@ -1,4 +1,5 @@
 #include "UI/DesktopLookPanel.h"
+#include <QCloseEvent>
 #include "System/DesktopLook.h"
 #include "UI/DesignController.h"
 #include "UI/NumberField.h"
@@ -42,6 +43,14 @@ QLabel *wrapped(const QString &text, QWidget *parent)
     label->setWordWrap(true);
     return label;
 }
+}
+
+void DesktopLookPanel::closeEvent(QCloseEvent *event)
+{
+    QJsonObject ignored;
+    m_controller.look({{"op", "handles"}, {"on", false}}, ignored);
+    m_controller.look({{"op", "discard"}}, ignored);
+    QWidget::closeEvent(event);
 }
 
 DesktopLookPanel::DesktopLookPanel(DesignController &controller, QWidget *parent) : QWidget(parent, Qt::Window), m_controller(controller)

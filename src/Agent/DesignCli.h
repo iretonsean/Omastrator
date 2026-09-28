@@ -8,5 +8,7 @@ namespace DesignCli {
 int runDesign(const QStringList &args, QTextStream &out, QTextStream &err);
 int runDesk(const QStringList &args, QTextStream &out, QTextStream &err);
 int runDaemon(const QStringList &args, QTextStream &out, QTextStream &err);
+// `omastrator reset`: the escape hatch, which works even when the app isn't answering.
+int runReset(QTextStream &out, QTextStream &err);
 QString designHelp();
 }
