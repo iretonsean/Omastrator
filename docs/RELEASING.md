@@ -16,14 +16,32 @@ a tag, publishes a release or pushes to the AUR.
    `omastrator-<version>-x86_64.tar.zst`, `omastrator-<version>-aarch64.tar.zst`
    and `SHA256SUMS.txt` to a GitHub Release. Watch it in the Actions tab; a
    full run (two Qt builds) takes a while.
+   - **Prove it before the first real tag.** No GitHub Actions run has
+     happened yet, so run `Release` (and `CI`) once with **Run workflow**
+     (`workflow_dispatch`) on a branch, or push a throwaway `v0.0.0-rc1` tag
+     to a fork. A dispatch run builds and uploads artifacts but publishes no
+     release. Both workflows build and test as an unprivileged `builder`
+     user and don't install Chromium (its sandbox can't start in a
+     container, and those tests skip without it).
    - **First time only:** the aarch64 job runs on a native `ubuntu-24.04-arm`
-     GitHub-hosted runner inside `menci/archlinuxarm:base-devel` — there's no
+     GitHub-hosted runner inside `menci/archlinuxarm` — there's no
      official Arch Linux ARM image, so this is a community one, unverified
      from here (no GitHub Actions run happened while writing this). If it
      can't pull that image or `pacman -Syu` fails oddly in it, swap in a
      working ALARM image, or fall back to QEMU user-mode emulation of aarch64
      inside the same `archlinux:base-devel` image the x86_64 job uses (slower,
      but known to work).
+   - **Bumping the pinned images.** Both build images are pinned by digest in
+     `release.yml` (and `ci.yml` for the Arch one), so a moved tag can't change
+     what builds the published binaries. To bump one, look up the tag's
+     current digest, for example
+     `docker buildx imagetools inspect archlinux:base-devel` (or
+     `menci/archlinuxarm:base-devel`), and replace the `@sha256:…` value.
+     `pacman -Syu` on top stays rolling, which is intended.
+   - **Re-running after a partial failure.** If `gh release create` already
+     made the release, re-run only the failed job; to replace assets on the
+     existing release use
+     `gh release upload v0.2.0 <files> --clobber`.
 3. Once the release is published, update `omastrator-bin`'s PKGBUILD:
    ```sh
    scripts/update-bin-pkgbuild.sh 0.2.0
@@ -87,17 +105,20 @@ download, since its source is the release tarball.
 
 ## Design decisions and why
 
-- **Depends `qt6-base`, `jq`, `shared-mime-info`, `hicolor-icon-theme` and
-  `desktop-file-utils`.** `qt6-base` covers Widgets, Concurrent, Network and
-  Test — Omastrator doesn't need `qt6-declarative` itself (only
-  `ShellPluginTests` links it, optionally, to run `OverlayLogic.js`); the
-  shell plugins run inside `omarchy-shell`/quickshell, which brings its own
-  Qt Qml. `jq` is a hard dependency of `omastrator setup` (`Setup+Files.cpp`
-  shells out to it to edit `shell.json`), not optional. The other three back
-  the `.install` file's `update-desktop-database`, `update-mime-database` and
-  `gtk-update-icon-cache` calls, which a direct `cmake --install` runs itself
-  (see the `install(CODE ...)` block in `CMakeLists.txt`) but a packaged
-  install has to run from post-install hooks instead.
+- **Depends `qt6-base`, `jq`, `shared-mime-info` and `hicolor-icon-theme`.**
+  `qt6-base` covers Widgets, Concurrent, Network and Test — Omastrator doesn't
+  need `qt6-declarative` itself (only `ShellPluginTests` links it, optionally,
+  to run `OverlayLogic.js`); the shell plugins run inside
+  `omarchy-shell`/quickshell, which brings its own Qt Qml. `jq` is a hard
+  dependency of `omastrator setup` (`Setup+Files.cpp` shells out to it to edit
+  `shell.json`), not optional. `shared-mime-info` and `hicolor-icon-theme` own
+  the MIME and icon directories the package installs into. The `.install`
+  files don't run `update-desktop-database`, `update-mime-database` or
+  `gtk-update-icon-cache`: pacman hooks shipped by `desktop-file-utils`,
+  `shared-mime-info` and `gtk-update-icon-cache` already do that on every
+  install, upgrade and removal. (A direct `cmake --install` runs
+  `update-mime-database` itself, in the `install(CODE ...)` block in
+  `CMakeLists.txt`, and skips it under `DESTDIR`.)
 - **`optdepends` follow the real `OMASTRATOR_*` overrides in AGENTS.md**,
   cross-checked against where each program is actually run
   (`src/Agent/Capture.cpp`, `src/Cloud/CloudStorage.cpp`,
@@ -105,10 +126,8 @@ download, since its source is the release tarball.
   `qt6-imageformats` for placing TIFF and WebP images
   (`src/IO/ImageImporter.cpp` reads `QImageReader::supportedImageFormats()`,
   and Qt ships those two as plugins in that package, not in `qt6-base`).
-  **`ghostscript` isn't in the list.** The brief that asked for this package
-  named it (EPS/PS import through Ghostscript), but nothing in this branch's
-  source runs `gs` — that work is still on `feat/import-pdf`, unmerged. Add
-  it once that lands; until then it would be an unused dependency.
+  `ghostscript` is there for EPS and PostScript import (`EpsImporter`
+  runs `gs`; without it the import says how to install it).
   **`voxtype` and `omdrop`/`omadrop` aren't in `optdepends` either**: none of
   the three are pacman or AUR packages. voxtype is Omarchy's own dictation
   engine (`omarchy voxtype install`); omdrop/omadrop are an Omarchy shell

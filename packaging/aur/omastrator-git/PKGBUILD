@@ -6,12 +6,13 @@ pkgdesc="Vector illustration for Linux, made for Omarchy (git version)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/iretonsean/Omastrator"
 license=('MIT')
-depends=('qt6-base' 'jq' 'shared-mime-info' 'hicolor-icon-theme' 'desktop-file-utils')
+depends=('qt6-base' 'jq' 'shared-mime-info' 'hicolor-icon-theme')
 makedepends=('cmake' 'git')
 # hyprpicker, slurp, grim, wl-clipboard: Capture (Pick Colour, Screenshot Region/Window).
 # rclone: Cloud storage. python-gobject/at-spi2-core: Design mode's AT-SPI inspector
 # reading native app windows. chromium: Live web editing and the browser inspector.
 # github-cli: Deploy's GitHub history. qt6-imageformats: placing TIFF and WebP images.
+# ghostscript: placing EPS and PostScript files.
 # Two more outside programs aren't pacman packages, so they aren't listed here: voxtype
 # (Omarchy's own dictation engine, installed with `omarchy voxtype install`) and omdrop/
 # omadrop (Send to a Device, installed with `omarchy plugin add
@@ -26,7 +27,8 @@ optdepends=('hyprpicker: Capture > Pick Colour as a Swatch'
             'at-spi2-core: Design mode reading a native app window (AT-SPI)'
             'chromium: Live web editing, and Design mode in a Chromium tab'
             'github-cli: Deploy shows its GitHub history'
-            'qt6-imageformats: placing TIFF and WebP images')
+            'qt6-imageformats: placing TIFF and WebP images'
+            'ghostscript: placing EPS and PostScript files')
 provides=('omastrator')
 conflicts=('omastrator' 'omastrator-bin')
 install=omastrator.install

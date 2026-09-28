@@ -1,8 +1,4 @@
 post_install() {
-    update-desktop-database -q
-    update-mime-database usr/share/mime &>/dev/null
-    gtk-update-icon-cache -q -t -f usr/share/icons/hicolor &>/dev/null
-
     echo ':: Run `omastrator setup` to wire up the island and tray light in'
     echo '   omarchy-shell, the Hyprland keys, the Omarchy menu entries and the'
     echo '   Chromium extension. It shows every change first and asks before'
@@ -16,10 +12,4 @@ post_upgrade() {
 pre_remove() {
     echo ':: If you ran `omastrator setup`, run `omastrator setup --remove` first'
     echo '   to undo the shell plugins, keys, menu entries and Chromium extension.'
-}
-
-post_remove() {
-    update-desktop-database -q
-    update-mime-database usr/share/mime &>/dev/null
-    gtk-update-icon-cache -q -t -f usr/share/icons/hicolor &>/dev/null
 }

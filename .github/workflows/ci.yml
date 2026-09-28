@@ -6,22 +6,41 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    container: archlinux:base-devel
+    # Digest-pinned; docs/RELEASING.md says how to bump it.
+    container: archlinux:base-devel@sha256:51dd3d24f7fba779e7c471caeee7804c50e8c134ad948e19685a1c83a42facc3
     steps:
+      # Chromium isn't installed: its sandbox can't start in a container, and the Chromium
+      # tests skip without it. Everything below the install step runs as `builder`, because
+      # the suite assumes a normal user (root reads the mode-000 files its tests expect to
+      # be unreadable) and its git tests need an identity.
       - name: Install build and test dependencies
-        run: pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq chromium
+        run: |
+          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq
+          useradd -m builder
 
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Hand the workspace to the build user
+        run: |
+          chown -R builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- env HOME=/home/builder git config --global user.name CI
+          runuser -u builder -- env HOME=/home/builder git config --global user.email ci@example.invalid
 
       - name: Configure
-        run: cmake -S . -B build -DOMASTRATOR_WERROR=ON
+        run: runuser -u builder -- env HOME=/home/builder cmake -S . -B build -DOMASTRATOR_WERROR=ON
 
       - name: Build
-        run: cmake --build build -j"$(nproc)"
+        run: runuser -u builder -- env HOME=/home/builder cmake --build build -j"$(nproc)"
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure --timeout 300
+        run: runuser -u builder -- env HOME=/home/builder ctest --test-dir build --output-on-failure --timeout 300

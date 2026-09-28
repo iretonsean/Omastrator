@@ -14,6 +14,16 @@ on:
   push:
     tags:
       - "v*"
+  # For proving a full run before the first real tag. It builds and uploads artifacts under
+  # the branch's name, but publishes nothing: the release job only runs for a v* tag.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -23,50 +33,74 @@ jobs:
         include:
           - arch: x86_64
             runner: ubuntu-latest
-            image: archlinux:base-devel
+            # archlinux:base-devel, pinned by digest; docs/RELEASING.md says how to bump it.
+            image: archlinux:base-devel@sha256:51dd3d24f7fba779e7c471caeee7804c50e8c134ad948e19685a1c83a42facc3
           # No official Arch Linux ARM container is published for GitHub's arm64 runners, so
-          # this uses the community image the Arch Linux ARM project's own CI points people at.
+          # this uses a community image (menci/archlinuxarm:base-devel, one person's Docker Hub
+          # account), pinned by digest so a moved tag can't change what builds the binaries.
           # Worth a first-run check: docs/RELEASING.md.
           - arch: aarch64
             runner: ubuntu-24.04-arm
-            image: menci/archlinuxarm:base-devel
+            image: menci/archlinuxarm@sha256:d939db4a839a146fe49bbde51e4d8d0453bca4a07e96d795ee8f2ee6a56a6943
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.image }}
     steps:
+      # Chromium isn't installed: its sandbox can't start in a container, and the Chromium
+      # tests skip without it. Every step after checkout runs as `builder`, because the suite
+      # assumes a normal user (root reads the mode-000 files its tests expect to be
+      # unreadable) and its git tests need an identity.
       - name: Install build and test dependencies
         run: |
-          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq chromium
+          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq
+          useradd -m builder
 
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Version from the tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Hand the workspace to the build user
+        run: |
+          chown -R builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- env HOME=/home/builder git config --global user.name CI
+          runuser -u builder -- env HOME=/home/builder git config --global user.email ci@example.invalid
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+        run: runuser -u builder -- env HOME=/home/builder cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
 
       - name: Build
-        run: cmake --build build -j"$(nproc)"
+        run: runuser -u builder -- env HOME=/home/builder cmake --build build -j"$(nproc)"
 
       - name: Test (offscreen; each test already sets QT_QPA_PLATFORM itself)
-        run: ctest --test-dir build --output-on-failure --timeout 300
+        run: runuser -u builder -- env HOME=/home/builder ctest --test-dir build --output-on-failure --timeout 300
 
       - name: Install to a /usr tree
-        run: DESTDIR="$PWD/pkgroot" cmake --install build
+        run: runuser -u builder -- env HOME=/home/builder DESTDIR="$PWD/pkgroot" cmake --install build
 
+      # The tag-derived version goes through the environment, not into the script text: a tag
+      # name can hold shell metacharacters.
       - name: Tar it up
         working-directory: pkgroot
-        run: tar --zstd -cf "../omastrator-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.zst" usr
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        # root:root ownership, so the package doesn't carry the build user's uid.
+        run: tar --zstd --owner=0 --group=0 -cf "../omastrator-$VERSION-$ARCH.tar.zst" usr
 
       - uses: actions/upload-artifact@v4
         with:
           name: omastrator-${{ matrix.arch }}
-          path: omastrator-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.zst
+          path: omastrator-*-${{ matrix.arch }}.tar.zst
           if-no-files-found: error
 
   release:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write

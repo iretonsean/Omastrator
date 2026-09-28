@@ -1,5 +1,6 @@
 #include "Anywhere/DesignMode.h"
 #include "Agent/Island.h"
+#include "Agent/Setup.h"
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -345,6 +346,8 @@ QJsonObject DesignMode::status() const
             {"monitor", m_monitor},
             {"monitorRect", monitorRect},
             {"tool", m_tool},
+            // Without setup's Hyprland keys Esc never reaches design mode, so the island can't promise it.
+            {"keysLoaded", Setup::designKeysLoaded(Setup::Environment::current())},
             {"hover", m_hover ? m_hover->toJson() : QJsonValue(QJsonValue::Null)},
             {"anchor", m_anchor ? m_anchor->toJson() : QJsonValue(QJsonValue::Null)},
             {"selected", m_selected ? m_selected->toJson() : QJsonValue(QJsonValue::Null)},

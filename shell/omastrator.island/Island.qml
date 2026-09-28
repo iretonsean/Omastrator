@@ -4,6 +4,7 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import qs.Commons
 import "../omastrator-ui" as O
+import "OverlayLogic.js" as Logic
 
 // The Omastrator island (docs/OS-SUITE.md): a pill centred under the bar on
 // the focused monitor. It rests on the mode glyph, expands to the mode's
@@ -104,7 +105,7 @@ Item {
       { id: "clearArt", icon: "clear", tip: "Clear drawings: take everything drawn off every window" },
       { id: "desk", tip: "The Desk: everything sent from any surface" },
       { id: "onboarding", icon: "help", tip: "Tune the suggestions: a few questions about your work" },
-      { id: "done", icon: "close", tip: "Leave design mode (Esc)" }
+      { id: "done", icon: "close", tip: "Leave design mode" }
     ]
   })
 
@@ -157,9 +158,9 @@ Item {
   }
 
   function designLine(prev, next) {
-    if (next.on && !prev.on) return "Design mode: point at anything. Clicks still reach the app; Esc leaves"
+    if (next.on && !prev.on) return Logic.designOnLine(next)
     if (next.message && next.message !== prev.message) return next.message
-    if (next.proposal && !prev.proposal) return next.proposal.title + " is on the overlay: Keep or Discard it in the bar"
+    if (next.proposal && !prev.proposal) return (next.proposal.title || "A proposal") + " is on the overlay: Keep or Discard it in the bar"
     return ""
   }
 

@@ -103,6 +103,7 @@ private slots:
     {
         const QString overlay = read(QStringLiteral("omastrator.island/Overlay.qml"));
         QVERIFY(!overlay.isEmpty());
+        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Logic.designOnLine(next)")));
         QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Overlay { status: status; islandWidth: root.pillWidth; islandHeight: root.pillHeight }")));
         const QString window = block(overlay, QStringLiteral("PanelWindow"));
         QVERIFY(window.contains(QStringLiteral("WlrLayershell.layer: WlrLayer.Overlay")));
@@ -117,6 +118,8 @@ private slots:
         QCOMPARE(parts, 5);
         // Even a drawing tool leaves the island reachable: its buttons change the tool and leave design mode.
         QVERIFY(mask.contains(QStringLiteral("Region { item: islandHole; intersection: Intersection.Subtract }")));
+        // ...and so does the Omarchy bar: a drawing tool must not turn a click on its clock or tray light into a shape.
+        QVERIFY(mask.contains(QStringLiteral("Region { x: 0; y: 0; width: window.width; height: window.place.reservedTop || 0; intersection: Intersection.Subtract }")));
         // A proposal left waiting keeps its Keep and Discard reachable, with or without design mode.
         QVERIFY(mask.contains(QStringLiteral("Region { item: proposalCard.visible ? proposalCard : null }")));
         // The keyboard stays with the apps unless something is being typed.
@@ -166,6 +169,14 @@ private slots:
         design["tool"] = "inspect";
         QVERIFY(call("wantsKeyboard", {design, screen, true}).toBool());
         QVERIFY(!call("wantsKeyboard", {design, other, true}).toBool());
+
+        // The island's line when design mode turns on: Esc only leaves with setup's keys loaded, or under a drawing tool.
+        const QString escLeaves = QStringLiteral("Design mode: point at anything. Clicks still reach the app; Esc leaves");
+        const QString clickLeaves = QStringLiteral("Design mode: point at anything. Clicks still reach the app; click the island's Leave (or run `omastrator reset`) to leave");
+        QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "point"}, {"keysLoaded", true}}}).toString(), escLeaves);
+        QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "point"}, {"keysLoaded", false}}}).toString(), clickLeaves);
+        QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "inspect"}, {"keysLoaded", false}}}).toString(), clickLeaves);
+        QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "rectangle"}, {"keysLoaded", false}}}).toString(), escLeaves);
 
         // The island's pill: centred under the bar's reserved space, with a margin; nothing before the island has a size.
         QVariantMap barred = screen;
@@ -242,6 +253,8 @@ private slots:
                                                     {"proposal", "AI: Something else"}}})
                      .toString(),
                  QStringLiteral("AI: Palette is on the overlay: Keep or Discard it in the bar"));
+        QCOMPARE(call("readyTooltip", {QVariantMap{{"design", QVariantMap{{"proposal", QVariantMap{{"title", ""}}}}}}}).toString(),
+                 QStringLiteral("A proposal is on the overlay: Keep or Discard it in the bar"));
         QCOMPARE(call("readyTooltip", {QVariantMap{{"proposal", "AI: Mock-up"}}}).toString(),
                  QStringLiteral("AI: Mock-up is ready: Enter keeps it, Esc discards it"));
         QCOMPARE(call("readyTooltip", {QVariantMap{{"variations", 3}}}).toString(), QStringLiteral("3 variations ready"));
