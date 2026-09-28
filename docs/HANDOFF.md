@@ -5,53 +5,115 @@ here" just below.**
 
 ## Next session starts here
 
-**Update 2026-09-27 ~23:30.** The author was away from the screen, so the work
-below was checked only in offscreen renders and tests. It's on two branches,
-stacked:
+**State at 2026-09-28 ~08:20.** Everything is on `feat/frames` (pushed; 95/95
+suites pass). It's stacked on `feat/graphite-look`, which is stacked on
+`fix/design-mode-escape`. None of them is merged into main yet.
 
-- `feat/graphite-look`, off fix/design-mode-escape;
-- `feat/frames`, off feat/graphite-look. It's pushed and holds frames, auto
-  layout and constraints, with 95 of 95 test suites passing.
+- **Installed:** the app, from `feat/frames` at 0b8bbb3, in ~/.local. The shell
+  plugins are synced too (the author ran `omarchy restart shell` at 08:01).
+- **Not restarted:** the background daemon, which is also the app window the
+  author works in, still runs the build from 23:30.
+  - Restart it only when the author says so, since it closes their open
+    window: find it with `pgrep -x omastrator -a`, kill that PID, and start it
+    with `systemd-run --user … omastrator --daemon`.
+  - Never use `pkill -f 'omastrator --daemon'`: it matches and kills its own
+    shell.
+  - Until the restart, Name with AI (below) isn't in the running app.
+- **Done this morning:**
+  - The floating bar's Ask took no keys: typing P picked the Pen underneath.
+    The overlay now claims the keyboard on the click (`window.asking` in
+    Overlay.qml).
+  - Three older QML errors in Island.qml and Overlay.qml are fixed.
+  - **Name with AI** (0b8bbb3):
+    - The agent's standing instructions (`AgentLauncher::instructions`) require
+      real layer names.
+    - A `rename` tool renames many objects in one call.
+    - The Layers footer has a "Name with AI" button. Its arrow offers naming
+      conventions, and the last one used is kept in QSettings
+      `layerNamingConvention`.
+    - `AgentLauncher::namePrompt` and `AgentBridge::nameLayers` drive it.
+- **Open investigation: Inspect makes the desktop sluggish** (the author,
+  08:05). Nothing is fixed yet.
+  - What's measured so far: each Inspect step is cheap on its own, under
+    0.1 s. That covers the AT-SPI helper, grim for 1 px, and hyprctl. The
+    status payload is 1.3 KB. When idle, the daemon uses 0.3% CPU.
+  - DesignMode polls every 100 ms on the daemon's main thread. It spawns
+    `python3` (AT-SPI) and `grim` when the pointer rests, and the web lookup
+    waits in a local event loop.
+  - The suspects to check next:
+    1. Hyprland redrawing the full-screen Overlay layer on every hover change
+       (a repaint of a whole-screen layer surface);
+    2. quickshell re-evaluating bindings on each status line;
+    3. the page lookup in a browser blocking the daemon.
+  - How to catch it: run `scripts/profile-design-mode.sh`, which waits for
+    design mode and then records 90 s of per-process CPU. Have the author use
+    Inspect over a few windows while it records.
+  - Two recordings this morning caught nothing, because design mode was never
+    turned on while they ran.
+  - Ask the author whether it's sluggish everywhere or over certain apps.
 
-The app (feat/frames) is installed and the daemon is running on it.
+Next, in the author's order:
 
-1. **Once the session is unlocked**, run `scripts/install-local.sh --shell`.
-   That syncs the Graphite island and bar. It was held back because restarting
-   omarchy-shell under the lock screen could kill the lock.
-2. **Ask the author how the Graphite look reads on the real desktop** (see
-   "The Graphite look" below).
-3. **Ask them to try frames and auto layout:**
-   - F draws a frame.
-   - Ctrl+Alt+G frames the selection.
-   - Shift+A adds auto layout.
-   - The Layout section edits it.
-   - Dragging a frame's handles resizes it by its children's constraints.
-4. **Then continue docs/FIGMA-AUDIT.md's build order**, starting with effects.
-5. **Merging:** fix/design-mode-escape, then feat/graphite-look, then
-   feat/frames, with `scripts/merge-branch.sh` each time.
+1. The sluggishness above.
+2. The queued feedback below.
+3. docs/FIGMA-AUDIT.md's build order, with effects next.
+
+**Merging:** fix/design-mode-escape, then feat/graphite-look, then
+feat/frames, each with `scripts/merge-branch.sh`. Merge when convenient,
+after the author has seen the look.
 
 ### The author's feedback on the desktop (2026-09-28), queued and not started
 
 1. **Inspect should reach inside windows.** It should read the content in a
    window (its controls and text, down the AT-SPI tree or the DOM), not only
    the window's bounds and Omarchy's own elements.
+   - Found on 2026-09-28: the AT-SPI helper (`pythonHelper` in
+     src/Anywhere/Inspect.cpp) answers "This app has no accessibility tree"
+     for Chromium and "Nothing accessible is there" for Omastrator's own Qt
+     window. So most windows fall back to their bounds.
+   - Likely needs: Chromium's accessibility switched on
+     (`--force-renderer-accessibility`, or the extension or DevTools route
+     that Live already has); Qt apps run with the AT-SPI bridge on
+     (`QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1`); and GTK apps checked.
+   - Web pages already go through the DOM when Omastrator's browser link
+     reaches the tab.
 2. **A path in a frame should resize with the frame, keeping its
    proportions.** Today paths default to the Left/Top constraints and stay put.
-   Decide the default: Scale with the aspect ratio locked for vector paths,
-   probably.
+   The proposal waiting on the author's answer:
+   - vector paths default to Scale with their aspect ratio kept;
+   - text and images keep Left/Top, as Figma users expect.
+
+   The alternative is that everything scales. Constraints live in
+   `LayoutItem`; the resize is `VectorDocument::resizeFrame` in
+   src/Document/AutoLayout.cpp.
 3. **Share ▸ Send to a device.** Send the selection to the author's iPhone
    through the AirDrop plugin installed in Omarchy (see the omadrop project,
    `omdrop-awdl`).
 4. **The panels are bloated.** There's too much vertical scrolling. Keep every
    feature, but design a new UX that frees up vertical space without hiding
    everything behind a ••• button. The layouts inside the sections need design
-   work too. Do a design pass first and show the author options.
+   work too. Do a design pass first and show the author options. Ideas already
+   mentioned to them:
+   - sections that show or collapse by what's selected;
+   - fields side by side in pairs;
+   - tabs.
+
+   Don't rebuild anything until they pick an option.
 5. **Keyboard shortcuts feel missing.** Check the keys against Figma's.
    - Shift+A is there, as a canvas key, and needs a selection and canvas
      focus. Find out why the author didn't find it working, or didn't find it
      at all.
    - Then close the gaps and make the keys easy to discover: in menus,
      tooltips and the Ctrl+K palette.
+   - The keys added this session:
+     - F: the Frame tool;
+     - Ctrl+Alt+G: Frame Selection;
+     - Shift+A: add auto layout;
+     - Alt+Shift+A: remove auto layout;
+     - Ctrl+Shift+G: Remove Frame.
+
+     The Object menu lists Add Auto Layout without its key, because the key is
+     a canvas key so that a capital A still types.
 6. **Resize an artboard on the canvas as you would a frame,** with the Select
    tool, not only with the Artboard tool.
 
