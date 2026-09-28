@@ -241,6 +241,18 @@ public:
     void frameSelection();
     // The Frame tool: a frame over `rect`, inside the innermost frame that holds it. Selected.
     QUuid addFrame(const QRectF &rect);
+    // Shift+A (docs/AUTO-LAYOUT.md): a selected frame without auto layout gets it, its direction, gap and
+    // padding read from where its children are; anything else goes into a new auto-layout frame that hugs it.
+    void addAutoLayout();
+    // Alt+Shift+A: the selected frames lose auto layout; their children stay where they are.
+    void removeAutoLayout();
+    bool canRemoveAutoLayout() const;
+    // The auto layout the selected frames share, for the panel; changing it sets every one's.
+    std::optional<AutoLayout> selectedAutoLayout() const;
+    void setAutoLayout(const AutoLayout &layout, const QString &editName);
+    // Sizing and Absolute position for every selected object.
+    void setLayoutSizing(Qt::Orientation axis, LayoutSizing sizing);
+    void setAbsolutePosition(bool absolute);
     // Selected frames, and whether every one clips its content (none selected: false).
     std::vector<QUuid> selectedFrames() const;
     bool selectedFramesClip() const;

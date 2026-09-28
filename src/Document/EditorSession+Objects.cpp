@@ -6,6 +6,7 @@
 #include <QMimeData>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace {
@@ -275,6 +276,159 @@ void EditorSession::frameSelection()
         for (const QUuid &id : members)
             document.move(id, frameID, -1);
         m_selection = {frameID};
+    });
+}
+
+namespace {
+// Figma's reading of a frame's children for Shift+A: the direction they spread in, put in that
+// order, the gap between them and the padding around them, all hugging.
+AutoLayout inferAutoLayout(VectorDocument &document, const QUuid &frameID)
+{
+    AutoLayout layout;
+    const QRectF box = document.find(frameID)->shape->rect.normalized();
+    std::vector<std::pair<QUuid, QRectF>> items;
+    for (const QUuid &child : document.children(frameID)) {
+        if (document.find(child)->isVisible)
+            items.emplace_back(child, document.bounds(child));
+    }
+    if (items.empty())
+        return layout;
+    double left = box.right(), right = box.left(), top = box.bottom(), bottom = box.top();
+    double minX = std::numeric_limits<double>::max(), maxX = -minX, minY = minX, maxY = -minX;
+    for (const auto &[id, rect] : items) {
+        left = std::min(left, rect.left());
+        right = std::max(right, rect.right());
+        top = std::min(top, rect.top());
+        bottom = std::max(bottom, rect.bottom());
+        minX = std::min(minX, rect.center().x());
+        maxX = std::max(maxX, rect.center().x());
+        minY = std::min(minY, rect.center().y());
+        maxY = std::max(maxY, rect.center().y());
+    }
+    const bool horizontal = items.size() < 2 ? box.width() >= box.height() : maxX - minX >= maxY - minY;
+    layout.direction = horizontal ? LayoutDirection::horizontal : LayoutDirection::vertical;
+    std::stable_sort(items.begin(), items.end(), [horizontal](const auto &a, const auto &b) {
+        return horizontal ? a.second.left() < b.second.left() : a.second.top() < b.second.top();
+    });
+    double gaps = 0;
+    for (size_t index = 1; index < items.size(); ++index)
+        gaps += std::max(0.0, horizontal ? items[index].second.left() - items[index - 1].second.right()
+                                         : items[index].second.top() - items[index - 1].second.bottom());
+    layout.gap = items.size() > 1 ? std::round(gaps / double(items.size() - 1)) : 10;
+    layout.paddingLeft = std::max(0.0, std::round(left - box.left()));
+    layout.paddingTop = std::max(0.0, std::round(top - box.top()));
+    layout.paddingRight = std::max(0.0, std::round(box.right() - right));
+    layout.paddingBottom = std::max(0.0, std::round(box.bottom() - bottom));
+    // The flow follows document order: put them in the order they sit.
+    for (size_t index = 0; index < items.size(); ++index)
+        document.move(items[index].first, frameID, int(index));
+    return layout;
+}
+}
+
+void EditorSession::addAutoLayout()
+{
+    if (!m_document || m_selection.empty())
+        return;
+    const VectorObject *single = m_selection.size() == 1 ? m_document->find(m_selection.front()) : nullptr;
+    if (single && single->kind == ObjectKind::frame && !single->autoLayout) {
+        const QUuid id = single->id;
+        edit(QStringLiteral("Add Auto Layout"), [&](VectorDocument &document) {
+            // Reading the layout reorders the children, which moves objects: find the frame after.
+            const AutoLayout layout = inferAutoLayout(document, id);
+            VectorObject *frame = document.find(id);
+            frame->autoLayout = layout;
+            frame->layout.width = frame->layout.height = LayoutSizing::hug;
+        });
+        return;
+    }
+    const std::vector<QUuid> members = selectionInOrder();
+    const QRectF box = m_document->bounds(members);
+    VectorObject frame = VectorObject::frame(box, m_document->uniqueName(QStringLiteral("Frame")));
+    // Wrapping keeps what's behind visible: no paper of its own.
+    frame.fill = Paint::none();
+    const QUuid frameID = frame.id;
+    edit(QStringLiteral("Add Auto Layout"), [&](VectorDocument &document) {
+        const QUuid top = members.back();
+        const QUuid parent = *document.find(top)->parentID;
+        document.insert(frame, parent, top);
+        for (const QUuid &id : members)
+            document.move(id, frameID, -1);
+        const AutoLayout layout = inferAutoLayout(document, frameID);
+        VectorObject *made = document.find(frameID);
+        made->autoLayout = layout;
+        made->layout.width = made->layout.height = LayoutSizing::hug;
+        m_selection = {frameID};
+    });
+}
+
+bool EditorSession::canRemoveAutoLayout() const
+{
+    const std::vector<QUuid> frames = selectedFrames();
+    return std::any_of(frames.begin(), frames.end(), [&](const QUuid &id) { return m_document->find(id)->autoLayout.has_value(); });
+}
+
+void EditorSession::removeAutoLayout()
+{
+    if (!canRemoveAutoLayout())
+        return;
+    const std::vector<QUuid> frames = selectedFrames();
+    edit(QStringLiteral("Remove Auto Layout"), [&](VectorDocument &document) {
+        for (const QUuid &id : frames) {
+            VectorObject *frame = document.find(id);
+            frame->autoLayout.reset();
+            // It keeps the size it has.
+            frame->layout.width = frame->layout.height = LayoutSizing::fixed;
+        }
+    });
+}
+
+std::optional<AutoLayout> EditorSession::selectedAutoLayout() const
+{
+    const std::vector<QUuid> frames = selectedFrames();
+    if (frames.empty())
+        return std::nullopt;
+    const std::optional<AutoLayout> first = m_document->find(frames.front())->autoLayout;
+    return std::all_of(frames.begin(), frames.end(), [&](const QUuid &id) { return m_document->find(id)->autoLayout == first; }) ? first : std::nullopt;
+}
+
+void EditorSession::setAutoLayout(const AutoLayout &layout, const QString &editName)
+{
+    const std::vector<QUuid> frames = selectedFrames();
+    if (frames.empty())
+        return;
+    edit(editName, [&](VectorDocument &document) {
+        for (const QUuid &id : frames)
+            document.find(id)->autoLayout = layout;
+    });
+}
+
+void EditorSession::setLayoutSizing(Qt::Orientation axis, LayoutSizing sizing)
+{
+    if (!m_document || m_selection.empty())
+        return;
+    const std::vector<QUuid> ids = m_selection;
+    edit(QStringLiteral("Resizing"), [&](VectorDocument &document) {
+        for (const QUuid &id : ids) {
+            VectorObject *object = document.find(id);
+            const VectorObject *parent = object && object->parentID ? document.find(*object->parentID) : nullptr;
+            // Hug needs content that lays itself out; fill needs an auto-layout parent to give room.
+            if (!object || (sizing == LayoutSizing::hug && !object->autoLayout && object->kind != ObjectKind::text)
+                || (sizing == LayoutSizing::fill && !(parent && parent->autoLayout)))
+                continue;
+            (axis == Qt::Horizontal ? object->layout.width : object->layout.height) = sizing;
+        }
+    });
+}
+
+void EditorSession::setAbsolutePosition(bool absolute)
+{
+    if (!m_document || m_selection.empty())
+        return;
+    const std::vector<QUuid> ids = m_selection;
+    edit(absolute ? QStringLiteral("Absolute Position") : QStringLiteral("Auto Layout Position"), [&](VectorDocument &document) {
+        for (const QUuid &id : ids)
+            document.find(id)->layout.absolute = absolute;
     });
 }
 

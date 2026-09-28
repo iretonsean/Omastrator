@@ -66,6 +66,8 @@ void Menus::synchronize()
     action(QStringLiteral("selectMainComponent"))->setEnabled(drawn && s.selectedMaster().has_value());
     action(QStringLiteral("ungroup"))->setEnabled(editing && s.canUngroup());
     action(QStringLiteral("frameSelection"))->setEnabled(editing && s.canGroup());
+    action(QStringLiteral("addAutoLayout"))->setEnabled(editing && s.canGroup());
+    action(QStringLiteral("removeAutoLayout"))->setEnabled(editing && s.canRemoveAutoLayout());
     action(QStringLiteral("clipContent"))->setEnabled(editing && !s.selectedFrames().empty());
     action(QStringLiteral("clipContent"))->setChecked(s.selectedFramesClip());
     action(QStringLiteral("makeCompoundPath"))->setEnabled(editing && s.canCombine());

@@ -72,7 +72,46 @@ Other things still to do for frames:
 - frames in the agent tools and the lift;
 - a frame preset list (phone, desktop), as Figma's Frame tool has.
 
-Next in the build order: auto layout, then constraints.
+**Auto layout** is built too, on the same branch (docs/AUTO-LAYOUT.md):
+
+- **The model:** `AutoLayout` on a frame and `LayoutItem` on any object:
+  - direction;
+  - gap, or Auto (space between);
+  - per-side padding;
+  - primary and counter alignment;
+  - wrap with a counter gap;
+  - Fixed/Hug/Fill sizing;
+  - Absolute position.
+- **The engine:** `VectorDocument::applyAutoLayout`
+  (src/Document/AutoLayout.cpp). It runs innermost first and repeats until
+  nothing moves. It runs on every notify and prune and after a file is read.
+  - A child frame resizes its box, a live rectangle its rect, and area type
+    its width. Anything else stretches.
+  - Rotated frames are skipped.
+- **Shift+A:** gives a frame auto layout, reading the direction, gap and padding
+  from where its children sit and putting them in that order. With loose
+  objects selected, it wraps them in a new hugging frame with no fill.
+- **Alt+Shift+A** removes auto layout, as does Object ▸ Remove Auto Layout.
+- **The Properties panel's Layout section:**
+  - Add;
+  - Horizontal, Vertical or Wrap;
+  - Gap and Auto;
+  - padding in pairs;
+  - the 3 × 3 alignment grid;
+  - W and H sizing;
+  - Absolute position;
+  - Clip content.
+- **Tests:** AutoLayoutTests and PropertiesPanelTests::theLayoutSectionDrivesAutoLayout.
+
+Not done yet:
+
+- dragging to reorder inside an auto-layout frame;
+- editing padding per side (the panel sets the pairs);
+- baseline alignment;
+- min and max sizes;
+- a canvas overlay for the gap and padding (Figma's pink handles).
+
+Next in the build order: constraints and resizing, then effects.
 
 ## The Graphite look (branch feat/graphite-look, off fix/design-mode-escape)
 

@@ -248,6 +248,10 @@ void Menus::buildObject(QMenuBar &bar)
     add(object, QStringLiteral("clipContent"), QStringLiteral("Clip Content"), QKeySequence(), [this] {
         session().setClipsContent(!session().selectedFramesClip());
     })->setCheckable(true);
+    // Shift+A and Alt+Shift+A are canvas keys (docs/AUTO-LAYOUT.md), so typing keeps its capital A.
+    add(object, QStringLiteral("addAutoLayout"), QStringLiteral("Add Auto Layout"), QKeySequence(), [this] { session().addAutoLayout(); });
+    add(object, QStringLiteral("removeAutoLayout"), QStringLiteral("Remove Auto Layout"), QKeySequence(),
+        [this] { session().removeAutoLayout(); });
     object->addSeparator();
     // Components (docs/DESIGN-SYSTEMS.md): Figma's keys for Make and Detach.
     QMenu *components = object->addMenu(QStringLiteral("Components"));

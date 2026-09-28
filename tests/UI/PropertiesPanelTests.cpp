@@ -68,6 +68,7 @@ private slots:
     void characterShowMoreIsRemembered();
     void characterReadsMixedAcrossTexts();
     void areaTextResizesItsBoxNotItsGlyphs();
+    void theLayoutSectionDrivesAutoLayout();
 
 };
 
@@ -741,6 +742,50 @@ void PropertiesPanelTests::areaTextResizesItsBoxNotItsGlyphs()
     QCOMPARE(after->text.size, box.text.size);
     QVERIFY(after->transform.type() <= QTransform::TxTranslate);
     QCOMPARE(bounds(session, id).left(), 10.0);
+}
+
+// Frames and auto layout: Add, the flow, gap, padding and alignment, sizing and Absolute.
+void PropertiesPanelTests::theLayoutSectionDrivesAutoLayout()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = session.addPath(Shapes::rectangle(QRectF(20, 20, 40, 30)), QStringLiteral("A"));
+    const QUuid b = session.addPath(Shapes::rectangle(QRectF(80, 20, 20, 50)), QStringLiteral("B"));
+    session.select({a, b});
+    session.frameSelection();
+    const QUuid frame = session.selection().front();
+    PropertiesPanel panel(session);
+    panel.resize(300, 900);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    const auto shown = [&](const char *name) { return panel.findChild<QWidget *>(name)->isVisible(); };
+    QVERIFY(shown("layoutSection") && shown("layoutAdd") && !shown("layoutGap") && shown("layoutClip"));
+    panel.findChild<QPushButton *>("layoutAdd")->click();
+    QVERIFY(session.document()->find(frame)->autoLayout);
+    QVERIFY(shown("layoutGap") && !shown("layoutAdd"));
+    type(panel, "layoutGapField", "4");
+    QCOMPARE(session.document()->find(frame)->autoLayout->gap, 4.0);
+    QCOMPARE(bounds(session, b).left(), 64.0);
+    choose(panel, "layoutFlow", 1);
+    QCOMPARE(session.document()->find(frame)->autoLayout->direction, LayoutDirection::vertical);
+    QCOMPARE(bounds(session, b).top(), 54.0);
+    // Bottom right of the grid: for a column, the end along it and across it.
+    panel.findChild<QToolButton *>("layoutAlign8")->click();
+    QCOMPARE(session.document()->find(frame)->autoLayout->primary, LayoutAlign::end);
+    QCOMPARE(session.document()->find(frame)->autoLayout->counter, LayoutAlign::end);
+    // A child: Fill width, then Absolute.
+    session.select({b});
+    QVERIFY(shown("layoutSection") && shown("layoutAbsolute") && !shown("layoutClip") && !shown("layoutGap"));
+    choose(panel, "layoutWidth", 2);
+    QCOMPARE(session.document()->find(b)->layout.width, LayoutSizing::fill);
+    QCOMPARE(bounds(session, b).width(), 40.0);
+    panel.findChild<QCheckBox *>("layoutAbsolute")->click();
+    QVERIFY(session.document()->find(b)->layout.absolute);
+    if (const QByteArray grab = qgetenv("OMASTRATOR_TEST_GRAB"); !grab.isEmpty()) {
+        session.select({frame});
+        QTest::qWait(100);
+        panel.grab().save(QString::fromLocal8Bit(grab) + QStringLiteral("/layout-panel.png"));
+    }
 }
 
 QTEST_MAIN(PropertiesPanelTests)

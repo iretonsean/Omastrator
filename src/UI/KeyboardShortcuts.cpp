@@ -179,6 +179,9 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             {"Apply / finish current operation", "\r"}, {"Cancel current operation", "\x1b"}};
         for (const auto &[title, key] : keys)
             result.push_back(entry(title, key, 0, false));
+        // Figma's auto layout keys, on the canvas.
+        result.push_back(entry("Add auto layout", QStringLiteral("a"), 8, false));
+        result.push_back(entry("Remove auto layout", QStringLiteral("a"), 10, false));
         for (const auto &[direction, key] : std::vector<std::pair<QString, QString>>{
                  {"Left", QString(QChar(0xf702))}, {"Right", QString(QChar(0xf703))}, {"Up", QString(QChar(0xf700))}, {"Down", QString(QChar(0xf701))}}) {
             // The step is the keyboard increment in Preferences.

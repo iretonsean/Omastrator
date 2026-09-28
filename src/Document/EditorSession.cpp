@@ -82,8 +82,10 @@ void EditorSession::notify(bool documentToo)
     if (documentToo && m_interaction)
         settle();
     // Wrap and thread previews follow a drag live, same as the committed edit.
-    if (documentToo && m_document)
+    if (documentToo && m_document) {
+        m_document->applyAutoLayout();
         m_document->reflowText();
+    }
     // Artboard 1's size double as the viewport's reference point; keep the document
     // origin still on screen when it changes (a drag on the Artboard tool, or undo).
     if (documentToo && m_document && m_document->size != m_viewportDocumentSize) {
@@ -408,6 +410,7 @@ void EditorSession::pruneSelection()
     }
     // An edited anchor ends a live shape.
     m_document->expandEditedShapes();
+    m_document->applyAutoLayout();
     m_document->reflowText();
     std::erase_if(m_selection, [&](const QUuid &id) { return !m_document->find(id); });
     if (m_keyObject && (m_selection.size() < 2 || !isSelected(*m_keyObject)))

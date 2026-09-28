@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QToolButton>
 #include <array>
@@ -64,6 +65,11 @@ private:
     // Live rectangles' corners and compound paths' fill rule.
     PanelSection *shapeSection();
     void synchronizeShape();
+    // Frames and auto layout (docs/AUTO-LAYOUT.md): direction, gap, padding, alignment, sizing, Absolute, Clip content.
+    PanelSection *layoutSection();
+    void synchronizeLayout();
+    // Every selected frame's auto layout, changed by `change`.
+    void changeLayout(const QString &editName, const std::function<void(AutoLayout &)> &change);
     // An instance's variant properties, Detach and Reset; a component's name and instances.
     PanelSection *componentSection();
     void synchronizeComponent();
@@ -110,6 +116,20 @@ private:
     PanelSection *m_pathfinder = nullptr;
     PanelSection *m_shape = nullptr;
     PanelSection *m_component = nullptr;
+    PanelSection *m_layout = nullptr;
+    QPushButton *m_layoutAdd = nullptr;
+    QWidget *m_layoutRows = nullptr;
+    QComboBox *m_layoutFlow = nullptr;
+    NumberField *m_layoutGap = nullptr;
+    QCheckBox *m_layoutAutoGap = nullptr;
+    NumberField *m_layoutPadX = nullptr;
+    NumberField *m_layoutPadY = nullptr;
+    std::array<QToolButton *, 9> m_layoutAlign{};
+    QWidget *m_layoutSizing = nullptr;
+    QComboBox *m_layoutWidth = nullptr;
+    QComboBox *m_layoutHeight = nullptr;
+    QCheckBox *m_layoutAbsolute = nullptr;
+    QCheckBox *m_layoutClip = nullptr;
     QWidget *m_componentRows = nullptr;
     NumberField *m_radius = nullptr;
     QToolButton *m_cornersLinked = nullptr;

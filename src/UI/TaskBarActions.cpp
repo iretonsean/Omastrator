@@ -370,6 +370,10 @@ struct Filler {
             swatches();
         } else if (kind == QLatin1String("frame")) {
             swatches();
+            if (session().canRemoveAutoLayout())
+                action("removeAutoLayout", QStringLiteral("Remove Auto Layout"));
+            else
+                action("addAutoLayout", QStringLiteral("Auto Layout"));
             action("clipContent");
             action("ungroup", QStringLiteral("Remove Frame"));
         } else if (kind == QLatin1String("clipGroup")) {

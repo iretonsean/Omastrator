@@ -51,7 +51,7 @@ PropertiesPanel::PropertiesPanel(EditorSession &session, QWidget *parent) : QScr
     m_character = new CharacterSection(m_session, content);
     m_paragraph = new ParagraphSection(m_session, content);
     bool first = true;
-    for (PanelSection *block : {documentSection(), componentSection(), transformSection(), shapeSection(), static_cast<PanelSection *>(m_character),
+    for (PanelSection *block : {documentSection(), componentSection(), transformSection(), layoutSection(), shapeSection(), static_cast<PanelSection *>(m_character),
                                 static_cast<PanelSection *>(m_paragraph), appearanceSection(), strokeSection(), alignSection(), pathfinderSection()}) {
         if (!first) {
             // A section's rule hides with it.
@@ -316,6 +316,13 @@ void PropertiesPanel::synchronize()
     show(m_component, drawn && selected && (!m_session.selectedInstances().empty() || m_session.selectedMaster().has_value()));
     if (!m_component->isHidden())
         synchronizeComponent();
+    show(m_layout, drawn && selected && (!m_session.selectedFrames().empty() || std::any_of(m_session.selection().begin(), m_session.selection().end(), [this](const QUuid &id) {
+        const VectorObject *object = m_session.document()->find(id);
+        const VectorObject *parent = object && object->parentID ? m_session.document()->find(*object->parentID) : nullptr;
+        return parent && parent->autoLayout;
+    })));
+    if (!m_layout->isHidden())
+        synchronizeLayout();
     show(m_shape, drawn && selected && (!m_session.selectedShapes().empty() || !m_session.selectedCompoundPaths().empty()));
     if (!m_shape->isHidden())
         synchronizeShape();

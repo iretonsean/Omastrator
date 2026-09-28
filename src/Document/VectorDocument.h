@@ -274,6 +274,47 @@ enum class SameAttribute { fillColor, strokeColor, fillAndStroke, strokeWeight, 
 // Select ▸ Object: kinds of object picked across the document.
 enum class ObjectFilter { textObjects, images, clippingMasks, openPaths, strayPoints };
 
+// Auto layout (docs/AUTO-LAYOUT.md): a frame that places its children in a row or
+// column, with a gap, padding and alignment, and can size itself to them.
+enum class LayoutDirection { horizontal, vertical };
+enum class LayoutAlign { start, center, end };
+// Fixed keeps a size; hug takes the content's (auto-layout frames, text); fill takes
+// the room an auto-layout parent leaves.
+enum class LayoutSizing { fixed, hug, fill };
+QString rawValue(LayoutDirection direction);
+QString rawValue(LayoutAlign align);
+QString rawValue(LayoutSizing sizing);
+std::optional<LayoutDirection> layoutDirection(const QString &rawValue);
+std::optional<LayoutAlign> layoutAlign(const QString &rawValue);
+std::optional<LayoutSizing> layoutSizing(const QString &rawValue);
+
+struct AutoLayout {
+    LayoutDirection direction = LayoutDirection::horizontal;
+    double gap = 10;
+    // Figma's Auto spacing: the free room goes between the items instead of `gap`.
+    bool spaceBetween = false;
+    double paddingLeft = 10;
+    double paddingTop = 10;
+    double paddingRight = 10;
+    double paddingBottom = 10;
+    // Along the direction, and across it.
+    LayoutAlign primary = LayoutAlign::start;
+    LayoutAlign counter = LayoutAlign::start;
+    // Horizontal only: items run on into new rows, `counterGap` apart.
+    bool wrap = false;
+    double counterGap = 10;
+    friend bool operator==(const AutoLayout &, const AutoLayout &) = default;
+};
+
+// How an object sizes itself, and whether an auto-layout parent flows it.
+struct LayoutItem {
+    LayoutSizing width = LayoutSizing::fixed;
+    LayoutSizing height = LayoutSizing::fixed;
+    // Absolute position: kept where it is, out of the flow.
+    bool absolute = false;
+    friend bool operator==(const LayoutItem &, const LayoutItem &) = default;
+};
+
 // Groups (P2-9): the top child's luminance masks the rest. Clip hides whatever
 // falls outside the mask's own rendered coverage; off, that area stays visible.
 struct OpacityMask {
@@ -316,6 +357,10 @@ struct VectorObject {
     std::optional<LiveRectangle> shape;
     // Frames: children show only inside the box.
     bool clipsContent = true;
+    // Frames: auto layout, when on.
+    std::optional<AutoLayout> autoLayout;
+    // Its own sizing, and its place in an auto-layout parent's flow.
+    LayoutItem layout;
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
     // applying changes back to the source.
     QString liftedFrom;
@@ -428,6 +473,9 @@ struct VectorDocument {
     QString uniqueName(const QString &base) const;
     // Rectangles whose anchors were edited become plain paths.
     void expandEditedShapes();
+    // Lays out every auto-layout frame, innermost first, until nothing moves
+    // (docs/AUTO-LAYOUT.md). Rotated frames are left as they are.
+    void applyAutoLayout();
     // Fills every text's `flow` (P2-4): wrap objects above area type in paint order
     // become exclusions, and threadNext chains become frames sharing one story. A
     // no-op, clearing any stale flow, when nothing wraps or threads.

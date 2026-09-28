@@ -94,8 +94,8 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
 {
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
     // Fifty-nine menu entries (Frame Selection the last in), eleven type keys, twenty tools (Type on a
-    // Path's Shift+T, Width, Artboard and Frame among them), five keys, eight nudges.
-    QCOMPARE(int(all.size()), 105);
+    // Path's Shift+T, Width, Artboard and Frame among them), five keys, two auto layout keys, eight nudges.
+    QCOMPARE(int(all.size()), 107);
     QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 72);
     QCOMPARE(named("Join").original, ShortcutChord("j", 1));
     QCOMPARE(named("Hide Guides").original, ShortcutChord(";", 1));

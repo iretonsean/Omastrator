@@ -142,6 +142,15 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         session.selectTool(Tool::width);
         return true;
     }
+    // Shift+A: auto layout, as in Figma; Alt+Shift+A takes it off.
+    const bool altOnly = (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) == Qt::AltModifier;
+    if ((plain || altOnly) && shift && !event->isAutoRepeat() && event->key() == Qt::Key_A && !drag && session.hasSelection()) {
+        if (altOnly)
+            session.removeAutoLayout();
+        else
+            session.addAutoLayout();
+        return true;
+    }
     // Shift-O: the Artboard tool.
     if (plain && shift && !event->isAutoRepeat() && event->key() == Qt::Key_O) {
         session.selectTool(Tool::artboard);

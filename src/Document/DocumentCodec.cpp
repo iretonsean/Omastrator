@@ -517,6 +517,13 @@ QJsonObject encode(const VectorObject &object)
         json["shape"] = encode(*object.shape);
         if (!object.clipsContent)
             json["clipsContent"] = false;
+        if (const std::optional<AutoLayout> &layout = object.autoLayout) {
+            json["autoLayout"] = QJsonObject{{"direction", rawValue(layout->direction)}, {"gap", layout->gap},
+                                             {"spaceBetween", layout->spaceBetween},
+                                             {"padding", QJsonArray{layout->paddingLeft, layout->paddingTop, layout->paddingRight, layout->paddingBottom}},
+                                             {"primary", rawValue(layout->primary)}, {"counter", rawValue(layout->counter)},
+                                             {"wrap", layout->wrap}, {"counterGap", layout->counterGap}};
+        }
         break;
     case ObjectKind::text:
         json["text"] = encode(object.text);
@@ -543,6 +550,10 @@ QJsonObject encode(const VectorObject &object)
         if (!strokes.isEmpty())
             json["moreStrokes"] = strokes;
     }
+    // Additive, optional key: sizing and absolute position, left out at their defaults.
+    if (object.layout != LayoutItem{})
+        json["layout"] = QJsonObject{{"width", rawValue(object.layout.width)}, {"height", rawValue(object.layout.height)},
+                                     {"absolute", object.layout.absolute}};
     if (!object.tokenRefs.empty()) {
         QJsonObject refs;
         for (const auto &[key, token] : object.tokenRefs)
@@ -603,6 +614,31 @@ VectorObject decodeObject(const QJsonObject &json)
         object.shape = decodeShape(json["shape"].toObject());
         object.path = object.shape->path();
         object.clipsContent = json["clipsContent"].toBool(true);
+        if (json.contains("autoLayout")) {
+            const QJsonObject read = json["autoLayout"].toObject();
+            AutoLayout layout;
+            layout.direction = layoutDirection(read["direction"].toString()).value_or(LayoutDirection::horizontal);
+            layout.gap = read["gap"].toDouble(10);
+            layout.spaceBetween = read["spaceBetween"].toBool();
+            const QJsonArray padding = read["padding"].toArray();
+            if (padding.size() == 4) {
+                layout.paddingLeft = std::max(0.0, padding[0].toDouble());
+                layout.paddingTop = std::max(0.0, padding[1].toDouble());
+                layout.paddingRight = std::max(0.0, padding[2].toDouble());
+                layout.paddingBottom = std::max(0.0, padding[3].toDouble());
+            }
+            layout.primary = layoutAlign(read["primary"].toString()).value_or(LayoutAlign::start);
+            layout.counter = layoutAlign(read["counter"].toString()).value_or(LayoutAlign::start);
+            layout.wrap = read["wrap"].toBool();
+            layout.counterGap = read["counterGap"].toDouble(10);
+            object.autoLayout = layout;
+        }
+    }
+    if (json.contains("layout")) {
+        const QJsonObject read = json["layout"].toObject();
+        object.layout.width = layoutSizing(read["width"].toString()).value_or(LayoutSizing::fixed);
+        object.layout.height = layoutSizing(read["height"].toString()).value_or(LayoutSizing::fixed);
+        object.layout.absolute = read["absolute"].toBool();
     }
     if (object.kind == ObjectKind::text) {
         object.text = decodeText(json["text"].toObject());
@@ -796,6 +832,7 @@ VectorDocument decode(const QJsonObject &json)
     }
     if (document.layers().empty())
         document = VectorDocument::blank(document.size);
+    document.applyAutoLayout();
     document.reflowText();
     return document;
 }
