@@ -1,4 +1,5 @@
 #include "IO/FigmaMapperInternal.h"
+#include "IO/SvgImporterParts.h"
 #include <QLineF>
 #include <QtEndian>
 #include <cstring>
@@ -148,11 +149,37 @@ VectorPath decodeBlob(const QByteArray &blob, QSizeF size, Context &ctx)
 }
 }
 
+// REST's ?geometry=paths gives fillGeometry directly instead: SVG path data plus
+// its own winding rule, no blob to decode.
+VectorPath decodeRestGeometry(const QVariantList &paths)
+{
+    VectorPath path;
+    std::optional<bool> firstNonzero;
+    bool mixed = false;
+    for (const QVariant &entry : paths) {
+        const QVariantMap p = entry.toMap();
+        const VectorPath piece = SvgImport::parsePathData(p.value(QStringLiteral("path")).toString());
+        path.contours.insert(path.contours.end(), piece.contours.begin(), piece.contours.end());
+        const bool nonzero = p.value(QStringLiteral("windingRule")).toString() != QLatin1String("EVENODD");
+        if (!firstNonzero)
+            firstNonzero = nonzero;
+        else if (*firstNonzero != nonzero)
+            mixed = true;
+    }
+    path.fillRule = firstNonzero.value_or(true) ? Qt::WindingFill : Qt::OddEvenFill;
+    Q_UNUSED(mixed);
+    return path;
+}
+
 VectorPath decodeVectorNetwork(Context &ctx, const QVariantMap &node)
 {
+    if (node.contains(QStringLiteral("fillGeometry")))
+        return decodeRestGeometry(list(node, "fillGeometry"));
     const QVariantMap vectorData = map(node, "vectorData");
-    if (!vectorData.contains(QStringLiteral("vectorNetworkBlob")))
+    if (!vectorData.contains(QStringLiteral("vectorNetworkBlob"))) {
+        ctx.warn(QStringLiteral("A vector shape’s geometry wasn’t available, so it was left out."));
         return {};
+    }
     const int blobIndex = vectorData.value(QStringLiteral("vectorNetworkBlob")).toInt();
     if (blobIndex < 0 || blobIndex >= ctx.tree.blobs.size()) {
         ctx.warn(QStringLiteral("A vector shape’s geometry couldn’t be found, and was left out."));
