@@ -17,25 +17,83 @@ The clean-slate promo is finished, approved and posted on X by the author. Its
 brief, source, renderer and video are in `media/animation/` (see the Status
 note at the top of `media/animation/BRIEF.md`).
 
-### In progress: import formats (2026-09-28)
+### Checklist for the next session (written 2026-09-28 ~15:00)
 
-Three Sonnet 5 agents work in Herdr panes, each in its own worktree off
-`main`. The briefs are in `~/Projects/.omastrator-import-briefs/`:
+Nothing is building or running. Every agent finished and committed, and
+their panes are closed. Their session IDs are in
+`~/Projects/.omastrator-briefs/SESSIONS.md`. Work top to bottom:
 
-- `feat/import-pdf`: an in-tree PDF reader (no Poppler: the repo is MIT and
-  Poppler is GPL), then Illustrator .ai through its PDF part, then EPS/PS
-  through Ghostscript run as a program.
-- `feat/import-figma`: Paste from Figma, Import from Figma Link… (REST API)
-  and .fig files (best effort).
-- `feat/import-open`: Sketch, Penpot v3, Inkscape layers and .svgz,
-  HEIC/AVIF, placing PSD flattened, and Excalidraw.
+1. **Merge five finished branches into `main`** (none is pushed):
+   - `feat/import-pdf`: an in-tree PDF reader, .ai files, and EPS/PS
+     through Ghostscript (docs/import/pdf.md);
+   - `feat/import-figma`: Paste from Figma, Import from Figma Link…, and
+     .fig files (docs/import/figma.md);
+   - `feat/import-open`: Sketch, Penpot v3, Inkscape layers and .svgz,
+     HEIC/AVIF, placing PSD flattened, and Excalidraw (docs/import/*.md);
+   - `feat/alpha-installs`: the AUR PKGBUILDs, the release workflow,
+     docs/RELEASING.md, and the `/tmp` LiveReviewTests leak;
+   - `fix/audit-leftovers`: the tray tooltip and the escape-hatch audit.
 
-The agents commit on their branches and never push or merge. The next step
-is to merge all three. They touch the same few lines in Open/Place, the file
-filters and drag-and-drop, and two of them write the same
-`src/IO/ZipReader`, so keep one copy. Then update the README's Files list and
-ask the author before pushing. Figma needs checking against the author's real
-files.
+   Expect small conflicts in Open/Place, the file filters and
+   drag-and-drop. Two copies of `src/IO/ZipReader` should become one. Then
+   add the new formats to the README's Files list, run `scripts/check.sh`
+   (builds under `flock ~/.cache/omastrator-build.lock`, `-j2`), and
+   **ask the author before pushing**. Remove the merged worktrees
+   afterwards.
+2. **Quick wins from the research** (docs/research/unbuilt-features-2026-09.md),
+   easiest first. They're all small, and each is a feature Illustrator or
+   Figma users vote for that neither has built:
+   - **Text stroke inside/outside** (Illustrator, 213 votes). Check it
+     first: the renderer already aligns strokes on closed paths
+     (VectorRenderer.cpp:259), and glyph outlines are closed, so it may
+     already work on text. If it does, add a test and a README line. If it
+     doesn't, route text strokes through the same path.
+   - **Non-printing / non-exporting artboards** (Illustrator, 152 votes).
+     Add a flag on `Artboard` (VectorDocument.h:263), a toggle in the
+     Artboards list and its context menu, and make Export, Export for
+     Screens and Share skip flagged artboards. Show a marker on the canvas
+     label.
+   - **Editable document presets** (Illustrator, 150 votes). The New
+     Document sheet's five presets are hard-coded (NewDocumentSheet.cpp:10).
+     Add Save Preset…, Rename and Delete, stored in
+     `~/.config/omastrator/presets.json`.
+   - **Lock Document / read-only mode** (Figma, 44 votes plus duplicate
+     threads). A per-file toggle stops edits in `EditorSession` with a
+     plain status line, shows a lock on the tab, and is saved in the
+     `.omai`.
+   - **Settings that travel** (Illustrator, 144 votes). Preferences ▸
+     Export/Import Settings saves one file (preferences, remapped keys,
+     workspace, presets), with an option to keep it on connected cloud
+     storage through the existing rclone code.
+   - **Spell check in type** (Illustrator's Grammarly request, 432 votes).
+     Underline misspellings in the inline text editor through Hunspell
+     (LGPL/MPL, optional at build time), plus "Check Spelling with AI" on
+     the selection through the agent.
+3. **Effects** (docs/EFFECTS.md): **the author hasn't reviewed the design
+   yet.** Ask before building. It's built in phases on `feat/effects` after
+   the merge.
+4. **Browser View and canvas workspaces** (docs/BROWSER-FRAMES.md):
+   **approved**, including the headless Omastrator profile with a one-time
+   sign-in in a normal window. Build order: Pages, canvas workspaces, the
+   Browser View frame and Browse tool, Live inside the frame (then remove
+   Live from the island), then Duplicate at Breakpoints and Clean Session.
+5. **Bigger bets from the research**, for later:
+   - vector halftones, after effects;
+   - grid auto layout with Hug/Fill;
+   - native tables and a chart tool;
+   - real-time co-editing.
+6. **The author's own steps:**
+   - publish to the AUR and cut the first tagged release, per
+     docs/RELEASING.md;
+   - supply real Figma files, pastes and links, and real .ai files, to
+     check the importers;
+   - the desktop checks under "Waiting on the author".
+7. **Housekeeping:**
+   - `llama-fim`, `opencode-serve` and the seanireton.com Vite server were
+     stopped (not disabled) to free RAM for builds. They come back at the
+     next login, or with `systemctl --user start llama-fim opencode-serve`.
+   - The rendering test left two runtime-only Hyprland rules for classes
+     `omaspike*`, which go at the next config reload.
 
 ### Waiting on the author
 
