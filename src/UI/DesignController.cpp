@@ -270,7 +270,8 @@ QJsonObject DesignController::status()
                                     {"x", monitor.rect.x()},
                                     {"y", monitor.rect.y()},
                                     {"width", monitor.rect.width()},
-                                    {"height", monitor.rect.height()}});
+                                    {"height", monitor.rect.height()},
+                                    {"reservedTop", monitor.reservedTop}});
     status["monitors"] = monitors;
     status["message"] = m_message;
     const AnywhereSettings::Answers answers = AnywhereSettings::Answers::fromJson(m_settings["onboarding"].toObject());

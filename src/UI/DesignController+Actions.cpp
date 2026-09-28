@@ -81,7 +81,6 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
     }
     if (action == QLatin1String("off") || action == QLatin1String("toggle")) {
         m_mode->setOn(false);
-        Island::resetKeys();
         result["on"] = false;
         return {};
     }
@@ -153,7 +152,14 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
     if (action == QLatin1String("clear")) {
         if (overlay.isInteracting())
             return QStringLiteral("Keep or discard the preview on the overlay first.");
-        m_overlays.clear(params["surface"].toString());
+        // "all" takes every surface's art away: the one step back to a clean screen.
+        const QString surface = params["surface"].toString();
+        const QStringList keys = surface == QLatin1String("all") ? m_overlays.surfaces() : QStringList{surface};
+        // A lift still running would put its result back after the screen was cleared.
+        if (surface == QLatin1String("all") && m_lift && m_lift->isRunning())
+            m_lift->cancel();
+        for (const QString &key : keys)
+            m_overlays.clear(key);
         return {};
     }
     if (action == QLatin1String("onboarding"))

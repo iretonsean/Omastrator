@@ -66,9 +66,11 @@ void DesignMode::setOn(bool on, const QString &monitor)
         const auto focused = monitor.isEmpty() ? Hyprland::focusedMonitor(m_monitors) : Hyprland::monitorNamed(monitor, m_monitors);
         m_monitor = focused ? focused->name : monitor;
         m_timer.start();
+        Island::holdDesignKeys();
     } else {
         m_timer.stop();
         m_tool = QStringLiteral("inspect");
+        Island::resetKeys();
     }
     // The island's mode is the switch the hotkey, the island and Esc all flip.
     Island::State state = Island::read();

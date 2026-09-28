@@ -14,6 +14,9 @@ Item {
   id: root
 
   required property var status
+  // The island's pill, from Island.qml: the overlay leaves it out of its input.
+  property int islandWidth: 0
+  property int islandHeight: 0
 
   readonly property var design: status.value("design", {}) || {}
   readonly property bool on: !!design.on
@@ -140,11 +143,22 @@ Item {
         Region { item: window.maskMode === "panels" && onboardingCard.visible ? onboardingCard : null }
         Region { item: window.maskMode === "panels" && typing.visible ? typing : null }
         Region { item: window.maskMode === "panels" && gapGrip.visible ? gapGrip : null }
+        // The island stays reachable over everything else: its buttons are how to change tool or leave.
+        Region { item: islandHole; intersection: Intersection.Subtract }
       }
 
       Item {
         id: everything
         anchors.fill: parent
+      }
+
+      Item {
+        id: islandHole
+        readonly property var box: Logic.islandHole(window.place, root.islandWidth, root.islandHeight, Style.gapsOut)
+        x: box.x
+        y: box.y
+        width: box.width
+        height: box.height
       }
 
       // ------------------------------------------------------------ art

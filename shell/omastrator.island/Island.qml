@@ -22,7 +22,7 @@ Item {
   }
 
   // Design mode everywhere (docs/ANYWHERE.md): the click-through overlay on every monitor.
-  Overlay { status: status }
+  Overlay { status: status; islandWidth: root.pillWidth; islandHeight: root.pillHeight }
 
   readonly property string designTool: (status.value("design", {}) || {}).tool || "inspect"
 
@@ -100,6 +100,7 @@ Item {
       { id: "text", tip: "Text: click, type, then Enter" },
       { id: "note", tip: "Note: click or drag, type, then Enter" },
       { id: "undoArt", icon: "undo", tip: "Undo on the overlay" },
+      { id: "clearArt", icon: "clear", tip: "Clear drawings: take everything drawn off every window" },
       { id: "desk", tip: "The Desk: everything sent from any surface" },
       { id: "onboarding", icon: "help", tip: "Tune the suggestions: a few questions about your work" },
       { id: "done", icon: "close", tip: "Leave design mode (Esc)" }
@@ -219,6 +220,7 @@ Item {
 
   function designArgs(id) {
     if (id === "undoArt") return ["design", "undo"]
+    if (id === "clearArt") return ["design", "clear", "all"]
     if (id === "desk") return ["desk", "show"]
     if (id === "onboarding") return ["design", "onboarding", "open"]
     if (id === "done") return ["design", "off"]
@@ -269,6 +271,8 @@ Item {
   // ------------------------------------------------------------ look
 
   readonly property int pillHeight: Style.space(34)
+  // The shown pill's width, so the overlay can leave the island reachable while a drawing tool is on.
+  property int pillWidth: 0
   readonly property int buttonSize: Style.space(28)
   readonly property int glyphSize: Style.space(16)
   readonly property int pad: Style.space(4)
@@ -386,6 +390,7 @@ Item {
       WlrLayershell.layer: WlrLayer.Top
       WlrLayershell.namespace: "omastrator-island"
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      onVisibleChanged: if (visible) root.pillWidth = pill.width
 
       // Only the pill takes the pointer; the rest of the strip lets clicks through.
       mask: Region { item: pill }
@@ -396,6 +401,8 @@ Item {
         anchors.top: parent.top
         height: root.pillHeight
         width: row.implicitWidth + root.pad * 2
+        onWidthChanged: if (window.visible) root.pillWidth = width
+        Component.onCompleted: if (window.visible) root.pillWidth = width
         radius: height / 2
         color: root.surface
         // Themes whose popups have no border still get an edge on a dark desktop.

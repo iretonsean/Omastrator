@@ -15,7 +15,7 @@ inline constexpr const char *clients = R"json([
 ])json";
 
 inline constexpr const char *monitors = R"json([
- {"id": 0, "name": "DP-1", "x": 0, "y": 0, "width": 3840, "height": 2160, "scale": 2, "transform": 0, "focused": true,
+ {"id": 0, "name": "DP-1", "x": 0, "y": 0, "width": 3840, "height": 2160, "scale": 2, "transform": 0, "focused": true, "reserved": [0, 26, 0, 0],
   "activeWorkspace": {"id": 1, "name": "1"}, "specialWorkspace": {"id": 0, "name": ""}},
  {"id": 1, "name": "HDMI-A-1", "x": 1920, "y": 0, "width": 1080, "height": 1920, "scale": 1, "transform": 1, "focused": false,
   "activeWorkspace": {"id": 2, "name": "2"}, "specialWorkspace": {"id": 0, "name": ""}}

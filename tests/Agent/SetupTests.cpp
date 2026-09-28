@@ -141,9 +141,12 @@ private slots:
     void setupAndRemoveAreIdempotent()
     {
         const QStringList before = snapshot(m_home.path());
+        // Design mode enters its submap only once Hyprland loads the keys that define it.
+        QVERIFY(!Setup::designKeysLoaded(Setup::Environment::current()));
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
         QVERIFY2(out.contains(QLatin1String("Set up.")), qPrintable(out));
+        QVERIFY(Setup::designKeysLoaded(Setup::Environment::current()));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island/Island.qml"))));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.ai/TrayLight.qml"))));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator-ui/Status.qml"))));
@@ -167,6 +170,7 @@ private slots:
 
         QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
         QVERIFY2(out.contains(QLatin1String("Removed.")), qPrintable(out));
+        QVERIFY(!Setup::designKeysLoaded(Setup::Environment::current()));
         // Exactly what was there before, byte for byte, folders included.
         QCOMPARE(snapshot(m_home.path()), before);
         QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);

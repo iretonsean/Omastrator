@@ -103,7 +103,7 @@ private slots:
     {
         const QString overlay = read(QStringLiteral("omastrator.island/Overlay.qml"));
         QVERIFY(!overlay.isEmpty());
-        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Overlay { status: status }")));
+        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Overlay { status: status; islandWidth: root.pillWidth; islandHeight: root.pillHeight }")));
         const QString window = block(overlay, QStringLiteral("PanelWindow"));
         QVERIFY(window.contains(QStringLiteral("WlrLayershell.layer: WlrLayer.Overlay")));
         QVERIFY(window.contains(QStringLiteral("exclusionMode: ExclusionMode.Ignore")));
@@ -115,6 +115,8 @@ private slots:
         for (auto match = part.globalMatch(mask); match.hasNext(); match.next())
             ++parts;
         QCOMPARE(parts, 5);
+        // Even a drawing tool leaves the island reachable: its buttons change the tool and leave design mode.
+        QVERIFY(mask.contains(QStringLiteral("Region { item: islandHole; intersection: Intersection.Subtract }")));
         // The keyboard stays with the apps unless something is being typed.
         QVERIFY(window.contains(QStringLiteral("WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None")));
         QVERIFY(!overlay.contains(QStringLiteral("WlrKeyboardFocus.Exclusive")));
@@ -161,6 +163,16 @@ private slots:
         design["tool"] = "inspect";
         QVERIFY(call("wantsKeyboard", {design, screen, true}).toBool());
         QVERIFY(!call("wantsKeyboard", {design, other, true}).toBool());
+
+        // The island's pill: centred under the bar's reserved space, with a margin; nothing before the island has a size.
+        QVariantMap barred = screen;
+        barred["reservedTop"] = 26;
+        const QVariantMap hole = call("islandHole", {barred, 400, 34, 5}).toMap();
+        QCOMPARE(hole["x"].toInt(), 754);
+        QCOMPARE(hole["y"].toInt(), 25);
+        QCOMPARE(hole["width"].toInt(), 412);
+        QCOMPARE(hole["height"].toInt(), 46);
+        QCOMPARE(call("islandHole", {screen, 0, 34, 5}).toMap()["width"].toInt(), 0);
 
         // The bar under the thing, above it near the bottom, always inside the screen.
         QVariantMap spot = call("barPosition", {QVariantList{2000, 100, 200, 40}, 300, 60, screen, 10}).toMap();

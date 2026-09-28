@@ -159,6 +159,15 @@ HyprFormat hyprFormat(const Environment &environment)
     return QFileInfo::exists(QDir(environment.hyprDirectory()).filePath(QStringLiteral("hyprland.lua"))) ? HyprFormat::lua : HyprFormat::conf;
 }
 
+bool designKeysLoaded(const Environment &environment)
+{
+    const bool lua = hyprFormat(environment) == HyprFormat::lua;
+    const QString name = lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf");
+    const QByteArray keys = readFile(QDir(environment.omastratorConfig()).filePath(name)).value_or(QByteArray());
+    const QByteArray hypr = readFile(QDir(environment.hyprDirectory()).filePath(name)).value_or(QByteArray());
+    return keys.contains("omastrator-design") && hypr.contains("omastrator/" + name.toUtf8());
+}
+
 std::vector<Change> installPlan(const Environment &environment, bool withBar, bool withSource, QStringList *notes)
 {
     std::vector<Change> plan;

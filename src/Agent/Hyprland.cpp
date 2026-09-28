@@ -123,6 +123,7 @@ std::vector<Monitor> parseMonitors(const QJsonValue &json)
             std::swap(width, height);
         monitor.rect = QRect(object["x"].toInt(), object["y"].toInt(), width, height);
         monitor.focused = object["focused"].toBool();
+        monitor.reservedTop = object["reserved"].toArray().at(1).toInt();
         monitor.activeWorkspace = object["activeWorkspace"].toObject()["id"].toInt();
         monitor.specialWorkspace = object["specialWorkspace"].toObject()["id"].toInt();
         monitor.specialName = object["specialWorkspace"].toObject()["name"].toString();

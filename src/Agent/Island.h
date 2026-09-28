@@ -42,6 +42,8 @@ QString ensureAppRunning(int timeoutMs = 15'000);
 bool appIsRunning();
 // Hands the keyboard back to the apps: leaves any Omastrator submap in Hyprland ($OMASTRATOR_HYPRCTL in tests).
 void resetKeys();
+// Holds design mode's submap, where Escape leaves, however design mode was turned on; only when Hyprland defines it.
+void holdDesignKeys();
 
 // `omastrator island <verb> …`. Returns the exit code.
 int runCli(const QStringList &args, QTextStream &out, QTextStream &err);

@@ -17,6 +17,16 @@ function maskMode(design, screen, panelsShown) {
   return panelsShown ? "panels" : "none"
 }
 
+// Where the island's pill sits in the overlay's coordinates on `screen`: centred under the bar's reserved space.
+// The overlay leaves this out of its input so the island stays reachable, and stops drawing, over it.
+function islandHole(screen, pillWidth, pillHeight, gapsOut) {
+  if (!screen || pillWidth <= 0 || pillHeight <= 0)
+    return { x: 0, y: 0, width: 0, height: 0 }
+  var margin = 6
+  return { x: Math.round(screen.width / 2 - pillWidth / 2) - margin, y: (screen.reservedTop || 0) + gapsOut - margin,
+           width: pillWidth + 2 * margin, height: pillHeight + 2 * margin }
+}
+
 // Typing needs the keyboard: the Ask field, onboarding and the text tools. Otherwise the apps keep it.
 function wantsKeyboard(design, screen, typing) {
   if (!design || !design.on || design.monitor !== screen.name)

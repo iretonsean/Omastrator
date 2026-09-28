@@ -60,6 +60,9 @@ private slots:
         // Pixels become layout points; a quarter turn swaps the sides.
         QCOMPARE(monitors[0].rect, QRect(0, 0, 1920, 1080));
         QCOMPARE(monitors[0].scale, 2.0);
+        // The bar's reserved space, which the overlay needs to find the island under it.
+        QCOMPARE(monitors[0].reservedTop, 26);
+        QCOMPARE(monitors[1].reservedTop, 0);
         QCOMPARE(monitors[1].rect, QRect(1920, 0, 1920, 1080));
         QCOMPARE(Hyprland::focusedMonitor(monitors)->name, QStringLiteral("DP-1"));
         QCOMPARE(Hyprland::parseCursor(QJsonDocument::fromJson(InspectFixtures::cursor).object()), std::optional<QPoint>(QPoint(12, 34)));

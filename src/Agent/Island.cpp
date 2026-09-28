@@ -4,6 +4,7 @@
 #include "Agent/Capture.h"
 #include "Agent/Dictation.h"
 #include "Agent/Hyprland.h"
+#include "Agent/Setup.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -153,6 +154,13 @@ void resetKeys()
 {
     // Harmless when no submap is held.
     Hyprland::dispatch(QStringLiteral("hl.dispatch(hl.dsp.submap(\"reset\"))"), QStringLiteral("submap reset"));
+}
+
+void holdDesignKeys()
+{
+    if (!Setup::designKeysLoaded(Setup::Environment::current()))
+        return;
+    Hyprland::dispatch(QStringLiteral("hl.dispatch(hl.dsp.submap(\"omastrator-design\"))"), QStringLiteral("submap omastrator-design"));
 }
 
 QString ensureAppRunning(int timeoutMs)

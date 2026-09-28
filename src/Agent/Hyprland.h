@@ -33,6 +33,8 @@ struct Monitor {
     QRect rect;
     double scale = 1;
     bool focused = false;
+    // Space layer surfaces such as the bar keep at the top, in layout pixels.
+    int reservedTop = 0;
     int activeWorkspace = 0;
     // A special workspace shown over the monitor, or 0.
     int specialWorkspace = 0;

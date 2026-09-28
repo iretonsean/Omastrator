@@ -195,6 +195,10 @@ private slots:
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
         QVERIFY(!app.status()["overlays"].toArray().isEmpty());
         QVERIFY(!app.status().contains("bar"));
+        // Clear all is the one step back to a clean screen: every surface's art goes.
+        app.call(QStringLiteral("clear"), {{"surface", "all"}});
+        QVERIFY(overlays.surfaces().isEmpty());
+        QTRY_VERIFY(app.status()["overlays"].toArray().isEmpty());
     }
 
     void workGoesWhereTheUserChoosesAndTheDeskLabelsItsSource()
