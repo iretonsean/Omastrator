@@ -1,9 +1,63 @@
-# Handoff (2026-09-27, late evening)
+# Handoff (2026-09-28)
 
 For the next session after a context clear. **Start with "Next session starts
 here" just below.**
 
 ## Next session starts here
+
+**State at 2026-09-28 ~10:30:** everything is merged into `main` and pushed.
+That covers the whole stack (the design-mode Esc fix, the Graphite look,
+frames and auto layout, Inspect inside windows) plus today's four branches:
+resizing artboards on the canvas, the shortcuts pass, Send to a device, and
+the dense Properties panel. Only `wip/promo-v3` stays unmerged, and v4
+replaces it.
+
+### Your job: the promo v4 storyboard
+
+The author wants an animation of the app's features, **v4**. Before anything
+is animated they approve a storyboard:
+
+1. Read **`media/promo/BRIEF-v4.md`**. It holds the author's interview
+   answers: the story ("pro tool, native home"), the length, what must
+   appear, what's dropped, and the fixed rules.
+2. Write **`media/promo/OUTLINE-v4.md`** in the form of `OUTLINE-v2.md`:
+   numbered screens, what's on each screen (the content inside it), the
+   caption, and the narrative and subtext around the product. It must read
+   as a story. No polish needed. Publish it where the author can read it
+   (a doc or an artifact) and give them the link.
+3. **Stop and wait for the author's approval.** Don't animate before it.
+4. After approval: build `media/promo/promo-v4.html` from v3's machinery
+   (`promo-v3.html` on wip/promo-v3: the reading-time warp, the chapters, and
+   `render.mjs --workers 3`), for review.
+
+### Waiting on the author (not blocking the storyboard)
+
+- **Restart Chromium** (or reload the Omastrator extension) and **restart the
+  daemon**, after `scripts/install-local.sh` from main. Main isn't installed
+  yet, and Inspect inside windows only goes live after this.
+- **Try on the desktop:**
+  - the dense panel (docs/PANELS.md);
+  - Shift+A after clicking in Layers, and Esc and Tab;
+  - resizing an artboard with the Select tool;
+  - a real Send to a Device to the iPhone (docs/SHARE.md);
+  - Inspect reading a Chromium tab and a Qt app.
+- **Parked indefinitely:** the frame-resize default for paths. Don't raise
+  it.
+- **Parked until the author is at the Mac:** the Inspect sluggishness, with
+  `scripts/profile-design-mode.sh`.
+
+### Memory hygiene (the machine has 15 GB and /tmp is in RAM)
+
+- Test runs leave `/tmp/LiveReviewTests-*` folders of about 143 MB each. The
+  author's machine ran out of memory on 2026-09-28 partly because of them.
+  Make LiveReviewTests clean up after itself (a QTemporaryDir, or removing its
+  folder in cleanup), and delete stale ones before big builds.
+- Old Claude scratch folders were moved to
+  `~/.local/share/claude-scratch-archive/2026-09-28/`.
+- Build with at most -j2 and one build at a time
+  (`flock ~/.cache/omastrator-build.lock …`).
+
+### Branch-by-branch notes from today (the detail)
 
 **Update 2026-09-28: queued item 6 (resize artboards on the canvas) is built**
 on `feat/artboard-resize` (off `feat/inspect-inside`). Not installed; the
