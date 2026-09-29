@@ -1,5 +1,6 @@
 #include "Canvas/EditorCanvasState.h"
 #include "Document/BrowserInput.h"
+#include <QAction>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
@@ -141,6 +142,15 @@ bool EditorCanvas::State::browseWheel(QWheelEvent *event)
     return true;
 }
 
+bool EditorCanvas::State::browseReserved(const QKeyEvent *event) const
+{
+    // Ctrl+K is the fallback for a window with no palette action, as in a bare canvas.
+    QList<QKeySequence> palette{QKeySequence(Qt::CTRL | Qt::Key_K)};
+    if (const auto *action = canvas.window()->findChild<QAction *>(QStringLiteral("commandPalette")))
+        palette = action->shortcuts();
+    return BrowserInput::reserved(event->key(), event->modifiers(), palette);
+}
+
 bool EditorCanvas::State::browseKey(QKeyEvent *event, bool down)
 {
     if (session.tool() != Tool::browse)
@@ -151,7 +161,7 @@ bool EditorCanvas::State::browseKey(QKeyEvent *event, bool down)
             session.selectTool(Tool::select);
         return down;
     }
-    if (!browseFocus || BrowserInput::reserved(event->key(), event->modifiers()) || !browserHost)
+    if (!browseFocus || browseReserved(event) || !browserHost)
         return false;
     // A release that repeats a held key is Qt's echo, not the user's.
     if (!down && event->isAutoRepeat())

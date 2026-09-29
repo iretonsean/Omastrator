@@ -172,14 +172,19 @@ void BrowserInputTests::controlShortcutsAskForTheirEditingCommand()
 
 void BrowserInputTests::escapeAndControlKAreNeverTheirs()
 {
-    QVERIFY(BrowserInput::reserved(Qt::Key_Escape, {}));
-    QVERIFY(BrowserInput::reserved(Qt::Key_Escape, Qt::ShiftModifier));
-    QVERIFY(BrowserInput::reserved(Qt::Key_K, Qt::ControlModifier));
-    QVERIFY(BrowserInput::reserved(Qt::Key_K, Qt::ControlModifier | Qt::ShiftModifier));
-    QVERIFY(!BrowserInput::reserved(Qt::Key_K, {}));
-    QVERIFY(!BrowserInput::reserved(Qt::Key_K, Qt::ShiftModifier));
-    QVERIFY(!BrowserInput::reserved(Qt::Key_Z, Qt::ControlModifier));
-    QVERIFY(!BrowserInput::reserved(Qt::Key_Return, {}));
+    const QList<QKeySequence> palette{QKeySequence(Qt::CTRL | Qt::Key_K), QKeySequence(Qt::CTRL | Qt::Key_Slash)};
+    QVERIFY(BrowserInput::reserved(Qt::Key_Escape, {}, palette));
+    QVERIFY(BrowserInput::reserved(Qt::Key_Escape, Qt::ShiftModifier, palette));
+    QVERIFY(BrowserInput::reserved(Qt::Key_K, Qt::ControlModifier, palette));
+    QVERIFY(BrowserInput::reserved(Qt::Key_Slash, Qt::ControlModifier, palette));
+    QVERIFY(!BrowserInput::reserved(Qt::Key_K, Qt::ControlModifier | Qt::ShiftModifier, palette));
+    QVERIFY(!BrowserInput::reserved(Qt::Key_K, {}, palette));
+    QVERIFY(!BrowserInput::reserved(Qt::Key_Z, Qt::ControlModifier, palette));
+    QVERIFY(!BrowserInput::reserved(Qt::Key_Return, {}, palette));
+    // A remapped palette: the new key is the app's, and Ctrl+K goes to the page.
+    const QList<QKeySequence> remapped{QKeySequence(Qt::CTRL | Qt::Key_J)};
+    QVERIFY(BrowserInput::reserved(Qt::Key_J, Qt::ControlModifier, remapped));
+    QVERIFY(!BrowserInput::reserved(Qt::Key_K, Qt::ControlModifier, remapped));
 }
 
 void BrowserInputTests::keysWithoutAnAnswerAreLeftOut()

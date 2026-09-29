@@ -261,6 +261,7 @@ struct EditorCanvas::State {
     bool browseWheel(QWheelEvent *event);
     // True when the page took the key (or Browse claims it), so it goes no further.
     bool browseKey(QKeyEvent *event, bool down);
+    bool browseReserved(const QKeyEvent *event) const;
     bool browseInput(QInputMethodEvent *event);
     // Whether keys go to a page: a click has put focus in one.
     bool browseFocused() const { return session.tool() == Tool::browse && browseFocus.has_value(); }

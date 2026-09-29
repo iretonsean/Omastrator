@@ -1,6 +1,8 @@
 #include "Document/BrowserInput.h"
 #include <QJsonArray>
+#include <QKeySequence>
 #include <QList>
+#include <algorithm>
 #include <utility>
 
 namespace BrowserInput {
@@ -180,11 +182,12 @@ std::optional<Key> keyFor(int qtKey, const QString &text, Qt::KeyboardModifiers 
     return std::nullopt;
 }
 
-bool reserved(int qtKey, Qt::KeyboardModifiers modifiers)
+bool reserved(int qtKey, Qt::KeyboardModifiers modifiers, const QList<QKeySequence> &palette)
 {
     if (qtKey == Qt::Key_Escape)
         return true;
-    return qtKey == Qt::Key_K && modifiers.testFlag(Qt::ControlModifier) && !modifiers.testFlag(Qt::AltModifier);
+    const QKeyCombination pressed(modifiers & ~Qt::KeypadModifier, Qt::Key(qtKey));
+    return std::any_of(palette.begin(), palette.end(), [&](const QKeySequence &each) { return each.count() == 1 && each[0] == pressed; });
 }
 
 std::optional<QJsonObject> keyParams(bool down, int qtKey, const QString &text, Qt::KeyboardModifiers modifiers, bool autoRepeat)

@@ -3,6 +3,7 @@
 #include "Document/EditorSession.h"
 #include "Live/StaticServer.h"
 #include "UI/BrowserViews.h"
+#include <QAction>
 #include <QEventLoop>
 #include <QJsonArray>
 #include <QSignalSpy>
@@ -260,6 +261,35 @@ private slots:
         QTest::keyClick(&rig.canvas, Qt::Key_Escape);
         QCOMPARE(rig.session.tool(), Tool::select);
         QVERIFY(rig.host.of(QStringLiteral("Input.dispatchKeyEvent")).isEmpty());
+    }
+
+    void thePalettesLiveShortcutFiresAndIsNeverSentToThePage()
+    {
+        Rig rig;
+        int opened = 0;
+        QAction palette(&rig.canvas);
+        palette.setObjectName(QStringLiteral("commandPalette"));
+        palette.setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+        rig.canvas.addAction(&palette);
+        QObject::connect(&palette, &QAction::triggered, [&] { ++opened; });
+        QVERIFY(QTest::qWaitForWindowActive(&rig.canvas));
+        click(&rig.canvas, rig.inFrame());
+        rig.host.calls.clear();
+        QTest::keyClick(&rig.canvas, Qt::Key_K, Qt::ControlModifier);
+        QCOMPARE(opened, 1);
+        for (const auto &call : rig.host.of(QStringLiteral("Input.dispatchKeyEvent")))
+            QVERIFY(call.params["code"].toString() != QLatin1String("KeyK"));
+        // Remapped: the new key opens it, and the old one belongs to the page.
+        palette.setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+        rig.host.calls.clear();
+        QTest::keyClick(&rig.canvas, Qt::Key_J, Qt::ControlModifier);
+        QCOMPARE(opened, 2);
+        QTest::keyClick(&rig.canvas, Qt::Key_K, Qt::ControlModifier);
+        QCOMPARE(opened, 2);
+        bool sentK = false;
+        for (const auto &call : rig.host.of(QStringLiteral("Input.dispatchKeyEvent")))
+            sentK = sentK || call.params["code"].toString() == QLatin1String("KeyK");
+        QVERIFY(sentK);
     }
 
     void leavingBrowseLetsGoOfTheButtonAndTheFocus()

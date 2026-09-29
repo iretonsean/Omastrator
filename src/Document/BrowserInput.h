@@ -1,5 +1,7 @@
 #pragma once
 #include <QJsonObject>
+#include <QKeySequence>
+#include <QList>
 #include <QPoint>
 #include <QPointF>
 #include <QRectF>
@@ -36,8 +38,9 @@ struct Key {
 // The key a Qt key event stands for, given its text; none for a key the page has no name for.
 std::optional<Key> keyFor(int qtKey, const QString &text, Qt::KeyboardModifiers modifiers);
 
-// Esc leaves Browse and Ctrl+K opens the palette; the page never sees either.
-bool reserved(int qtKey, Qt::KeyboardModifiers modifiers);
+// Esc leaves Browse and the command palette's shortcuts open it; the page never sees either. `palette` is the live
+// list from the palette's action, so a remap follows.
+bool reserved(int qtKey, Qt::KeyboardModifiers modifiers, const QList<QKeySequence> &palette);
 
 // Input.dispatchKeyEvent's parameters for a press or a release, or none for an unknown key. A printable key with no
 // Ctrl, Alt or Meta is a keyDown that carries its text; the rest are rawKeyDown, with the editing command a Ctrl shortcut

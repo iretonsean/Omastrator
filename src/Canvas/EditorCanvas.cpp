@@ -209,7 +209,7 @@ bool EditorCanvas::event(QEvent *event)
     if (m_state->session.tool() == Tool::browse && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress
                                                     || event->type() == QEvent::KeyRelease)) {
         auto *key = static_cast<QKeyEvent *>(event);
-        const bool palette = BrowserInput::reserved(key->key(), key->modifiers()) && key->key() != Qt::Key_Escape;
+        const bool palette = m_state->browseReserved(key) && key->key() != Qt::Key_Escape;
         if (event->type() == QEvent::ShortcutOverride && (m_state->browseFocused() || key->key() == Qt::Key_Escape) && !palette) {
             event->accept();
             return true;
