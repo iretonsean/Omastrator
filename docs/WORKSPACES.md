@@ -178,6 +178,10 @@ reach the other pages. So:
 - **Windows the user drags** onto a page workspace stay there while it's
   claimed, and go to the return workspace when it's given back. If the user
   drags the editor or a stand-in elsewhere, the next swap puts it back.
+- **A stand-in the user closes** (Super+W) stays closed: that page's
+  workspace is given back, and the page is reclaimed only when the user next
+  goes to it from the Pages list or Next/Previous Page. We never reopen a
+  window the user just closed.
 
 ## 5. The island and the bar
 
@@ -227,6 +231,7 @@ touches the real Hyprland.
   - a numbered workspace does nothing;
   - our own echo dispatches nothing (the log is unchanged);
   - the agent's `page add` moves silently;
+  - closing a stand-in gives its workspace back and nothing reopens it;
   - no `focuswindow` when the app isn't focused.
 - `WorkspaceClaimsTests`:
   - the file round-trips;
