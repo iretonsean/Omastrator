@@ -523,9 +523,18 @@ public:
     void paste(PastePosition position);
     bool canPaste() const;
     // Set once by the app: another clipboard format, tried before the plain-image
-    // fallback (Figma's paste; docs/import/figma.md). Returns the objects it
-    // decoded, or nullopt when it doesn't recognise this clipboard.
-    using ExternalPasteHandler = std::function<std::optional<std::vector<VectorObject>>(const QMimeData &)>;
+    // fallback (Figma's paste; docs/import/figma.md). `recognises` is cheap and
+    // runs on every menu refresh (canPaste); `read` does the full decode, only
+    // when pasting, and returns nullopt when it can't read this clipboard.
+    struct ExternalPaste {
+        std::vector<VectorObject> objects;
+        // What the paste couldn't bring along; reported through pasteLeftOut().
+        QStringList warnings;
+    };
+    struct ExternalPasteHandler {
+        std::function<bool(const QMimeData &)> recognises;
+        std::function<std::optional<ExternalPaste>(const QMimeData &)> read;
+    };
     static void setExternalPasteHandler(ExternalPasteHandler handler);
 
     // View -------------------------------------------------------------------
@@ -585,6 +594,8 @@ signals:
     void changed();
     // The artboard or objects changed; the canvas redraws.
     void documentChanged();
+    // A paste from another app left some things out.
+    void pasteLeftOut(const QStringList &warnings);
 
 private:
     void notify(bool documentToo = true);

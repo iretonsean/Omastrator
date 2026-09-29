@@ -31,6 +31,7 @@ private:
     QPushButton *m_importButton = nullptr;
     QNetworkAccessManager m_network;
     QPointer<QNetworkReply> m_reply;
+    QString m_pendingToken;
 
     void updateTokenRow();
     void startImport();

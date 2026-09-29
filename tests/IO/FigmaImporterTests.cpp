@@ -513,6 +513,84 @@ private slots:
         QVERIFY(!FigmaImporter::parseLink(QStringLiteral("https://example.com/not-figma")).has_value());
     }
 
+    void linkParsesTheOtherShapesFigmaCopies()
+    {
+        // No trailing slash, with and without a query.
+        const auto bare = FigmaImporter::parseLink(QStringLiteral("https://www.figma.com/design/abc123"));
+        QVERIFY(bare.has_value());
+        QCOMPARE(bare->fileKey, QStringLiteral("abc123"));
+        const auto query = FigmaImporter::parseLink(QStringLiteral("https://www.figma.com/design/abc123?node-id=4-5"));
+        QVERIFY(query.has_value());
+        QCOMPARE(query->fileKey, QStringLiteral("abc123"));
+        QCOMPARE(query->nodeID, QStringLiteral("4:5"));
+        // A branch's own key is the file to fetch.
+        const auto branch = FigmaImporter::parseLink(QStringLiteral("https://www.figma.com/design/abc123/branch/xyz789/Name?node-id=1-2"));
+        QVERIFY(branch.has_value());
+        QCOMPARE(branch->fileKey, QStringLiteral("xyz789"));
+        QCOMPARE(branch->nodeID, QStringLiteral("1:2"));
+        QVERIFY(FigmaImporter::parseLink(QStringLiteral("figma.com/file/abc123/x")).has_value());
+        // The host is anchored.
+        QVERIFY(!FigmaImporter::parseLink(QStringLiteral("https://notfigma.com/design/abc123/x")).has_value());
+        QVERIFY(!FigmaImporter::parseLink(QStringLiteral("https://www.figma.com/community/abc123/x")).has_value());
+    }
+
+    void savingTheTokenReportsAFailure()
+    {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        // The config folder's parent is a regular file, so nothing can be created under it.
+        QFile blocker(config.filePath(QStringLiteral("file")));
+        QVERIFY(blocker.open(QIODevice::WriteOnly));
+        blocker.close();
+        qputenv("XDG_CONFIG_HOME", blocker.fileName().toUtf8());
+        QVERIFY(!FigmaImporter::Token::save(QStringLiteral("figd_secret")));
+        QVERIFY(!FigmaImporter::Token::load().has_value());
+        qunsetenv("XDG_CONFIG_HOME");
+    }
+
+    void aNewTokenFolderIsPrivate()
+    {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        QVERIFY(FigmaImporter::Token::save(QStringLiteral("figd_secret")));
+        const QFile::Permissions folder = QFileInfo(config.filePath(QStringLiteral("omastrator"))).permissions();
+        QVERIFY(!(folder & (QFile::ReadGroup | QFile::WriteGroup | QFile::ExeGroup | QFile::ReadOther | QFile::WriteOther | QFile::ExeOther)));
+        FigmaImporter::Token::forget();
+        qunsetenv("XDG_CONFIG_HOME");
+    }
+
+    void everyPageKeepsItsContentInsideItsOwnArtboard()
+    {
+        const QByteArray json = R"({"document": {"id": "0:0", "type": "DOCUMENT", "children": [
+            {"id": "0:1", "type": "CANVAS", "name": "One", "children": [
+                {"id": "1:1", "type": "RECTANGLE", "name": "A", "size": {"x": 50, "y": 30},
+                 "relativeTransform": [[1, 0, 200], [0, 1, 70]]},
+                {"id": "1:2", "type": "COMPONENT", "name": "Master", "size": {"x": 50, "y": 30},
+                 "relativeTransform": [[1, 0, 300], [0, 1, 400]], "children": [
+                    {"id": "1:3", "type": "RECTANGLE", "name": "Inner", "size": {"x": 50, "y": 30},
+                     "relativeTransform": [[1, 0, 0], [0, 1, 0]]}]}]},
+            {"id": "0:2", "type": "CANVAS", "name": "Two", "children": [
+                {"id": "2:1", "type": "RECTANGLE", "name": "B", "size": {"x": 80, "y": 60},
+                 "relativeTransform": [[1, 0, -40], [0, 1, 500]]},
+                {"id": "2:2", "type": "INSTANCE", "name": "Copy", "componentId": "1:2", "size": {"x": 50, "y": 30},
+                 "relativeTransform": [[1, 0, -30], [0, 1, 510]]}]}]}})";
+        const VectorDocument document = FigmaImporter::parseRestFile(json, QString());
+        QCOMPARE(document.artboards.size(), size_t(2));
+        const VectorObject *a = named(document, QStringLiteral("A"));
+        const VectorObject *b = named(document, QStringLiteral("B"));
+        QVERIFY(a && b);
+        QVERIFY(document.artboards[0].rect.contains(a->path.bounds()));
+        QVERIFY(document.artboards[1].rect.contains(b->path.bounds()));
+        QVERIFY(!document.artboards[0].rect.intersects(document.artboards[1].rect));
+        // An instance made on page two, of a component on page one, stays on page two.
+        const VectorObject *copy = named(document, QStringLiteral("Copy"));
+        QVERIFY(copy && copy->instance.has_value());
+        const QRectF copyBounds = document.bounds(copy->id, true);
+        QVERIFY(copyBounds.isValid());
+        QVERIFY(document.artboards[1].rect.contains(copyBounds));
+    }
+
     void tokenRoundTripsWithRestrictivePermissions()
     {
         QTemporaryDir config;

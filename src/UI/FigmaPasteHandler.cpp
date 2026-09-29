@@ -26,17 +26,28 @@ std::vector<VectorObject> flatten(const VectorDocument &document)
 
 void install()
 {
-    EditorSession::setExternalPasteHandler([](const QMimeData &data) -> std::optional<std::vector<VectorObject>> {
-        if (!data.hasFormat(QStringLiteral("text/html")))
-            return std::nullopt;
-        const QByteArray html = data.data(QStringLiteral("text/html"));
-        if (!FigmaImporter::isFigmaClipboardHtml(html))
-            return std::nullopt;
-        try {
-            return flatten(FigmaImporter::parseClipboardHtml(html));
-        } catch (const FileError &) {
-            return std::nullopt;
-        }
+    EditorSession::setExternalPasteHandler({
+        [](const QMimeData &data) {
+            if (!data.hasFormat(QStringLiteral("text/html")))
+                return false;
+            // Only the start: Figma's marker comes first, and a full clipboard can be megabytes.
+            return FigmaImporter::isFigmaClipboardHtml(data.data(QStringLiteral("text/html")).left(16384));
+        },
+        [](const QMimeData &data) -> std::optional<EditorSession::ExternalPaste> {
+            if (!data.hasFormat(QStringLiteral("text/html")))
+                return std::nullopt;
+            const QByteArray html = data.data(QStringLiteral("text/html"));
+            if (!FigmaImporter::isFigmaClipboardHtml(html))
+                return std::nullopt;
+            try {
+                EditorSession::ExternalPaste paste;
+                const VectorDocument document = FigmaImporter::parseClipboardHtml(html, &paste.warnings);
+                paste.objects = flatten(document);
+                return paste;
+            } catch (const FileError &) {
+                return std::nullopt;
+            }
+        },
     });
 }
 }

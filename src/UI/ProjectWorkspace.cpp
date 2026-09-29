@@ -35,6 +35,7 @@ ProjectWorkspace::ProjectWorkspace()
     const auto first = std::make_shared<ProjectTab>(QStringLiteral("Untitled"));
     m_tabs = {first};
     m_selectedID = first->id;
+    watchPaste(*first);
     setUpCloud();
 }
 
@@ -81,9 +82,17 @@ ProjectTab &ProjectWorkspace::addTab(bool reuseEmpty, const QString &name)
     return current();
 }
 
+// A paste from another app says once what it couldn't bring along.
+void ProjectWorkspace::watchPaste(ProjectTab &tab)
+{
+    connect(&tab.session, &EditorSession::pasteLeftOut, this,
+            [this](const QStringList &warnings) { showError(QStringLiteral("Some of what you pasted was left out"), warnings.join(QLatin1Char('\n'))); });
+}
+
 // A lone empty tab gives way to what arrives.
 void ProjectWorkspace::adopt(std::shared_ptr<ProjectTab> tab)
 {
+    watchPaste(*tab);
     if (m_tabs.size() == 1 && !current().session.hasDocument())
         m_tabs.clear();
     m_tabs.push_back(tab);

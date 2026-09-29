@@ -212,7 +212,10 @@ QVariantMap translateFields(const QJsonObject &node)
         fields.insert(QStringLiteral("booleanOperation"), node.value(QStringLiteral("booleanOperation")));
     if (node.contains(QStringLiteral("componentId"))) {
         QVariantMap symbolData;
-        symbolData.insert(QStringLiteral("symbolID"), node.value(QStringLiteral("componentId")).toVariant());
+        // The mapper reads a Kiwi GUID; a REST id is "session:local".
+        const QStringList parts = node.value(QStringLiteral("componentId")).toString().split(QLatin1Char(':'));
+        if (parts.size() == 2)
+            symbolData.insert(QStringLiteral("symbolID"), QVariantMap{{QStringLiteral("sessionID"), parts[0].toUInt()}, {QStringLiteral("localID"), parts[1].toUInt()}});
         fields.insert(QStringLiteral("symbolData"), symbolData);
     }
     return fields;
@@ -223,7 +226,8 @@ QVariantMap translateFields(const QJsonObject &node)
 void walk(const QJsonObject &node, const Guid &parent, int index, Tree &tree)
 {
     const Guid guid = node.value(QStringLiteral("id")).toString();
-    if (guid.isEmpty())
+    // A repeated id (a hostile or buggy response) would make a node its own descendant.
+    if (guid.isEmpty() || tree.nodes.count(guid))
         return;
     Node built;
     built.fields = translateFields(node);

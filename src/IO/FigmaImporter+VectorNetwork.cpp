@@ -26,6 +26,9 @@ struct Reader {
         return value;
     }
 
+    // Whether `count` records of `size` bytes could still fit; checked before any allocation.
+    bool fits(quint32 count, qsizetype size) const { return ok && qsizetype(count) <= (data.size() - pos) / size; }
+
     float f32()
     {
         if (pos + 4 > data.size()) {
@@ -51,6 +54,11 @@ VectorPath decodeBlob(const QByteArray &blob, QSizeF size, Context &ctx)
     const quint32 vertexCount = reader.u32();
     const quint32 segmentCount = reader.u32();
     const quint32 regionCount = reader.u32();
+    // Vertices are 12 bytes, segments 28 and regions at least 8: a claim past the blob is false.
+    if (!reader.fits(vertexCount, 12) || !reader.fits(segmentCount, 28) || !reader.fits(regionCount, 8)) {
+        ctx.warn(QStringLiteral("A vector shape’s geometry was damaged, and was left out."));
+        return {};
+    }
 
     struct Segment {
         quint32 start = 0, end = 0;
@@ -88,6 +96,10 @@ VectorPath decodeBlob(const QByteArray &blob, QSizeF size, Context &ctx)
         const quint32 loopCount = reader.u32();
         for (quint32 l = 0; l < loopCount && reader.ok; ++l) {
             const quint32 indexCount = reader.u32();
+            if (!reader.fits(indexCount, 4)) {
+                ctx.warn(QStringLiteral("Part of a vector shape’s outline couldn’t be read, and was left out."));
+                break;
+            }
             std::vector<quint32> indices(indexCount);
             for (quint32 i = 0; i < indexCount; ++i)
                 indices[i] = reader.u32();

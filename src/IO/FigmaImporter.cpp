@@ -93,7 +93,7 @@ VectorDocument fromNodeChanges(const QVariantList &nodeChanges, const QVariantLi
     return document;
 }
 
-VectorDocument fromKiwiBytes(const QByteArray &fileBytes, QStringList *warnings)
+VectorDocument decodeKiwiBytes(const QByteArray &fileBytes, QStringList *warnings)
 {
     const QHash<QString, QByteArray> images = zipImages(fileBytes);
     const QByteArray canvas = canvasBytes(fileBytes);
@@ -106,6 +106,16 @@ VectorDocument fromKiwiBytes(const QByteArray &fileBytes, QStringList *warnings)
     }
     const QVariantMap message = container.message.toMap();
     return fromNodeChanges(message.value(QStringLiteral("nodeChanges")).toList(), message.value(QStringLiteral("blobs")).toList(), images, warnings);
+}
+
+// Backstop for anything the size checks miss: Open and Place catch only FileError.
+VectorDocument fromKiwiBytes(const QByteArray &fileBytes, QStringList *warnings)
+{
+    try {
+        return decodeKiwiBytes(fileBytes, warnings);
+    } catch (const std::bad_alloc &) {
+        throw FileError(QStringLiteral("This Figma file is too large or damaged to import."));
+    }
 }
 
 QString tokenPath()
@@ -201,12 +211,14 @@ VectorDocument parseClipboardHtml(const QByteArray &html, QStringList *warnings)
 
 std::optional<LinkTarget> parseLink(const QString &url)
 {
-    static const QRegularExpression pattern(QStringLiteral("figma\\.com/(?:design|file|proto)/([a-zA-Z0-9]+)/"));
-    const QRegularExpressionMatch match = pattern.match(url);
+    static const QRegularExpression pattern(
+        QStringLiteral("(?:^|//|\\.)figma\\.com/(?:design|file|proto)/([A-Za-z0-9]+)(?:/branch/([A-Za-z0-9]+))?(?:[/?#]|$)"));
+    const QRegularExpressionMatch match = pattern.match(url.trimmed());
     if (!match.hasMatch())
         return std::nullopt;
     LinkTarget target;
-    target.fileKey = match.captured(1);
+    // A branch link's own key is the file to fetch.
+    target.fileKey = match.captured(2).isEmpty() ? match.captured(1) : match.captured(2);
     static const QRegularExpression nodeParam(QStringLiteral("[?&]node-id=([^&]+)"));
     const QRegularExpressionMatch nodeMatch = nodeParam.match(url);
     if (nodeMatch.hasMatch())
@@ -224,20 +236,30 @@ std::optional<QString> load()
     return token.isEmpty() ? std::nullopt : std::optional(token);
 }
 
-void save(const QString &token)
+bool save(const QString &token)
 {
     const QString path = tokenPath();
-    QDir().mkpath(QFileInfo(path).absolutePath());
+    const QString folder = QFileInfo(path).absolutePath();
+    if (!QFileInfo::exists(folder)) {
+        QDir().mkpath(folder);
+        QFile::setPermissions(folder, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    }
     QSaveFile file(path);
     QJsonObject object;
     object.insert(QStringLiteral("token"), token);
     const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Indented);
-    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+    if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcIO) << "couldn't save the Figma token:" << file.errorString();
-        return;
+        return false;
     }
-    // A personal access token: only this user reads it.
-    QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner);
+    // A personal access token: only this user reads it. Set on the temporary file
+    // before the token is written, so the rename never exposes a wider mode.
+    if (!file.setPermissions(QFile::ReadOwner | QFile::WriteOwner) || file.write(bytes) != bytes.size() || !file.commit()) {
+        file.cancelWriting();
+        qCWarning(lcIO) << "couldn't save the Figma token:" << file.errorString();
+        return false;
+    }
+    return true;
 }
 
 void forget()
