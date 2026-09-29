@@ -280,8 +280,32 @@ private slots:
         QCOMPARE(instanceChildren.size(), size_t(1));
         QCOMPARE(instanceChildren.front()->text.text, QString("Overridden!"));
 
-        // Two real artboards: the page's own, and the symbol master's.
+        // Two real artboards: the page's own, and the symbol master's, on their own pages.
         QCOMPARE(document.artboards.size(), size_t(2));
+        QCOMPARE(document.pageCount(), 2);
+        QCOMPARE(document.allPages()[1].name, QString("Symbols"));
+        QCOMPARE(document.pageOf(card->id), document.allPages()[1].id);
+        QCOMPARE(document.pageOf(cardInstance->id), document.allPages()[0].id);
+    }
+
+    void sketchPagesBecomePagesFromTheOrigin()
+    {
+        const auto artboard = [](const QString &id, const QString &name, double width) {
+            return QJsonObject{{"_class", "artboard"}, {"do_objectID", id}, {"name", name},
+                               {"frame", frameJson(0, 0, width, 100)}, {"layers", QJsonArray{}}};
+        };
+        const VectorDocument document = SketchImporter::parse(sketchFile(
+            {}, {{"Home", QJsonArray{artboard("A", "Wide", 400), artboard("B", "Narrow", 200)}}, {"Settings", QJsonArray{artboard("C", "Only", 300)}}}));
+        QCOMPARE(document.pageCount(), 2);
+        QCOMPARE(document.allPages()[0].name, QString("Home"));
+        QCOMPARE(document.currentPageId(), document.allPages()[0].id);
+        QCOMPARE(document.artboardsOn(document.allPages()[0].id).size(), size_t(2));
+        QCOMPARE(document.artboardsOn(document.allPages()[0].id)[1].name, QString("Narrow"));
+        // The second page starts at the origin, not beside the first.
+        QCOMPARE(document.artboardsOn(document.allPages()[1].id).front().rect, QRectF(0, 0, 300, 100));
+        QCOMPARE(document.layers().size(), size_t(1));
+        QCOMPARE(document.find(document.layersOn(document.allPages()[1].id).front())->name, QString("Settings"));
+        QCOMPARE(document.size, QSizeF(400, 100));
     }
 
     void missingDocumentJsonIsAFileError() { QVERIFY_THROWS_EXCEPTION(FileError, SketchImporter::parse(QByteArrayLiteral("not a zip"))); }

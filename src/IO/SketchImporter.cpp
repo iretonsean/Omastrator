@@ -61,11 +61,16 @@ public:
         };
         std::vector<PageInfo> pages;
         double nextX = 0;
+        // Several Sketch pages become pages, each from the origin; one stays the plain document.
+        const bool paged = orderedPages.size() > 1;
+        std::vector<Page> pageList;
         for (const QJsonObject &pageJson : orderedPages) {
             PageInfo info;
             info.json = pageJson;
-            info.offsetX = nextX;
-            nextX = info.offsetX + std::max(100.0, contentBounds(pageJson).width()) + 200;
+            if (!paged) {
+                info.offsetX = nextX;
+                nextX = info.offsetX + std::max(100.0, contentBounds(pageJson).width()) + 200;
+            }
 
             VectorObject layer;
             layer.kind = ObjectKind::layer;
@@ -73,6 +78,10 @@ public:
             if (layer.name.isEmpty())
                 layer.name = QStringLiteral("Page");
             layer.layerColor = nextLayerColor(int(document.layers().size()));
+            if (paged) {
+                pageList.push_back(Page{QUuid::createUuid(), layer.name});
+                layer.page = pageList.back().id;
+            }
             document.objects.push_back(layer);
             info.layerID = document.objects.back().id;
             pages.push_back(info);
@@ -123,9 +132,20 @@ public:
         // instances can resolve them, regardless of which page they live on.
         std::stable_sort(artboards.begin(), artboards.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
         std::vector<Artboard> ordered;
-        for (auto &entry : artboards)
+        for (auto &entry : artboards) {
+            if (paged)
+                entry.second.page = pageList[size_t(entry.first.first)].id;
             ordered.push_back(std::move(entry.second));
-        document.setArtboards(std::move(ordered));
+        }
+        if (paged) {
+            document.pages = pageList;
+            document.currentPage = pageList.front().id;
+            document.artboards = std::move(ordered);
+            document.size = document.artboards.front().rect.size();
+            document.background = document.artboards.front().background;
+        } else {
+            document.setArtboards(std::move(ordered));
+        }
         warnings.removeDuplicates();
     }
 
