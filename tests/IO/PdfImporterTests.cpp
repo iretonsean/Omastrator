@@ -198,7 +198,7 @@ private slots:
         QVERIFY(image->image.pixelColor(1, 0).alpha() < 50);
     }
 
-    void twoPagesBecomeTwoArtboards()
+    void twoPagesBecomeTwoPages()
     {
         PdfFixtureBuilder pdf;
         const int content1 = pdf.addStream("", "0 0 1 rg 0 0 10 10 re f");
@@ -219,11 +219,18 @@ private slots:
         pdf.addDict(QByteArray("/Type /Catalog /Pages %1 0 R").replace("%1", QByteArray::number(pagesObj)));
 
         const VectorDocument document = PdfImporter::parse(pdf.build(catalogObj));
+        // A page each, the first showing, each artboard at the origin of its own page.
+        QCOMPARE(document.pageCount(), 2);
+        QCOMPARE(document.allPages()[0].name, QStringLiteral("Page 1"));
+        QCOMPARE(document.allPages()[1].name, QStringLiteral("Page 2"));
+        QCOMPARE(document.currentPageId(), document.allPages()[0].id);
         QCOMPARE(document.artboards.size(), size_t(2));
-        QCOMPARE(document.artboards[0].rect.size(), QSizeF(50, 50));
-        QCOMPARE(document.artboards[1].rect.size(), QSizeF(80, 60));
-        QVERIFY(document.artboards[1].rect.left() >= document.artboards[0].rect.right());
-        QCOMPARE(document.layers().size(), size_t(2));
+        QCOMPARE(document.artboardsOn(document.allPages()[0].id).front().rect, QRectF(0, 0, 50, 50));
+        QCOMPARE(document.artboardsOn(document.allPages()[1].id).front().rect, QRectF(0, 0, 80, 60));
+        QCOMPARE(document.layers().size(), size_t(1));
+        QCOMPARE(document.layersOn(document.allPages()[1].id).size(), size_t(1));
+        QCOMPARE(document.allLayers().size(), size_t(2));
+        QCOMPARE(document.size, QSizeF(50, 50));
     }
 
     void hiddenOcgImportsAsAHiddenLayer()
