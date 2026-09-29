@@ -88,6 +88,23 @@ and the real width disagree.
 Suggested fix: round a Browser View's width and height to whole CSS px when
 the tool (and a resize) commits them.
 
+## 6. [ ] Edit Page fills every selection box after the first with solid blue
+
+**Confirmed, with the fix tested.** In Edit Page, Shift-click a second
+element. Its selection box is drawn filled with the accent colour, and the
+element disappears under it. Only the first box is drawn as an outline.
+
+- The cause is in `EditorCanvas::State::drawEditPage`
+  (`src/Canvas/EditorCanvas+EditPage.cpp`, the loop over
+  `boxes.selection`). Each pass sets `painter.setBrush(color)` to draw the
+  label's pill, and the next pass's `painter.drawRect(rect)` still uses that
+  brush.
+- **The fix:** call `painter.setBrush(Qt::NoBrush);` before
+  `painter.drawRect(rect);` in the loop. With that line, both boxes draw as
+  outlines, which was checked in the recording.
+- A test could grab the canvas with two selected elements and check that a
+  pixel inside the second box isn't the accent colour.
+
 ## Not bugs (checked)
 
 - **Zoom counts device pixels.** At a device pixel ratio of 2, "100%" is
