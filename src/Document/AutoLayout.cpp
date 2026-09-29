@@ -210,6 +210,10 @@ private:
     bool resize(const QUuid &id, QSizeF size)
     {
         VectorObject *object = m_document.find(id);
+        // A Browser View is whole px, so a fractional fill width is compared as the whole one it will become; otherwise
+        // every pass would find it a hair off and go on to the last.
+        if (object->browser)
+            size = BrowserView::wholeSize(size);
         const QRectF now = m_document.bounds(id);
         if (near(now.width(), size.width()) && near(now.height(), size.height()))
             return false;
@@ -307,9 +311,11 @@ void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box, bool previe
     const QRectF old = frame->shape->rect.normalized();
     QRectF fresh = box.normalized();
     // A Browser View lays its page out at its width in CSS px, so every way to size one (the handles, W and H,
-    // a breakpoint, Design Width) lands on whole pixels.
-    if (frame->browser)
-        fresh.setSize(BrowserView::wholeSize(fresh.size()));
+    // a breakpoint, Design Width) lands on whole pixels, and a side that stayed where it was still does.
+    if (frame->browser) {
+        fresh = BrowserView::wholeBox(fresh, near(fresh.right(), old.right()) && !near(fresh.left(), old.left()),
+                                      near(fresh.bottom(), old.bottom()) && !near(fresh.top(), old.top()));
+    }
     if (!near(fresh.width(), old.width()))
         frame->layout.width = frame->layout.width == LayoutSizing::hug ? LayoutSizing::fixed : frame->layout.width;
     if (!near(fresh.height(), old.height()))
@@ -376,7 +382,7 @@ std::optional<LayoutSizing> layoutSizing(const QString &raw)
     return valueOf(sizingNames, raw);
 }
 
-void VectorDocument::applyAutoLayout()
+int VectorDocument::applyAutoLayout()
 {
     std::vector<std::pair<int, QUuid>> frames;
     for (const VectorObject &object : objects) {
@@ -389,7 +395,7 @@ void VectorDocument::applyAutoLayout()
         frames.emplace_back(depth, object.id);
     }
     if (frames.empty())
-        return;
+        return 0;
     // Innermost first, so a hugging frame has its size before its parent measures it; a fill size
     // handed down changes the child's own layout, so go again until nothing moves.
     std::stable_sort(frames.begin(), frames.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
@@ -399,6 +405,7 @@ void VectorDocument::applyAutoLayout()
         for (const auto &[depth, id] : frames)
             changed = layouter.layOut(id) || changed;
         if (!changed)
-            return;
+            return pass + 1;
     }
+    return 4;
 }

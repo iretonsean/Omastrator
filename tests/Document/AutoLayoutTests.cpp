@@ -58,6 +58,32 @@ private slots:
         QCOMPARE(row.box(), QRectF(100, 100, 100, 60));
     }
 
+    // A Browser View is whole px, so a fill width of 33⅓ is compared as the 33 it becomes. Compared as it is, every pass finds
+    // the frame a third of a pixel off and the layout goes on to its last pass.
+    void aFillBrowserViewSettlesInTwoPasses()
+    {
+        VectorDocument document = VectorDocument::blank({600, 600});
+        VectorObject parent = VectorObject::frame({QPointF(100, 100), QSizeF(100, 50)});
+        parent.autoLayout = layout(LayoutDirection::horizontal, 0, 0);
+        const QUuid frame = parent.id;
+        document.insert(parent, document.layers().front());
+        std::vector<QUuid> children;
+        for (int index = 0; index < 3; ++index) {
+            VectorObject child = VectorObject::frame({QPointF(300, 300), QSizeF(20, 20)});
+            child.layout.width = LayoutSizing::fill;
+            child.layout.height = LayoutSizing::fill;
+            if (index == 1)
+                child.browser = BrowserView{QUrl(QStringLiteral("https://example.com/")), {}, {}};
+            children.push_back(child.id);
+            document.insert(child, frame);
+        }
+        QCOMPARE(document.applyAutoLayout(), 2);
+        QCOMPARE(document.bounds(children[1]).width(), 33.0);
+        QVERIFY(qAbs(document.bounds(children[0]).width() - 100.0 / 3) < 1e-6);
+        // Nothing left to do.
+        QCOMPARE(document.applyAutoLayout(), 1);
+    }
+
     void aColumnCentresAcross()
     {
         AutoLayout column = layout(LayoutDirection::vertical, 5, 0);

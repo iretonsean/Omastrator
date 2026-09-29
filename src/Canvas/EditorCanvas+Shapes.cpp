@@ -89,7 +89,12 @@ void EditorCanvas::State::dragFrame(const QRectF &drawn)
 {
     const bool web = session.tool() == Tool::browserView;
     // A page lays out at whole CSS px, whatever the zoom the drag was made at.
-    const QRectF rect = web ? QRectF(drawn.topLeft(), BrowserView::wholeSize(drawn.size())) : drawn;
+    // The corner the drag began at stays where it is: drawing up or to the left rounds towards the other side.
+    const auto atPress = [&](double edge, double press) { return std::abs(edge - press) < 1e-6; };
+    const QPointF press = drag->pressDocument;
+    const QRectF rect = web ? BrowserView::wholeBox(drawn, atPress(drawn.right(), press.x()) && !atPress(drawn.left(), press.x()),
+                                                    atPress(drawn.bottom(), press.y()) && !atPress(drawn.top(), press.y()))
+                            : drawn;
     if (!drag->interacting) {
         const VectorDocument &document = *session.document();
         std::optional<QUuid> host;

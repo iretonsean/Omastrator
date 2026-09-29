@@ -156,6 +156,27 @@ private slots:
         QCOMPARE(board.box(drawn).size(), QSizeF(1, 40));
     }
 
+    // A left or top handle moves that edge and leaves the right or bottom one; rounding the size must not move it.
+    void theSideThatStayedStaysWhenTheSizeIsRounded()
+    {
+        Board board;
+        // The frame is 0,0 to 400,300. Its left edge goes to 10.4 and its top to 20.3, right and bottom where they were.
+        board.session.select({board.frame});
+        board.session.beginPreview(QStringLiteral("Preview Width"));
+        board.session.previewFrameBox(board.frame, QRectF(QPointF(10.4, 20.3), QPointF(400, 300)));
+        const QRectF shown = board.box(board.frame);
+        QCOMPARE(shown.size(), QSizeF(390, 280));
+        QCOMPARE(shown.right(), 400.0);
+        QCOMPARE(shown.bottom(), 300.0);
+        // The right edge moving leaves the left one, as it always did.
+        board.session.previewFrameBox(board.frame, QRectF(QPointF(0, 0), QPointF(389.6, 299.7)));
+        QCOMPARE(board.box(board.frame), QRectF(0, 0, 390, 300));
+        board.session.cancelInteraction();
+        // Design Width keeps the fixed side too.
+        board.session.setDesignBox(board.frame, QRectF(QPointF(10.4, 0), QPointF(400, 300)));
+        QCOMPARE(board.box(board.frame), QRectF(10, 0, 390, 300));
+    }
+
     void aFrameThatIsNotABrowserViewKeepsItsFractionalSize()
     {
         Board board;
