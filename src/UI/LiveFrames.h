@@ -62,7 +62,9 @@ public:
 
     // Across every document. Pending edits of a project are its frames' and the held ones; the window's are the bridge's.
     static std::vector<LiveEdit> pendingEdits(const QString &folder);
-    // What was written or kept: every frame's edits for the project, and the held ones, are gone.
+    // What was written or sent: `taken` (by identity) are gone from every frame's session and from the held ones. An edit a
+    // session made that `taken` doesn't have, published or not, stays. With none named: everything pending now.
+    static void clearPending(const QString &folder, const std::vector<LiveEdit> &taken);
     static void clearPending(const QString &folder);
     // Edits from a host that stopped, kept for the project until they are written or the app quits.
     static void hold(const QString &folder, std::vector<LiveEdit> edits);
@@ -86,8 +88,13 @@ private:
         // Lives on the pool's thread; only touched there once started.
         LiveSession *session = nullptr;
         Snapshot snapshot;
-        // clearPending commands the session hasn't run yet: until they have, its snapshots show no edits.
-        int clearing = 0;
+        // clearPending commands the session hasn't run yet, oldest first: until they have, its snapshots leave out the
+        // edits they remove (and offer no undo, as the session forgets its steps).
+        struct Clearing {
+            std::vector<LiveEdit> taken;
+            bool dropsUndo = false;
+        };
+        std::vector<Clearing> clearing;
     };
 
     void publish(const QUuid &frame, const Snapshot &snapshot, LiveSession *from);

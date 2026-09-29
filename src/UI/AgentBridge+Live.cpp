@@ -72,7 +72,7 @@ QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
         record(QStringLiteral("Live edits"), plan.done.join(QLatin1Char('\n')), plan.changes, project);
     // A Browser View's write-back takes every host's edits; the ones left for the agent stay with the window if it is on the project.
     if (framed)
-        LiveFrames::clearPending(project);
+        LiveFrames::clearPending(project, edits);
     if (!framed || (!m_live.project().isEmpty() && canonical(m_live.project()) == canonical(project)))
         m_live.setEdits(plan.unresolved);
     else
@@ -135,8 +135,9 @@ QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &eleme
         && !m_pipeline.waitingFor.contains(work.requestId))
         m_pipeline.waitingFor << work.requestId;
     if (instruction.isEmpty()) {
+        // Only what the brief carried: an edit made since stays for the next Save.
         if (framed)
-            LiveFrames::clearPending(project);
+            LiveFrames::clearPending(project, brief.edits);
         if (inWindow)
             m_live.setEdits({});
     }

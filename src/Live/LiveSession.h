@@ -34,6 +34,7 @@ struct LiveEdit {
     QString path;
     QString origin;
     QJsonObject toJson() const;
+    friend bool operator==(const LiveEdit &, const LiveEdit &) = default;
 };
 
 // Live mode (docs/OS-SUITE.md): a page in Omastrator's own Chromium with the
@@ -124,6 +125,8 @@ public:
     // Forgets the recorded edits, or keeps only `edits` (the ones write-back left for the agent).
     void clearEdits();
     void setEdits(std::vector<LiveEdit> edits);
+    // Forgets exactly these edits (by identity, every field): one made after the caller read the list stays.
+    void removeEdits(const std::vector<LiveEdit> &edits);
     void removeEdit(int index);
     // Shows a line in the overlay's bar.
     void notice(const QString &text);

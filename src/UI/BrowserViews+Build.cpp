@@ -209,8 +209,8 @@ QString BrowserViews::startBuild(const QUuid &frame, const QString &folder, cons
     const QString failure = m_agent->handOff(handOff);
     if (!failure.isEmpty())
         return failure;
-    // Everything pending went in the package just now, so all of it is done.
-    LiveFrames::clearPending(folder);
+    // What went in the package is done; an edit made while it was made stays pending.
+    LiveFrames::clearPending(folder, handOff.pending);
     scheduleRepaint(frame);
     emit frameChanged(frame);
     return {};

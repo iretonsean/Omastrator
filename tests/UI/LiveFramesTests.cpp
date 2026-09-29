@@ -9,6 +9,7 @@
 #include "../Agent/FakeAgents.h"
 #include <QFile>
 #include <QProcess>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QThread>
 #include <QTemporaryDir>
@@ -300,6 +301,71 @@ private slots:
         QVERIFY(bridge.pendingEdits(served->folder).empty());
         QVERIFY(LiveFrames::held(served->folder).empty());
         QTRY_VERIFY_WITH_TIMEOUT(!LiveFrames::of(session)->snapshot(hosted.frame).canUndo, 10'000);
+    }
+
+    void clearingWhatWasReadKeepsAnEditTheSessionHadNotPublished()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        startLive(session, hosted.frame, served->folder);
+        editOpacity(session, hosted.frame, QStringLiteral("0.4"));
+        LiveFrames *frames = LiveFrames::of(session);
+
+        // A Save reads what is pending; the page's owner then makes one more edit, with the session's signals held so
+        // that nothing has published it when the Save clears what it took.
+        const std::vector<LiveEdit> read = LiveFrames::pendingEdits(served->folder);
+        QCOMPARE(read.size(), size_t(1));
+        LiveEdit late = read.front();
+        late.property = QStringLiteral("padding-bottom");
+        late.before = QStringLiteral("0px");
+        late.after = QStringLiteral("90px");
+        bool added = false;
+        frames->run(hosted.frame, [&](LiveSession &live) {
+            std::vector<LiveEdit> both = live.edits();
+            both.push_back(late);
+            const QSignalBlocker quiet(&live);
+            live.setEdits(both);
+            return QString();
+        }, [&](const QString &) { added = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(added, patience);
+
+        LiveFrames::clearPending(served->folder, read);
+        // The session runs its commands in order, so this one has the edits as the clear left them.
+        std::vector<LiveEdit> left;
+        bool seen = false;
+        frames->run(hosted.frame, [&](LiveSession &live) {
+            left = live.edits();
+            return QString();
+        }, [&](const QString &) { seen = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(seen, patience);
+        QCOMPARE(left.size(), size_t(1));
+        QCOMPARE(left.front().property, QStringLiteral("padding-bottom"));
+        // The next Save finds it, and only it.
+        QTRY_COMPARE_WITH_TIMEOUT(LiveFrames::pendingEdits(served->folder).size(), size_t(1), 10'000);
+        QCOMPARE(LiveFrames::pendingEdits(served->folder).front().property, QStringLiteral("padding-bottom"));
+    }
+
+    void clearingWhatWasReadLeavesHeldEditsThatCameLater()
+    {
+        const QString folder = QFileInfo(m_directory.path()).canonicalFilePath() + QStringLiteral("/held");
+        LiveEdit sent;
+        sent.selector = QStringLiteral("#title");
+        sent.property = QStringLiteral("color");
+        sent.after = QStringLiteral("red");
+        LiveEdit later = sent;
+        later.property = QStringLiteral("padding");
+        LiveFrames::hold(folder, {sent});
+        const std::vector<LiveEdit> read = LiveFrames::pendingEdits(folder);
+        // A frame that stopped meanwhile hands its edit over before the Save clears.
+        LiveFrames::hold(folder, {later});
+        LiveFrames::clearPending(folder, read);
+        QCOMPARE(LiveFrames::held(folder).size(), size_t(1));
+        QCOMPARE(LiveFrames::held(folder).front().property, QStringLiteral("padding"));
+        LiveFrames::clearPending(folder);
+        QVERIFY(LiveFrames::held(folder).empty());
     }
 
     void stoppingAFrameHoldsItsEditsForDeploy()

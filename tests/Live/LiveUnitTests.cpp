@@ -1,4 +1,5 @@
 #include "Live/DevServer.h"
+#include "Live/LiveSession.h"
 #include "Live/Registry.h"
 #include "Live/StaticServer.h"
 #include "Live/Tokens.h"
@@ -10,6 +11,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QProcess>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTemporaryDir>
@@ -270,6 +272,34 @@ private slots:
         get(server.url().resolved(QUrl(QStringLiteral("/%2e%2e/secret.txt"))), &status);
         QCOMPARE(status, 404);
         QCOMPARE(StaticServer::mimeType(QStringLiteral("x.svg")), QByteArray("image/svg+xml"));
+    }
+
+    void removingEditsForgetsExactlyTheNamedOnes()
+    {
+        const auto edit = [](const QString &selector, const QString &property, const QString &after) {
+            LiveEdit made;
+            made.selector = selector;
+            made.property = property;
+            made.before = QStringLiteral("0");
+            made.after = after;
+            return made;
+        };
+        LiveSession session;
+        QSignalSpy changed(&session, &LiveSession::changed);
+        session.setEdits({edit("#a", "opacity", "0.5"), edit("#b", "opacity", "0.6"), edit("#c", "opacity", "0.7")});
+        changed.clear();
+
+        // The edit made since the caller read the list (#c) and one that shares a target but not a value stay.
+        session.removeEdits({edit("#a", "opacity", "0.5"), edit("#b", "opacity", "0.9")});
+        QCOMPARE(session.edits().size(), size_t(2));
+        QCOMPARE(session.edits()[0].selector, QStringLiteral("#b"));
+        QCOMPARE(session.edits()[1].selector, QStringLiteral("#c"));
+        QCOMPARE(changed.size(), 1);
+
+        // Naming nothing that is there changes nothing and says nothing.
+        session.removeEdits({edit("#z", "opacity", "1")});
+        QCOMPARE(session.edits().size(), size_t(2));
+        QCOMPARE(changed.size(), 1);
     }
 
     void viteHelperMarksSourceLocations()

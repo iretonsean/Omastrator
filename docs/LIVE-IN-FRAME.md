@@ -691,6 +691,21 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     `aStalePictureInAWiderBoxKeepsItsSizeAndTopLeftCorner`,
     `aPictureThatShowsTheFramesSizeFillsItWhateverItsDensity`.
 
+## Clearing what was written or sent
+
+`LiveFrames::clearPending(folder, taken)` removes the edits a write-back or a
+Build It took, by identity (`LiveEdit` compares every field), from the held
+edits and from each frame's session (`LiveSession::removeEdits`, run on the
+pool's thread). An edit a session recorded after the caller read the list stays,
+published or not; it used to be wiped by `setEdits({})`. A frame's snapshot
+leaves out the edits of a clear that hasn't run yet, so the panel never shows
+them again in between. Callers: `liveWriteBack` (everything it read),
+`liveAsk` (the brief's edits) and Build It (the package's `pending`).
+`clearPending(folder)` alone clears what is pending now. Tests:
+`clearingWhatWasReadKeepsAnEditTheSessionHadNotPublished` (Chromium),
+`clearingWhatWasReadLeavesHeldEditsThatCameLater`,
+`removingEditsForgetsExactlyTheNamedOnes`.
+
 ## Follow-ups
 
 - Custom… in the element bar has no alpha since `ColorPickerSheet` replaced
@@ -703,10 +718,6 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
   (paused or closed), the swap keeps translating until the next non-dev
   navigation, and a deliberate trip to that localhost port meanwhile is saved
   as the production address.
-- An unpublished-edit race in `clearPending`: an edit the session made but
-  hadn't published when `clearPending` ran is wiped by `setEdits({})` without
-  being written. Build It's "only what it sent" has the same race
-  (`BrowserViews+Build.cpp`).
 - The token as the unit ("p-4", "radius-md") and the small arrow that lists the
   scale, in the bar's fields. The host's element state doesn't carry an edit's
   snapped token yet; it needs to.
