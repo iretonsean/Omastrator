@@ -72,6 +72,7 @@ private slots:
     void theLayoutSectionDrivesAutoLayout();
     void paddingCanBeSetPerSide();
     void inferredUnevenPaddingShowsEverySide();
+    void deselectingMidScrubDoesNotLeaveTheEditOpen();
 
 };
 
@@ -881,6 +882,41 @@ void PropertiesPanelTests::paddingCanBeSetPerSide()
     QCOMPARE(padding().paddingLeft, 13.0);
     QCOMPARE(padding().paddingRight, 13.0);
     QCOMPARE(session.undoNames().size(), steps + 1);
+}
+
+// Esc on the canvas deselects while the pointer is still on a label; the release never reaches the field.
+void PropertiesPanelTests::deselectingMidScrubDoesNotLeaveTheEditOpen()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = session.addPath(Shapes::rectangle(QRectF(20, 20, 40, 30)), QStringLiteral("A"));
+    session.select({a});
+    session.frameSelection();
+    const QUuid frame = session.selection().front();
+    session.addAutoLayout();
+    PropertiesPanel panel(session);
+    panel.resize(300, 900);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    QWidget *handle = numberNamed(panel, "layoutPaddingX")->handle();
+    QVERIFY(handle->isVisible());
+    const auto send = [&](QEvent::Type type, double x, Qt::MouseButtons buttons) {
+        QMouseEvent event(type, QPointF(x, 4), handle->mapToGlobal(QPointF(x, 4)), Qt::LeftButton, buttons, Qt::NoModifier);
+        QCoreApplication::sendEvent(handle, &event);
+    };
+    send(QEvent::MouseButtonPress, 4, Qt::LeftButton);
+    send(QEvent::MouseMove, 14, Qt::LeftButton);
+    const std::vector<QString> before = session.undoNames();
+    session.deselectAll();
+    QVERIFY(!handle->isVisible());
+    // The edit closed with the field, so the scrub is a step and the next edit is another.
+    QCOMPARE(session.undoNames().size(), before.size() + 1);
+    session.select({frame});
+    AutoLayout layout = *session.selectedAutoLayout();
+    layout.gap += 1;
+    session.setAutoLayout(layout, QStringLiteral("Gap"));
+    QCOMPARE(session.undoNames().size(), before.size() + 2);
+    QCOMPARE(session.undoName(), QString("Gap"));
 }
 
 // What Add Auto Layout inferred on the author's canvas: the pair read "Mixed" and hid why children sat off-centre.
