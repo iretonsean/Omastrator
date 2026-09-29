@@ -1,6 +1,7 @@
 #pragma once
 #include <QByteArray>
 #include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -10,12 +11,17 @@
 // `omastrator setup` (docs/OS-SUITE.md): installs the island and tray light
 // plugins, writes the Hyprland keys, the Omarchy menu entries and the
 // dictation vocabulary, and offers the bar widget and the Hyprland source
-// line. Every change to a file is shown as a diff and confirmed first;
-// `--remove` takes out exactly what setup added, as recorded in setup.json.
+// line. Every change to a file is shown as a diff and confirmed first, after
+// a copy of each file it will change goes to setup-backups (`--restore` puts
+// it back); `--remove` takes out exactly what setup added, as recorded in
+// setup.json. Setup never takes a key the user already uses, and `--no-keys`
+// takes none.
 namespace Setup {
 struct Environment {
     QString home;
     QString configHome;
+    // $XDG_STATE_HOME, else ~/.local/state.
+    QString stateHome;
     QString omarchyPath;
     // The repo's or package's shell/ folder the plugins are copied from.
     QString shellSource;
@@ -33,6 +39,8 @@ struct Environment {
     QString menu() const;
     QString hyprDirectory() const;
     QString record() const;
+    // Where every setup or remove keeps a copy of the files it changes: <stateHome>/omastrator/setup-backups.
+    QString backups() const;
     // Chromium's per-user native messaging host manifest, and the flags file its launcher reads.
     QString browserHostManifest() const;
     QString chromiumFlags() const;
@@ -76,9 +84,26 @@ struct DesignKeys {
     static DesignKeys from(const Environment &environment);
 };
 
-// The generated files.
-QByteArray hyprlandLua(const QString &command, const DesignKeys &keys = {});
-QByteArray hyprlandConf(const QString &command, const DesignKeys &keys = {});
+// A key combination the way Hyprland matches it: modifiers in the order SUPER, CTRL, ALT, SHIFT, then the key,
+// upper case ("SUPER+ALT+O"). Reads Lua's "SUPER + ALT + O".
+QString normalizeCombo(const QString &lua);
+// "SUPER+ALT+ESCAPE" as people write it: "Super+Alt+Escape".
+QString displayCombo(const QString &normalized);
+// Every global key setup would bind, normalised: the mode keys, dictation, design mode, the Desk and the reset.
+QStringList omastratorKeys(const DesignKeys &keys);
+// The global keys the user already binds (Hyprland's live binds, else their config), normalised. Omastrator's own binds don't count,
+// nor do keys used only inside a submap: the keys setup binds inside its own submaps can't collide with anything.
+QSet<QString> takenKeys(const Environment &environment);
+struct KeyChoice {
+    // Normalised keys setup leaves out of the file it writes, and the same for display.
+    QStringList skip;
+    QStringList skipped;
+};
+KeyChoice chooseKeys(const Environment &environment);
+
+// The generated files. `skip` is normalised keys to leave unbound (see chooseKeys).
+QByteArray hyprlandLua(const QString &command, const DesignKeys &keys = {}, const QStringList &skip = {});
+QByteArray hyprlandConf(const QString &command, const DesignKeys &keys = {}, const QStringList &skip = {});
 // The text setup appends to the user's Hyprland config with --apply.
 QByteArray sourceBlock(HyprFormat format);
 // The Omastrator entries of the Omarchy menu, between BEGIN and END markers.
@@ -110,10 +135,46 @@ QStringList missingTools();
 // `word` safe for a shell command line.
 QString shellQuote(const QString &word);
 
-// What setup would change now, and what --remove would.
-std::vector<Change> installPlan(const Environment &environment, bool withBar, bool withSource, QStringList *notes);
+// What setup would change now, and what --remove would. `noKeys` leaves out the Hyprland keys and the line that loads them;
+// `skippedKeys` gets the keys left alone because the user already uses them ("Super+Alt+C").
+std::vector<Change> installPlan(const Environment &environment, bool withBar, bool withSource, QStringList *notes, bool noKeys = false, QStringList *skippedKeys = nullptr);
 std::vector<Change> removalPlan(const Environment &environment, QStringList *notes);
 
-// `omastrator setup [--yes] [--apply] [--remove] [--dry-run]`. Answers come from `in`.
+// A copy of the files one setup, remove or restore was about to change, in <backups>/<name>/.
+struct BackupEntry {
+    // The original path; `existed` is false for a file setup made, which a restore deletes again.
+    QString path;
+    bool existed = false;
+    // The copy, relative to the backup's folder.
+    QString stored;
+};
+struct Backup {
+    QString name;
+    QString folder;
+    QString created;
+    // "setup" or "remove".
+    QString action;
+    std::vector<BackupEntry> entries;
+    // Folders that didn't exist yet, removed by a restore once empty.
+    QStringList createdDirectories;
+};
+// A folder name for a backup made now, not yet taken: "20260928-101500", then "20260928-101500-02".
+QString newBackupName(const Environment &environment);
+// Copies each existing file of `paths` and writes the manifest last. Returns why it couldn't, having removed what it made; nothing else changes.
+QString writeBackup(const Environment &environment, const QString &name, const QString &action, const QStringList &paths, Backup *made);
+// Deletes the oldest backups beyond `keep`, never `except` (the one just made). Only folders named like a backup are touched.
+void pruneBackups(const Environment &environment, const QString &except, int keep = 5);
+// Every backup with a readable manifest, newest first.
+std::vector<Backup> listBackups(const Environment &environment);
+// `name` is a folder name, a unique start of one, or a path; empty is the newest.
+std::optional<Backup> findBackup(const Environment &environment, const QString &name);
+// What --restore would change: each file that differs from the backup's copy.
+std::vector<Change> restorePlan(const Environment &environment, const Backup &backup, QString *error);
+// Tells the shell to rescan its plugins and reload; adds a note when it isn't running.
+void reloadOmarchyShell(QStringList *notes);
+int runListBackups(const Environment &environment, QTextStream &out);
+int runRestore(const Environment &environment, const QString &name, bool yes, bool dryRun, QTextStream &in, QTextStream &out, QTextStream &err);
+
+// `omastrator setup [--yes] [--apply] [--no-keys] [--remove] [--restore [BACKUP]] [--list-backups] [--dry-run]`. Answers come from `in`.
 int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStream &err);
 }

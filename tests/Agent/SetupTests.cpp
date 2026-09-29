@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -52,6 +53,18 @@ class SetupTests : public QObject {
 
 private:
     QTemporaryDir m_home;
+    // Outside the HOME that tests snapshot: the state folder (backups) and the fake hyprctl's answer.
+    QTemporaryDir m_state;
+    QTemporaryDir m_fake;
+
+    QString backupsFolder() const { return m_state.filePath(QStringLiteral("omastrator/setup-backups")); }
+    QStringList backupNames() const { return QDir(backupsFolder()).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name); }
+    // The live binds hyprctl reports: (modmask, key, submap).
+    void liveBinds(const QJsonArray &binds) { write(m_fake.filePath(QStringLiteral("binds.json")), QJsonDocument(binds).toJson()); }
+    static QJsonObject bind(int modmask, const QString &key, const QString &submap = QString(), const QString &description = QString())
+    {
+        return {{"modmask", modmask}, {"key", key}, {"submap", submap}, {"description", description}, {"dispatcher", "exec"}, {"arg", "true"}, {"mouse", false}};
+    }
 
     QString config(const QString &relative) const { return m_home.filePath(QStringLiteral(".config/") + relative); }
 
@@ -70,8 +83,13 @@ private:
 private slots:
     void initTestCase()
     {
-        QVERIFY(m_home.isValid());
+        QVERIFY(m_home.isValid() && m_state.isValid() && m_fake.isValid());
         qputenv("HOME", m_home.path().toUtf8());
+        qputenv("XDG_STATE_HOME", m_state.path().toUtf8());
+        qunsetenv("HYPRLAND_INSTANCE_SIGNATURE");
+        write(m_fake.filePath(QStringLiteral("hyprctl")), "#!/bin/sh\ncat \"$(dirname \"$0\")/binds.json\"\n");
+        QFile::setPermissions(m_fake.filePath(QStringLiteral("hyprctl")), QFile::permissions(m_fake.filePath(QStringLiteral("hyprctl"))) | QFile::ExeOwner);
+        qputenv("OMASTRATOR_HYPRCTL", m_fake.filePath(QStringLiteral("hyprctl")).toUtf8());
         qputenv("XDG_CONFIG_HOME", config(QString()).toUtf8());
         qputenv("OMASTRATOR_SHELL_DIR", OMASTRATOR_SOURCE_DIR "/shell");
         qputenv("OMARCHY_PATH", m_home.filePath(QStringLiteral("omarchy")).toUtf8());
@@ -84,6 +102,9 @@ private slots:
     void init()
     {
         QDir(config(QString())).removeRecursively();
+        QDir(m_state.path()).removeRecursively();
+        QDir().mkpath(m_state.path());
+        liveBinds({});
         write(config(QStringLiteral("omarchy/shell.json")), userShellJson);
         write(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc")), userMenu);
         write(config(QStringLiteral("hypr/hyprland.lua")), userHypr);
@@ -326,6 +347,237 @@ private slots:
         qputenv("OMASTRATOR_SHELL_DIR", previous);
 
         QCOMPARE(location.source, override.path());
+    }
+
+    void everyChangeIsBackedUpFirst()
+    {
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QCOMPARE(backupNames().size(), 1);
+        const QString name = backupNames().first();
+        const QString folder = QDir(backupsFolder()).filePath(name);
+        QVERIFY2(out.contains(folder), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("omastrator setup --restore ") + name), qPrintable(out));
+        QVERIFY(QRegularExpression(QStringLiteral("^\\d{8}-\\d{6}$")).match(name).hasMatch());
+        // The copies are the files as they were, and the manifest names their original paths.
+        const QJsonObject manifest = QJsonDocument::fromJson(read(QDir(folder).filePath(QStringLiteral("manifest.json")))).object();
+        QMap<QString, bool> existed;
+        for (const QJsonValue &entry : manifest["entries"].toArray())
+            existed[entry.toObject()["path"].toString()] = entry.toObject()["existed"].toBool();
+        QVERIFY(existed.value(config(QStringLiteral("hypr/hyprland.lua"))));
+        QVERIFY(existed.value(config(QStringLiteral("omarchy/shell.json"))));
+        QVERIFY(existed.value(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc"))));
+        QVERIFY(existed.contains(config(QStringLiteral("omastrator/hyprland.lua"))));
+        QVERIFY(!existed.value(config(QStringLiteral("omastrator/hyprland.lua"))));
+        QCOMPARE(read(QDir(folder).filePath(QStringLiteral("files") + config(QStringLiteral("hypr/hyprland.lua")))), userHypr);
+        QCOMPARE(read(QDir(folder).filePath(QStringLiteral("files") + config(QStringLiteral("omarchy/shell.json")))), userShellJson);
+        // Files setup didn't change aren't copied.
+        QVERIFY(!existed.contains(config(QStringLiteral("omarchy/theme"))));
+
+        // The preview names the folder before anything is asked.
+        QVERIFY(setup({QStringLiteral("--remove"), QStringLiteral("--dry-run")}, QString(), &out) == 0);
+        QVERIFY2(out.contains(QLatin1String("setup would copy every file it changes to ") + backupsFolder()), qPrintable(out));
+    }
+
+    void noBackupNoChange()
+    {
+        const QStringList before = snapshot(m_home.path());
+        // A state folder that can't be made: a file where its parent should be.
+        write(m_home.filePath(QStringLiteral("blocker")), "x");
+        qputenv("XDG_STATE_HOME", m_home.filePath(QStringLiteral("blocker")).toUtf8());
+        QString out;
+        const QStringList withBlocker = snapshot(m_home.path());
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 1);
+        QVERIFY2(out.contains(QLatin1String("Nothing was changed")), qPrintable(out));
+        QCOMPARE(snapshot(m_home.path()), withBlocker);
+        QFile::remove(m_home.filePath(QStringLiteral("blocker")));
+        qputenv("XDG_STATE_HOME", m_state.path().toUtf8());
+        QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    void onlyTheNewestFiveBackupsStay()
+    {
+        const Setup::Environment environment = Setup::Environment::current();
+        const QString file = config(QStringLiteral("hypr/hyprland.lua"));
+        for (int day = 1; day <= 7; ++day)
+            QVERIFY(Setup::writeBackup(environment, QStringLiteral("2026010%1-000000").arg(day), QStringLiteral("setup"), {file}, nullptr).isEmpty());
+        QDir().mkpath(QDir(backupsFolder()).filePath(QStringLiteral("mine")));
+        Setup::pruneBackups(environment, QStringLiteral("20260101-000000"));
+        // The newest five and the one just made; a folder that isn't a backup is left alone.
+        QCOMPARE(backupNames(), (QStringList{QStringLiteral("20260101-000000"), QStringLiteral("20260103-000000"), QStringLiteral("20260104-000000"),
+                                             QStringLiteral("20260105-000000"), QStringLiteral("20260106-000000"), QStringLiteral("20260107-000000"),
+                                             QStringLiteral("mine")}));
+        Setup::pruneBackups(environment, QStringLiteral("20260107-000000"));
+        QCOMPARE(backupNames().size(), 6);
+        QVERIFY(!backupNames().contains(QStringLiteral("20260101-000000")));
+    }
+
+    void aSetupKeepsFiveBackupsAtMost()
+    {
+        QString out;
+        for (int round = 0; round < 7; ++round) {
+            QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+            QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
+        }
+        QCOMPARE(backupNames().size(), 5);
+        // The last thing made is kept.
+        QVERIFY2(out.contains(backupNames().last()), qPrintable(out));
+    }
+
+    void restorePutsEveryFileBack()
+    {
+        const QStringList before = snapshot(m_home.path());
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        write(config(QStringLiteral("unrelated.txt")), "mine");
+        const QString name = backupNames().first();
+
+        // It shows what will change, and asks.
+        QCOMPARE(setup({QStringLiteral("--restore")}, QStringLiteral("n\n"), &out), 0);
+        QVERIFY2(out.contains(name) && out.contains(QLatin1String("Put these files back?")) && out.contains(QLatin1String("Skipped.")), qPrintable(out));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--dry-run")}, QString(), &out), 0);
+        QVERIFY(out.contains(QLatin1String("Dry run: nothing changed.")));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
+
+        // Named, and with --yes: what setup wrote goes, what it edited comes back, what it never touched stays.
+        QCOMPARE(setup({QStringLiteral("--restore"), name, QStringLiteral("--yes")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Restored")), qPrintable(out));
+        QCOMPARE(read(config(QStringLiteral("unrelated.txt"))), QByteArray("mine"));
+        QFile::remove(config(QStringLiteral("unrelated.txt")));
+        QCOMPARE(snapshot(m_home.path()), before);
+
+        // Nothing left to do the second time.
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QVERIFY(out.contains(QLatin1String("nothing to restore")));
+        QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    void restoreWorksAfterAnInterruptedSetup()
+    {
+        const QStringList before = snapshot(m_home.path());
+        const Setup::Environment environment = Setup::Environment::current();
+        const QStringList paths = {config(QStringLiteral("hypr/hyprland.lua")), config(QStringLiteral("omastrator/hyprland.lua")),
+                                   config(QStringLiteral("omarchy/shell.json"))};
+        QVERIFY(Setup::writeBackup(environment, QStringLiteral("20260928-101500"), QStringLiteral("setup"), paths, nullptr).isEmpty());
+        // Setup stopped after two writes, before it could record anything.
+        write(paths[0], userHypr + "\n-- half written");
+        write(paths[1], "partial");
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator/setup.json"))));
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("20260928-1015"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    void restoreAndListSayWhenThereIsNothing()
+    {
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--list-backups")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("No setup backups yet")), qPrintable(out));
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--yes")}, QString(), &out), 1);
+        QVERIFY(out.contains(QLatin1String("no setup backup")));
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QCOMPARE(setup({QStringLiteral("--list-backups")}, QString(), &out), 0);
+        QVERIFY2(out.contains(backupNames().first()) && out.contains(QLatin1String("--restore")), qPrintable(out));
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("2001"), QStringLiteral("--yes")}, QString(), &out), 1);
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--remove")}, QString(), &out), 1);
+    }
+
+    void keysTheUserHasAreSkipped()
+    {
+        const QStringList before = snapshot(m_home.path());
+        // Live: Super+Alt+C is theirs; Super+Alt+L is bound inside their own submap, where it can't clash.
+        liveBinds({bind(72, QStringLiteral("C")), bind(72, QStringLiteral("L"), QStringLiteral("resize")), bind(64, QStringLiteral("Q"))});
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Super+Alt+C is already yours: skipped")), qPrintable(out));
+        QVERIFY(!out.contains(QLatin1String("Super+Alt+L is already yours")));
+        const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
+        QVERIFY(!keys.contains("hl.bind(\"SUPER + ALT + C\""));
+        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + L\""));
+        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + D\""));
+        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + Escape\""));
+        // Recorded, so setup stays exact.
+        const QJsonObject record = QJsonDocument::fromJson(read(config(QStringLiteral("omastrator/setup.json")))).object();
+        QCOMPARE(record["skippedKeys"].toArray().first().toString(), QStringLiteral("Super+Alt+C"));
+
+        // A second run is quiet about the key and changes nothing.
+        const QStringList installed = snapshot(m_home.path());
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Everything is already set up.")) && out.contains(QLatin1String("Super+Alt+C is already yours")), qPrintable(out));
+        QCOMPARE(snapshot(m_home.path()), installed);
+
+        QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    void restoreAfterSkippedKeysIsExact()
+    {
+        const QStringList before = snapshot(m_home.path());
+        liveBinds({bind(72, QStringLiteral("D"))});
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY(out.contains(QLatin1String("Super+Alt+D is already yours: skipped")));
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    void keysInTheConfigAreSkippedToo()
+    {
+        // No live Hyprland to ask: the user's own config says what they use.
+        write(config(QStringLiteral("hypr/hyprland.lua")),
+              userHypr
+                  + "hl.bind(\"SUPER + ALT + V\", hl.dsp.exec_cmd(\"mine\"))\n"
+                    "-- hl.bind(\"SUPER + ALT + A\", hl.dsp.exec_cmd(\"commented out\"))\n"
+                    "hl.define_submap(\"resize\", function()\n"
+                    "  hl.bind(\"SUPER + ALT + L\", hl.dsp.exec_cmd(\"in a submap\"))\n"
+                    "end)\n");
+        write(config(QStringLiteral("hypr/bindings.conf")), "$mod = SUPER\nbindd = $mod ALT, C, Mine, exec, mine\nbindm = SUPER ALT, D, movewindow\n");
+        QSet<QString> taken = Setup::takenKeys(Setup::Environment::current());
+        QVERIFY(taken.contains(QStringLiteral("SUPER+ALT+V")));
+        QVERIFY(taken.contains(QStringLiteral("SUPER+ALT+C")));
+        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+A")));
+        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+L")));
+        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+D")));
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Super+Alt+V is already yours: skipped")) && out.contains(QLatin1String("Super+Alt+C is already yours: skipped")), qPrintable(out));
+        const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
+        QVERIFY(!keys.contains("hl.bind(\"SUPER + ALT + V\""));
+        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + A\""));
+    }
+
+    void combosCompareTheWayHyprlandDoes()
+    {
+        QCOMPARE(Setup::normalizeCombo(QStringLiteral("SUPER + ALT + O")), QStringLiteral("SUPER+ALT+O"));
+        QCOMPARE(Setup::normalizeCombo(QStringLiteral("ALT SUPER + o")), QStringLiteral("SUPER+ALT+O"));
+        QCOMPARE(Setup::normalizeCombo(QStringLiteral("Super+Alt+Esc")), QStringLiteral("SUPER+ALT+ESCAPE"));
+        QCOMPARE(Setup::displayCombo(QStringLiteral("SUPER+ALT+C")), QStringLiteral("Super+Alt+C"));
+        QVERIFY(Setup::omastratorKeys({}).contains(QStringLiteral("SUPER+ALT+ESCAPE")));
+    }
+
+    void noKeysInstallsNoKeys()
+    {
+        const QByteArray hypr = read(config(QStringLiteral("hypr/hyprland.lua")));
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--no-keys"), QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("omastrator design on")), qPrintable(out));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
+        QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), hypr);
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island/Island.qml"))));
+        QVERIFY(read(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc"))).contains("BEGIN omastrator setup"));
+        QCOMPARE(setup({QStringLiteral("--no-keys"), QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY(out.contains(QLatin1String("Everything is already set up.")));
+        QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QVERIFY(!read(config(QStringLiteral("omarchy/shell.json"))).contains("omastrator"));
+    }
+
+    void helpNamesTheSafetyNet()
+    {
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--help")}, QString(), &out), 0);
+        for (const char *text : {"setup-backups", "--restore", "--no-keys", "--list-backups", "never takes a"})
+            QVERIFY2(out.contains(QLatin1String(text)), text);
     }
 
     void hyprlandAcceptsTheKeys()

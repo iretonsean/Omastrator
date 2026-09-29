@@ -63,6 +63,8 @@ struct Record {
     QString flagsPath;
     QString flagsExtension;
     bool flagsCreated = false;
+    // Keys setup left unbound because the user already uses them, so --remove and --restore know what was never taken.
+    QStringList skippedKeys;
 
     static Record read(const QString &path)
     {
@@ -83,6 +85,8 @@ struct Record {
         record.flagsPath = json["chromiumFlags"]["path"].toString();
         record.flagsExtension = json["chromiumFlags"]["extension"].toString();
         record.flagsCreated = json["chromiumFlags"]["created"].toBool();
+        for (const QJsonValue &key : json["skippedKeys"].toArray())
+            record.skippedKeys << key.toString();
         return record;
     }
     bool isEmpty() const
@@ -99,6 +103,7 @@ struct Record {
                                  {"menu", QJsonObject{{"block", menu}, {"comma", menuComma}, {"created", menuCreated}}},
                                  {"hyprSource", QJsonObject{{"path", sourcePath}, {"text", QString::fromUtf8(sourceText)}}},
                                  {"chromiumFlags", QJsonObject{{"path", flagsPath}, {"extension", flagsExtension}, {"created", flagsCreated}}},
+                                 {"skippedKeys", QJsonArray::fromStringList(skippedKeys)},
                              })
             .toJson(QJsonDocument::Indented);
     }
@@ -170,6 +175,8 @@ Environment Environment::current()
     Environment environment;
     environment.home = qEnvironmentVariable("HOME", QDir::homePath());
     environment.configHome = configHomeFor(environment.home);
+    const QString state = qEnvironmentVariable("XDG_STATE_HOME");
+    environment.stateHome = state.isEmpty() ? QDir(environment.home).filePath(QStringLiteral(".local/state")) : state;
     environment.omarchyPath = qEnvironmentVariable("OMARCHY_PATH", QStringLiteral("/usr/share/omarchy"));
     environment.binary = QCoreApplication::applicationFilePath();
     const ShellLocation shell = locateShell(environment.binary);
@@ -188,6 +195,7 @@ QString Environment::shellJson() const { return QDir(configHome).filePath(QStrin
 QString Environment::menu() const { return QDir(configHome).filePath(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc")); }
 QString Environment::hyprDirectory() const { return QDir(configHome).filePath(QStringLiteral("hypr")); }
 QString Environment::record() const { return QDir(omastratorConfig()).filePath(QStringLiteral("setup.json")); }
+QString Environment::backups() const { return QDir(stateHome).filePath(QStringLiteral("omastrator/setup-backups")); }
 QString Environment::browserHostManifest() const
 {
     return QDir(configHome).filePath(QStringLiteral("chromium/NativeMessagingHosts/%1.json").arg(QLatin1String(BrowserHost::name)));
@@ -260,7 +268,7 @@ bool designKeysLoaded(const Environment &environment)
     return submapDefined(environment, QStringLiteral("omastrator-design"));
 }
 
-std::vector<Change> installPlan(const Environment &environment, bool withBar, bool withSource, QStringList *notes)
+std::vector<Change> installPlan(const Environment &environment, bool withBar, bool withSource, QStringList *notes, bool noKeys, QStringList *skippedKeys)
 {
     std::vector<Change> plan;
     if (environment.shellSource.isEmpty()) {
@@ -282,10 +290,16 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
     }
 
     const HyprFormat format = hyprFormat(environment);
-    const QString keys = QDir(environment.omastratorConfig()).filePath(format == HyprFormat::lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf"));
-    plan.push_back({QStringLiteral("keys"), QStringLiteral("Write the island's Hyprland keys (Omastrator's own file)"), keys, readFile(keys),
-                    format == HyprFormat::lua ? hyprlandLua(environment.command, DesignKeys::from(environment))
-                                              : hyprlandConf(environment.command, DesignKeys::from(environment))});
+    if (!noKeys) {
+        const QString keys = QDir(environment.omastratorConfig()).filePath(format == HyprFormat::lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf"));
+        const KeyChoice choice = chooseKeys(environment);
+        const DesignKeys designKeys = DesignKeys::from(environment);
+        plan.push_back({QStringLiteral("keys"), QStringLiteral("Write the island's Hyprland keys (Omastrator's own file)"), keys, readFile(keys),
+                        format == HyprFormat::lua ? hyprlandLua(environment.command, designKeys, choice.skip)
+                                                  : hyprlandConf(environment.command, designKeys, choice.skip)});
+        if (skippedKeys)
+            *skippedKeys = choice.skipped;
+    }
     // The vocabulary is the user's to edit once written.
     const QString vocabulary = QDir(environment.omastratorConfig()).filePath(QStringLiteral("vocabulary.txt"));
     if (!QFileInfo::exists(vocabulary))
@@ -319,11 +333,12 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
     const QString hypr = hyprConfig(environment, format);
     const auto config = readFile(hypr);
     const QByteArray source = sourceBlock(format);
-    if (withSource) {
+    // With no keys file there is nothing for the line to load.
+    if (!noKeys && withSource) {
         if (!config || !config->contains(source.trimmed()))
             plan.push_back({QStringLiteral("source"), QStringLiteral("Load the island's keys from your Hyprland config"), hypr, config,
                             config.value_or(QByteArray()) + source});
-    } else if (!config || !config->contains(source.trimmed())) {
+    } else if (!noKeys && (!config || !config->contains(source.trimmed()))) {
         notes->append(QStringLiteral("To use the island's keys, add this to %1 (or run `omastrator setup --apply`):%2")
                           .arg(hypr, QString::fromUtf8(source).chopped(1)));
     }
@@ -394,30 +409,78 @@ std::vector<Change> removalPlan(const Environment &environment, QStringList *not
     return plan;
 }
 
+void reloadOmarchyShell(QStringList *notes)
+{
+    // The shell picks up new plugin files itself; enabling needs a rescan and a reload.
+    const QString shell = omarchyShell();
+    if (!QStandardPaths::findExecutable(shell).isEmpty() || QFileInfo(shell).isExecutable()) {
+        for (const QString &call : {QStringLiteral("rescanPlugins"), QStringLiteral("reloadConfig")}) {
+            QProcess process;
+            process.setStandardOutputFile(QProcess::nullDevice());
+            process.start(shell, {QStringLiteral("shell"), call});
+            process.waitForFinished(10'000);
+        }
+    } else {
+        *notes << QStringLiteral("omarchy-shell isn't running; the island appears the next time it starts.");
+    }
+}
+
 int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStream &err)
 {
-    for (const QString &arg : args) {
-        if (!QStringList{"--yes", "-y", "--apply", "--remove", "--dry-run", "--help", "-h"}.contains(arg)) {
+    bool restoring = false;
+    QString restoreName;
+    QStringList flags;
+    for (qsizetype at = 0; at < args.size(); ++at) {
+        const QString &arg = args[at];
+        if (arg == QLatin1String("--restore")) {
+            restoring = true;
+            // A backup's name follows --restore: the newest when it is left out.
+            if (at + 1 < args.size() && !args[at + 1].startsWith(QLatin1Char('-')))
+                restoreName = args[++at];
+        } else if (QStringList{"--yes", "-y", "--apply", "--remove", "--dry-run", "--help", "-h", "--no-keys", "--list-backups"}.contains(arg)) {
+            flags << arg;
+        } else {
             err << QStringLiteral("Unknown option %1. Run `omastrator setup --help`.\n").arg(arg);
             return 1;
         }
     }
-    if (args.contains(QStringLiteral("--help")) || args.contains(QStringLiteral("-h"))) {
-        out << "Usage: omastrator setup [--yes] [--apply] [--dry-run]\n"
-               "       omastrator setup --remove [--yes] [--dry-run]\n\n"
+    if (flags.contains(QStringLiteral("--help")) || flags.contains(QStringLiteral("-h"))) {
+        out << "Usage: omastrator setup [--yes] [--apply] [--no-keys] [--dry-run]\n"
+               "       omastrator setup --remove [--yes] [--dry-run]\n"
+               "       omastrator setup --restore [BACKUP] [--yes] [--dry-run]\n"
+               "       omastrator setup --list-backups\n\n"
                "Installs the island and tray light in omarchy-shell, writes the island's\n"
                "Hyprland keys and the Omarchy menu entries, and offers the tray light for\n"
                "the bar. Each change is shown as a diff and asked about first.\n\n"
-               "  --yes      Accept every change without asking.\n"
-               "  --apply    Also add the line that loads the keys to your Hyprland config.\n"
-               "  --dry-run  Show what would change; change nothing.\n"
-               "  --remove   Take out exactly what setup added.\n";
+               "Before it changes anything, setup copies every file it will change to\n"
+               "~/.local/state/omastrator/setup-backups/<date-time>/ (the newest 5 are\n"
+               "kept). If that copy can't be made, nothing changes. Setup never takes a\n"
+               "key you already use: it skips that key and says so.\n\n"
+               "  --yes           Accept every change without asking.\n"
+               "  --apply         Also add the line that loads the keys to your Hyprland config.\n"
+               "  --no-keys       Install without any global keys: the app, menu and plugins only.\n"
+               "  --dry-run       Show what would change; change nothing.\n"
+               "  --remove        Take out exactly what setup added.\n"
+               "  --restore       Put back the files from the newest backup, or from BACKUP (a\n"
+               "                  name from --list-backups), after showing what will change.\n"
+               "  --list-backups  List the backups, newest first.\n";
         return 0;
     }
-    const bool yes = args.contains(QStringLiteral("--yes")) || args.contains(QStringLiteral("-y"));
-    const bool dryRun = args.contains(QStringLiteral("--dry-run"));
-    const bool removing = args.contains(QStringLiteral("--remove"));
+    const bool yes = flags.contains(QStringLiteral("--yes")) || flags.contains(QStringLiteral("-y"));
+    const bool dryRun = flags.contains(QStringLiteral("--dry-run"));
+    const bool removing = flags.contains(QStringLiteral("--remove"));
+    const bool noKeys = flags.contains(QStringLiteral("--no-keys"));
+    const bool listing = flags.contains(QStringLiteral("--list-backups"));
+    const bool withSource = flags.contains(QStringLiteral("--apply"));
+    if ((restoring || listing) && (removing || withSource || noKeys || (restoring && listing))) {
+        err << QStringLiteral("--restore and --list-backups can't be combined with the other options. Run `omastrator setup --help`.\n");
+        return 1;
+    }
     const Environment environment = Environment::current();
+    if (listing)
+        return runListBackups(environment, out);
+    if (restoring)
+        return runRestore(environment, restoreName, yes, dryRun, in, out, err);
 
     QStringList notes;
     if (!removing) {
@@ -438,8 +501,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         if (!has || has->trimmed() != "true")
             withBar = ask(in, out, QStringLiteral("Add the Omastrator AI light to the bar?"));
     }
-    const bool withSource = args.contains(QStringLiteral("--apply"));
-    std::vector<Change> plan = removing ? removalPlan(environment, &notes) : installPlan(environment, withBar || dryRun, withSource, &notes);
+    QStringList skippedKeys;
+    std::vector<Change> plan = removing ? removalPlan(environment, &notes) : installPlan(environment, withBar || dryRun, withSource, &notes, noKeys, &skippedKeys);
 
     // One question per step; a step's files go together.
     std::vector<QString> order;
@@ -451,19 +514,40 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             order.push_back(change.key);
         steps[change.key].push_back(&change);
     }
+    const auto skippedNote = [](const QString &key) { return QStringLiteral("%1 is already yours: skipped").arg(key); };
     if (order.empty()) {
         out << (removing ? "Setup hasn't added anything here, so there is nothing to remove.\n" : "Everything is already set up.\n");
+        for (const QString &key : skippedKeys)
+            out << skippedNote(key) << '\n';
         for (const QString &note : notes)
             out << '\n' << note << '\n';
         return 0;
     }
 
     Record record = Record::read(environment.record());
-    bool reloadShell = false;
+    const QString backupName = newBackupName(environment);
+    const QString backupFolder = QDir(environment.backups()).filePath(backupName);
+    if (noKeys) {
+        out << "No keys: Hyprland and its keys are left alone. Reach design mode from the Omarchy menu (Omastrator, Island Mode, Design) or with\n"
+               "`omastrator design on`, and start the background app with `omastrator daemon start`.\n";
+        if (!record.files.contains(QDir(environment.omastratorConfig()).filePath(QStringLiteral("hyprland.lua")))
+            && !record.files.contains(QDir(environment.omastratorConfig()).filePath(QStringLiteral("hyprland.conf"))))
+            out << '\n';
+        else
+            out << "Keys from an earlier setup stay as they are; `omastrator setup --remove` takes them out.\n\n";
+    }
+    out << (dryRun ? "Before changing anything, setup would copy every file it changes to " : "Before changing anything, setup copies every file it changes to ")
+        << backupFolder << ".\n";
+
+    std::vector<QString> accepted;
     int applied = 0;
     for (const QString &key : order) {
         const std::vector<Change *> &step = steps[key];
         out << "\n== " << step.front()->title << " ==\n";
+        if (key == QLatin1String("keys")) {
+            for (const QString &skipped : skippedKeys)
+                out << "  " << skippedNote(skipped) << '\n';
+        }
         for (const Change *change : step) {
             if (change->summarize)
                 out << (change->before ? (change->after ? "  update " : "  delete ") : "  new    ") << change->path << '\n';
@@ -478,6 +562,30 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             out << "Skipped.\n";
             continue;
         }
+        accepted.push_back(key);
+    }
+
+    if (!accepted.empty()) {
+        // Every file the accepted steps write, and setup's own record: copied before the first one is touched.
+        QStringList paths{environment.record()};
+        for (const QString &key : accepted) {
+            for (const Change *change : steps[key])
+                paths << change->path;
+        }
+        paths.removeDuplicates();
+        Backup made;
+        if (const QString failure = writeBackup(environment, backupName, removing ? QStringLiteral("remove") : QStringLiteral("setup"), paths, &made);
+            !failure.isEmpty()) {
+            err << QStringLiteral("Nothing was changed: setup couldn't make its backup. %1\n").arg(failure);
+            return 1;
+        }
+        pruneBackups(environment, backupName);
+        out << "\nBacked up to " << backupFolder << ".\n";
+    }
+
+    bool reloadShell = false;
+    for (const QString &key : accepted) {
+        const std::vector<Change *> &step = steps[key];
         for (const Change *change : step) {
             // JSON edits apply to the file as it is now, so a skipped step above doesn't undo this one.
             std::optional<QByteArray> after = change->after;
@@ -497,7 +605,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                         record.directories << folder;
                 }
                 if (const QString failure = writeFile(change->path, *after); !failure.isEmpty()) {
-                    err << failure << '\n';
+                    err << failure << '\n'
+                        << QStringLiteral("Setup stopped part way. `omastrator setup --restore` puts back the files it copied to %1.\n").arg(backupFolder);
                     return 1;
                 }
             } else {
@@ -510,7 +619,7 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         }
         if (removing) {
             if (key == QLatin1String("files"))
-                record.files.clear();
+                record.files.clear(), record.skippedKeys.clear();
             if (key == QLatin1String("shell"))
                 record.island = record.bar = false;
             if (key == QLatin1String("menu"))
@@ -520,6 +629,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             if (key == QLatin1String("flags"))
                 record.flagsPath.clear(), record.flagsExtension.clear(), record.flagsCreated = false;
         } else {
+            if (key == QLatin1String("keys"))
+                record.skippedKeys = skippedKeys;
             if (key == QLatin1String("island"))
                 record.island = true;
             if (key == QLatin1String("bar"))
@@ -568,23 +679,13 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             writeFile(environment.record(), record.toJson());
         }
     }
-    if (reloadShell && !dryRun) {
-        // The shell picks up new plugin files itself; enabling needs a rescan and a reload.
-        const QString shell = omarchyShell();
-        if (!QStandardPaths::findExecutable(shell).isEmpty() || QFileInfo(shell).isExecutable()) {
-            for (const QString &call : {QStringLiteral("rescanPlugins"), QStringLiteral("reloadConfig")}) {
-                QProcess process;
-                process.setStandardOutputFile(QProcess::nullDevice());
-                process.start(shell, {QStringLiteral("shell"), call});
-                process.waitForFinished(10'000);
-            }
-        } else {
-            notes << QStringLiteral("omarchy-shell isn't running; the island appears the next time it starts.");
-        }
-    }
+    if (reloadShell && !dryRun)
+        reloadOmarchyShell(&notes);
     for (const QString &note : notes)
         out << '\n' << note << '\n';
     out << '\n' << (removing ? "Removed." : "Set up.") << ' ' << applied << (applied == 1 ? " step" : " steps") << (dryRun ? " would be applied.\n" : " applied.\n");
+    if (!accepted.empty())
+        out << "To put every file back as it was: omastrator setup --restore " << backupName << '\n';
     return 0;
 }
 }
