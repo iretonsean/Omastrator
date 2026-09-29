@@ -89,7 +89,7 @@ void VectorDocument::repairPageNames()
             return std::any_of(pages.begin(), pages.begin() + index, [&](const Page &other) { return other.name == candidate; });
         };
         for (int number = 2; taken(name); ++number)
-            name = QStringLiteral("%1 %2").arg(base).arg(number);
+            name = QStringLiteral("%1 %2").arg(base, QString::number(number));
         pages[index].name = name;
     }
 }
@@ -103,7 +103,7 @@ QString VectorDocument::uniquePageName(const QString &base) const
     if (!taken(base))
         return base;
     for (int number = 2;; ++number) {
-        const QString candidate = QStringLiteral("%1 %2").arg(base).arg(number);
+        const QString candidate = QStringLiteral("%1 %2").arg(base, QString::number(number));
         if (!taken(candidate))
             return candidate;
     }

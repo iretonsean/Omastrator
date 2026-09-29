@@ -99,7 +99,7 @@ QString css(const std::map<QString, int> &features)
 {
     QStringList settings;
     for (const auto &[tag, value] : features)
-        settings << QStringLiteral("'%1' %2").arg(tag).arg(value);
+        settings << QStringLiteral("'%1' %2").arg(tag, QString::number(value));
     return settings.join(QStringLiteral(", "));
 }
 

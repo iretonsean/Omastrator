@@ -576,7 +576,7 @@ std::vector<VectorObject> VectorDocument::copySubtree(const QUuid &id) const
 QString VectorDocument::uniqueName(const QString &base) const
 {
     for (int number = 1;; ++number) {
-        const QString candidate = QStringLiteral("%1 %2").arg(base).arg(number);
+        const QString candidate = QStringLiteral("%1 %2").arg(base, QString::number(number));
         const bool taken = std::any_of(objects.begin(), objects.end(), [&](const VectorObject &o) { return o.name == candidate; });
         if (!taken)
             return candidate;

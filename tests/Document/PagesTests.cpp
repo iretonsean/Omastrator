@@ -1,4 +1,6 @@
+#include "Document/DocumentCodec.h"
 #include "Document/EditorSession.h"
+#include <QJsonArray>
 #include "Rendering/VectorRenderer.h"
 #include <QSignalSpy>
 #include <QTest>
@@ -46,6 +48,14 @@ private:
         f.document.insert(square, f.layerTwo);
         f.document.ensurePages();
         return f;
+    }
+
+    // A name is text, not a template: "%1" or "%2" in it survives the number added after it.
+    static void percentNames()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::newRow("%1") << QStringLiteral("50%1 off");
+        QTest::newRow("%2") << QStringLiteral("A %2 B");
     }
 
 private slots:
@@ -757,6 +767,54 @@ private slots:
         QCOMPARE(f.document.uniquePageName(QStringLiteral("Home")), QStringLiteral("Home"));
         QCOMPARE(f.document.uniquePageName(QStringLiteral("Page 2")), QStringLiteral("Page 2 2"));
         QCOMPARE(f.document.uniquePageName(QStringLiteral("Page 1")), QStringLiteral("Page 1 2"));
+    }
+
+    void aPercentNameNumbersIntactInTheSession_data() { percentNames(); }
+    void aPercentNameNumbersIntactInTheSession()
+    {
+        QFETCH(QString, name);
+        EditorSession session;
+        session.createDocument({100, 100});
+        const QUuid first = session.currentPage();
+        session.renamePage(first, name);
+        const auto nameOf = [&](const QUuid &page) { return session.document()->pages[size_t(session.document()->pageIndex(page))].name; };
+        QCOMPARE(nameOf(session.addPage(name)), name + QStringLiteral(" 2"));
+        const QUuid other = session.addPage();
+        session.renamePage(other, name);
+        QCOMPARE(nameOf(other), name + QStringLiteral(" 3"));
+        QCOMPARE(nameOf(session.duplicatePage(first)), name + QStringLiteral(" Copy"));
+        QCOMPARE(nameOf(session.duplicatePage(first)), name + QStringLiteral(" Copy 2"));
+    }
+
+    void aPercentNameNumbersIntactInTheDocument_data() { percentNames(); }
+    void aPercentNameNumbersIntactInTheDocument()
+    {
+        QFETCH(QString, name);
+        VectorDocument document = twoPages().document;
+        for (Page &page : document.pages)
+            page.name = name;
+        document.repairPageNames();
+        QCOMPARE(document.pages[1].name, name + QStringLiteral(" 2"));
+        QCOMPARE(document.uniquePageName(name), name + QStringLiteral(" 3"));
+        QCOMPARE(document.uniqueName(name), name + QStringLiteral(" 1"));
+        QCOMPARE(document.uniqueArtboardName(name), name + QStringLiteral(" 1"));
+    }
+
+    void aFileWhosePagesShareAPercentNameIsRepairedIntact_data() { percentNames(); }
+    void aFileWhosePagesShareAPercentNameIsRepairedIntact()
+    {
+        QFETCH(QString, name);
+        QJsonObject json = DocumentCodec::encode(twoPages().document);
+        QJsonArray pages = json["pages"].toArray();
+        for (qsizetype index = 0; index < pages.size(); ++index) {
+            QJsonObject page = pages.at(index).toObject();
+            page["name"] = name;
+            pages.replace(index, page);
+        }
+        json["pages"] = pages;
+        const VectorDocument read = DocumentCodec::decode(json);
+        QCOMPARE(read.pages[0].name, name);
+        QCOMPARE(read.pages[1].name, name + QStringLiteral(" 2"));
     }
 };
 

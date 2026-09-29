@@ -153,6 +153,17 @@ private slots:
         // The rounded corner clips too: its very corner shows the paper.
         QVERIFY(close(pixel(board.document(), {21, 21}), Qt::white));
     }
+
+    void aPresetNameWithPercentPlaceholdersNumbersIntact()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        for (const QString &name : {QStringLiteral("50%1 off"), QStringLiteral("A %2 B")}) {
+            session.addFrame({0, 0, 10, 10}, name);
+            const QUuid second = session.addFrame({0, 0, 10, 10}, name);
+            QCOMPARE(session.document()->find(second)->name, name + QStringLiteral(" 2"));
+        }
+    }
 };
 
 QTEST_MAIN(FramesTests)

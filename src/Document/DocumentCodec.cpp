@@ -921,7 +921,7 @@ VectorDocument decode(const QJsonObject &json)
                 return std::any_of(document.pages.begin(), document.pages.end(), [&](const Page &other) { return other.name == candidate; });
             };
             for (int number = 2; taken(name); ++number)
-                name = QStringLiteral("%1 %2").arg(base).arg(number);
+                name = QStringLiteral("%1 %2").arg(base, QString::number(number));
             page.name = name;
             document.pages.push_back(page);
         }

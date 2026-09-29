@@ -499,7 +499,7 @@ QUuid EditorSession::addFrame(const QRectF &rect, const QString &name)
             // A second pick of a preset is "iPhone 16 2": the first keeps the bare name.
             label = name;
             for (int number = 2; taken(label); ++number)
-                label = QStringLiteral("%1 %2").arg(name).arg(number);
+                label = QStringLiteral("%1 %2").arg(name, QString::number(number));
         }
     }
     return addFrameObject(VectorObject::frame(rect, label), QStringLiteral("Frame"));

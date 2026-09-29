@@ -164,7 +164,7 @@ void EditorSession::renamePage(const QUuid &id, const QString &name)
     };
     QString result = wanted;
     for (int number = 2; taken(result); ++number)
-        result = QStringLiteral("%1 %2").arg(wanted).arg(number);
+        result = QStringLiteral("%1 %2").arg(wanted, QString::number(number));
     if (pages[size_t(m_document->pageIndex(id))].name == result)
         return;
     edit(QStringLiteral("Rename Page"), [&](VectorDocument &document) {
