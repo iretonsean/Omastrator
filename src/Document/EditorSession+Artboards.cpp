@@ -3,12 +3,19 @@
 #include <cmath>
 
 namespace {
+// Edits keep an artboard within the tested VectorDocument::maximumArtboardSide (imports may exceed it, and the codec still reopens those).
+QSizeF limited(QSizeF size)
+{
+    return {std::min(size.width(), VectorDocument::maximumArtboardSide), std::min(size.height(), VectorDocument::maximumArtboardSide)};
+}
+
 // Artboard `index` becomes `rect`. Art whose centre sat on it follows when `artFollows`: carried
 // along by a move, and by its constraints (as a frame's children) when the size changes.
-void placeArtboard(VectorDocument &document, int index, const QRectF &rect, bool artFollows)
+void placeArtboard(VectorDocument &document, int index, QRectF rect, bool artFollows)
 {
     std::vector<Artboard> boards = document.allArtboards();
     const QRectF from = boards[size_t(index)].rect;
+    rect.setSize(limited(rect.size()));
     std::vector<QUuid> art;
     if (artFollows && rect != from)
         art = document.artCenteredIn(from);
@@ -37,6 +44,7 @@ void EditorSession::setArtboardSize(QSizeF size)
 {
     if (!m_document || !(size.width() > 0 && size.height() > 0))
         return;
+    size = limited(size);
     const int index = activeArtboard();
     if (m_document->artboard(index).rect.size() == size)
         return;
@@ -80,6 +88,7 @@ QUuid EditorSession::addArtboard(QRectF rect)
     Artboard board;
     board.name = m_document->uniqueArtboardName();
     board.rect = rect;
+    board.rect.setSize(limited(rect.size()));
     const QUuid id = board.id;
     const int newIndex = m_document->artboardCount();
     edit(QStringLiteral("New Artboard"), [&](VectorDocument &document) {
@@ -204,7 +213,7 @@ void EditorSession::fitArtboardToArtwork(int index)
         return;
     edit(QStringLiteral("Fit Artboard to Artwork"), [&](VectorDocument &document) {
         std::vector<Artboard> boards = document.allArtboards();
-        boards[size_t(index)].rect = bounds;
+        boards[size_t(index)].rect = QRectF(bounds.topLeft(), limited(bounds.size()));
         document.setArtboards(boards);
     });
 }

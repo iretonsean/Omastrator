@@ -102,8 +102,8 @@ void NewDocumentSheetTests::lengthsReadInTheirUnits()
     QCOMPARE(NewDocumentSheet::dimension(" 1920 ", LengthUnit::px).value(), 1920.0);
     // Out of range, empty or no number: nothing.
     QVERIFY(!NewDocumentSheet::dimension("0.5", LengthUnit::pt));
-    QVERIFY(!NewDocumentSheet::dimension("16385", LengthUnit::pt));
-    QVERIFY(!NewDocumentSheet::dimension("300", LengthUnit::in));
+    QVERIFY(!NewDocumentSheet::dimension("1000001", LengthUnit::pt));
+    QVERIFY(!NewDocumentSheet::dimension("20000", LengthUnit::in));
     QVERIFY(!NewDocumentSheet::dimension("", LengthUnit::pt));
     QVERIFY(!NewDocumentSheet::dimension("wide", LengthUnit::pt));
     QVERIFY(!NewDocumentSheet::dimension("inf", LengthUnit::pt));
@@ -152,7 +152,7 @@ void NewDocumentSheetTests::invalidSizesRestCreate()
     auto &note = find<QLabel>(sheet.sheet, "documentNote");
     sheet.width().setText("0");
     QVERIFY(!sheet.create().isEnabled());
-    QCOMPARE(note.text(), QString("Enter sizes from 1 to 16,384 points."));
+    QCOMPARE(note.text(), QString("Enter sizes from 1 to 1,000,000 points (about 350 m)."));
     QCOMPARE(note.foregroundRole(), QPalette::BrightText);
     // Return does nothing while the size is refused.
     sheet.sheet.show();
@@ -223,7 +223,7 @@ void NewDocumentSheetTests::storeSkipsBadEntries()
     file.write(R"({"documents": {"saved": [
         {"name": "Good", "width": 100, "height": 200, "unit": "in"},
         {"name": "", "width": 100, "height": 200},
-        {"name": "Huge", "width": 99999, "height": 200},
+        {"name": "Huge", "width": 2000000, "height": 200},
         {"name": "good", "width": 5, "height": 5},
         {"name": "Odd unit", "width": 5, "height": 5, "unit": "furlong"},
         7], "hidden": ["A4", "A4", 3]}})");

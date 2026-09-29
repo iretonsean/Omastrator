@@ -7,7 +7,7 @@
 // Document: top-left pixels. View: widget points. Zoom 1: device pixels.
 class CanvasViewport {
 public:
-    static constexpr double minimumZoom = 0.001;
+    static constexpr double minimumZoom = 0.0001;
     static constexpr double maximumZoom = 32;
 
     QSizeF viewSize{0, 0};

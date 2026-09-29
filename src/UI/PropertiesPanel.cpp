@@ -159,6 +159,7 @@ PanelSection *PropertiesPanel::documentSection()
     }, m_document);
     m_artboardHeight->field->setObjectName(QStringLiteral("artboardHeight"));
     for (NumberField *side : {m_artboardWidth, m_artboardHeight}) {
+        side->maximum = VectorDocument::maximumArtboardSide;
         side->gesture = [this](bool starting) {
             if (starting)
                 m_session.beginEdit(QStringLiteral("Artboard Size"));

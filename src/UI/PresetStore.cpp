@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <cmath>
@@ -44,6 +45,14 @@ QJsonObject readFile(const QString &file, bool *valid = nullptr)
 }
 
 namespace PresetStore {
+QString limitDescription()
+{
+    const double meters = maximumPoints / 72 * 0.0254;
+    return QStringLiteral("%1 points (about %2 m)")
+        .arg(QLocale(QLocale::English).toString(qint64(maximumPoints)))
+        .arg(qint64(std::round(meters / 10) * 10));
+}
+
 QString path()
 {
     const QString given = qEnvironmentVariable("XDG_CONFIG_HOME");

@@ -515,8 +515,10 @@ VectorDocument import(const QByteArray &svgOrGzip, const QString &folder, const 
     const std::unique_ptr<NSVGimage, void (*)(NSVGimage *)> image(nsvgParse(text.data(), "px", 96), nsvgDelete);
     if (!image)
         throw FileError(QStringLiteral("The SVG could not be read."));
-    if (!(image->width > 0 && image->height > 0) || image->width > 1e6 || image->height > 1e6)
+    if (!(image->width > 0 && image->height > 0))
         throw FileError(QStringLiteral("The SVG has no size: give it a viewBox, or width and height."));
+    if (image->width > VectorDocument::maximumArtboardSide || image->height > VectorDocument::maximumArtboardSide)
+        throw FileError(QStringLiteral("The SVG is larger than Omastrator’s tested maximum of 1,000,000 points a side."));
     // Pixels at 96 dpi count as points one for one.
     VectorDocument document = builder.build(*image);
     lastWarningList = builder.warnings;
