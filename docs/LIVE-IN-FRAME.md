@@ -448,3 +448,26 @@ Deploy, Changes and History on the island already go through
     status stream's `live` key stays the window's.
   - The agent's brief for a project that is only in a frame has no screenshot
     (the window's session takes those) and carries the frame's address.
+
+- **Commit 3 (Edit Page).**
+  - Edit Page is a mode of `EditorCanvas` on the Selection tool (`editPage`), not
+    a tool: picking any other tool, Esc, a click outside the frame, deleting the
+    frame or leaving its page ends it. Entering deselects the document, so the
+    frame's own object is never selected while its elements are.
+  - The seam is `BrowserViewHost::beginEditPage / endEditPage / editBoxes`.
+    `beginEditPage` starts Live on the frame if it isn't running (with no
+    folder yet; commit 5 picks it) and turns `setPageEditing` on. It refuses
+    a frame with no address.
+  - A press reaches the page as a mouse move then a press, in page CSS points
+    (the Browse tool's mapping, so a held breakpoint preview and zoom are
+    covered). The overlay decides what it is: it selects, `Shift` adds, and it
+    swallows the click, so a link doesn't navigate. No key event goes to the
+    page in this mode.
+  - The wheel goes to the page and Ctrl+wheel still zooms. Double-click on a
+    frame enters; the bar's pencil (after the width buttons, shown wherever
+    they fit) and Edit Page in the Browser View menu and the task bar toggle.
+  - The frame's children draw at a quarter of their opacity while in the mode
+    (direct children only; the renderer compounds opacity down the tree). The
+    hover is a 1 px outline, the selection 2 px with a `tag  w × h` pill.
+  - The Browse and Edit Page modes share the browse drag, so a drag in Edit Page
+    is a page drag that the overlay swallows.

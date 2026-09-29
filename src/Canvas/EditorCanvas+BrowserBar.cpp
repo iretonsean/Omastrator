@@ -227,6 +227,8 @@ QString EditorCanvas::State::browserBarTip(QPointF view) const
             return browserHost->bar(layout.frame).loading ? QStringLiteral("Stop") : QStringLiteral("Reload");
         if (layout.tag.contains(view))
             return QStringLiteral("Not your site: changes stay on this machine.");
+        if (layout.editPage.contains(view))
+            return editPage == layout.frame ? QStringLiteral("Stop editing the page") : QStringLiteral("Edit Page");
         for (const auto &[rect, width] : layout.widths) {
             if (rect.contains(view))
                 return width == layout.designWidth ? QStringLiteral("Design width: %1").arg(width) : QStringLiteral("Preview at %1 wide").arg(width);
@@ -250,6 +252,11 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
             browserHost->act(layout.frame, BrowserViewHost::Action::forward);
         } else if (layout.reload.contains(view)) {
             browserHost->act(layout.frame, browserHost->bar(layout.frame).loading ? BrowserViewHost::Action::stop : BrowserViewHost::Action::reload);
+        } else if (layout.editPage.contains(view)) {
+            if (editPage == layout.frame)
+                leaveEditPage();
+            else
+                enterEditPage(layout.frame);
         } else if (const auto pressed = std::find_if(layout.widths.begin(), layout.widths.end(), [&](const auto &each) { return each.first.contains(view); });
                    pressed != layout.widths.end()) {
             // The same button, or the design width's, lets the preview go.

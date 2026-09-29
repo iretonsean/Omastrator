@@ -79,6 +79,8 @@ struct Rig {
         double total = -2;
         for (int each : all)
             total += size(each) + 2;
+        // The Edit Page pencil (24 wide) ends the row, a gap and 4 points after the last button.
+        total += 2 + 4 + 24;
         double x = box.right() - 2 - total;
         for (int each : all) {
             if (each == width)

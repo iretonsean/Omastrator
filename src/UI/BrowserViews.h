@@ -53,6 +53,9 @@ public:
     void dismissSignIn() override;
     bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params) override;
     QList<int> breakpoints(const QUuid &frame) const override;
+    QString beginEditPage(const QUuid &frame) override;
+    void endEditPage(const QUuid &frame) override;
+    EditBoxes editBoxes(const QUuid &frame) const override;
     // Whether the strip has been answered on this machine; tests clear it.
     static bool signInAnswered();
     static void setSignInAnswered(bool answered);
@@ -164,6 +167,8 @@ private:
     void limitPage(const Entry &entry);
     void onPageLimit(Entry &entry, const QString &method, const QJsonObject &params);
     void onPopup(const QUuid &key, const QUrl &url);
+    // A frame's Live changed: its boxes repaint, and Edit Page ends when its Live has.
+    void onLiveChanged(const QUuid &frame);
     void takeFrame(const QUuid &frame);
     void decodeNext(const QUuid &frame);
     void decoded(const QUuid &frame, const QImage &image, int ack);

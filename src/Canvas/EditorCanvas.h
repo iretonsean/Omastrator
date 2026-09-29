@@ -51,6 +51,12 @@ public:
     // The Browser View's address field opens over its bar; Enter changes the URL, Escape leaves it.
     void openAddressEditor(const QUuid &frame);
     bool isEditingAddress() const;
+    // Edit Page (docs/LIVE-IN-FRAME.md, section 3): the frame's page takes clicks as element picks. False, with a notice,
+    // when the page can't be edited. It ends on Esc, a click outside the frame, another tool, a page switch, deleting the
+    // frame and Live stopping.
+    bool enterEditPage(const QUuid &frame);
+    void leaveEditPage();
+    std::optional<QUuid> editPageFrame() const;
     // Document points to view pixels, as the canvas draws them now.
     QTransform documentToView() const;
     // Arrow keys move this many points, ten times as far with Shift.
@@ -65,6 +71,8 @@ signals:
     void textEditingChanged(bool editing);
     // A right-click, once it picked its target: the leaves under the pointer, topmost first.
     void contextMenuRequested(QPoint globalPosition, const QList<QUuid> &underPointer);
+    // Edit Page began or ended.
+    void editPageChanged();
     // A gesture began or ended, or the canvas paused or resumed.
     void gestureChanged();
 

@@ -320,6 +320,15 @@ void Menus::buildObject(QMenuBar &bar)
     browserView->menuAction()->setObjectName(QStringLiteral("browserViewMenu"));
     // The bar's right-click menu, for the selected frame; they name the Browser View in Ctrl+K.
     const auto browserFrame = [this] { return m_canvas && m_canvas->browserViewHost() ? session().selectedBrowserView() : std::nullopt; };
+    add(browserView, QStringLiteral("browserViewEditPage"), QStringLiteral("Edit Page"), QKeySequence(), [this, browserFrame] {
+        if (!m_canvas)
+            return;
+        if (m_canvas->editPageFrame())
+            m_canvas->leaveEditPage();
+        else if (const auto frame = browserFrame())
+            m_canvas->enterEditPage(*frame);
+    });
+    browserView->addSeparator();
     add(browserView, QStringLiteral("browserViewCopyUrl"), QStringLiteral("Copy URL"), QKeySequence(), [this, browserFrame] {
         if (const auto frame = browserFrame())
             QApplication::clipboard()->setText(session().document()->find(*frame)->browser->url.toString());

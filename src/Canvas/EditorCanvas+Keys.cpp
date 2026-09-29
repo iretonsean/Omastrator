@@ -87,7 +87,9 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         }
         return plain;
     case Qt::Key_Escape:
-        if (linkArmedFrom) {
+        if (editPage) {
+            leaveEditPage();
+        } else if (linkArmedFrom) {
             linkArmedFrom.reset();
         } else if (drag && drag->kind != DragKind::pen) {
             cancelDrag();

@@ -10,6 +10,7 @@
 namespace {
 constexpr double buttonGap = 2;
 constexpr double buttonHeight = 20;
+constexpr double pencilWidth = 24;
 // The address keeps at least this much when the buttons crowd it.
 constexpr double addressLeast = 120;
 constexpr double addressLeastPreviewing = 20;
@@ -28,7 +29,7 @@ std::optional<int> EditorCanvas::State::previewedWidth(const QUuid &frame) const
 
 bool EditorCanvas::State::showsWidths(const QUuid &frame) const
 {
-    if (session.isSelected(frame) || browseFocus == frame || browseHover == frame)
+    if (session.isSelected(frame) || browseFocus == frame || browseHover == frame || editPage == frame)
         return true;
     if (!hover || !session.hasDocument())
         return false;
@@ -52,6 +53,8 @@ double EditorCanvas::State::addWidthButtons(BrowserBarLayout &layout, double rig
     double total = -buttonGap;
     for (int width : widths)
         total += metrics.horizontalAdvance(QString::number(width)) + 14 + buttonGap;
+    // The Edit Page pencil ends the row.
+    total += buttonGap + 4 + pencilWidth;
     // A held preview keeps its buttons however narrow it gets, so the way back is always there.
     const bool previewing = held && held->frame == layout.frame && session.isPreviewOnly();
     if (right - left - total < (previewing ? addressLeastPreviewing : addressLeast))
@@ -63,6 +66,8 @@ double EditorCanvas::State::addWidthButtons(BrowserBarLayout &layout, double rig
         x += size + buttonGap;
     }
     layout.designWidth = design;
+    const double rowTop = layout.bar.top() + (layout.bar.height() - buttonHeight) / 2;
+    layout.editPage = QRectF(right - pencilWidth, rowTop, pencilWidth, buttonHeight);
     return right - total - 4;
 }
 
@@ -89,6 +94,31 @@ void EditorCanvas::State::drawWidthButtons(QPainter &painter, const BrowserBarLa
         }
     }
     painter.setBrush(Qt::NoBrush);
+    drawEditPageButton(painter, layout);
+}
+
+void EditorCanvas::State::drawEditPageButton(QPainter &painter, const BrowserBarLayout &layout) const
+{
+    if (layout.editPage.isNull())
+        return;
+    const bool on = editPage == layout.frame;
+    const bool hot = hover && layout.editPage.contains(*hover);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    if (on || hot) {
+        painter.setBrush(on ? accent() : canvas.palette().color(QPalette::Midlight));
+        painter.drawRoundedRect(layout.editPage, 5, 5);
+    }
+    // A pencil on the diagonal: body, then the tip.
+    painter.setPen(QPen(on ? QColor(Qt::white) : canvas.palette().color(QPalette::WindowText), 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    const QPointF c = layout.editPage.center();
+    QPolygonF pencil;
+    pencil << c + QPointF(3.5, -5.5) << c + QPointF(5.5, -3.5) << c + QPointF(-2.5, 4.5) << c + QPointF(-5.5, 5.5) << c + QPointF(-4.5, 2.5);
+    painter.drawPolygon(pencil);
+    painter.drawLine(c + QPointF(2, -4), c + QPointF(4, -2));
+    painter.restore();
 }
 
 void EditorCanvas::State::holdPreview(const QUuid &frame, int width)

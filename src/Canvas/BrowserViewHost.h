@@ -2,8 +2,11 @@
 #include <QImage>
 #include <QJsonObject>
 #include <QList>
+#include <QPointF>
+#include <QRectF>
 #include <QString>
 #include <QUuid>
+#include <optional>
 
 // What the canvas asks of whoever streams a Browser View's page (docs/BROWSER-VIEW.md), so the canvas
 // needn't link the browser code.
@@ -34,6 +37,21 @@ public:
     // The widths the frame's breakpoint buttons offer, ascending: its own site's media queries, or the defaults.
     virtual QList<int> breakpoints(const QUuid &frame) const;
 
+    // Edit Page (docs/LIVE-IN-FRAME.md, section 3): the page's elements can be picked. Beginning starts Live on the frame
+    // if it isn't running; the answer is why it can't, or empty.
+    virtual QString beginEditPage(const QUuid &frame);
+    virtual void endEditPage(const QUuid &frame);
+    // The page's hover and selection boxes in its CSS px (the frame's box top-left is 0,0), each with a "tag  W × H" label.
+    struct EditBox {
+        QRectF rect;
+        QString label;
+    };
+    struct EditBoxes {
+        std::optional<EditBox> hover;
+        QList<EditBox> selection;
+    };
+    virtual EditBoxes editBoxes(const QUuid &frame) const;
+
     // The sign-in strip inside the first Browser View, until Sign In… or Not Now answers it.
     virtual bool signInOffered() const;
     virtual void signIn();
@@ -47,3 +65,6 @@ inline QList<int> BrowserViewHost::breakpoints(const QUuid &) const { return {39
 inline bool BrowserViewHost::signInOffered() const { return false; }
 inline void BrowserViewHost::signIn() {}
 inline void BrowserViewHost::dismissSignIn() {}
+inline QString BrowserViewHost::beginEditPage(const QUuid &) { return QStringLiteral("Edit Page needs a live page."); }
+inline void BrowserViewHost::endEditPage(const QUuid &) {}
+inline BrowserViewHost::EditBoxes BrowserViewHost::editBoxes(const QUuid &) const { return {}; }

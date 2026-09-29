@@ -210,7 +210,7 @@ struct EditorCanvas::State {
     // A Browser View's address bar and sign-in strip (EditorCanvas+BrowserBar.cpp), laid out in view pixels.
     struct BrowserBarLayout {
         QUuid frame;
-        QRectF bar, back, forward, reload, name, address, tag;
+        QRectF bar, back, forward, reload, name, address, tag, editPage;
         // The breakpoint buttons and the width each previews, ascending; the design width is among them.
         std::vector<std::pair<QRectF, int>> widths;
         int designWidth = 0;
@@ -248,9 +248,24 @@ struct EditorCanvas::State {
     bool endHeldPreview();
     void setDesignWidth(const QUuid &frame, int width);
     void drawWidthButtons(QPainter &painter, const BrowserBarLayout &layout) const;
+    void drawEditPageButton(QPainter &painter, const BrowserBarLayout &layout) const;
     QPointer<QLineEdit> addressEdit;
     QUuid addressFrame;
     std::optional<QUuid> frameLabelAt(QPointF view) const;
+
+    // Edit Page (EditorCanvas+EditPage.cpp) -----------------------------------------------
+    std::optional<QUuid> editPage;
+    bool enterEditPage(const QUuid &frame);
+    void leaveEditPage();
+    // Ends the mode when its frame is gone, off the page or its tool has changed.
+    void checkEditPage();
+    // The press is the page's when it lands in the frame; outside it the mode ends and this answers false.
+    bool editPagePress(QPointF view, Qt::KeyboardModifiers modifiers);
+    void drawEditPage(QPainter &painter) const;
+    // Where a double-click on the Browser View at `view`, with no design object under it, would begin Edit Page.
+    std::optional<QUuid> editPageTargetAt(QPointF view) const;
+    // The frame's design children fade while the page is being edited.
+    void dimEditPageChildren(std::optional<VectorDocument> &shown) const;
 
     // Browse (EditorCanvas+Browse.cpp) -------------------------------------------------
     // The topmost Browser View under the point, and the box its page fills, in document units.
