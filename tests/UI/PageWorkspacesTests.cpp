@@ -59,6 +59,7 @@ private slots:
     void aRefusingHyprlandGreysItToo();
     void aOnePageDocumentClaimsNothing();
     void theSecondPageSpreadsTheDocumentOut();
+    void aStandInMapsUnderItsFirstTitleAndIsLabelledOnceFound();
     void switchingPagesSwapsTheEditorAndAStandIn();
     void turningOffGivesEverythingBack();
     void downToOnePageGivesBackAndUndoClaimsAgain();
@@ -169,6 +170,20 @@ void PageWorkspacesTests::theSecondPageSpreadsTheDocumentOut()
     QCOMPARE(state.claims[0].windows, QStringList{rig.world.stand(first)});
     QCOMPARE(state.claims[1].windows, QStringList{rig.editor()});
     QCOMPARE(state.claims[1].pageId, rig.page(1).toString(QUuid::WithoutBraces));
+}
+
+void PageWorkspacesTests::aStandInMapsUnderItsFirstTitleAndIsLabelledOnceFound()
+{
+    Rig rig;
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    const QString first = ws(QStringLiteral("Untitled"), QStringLiteral("Page 1"));
+    const FakeHyprlandWorld::Window *standIn = rig.world.window(rig.world.stand(first));
+    QVERIFY(standIn);
+    // Mapped with the title the app finds it by, then labelled with its page.
+    QVERIFY(standIn->mappedTitle.startsWith(QLatin1String("omastrator-standin-")));
+    QCOMPARE(standIn->title, QStringLiteral("Untitled · Page 1 — Omastrator"));
 }
 
 void PageWorkspacesTests::switchingPagesSwapsTheEditorAndAStandIn()

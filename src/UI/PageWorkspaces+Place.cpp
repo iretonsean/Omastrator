@@ -25,7 +25,6 @@ void PageWorkspaces::placeSoon()
 void PageWorkspaces::createStandIn(const QString &workspace)
 {
     auto *widget = new PageStandIn(m_nextStandIn++);
-    widget->setLabel(workspace.mid(int(QStringLiteral("design:").size())));
     connect(widget, &PageStandIn::closedByUser, this, &PageWorkspaces::standInClosed);
     m_standIns.push_back({widget, QString(), workspace});
     widget->show();
@@ -181,6 +180,7 @@ void PageWorkspaces::place()
             const QImage picture = pictureFor(claim.tab, claim.page);
             if (picture.cacheKey() != standIn.widget->picture().cacheKey())
                 standIn.widget->setPicture(picture);
+            // Only once the address is known: the first title is how the window is found until then.
             if (!standIn.address.isEmpty())
                 standIn.widget->setLabel(claim.name.mid(int(QStringLiteral("design:").size())));
         }

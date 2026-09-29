@@ -26,6 +26,8 @@ public:
         QString title;
         QString workspace;
         QPointer<QWidget> owner;
+        // The title at map time, for tests that care what the app could find the window by.
+        QString mappedTitle;
     };
 
     explicit FakeHyprlandWorld(FakeHyprctl &hyprctl, const QString &active = QStringLiteral("1")) : m_hyprctl(hyprctl), m_active(active)
@@ -252,7 +254,7 @@ private:
     QString add(qint64 pid, const QString &title, QWidget *owner)
     {
         const QString address = QStringLiteral("0x%1").arg(0xa00 + m_next++, 0, 16);
-        m_windows.append({address, pid, title, m_active, owner});
+        m_windows.append({address, pid, title, m_active, owner, title});
         m_focused = address;
         publish();
         return address;
