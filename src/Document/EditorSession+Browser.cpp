@@ -127,7 +127,10 @@ void EditorSession::setFixedWhilePreviewing(bool fixed)
     const std::vector<QUuid> ids = m_selection;
     edit(QStringLiteral("Fixed While Previewing"), [&](VectorDocument &document) {
         for (const QUuid &id : ids) {
-            if (VectorObject *object = document.find(id))
+            // Only a Browser View's own children have a preview to be fixed in.
+            VectorObject *object = document.find(id);
+            const VectorObject *parent = object && object->parentID ? document.find(*object->parentID) : nullptr;
+            if (object && parent && parent->browser)
                 object->layout.previewRule = fixed ? PreviewRule::fixed : PreviewRule::constraints;
         }
     });

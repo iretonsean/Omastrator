@@ -107,6 +107,17 @@ private slots:
         QCOMPARE(board.view().picture.cacheKey(), third.cacheKey());
     }
 
+    void fixedWhilePreviewingLeavesObjectsOutsideABrowserViewAlone()
+    {
+        Board board;
+        const QUuid badge = board.addBadge();
+        const QUuid outside = board.session.addFrame({600, 0, 50, 50}, QStringLiteral("Outside"));
+        board.session.select({badge, outside});
+        board.session.setFixedWhilePreviewing(true);
+        QCOMPARE(board.session.document()->find(badge)->layout.previewRule, PreviewRule::fixed);
+        QCOMPARE(board.session.document()->find(outside)->layout.previewRule, PreviewRule::constraints);
+    }
+
     void anUndoAfterANavigationKeepsTheNewAddress()
     {
         Board board;
