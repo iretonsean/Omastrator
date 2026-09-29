@@ -198,6 +198,21 @@ private slots:
         QVERIFY(!WorkspaceClaims::cleanUp(QCoreApplication::applicationPid()));
     }
 
+    void aReusedPidIsNotALiveApp()
+    {
+        // The file's pid is running, but it is a sleep now, not Omastrator.
+        QProcess stranger;
+        stranger.start(QStringLiteral("/bin/sleep"), {QStringLiteral("30")});
+        QVERIFY(stranger.waitForStarted());
+        QVERIFY(WorkspaceClaims::write(sample(stranger.processId())).isEmpty());
+        m_hyprctl->answer(QStringLiteral("clients"), clients({{QStringLiteral("0x777"), 999, pageA}}));
+        QVERIFY(WorkspaceClaims::cleanUp());
+        QVERIFY(m_hyprctl->dispatches().contains(QStringLiteral("dispatch movetoworkspacesilent name:3,address:0x777")));
+        QVERIFY(WorkspaceClaims::read().isEmpty());
+        stranger.kill();
+        stranger.waitForFinished();
+    }
+
     void startupOnlyEmptiesAnOldHyprlandSessionsClaims()
     {
         qputenv("HYPRLAND_INSTANCE_SIGNATURE", "another-session");

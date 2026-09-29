@@ -116,6 +116,18 @@ GiveBack giveBackFromFile()
     return result;
 }
 
+// A pid that is running but isn't Omastrator was reused by something else since the file was written.
+static bool isRunningOmastrator(qint64 pid)
+{
+    if (pid <= 0 || !QFileInfo::exists(QStringLiteral("/proc/%1").arg(pid)))
+        return false;
+    QFile theirs(QStringLiteral("/proc/%1/comm").arg(pid)), own(QStringLiteral("/proc/self/comm"));
+    // When the name can't be read, assume it is ours: leaving claims alone is the safe mistake.
+    if (!theirs.open(QIODevice::ReadOnly) || !own.open(QIODevice::ReadOnly))
+        return true;
+    return theirs.readAll() == own.readAll();
+}
+
 bool cleanUp(qint64 ownPid)
 {
     const State state = read();
@@ -125,7 +137,7 @@ bool cleanUp(qint64 ownPid)
         ownPid = getpid();
     if (state.pid == ownPid)
         return false;
-    if (state.pid > 0 && QFileInfo::exists(QStringLiteral("/proc/%1").arg(state.pid)))
+    if (isRunningOmastrator(state.pid))
         return false;
     const QString current = qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE");
     // With a fake hyprctl (tests) there's no signature; then the file's own is what counts.
