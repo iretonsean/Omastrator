@@ -90,7 +90,7 @@ void LivePanel::addSite(QVBoxLayout *column)
                                          : QStringLiteral("%1 edits not kept yet. Keep them as an edit set to have them back next visit.").arg(pending),
                             QStringLiteral("liveSitePending"), self));
     for (const EditSets::Set &set : sets) {
-        auto *box = new QCheckBox(QStringLiteral("%1 (%2 edits)").arg(set.name).arg(set.edits.size()), self);
+        auto *box = new QCheckBox(QStringLiteral("%1 (%2 edits)").arg(set.name, QString::number(set.edits.size())), self);
         box->setObjectName(QStringLiteral("liveEditSet"));
         box->setChecked(set.enabled);
         box->setToolTip(QStringLiteral("Shown on %1 every time it opens in Omastrator").arg(live.origin()));

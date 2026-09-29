@@ -253,7 +253,7 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
                 return failed(QStringLiteral("The Omarchy theme's colors.toml has no colours."));
             const QString group = QStringLiteral("Omarchy: %1").arg(themeName(directory));
             const QJsonObject result = callApp(QStringLiteral("swatches_add"), {{"group", group}, {"swatches", swatches}, {"replace", true}});
-            return done(QStringLiteral("Loaded %1 swatches from %2.").arg(result["added"].toInt()).arg(themeName(directory)));
+            return done(QStringLiteral("Loaded %1 swatches from %2.").arg(QString::number(result["added"].toInt()), themeName(directory)));
         }
     } catch (const AgentProtocol::Error &failure) {
         return failed(failure.message());

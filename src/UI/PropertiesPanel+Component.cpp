@@ -33,7 +33,7 @@ void PropertiesPanel::synchronizeComponent()
         return;
     const bool instance = !instances.empty();
     auto *heading = new QLabel(instance ? QStringLiteral("Instance of %1").arg(master->component->set)
-                                        : QStringLiteral("%1 · %2 instances").arg(master->component->set).arg(Components::instancesOf(document, *masterId).size()),
+                                        : QStringLiteral("%1 · %2 instances").arg(master->component->set, QString::number(Components::instancesOf(document, *masterId).size())),
                                m_componentRows);
     heading->setObjectName(QStringLiteral("componentHeading"));
     rows->addWidget(heading);

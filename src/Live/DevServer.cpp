@@ -180,7 +180,7 @@ QString DevServer::start(const QString &folder, int timeoutMs)
         pause(250);
     }
     stop();
-    return QStringLiteral("%1 didn't answer within %2 seconds.").arg(m_command.description).arg(timeoutMs / 1000);
+    return QStringLiteral("%1 didn't answer within %2 seconds.").arg(m_command.description, QString::number(timeoutMs / 1000));
 }
 
 QString DevServer::install(const QString &folder)

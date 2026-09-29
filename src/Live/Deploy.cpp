@@ -306,7 +306,7 @@ QString newLogPath(const QString &folder)
     const QString stem = QStringLiteral("%1-%2").arg(QFileInfo(folder).fileName(), QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss")));
     QString path = QDir(logDirectory()).filePath(stem + QStringLiteral(".log"));
     for (int n = 2; QFileInfo::exists(path); ++n)
-        path = QDir(logDirectory()).filePath(QStringLiteral("%1-%2.log").arg(stem).arg(n));
+        path = QDir(logDirectory()).filePath(QStringLiteral("%1-%2.log").arg(stem, QString::number(n)));
     return path;
 }
 

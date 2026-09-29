@@ -444,7 +444,7 @@ QString DesignController::ask(const QString &prompt, const Target &target, QJson
         if (inspection.background.isValid())
             context += QStringLiteral("Background %1. ").arg(inspection.background.name());
         if (!inspection.fontFamily.isEmpty())
-            context += QStringLiteral("Font %1 %2 at %3 px. ").arg(inspection.fontFamily, inspection.fontWeight).arg(inspection.fontSize);
+            context += QStringLiteral("Font %1 %2 at %3 px. ").arg(inspection.fontFamily, inspection.fontWeight, QString::number(inspection.fontSize));
         if (!inspection.text.isEmpty())
             context += QStringLiteral("Its text: “%1”.").arg(inspection.text);
         shot = inspection.bounds;

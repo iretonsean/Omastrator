@@ -63,7 +63,7 @@ QImage read(const QString &path, QStringList *warnings)
     const QSize size = reader.size();
     if (size.isValid() && (size.width() > maximumSide || size.height() > maximumSide))
         throw FileError(QStringLiteral("“%1” is %2 × %3 pixels; images up to %4 pixels a side can be placed.")
-                            .arg(fileName(path)).arg(size.width()).arg(size.height()).arg(maximumSide));
+                            .arg(fileName(path), QString::number(size.width()), QString::number(size.height()), QString::number(maximumSide)));
     QImage image;
     if (!reader.read(&image) || image.isNull()) {
         qCWarning(lcIO).noquote() << "cannot decode" << path + ":" << reader.errorString();

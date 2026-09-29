@@ -218,7 +218,7 @@ QString VectorDocument::uniqueArtboardName(const QString &base) const
 {
     const std::vector<Artboard> boards = allArtboards();
     for (int number = 1;; ++number) {
-        const QString candidate = QStringLiteral("%1 %2").arg(base).arg(number);
+        const QString candidate = QStringLiteral("%1 %2").arg(base, QString::number(number));
         const bool taken = std::any_of(boards.begin(), boards.end(), [&](const Artboard &board) { return board.name == candidate; });
         if (!taken)
             return candidate;
