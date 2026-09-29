@@ -92,6 +92,7 @@ private:
 
     void doOpen(const QUuid &frame, const QString &context);
     void makeRoom();
+    void openNextWaiting();
     void finishOpen(const QUuid &frame, const QString &context);
     void doClose(const QUuid &frame, CloseReason reason);
     void doCloseAll(CloseReason reason);

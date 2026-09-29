@@ -8,6 +8,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <algorithm>
 #include <mutex>
 
 // BrowserPool (docs/BROWSER-VIEW.md) in headless Chromium on a throwaway profile; skips without Chromium.
@@ -142,6 +143,46 @@ private slots:
         QCOMPARE(closed.first().at(0).toUuid(), b);
         QCOMPARE(closed.first().at(1).value<BrowserPool::CloseReason>(), BrowserPool::CloseReason::evicted);
         QCOMPARE(pool.tabCount(), 3);
+    }
+
+    void opensThatArriveTogetherStayWithinTheCap()
+    {
+        const int cap = 3;
+        BrowserPool pool(options(60'000, cap));
+        QSignalSpy closed(&pool, &BrowserPool::closed);
+        // More than the cap, all before the browser is up: the case of a file with a page of Browser Views.
+        for (int i = 0; i < cap + 2; ++i)
+            pool.open(QUuid::createUuid());
+        QElapsedTimer timer;
+        timer.start();
+        int most = 0;
+        while (timer.elapsed() < 90'000 && !(closed.count() == 2 && pool.tabCount() == cap)) {
+            most = std::max(most, pool.tabCount());
+            QTest::qWait(10);
+        }
+        QTest::qWait(500);
+        most = std::max(most, pool.tabCount());
+        QCOMPARE(closed.count(), 2);
+        QCOMPARE(pool.tabCount(), cap);
+        QVERIFY2(most <= cap, qPrintable(QString::number(most)));
+        // Chromium's own starting tab is one more.
+        QVERIFY(pageTargets(pool) <= cap + 1);
+    }
+
+    void aFrameClosedWhileTheBrowserStartsGetsNoTab()
+    {
+        BrowserPool pool(options(60'000));
+        QSignalSpy opened(&pool, &BrowserPool::opened);
+        QSignalSpy started(&pool, &BrowserPool::started);
+        const QUuid frame = QUuid::createUuid();
+        pool.open(frame);
+        pool.close(frame);
+        QVERIFY(started.wait(60'000));
+        QTest::qWait(1000);
+        QCOMPARE(opened.count(), 0);
+        QCOMPARE(pool.tabCount(), 0);
+        // Only Chromium's own starting tab is left.
+        QVERIFY(pageTargets(pool) <= 1);
     }
 
     void stopsWhenIdleAndClearsItsFile()

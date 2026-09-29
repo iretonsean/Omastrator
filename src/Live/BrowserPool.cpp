@@ -159,6 +159,8 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
     }
     if (!m_browser || !m_browser->isRunning()) {
         m_starting = true;
+        // Waiting with the others, so a close while the browser starts drops this open too.
+        m_pending.prepend({frame, context});
         delete m_browser;
         m_browser = new Browser(this);
         Browser::Options browser;
@@ -171,7 +173,6 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
             m_closeRequested = false;
             delete m_browser;
             m_browser = nullptr;
-            emit openFailed(frame, failure);
             const QList<Pending> waiting = std::exchange(m_pending, {});
             for (const Pending &each : waiting)
                 emit openFailed(each.frame, failure);
@@ -200,9 +201,23 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
         const QList<Pending> waiting = std::exchange(m_pending, {});
         for (const Pending &each : waiting)
             doOpen(each.frame, each.context);
+        return;
     }
     makeRoom();
+    // Every tab still being made counts: nothing to evict yet, so this open waits for one to finish.
+    if (m_tabs.size() + m_opening.size() >= m_options.maxTabs) {
+        m_pending.append({frame, context});
+        return;
+    }
     finishOpen(frame, context);
+}
+
+void BrowserPool::openNextWaiting()
+{
+    if (m_shutDown || m_starting || m_pending.isEmpty() || !m_browser)
+        return;
+    const Pending next = m_pending.takeFirst();
+    doOpen(next.frame, next.context);
 }
 
 void BrowserPool::makeRoom()
@@ -234,6 +249,7 @@ void BrowserPool::finishOpen(const QUuid &frame, const QString &context)
         m_opening.removeAll(frame);
         emit openFailed(frame, QStringLiteral("Could not open a tab in Chromium: %1").arg(error));
         noteTabs();
+        openNextWaiting();
     };
     m_browser->cdp().call(QStringLiteral("Target.createTarget"), params, QString(), [=, this](const QJsonObject &created, const QString &error) {
         const QString target = created["targetId"].toString();
@@ -253,6 +269,7 @@ void BrowserPool::finishOpen(const QUuid &frame, const QString &context)
             if (!m_opening.contains(frame)) {
                 m_browser->cdp().call(QStringLiteral("Target.closeTarget"), {{"targetId", target}}, QString());
                 noteTabs();
+                openNextWaiting();
                 return;
             }
             m_opening.removeAll(frame);
@@ -262,6 +279,7 @@ void BrowserPool::finishOpen(const QUuid &frame, const QString &context)
                     emit opened(frame);
             });
             noteTabs();
+            openNextWaiting();
         });
     });
 }
@@ -286,9 +304,14 @@ void BrowserPool::stopBrowser(bool later)
     m_idle->stop();
     if (!m_browser)
         return;
-    const QList<QUuid> frames = m_tabs.keys();
+    QList<QUuid> frames = m_tabs.keys();
+    // Opens that were waiting for a tab or a slot hear that the browser went too, so they can ask again.
+    frames += m_opening;
+    for (const Pending &each : std::as_const(m_pending))
+        frames.append(each.frame);
     m_tabs.clear();
     m_opening.clear();
+    m_pending.clear();
     for (const QUuid &frame : frames)
         emit closed(frame, CloseReason::lost);
     m_browser->disconnect(this);
