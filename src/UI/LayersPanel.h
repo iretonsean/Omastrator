@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class NativeLayerList;
+class PagesList;
 
 // The layers panel: heading, the tree, the footer's buttons.
 class LayersPanel : public QWidget {
@@ -13,6 +14,7 @@ public:
     explicit LayersPanel(EditorSession &session, QWidget *parent = nullptr);
 
     NativeLayerList &list() const { return *m_list; }
+    PagesList &pages() const { return *m_pages; }
     // Deletes the selection, else the active layer.
     void deleteTarget();
     // Name with AI: asks the agent to name the layers, with a naming convention or none. Returns an error to show,
@@ -32,6 +34,7 @@ private:
     EditorSession &m_session;
     QLabel *const m_count;
     NativeLayerList *const m_list;
+    PagesList *m_pages = nullptr;
     QToolButton *m_newLayer = nullptr;
     QToolButton *m_delete = nullptr;
     QToolButton *m_name = nullptr;
