@@ -190,6 +190,9 @@ QJsonObject AgentTools::selectTool(const QJsonObject &params)
 VectorDocument AgentTools::draft()
 {
     EditorSession &current = session();
+    // A held breakpoint width isn't an edit: it ends, the way any edit ends it.
+    if (current.isPreviewOnly())
+        current.cancelInteraction();
     if (current.isInteracting() && !ownsProposal(current))
         throw Error(AgentProtocol::busy, QStringLiteral("The user is in the middle of an edit. Try again in a moment."));
     return *current.document();
@@ -199,6 +202,8 @@ void AgentTools::propose(const QString &title, const VectorDocument &document, c
 {
     EditorSession &current = session();
     requireUnlocked(current);
+    if (current.isPreviewOnly())
+        current.cancelInteraction();
     if (!ownsProposal(current)) {
         if (current.isInteracting())
             throw Error(AgentProtocol::busy, QStringLiteral("The user is in the middle of an edit. Try again in a moment."));

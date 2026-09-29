@@ -335,6 +335,9 @@ QJsonObject AgentTools::updateObject(const QJsonObject &params)
         fail(QStringLiteral("That object is locked. The user can unlock it in the Layers panel."));
     // Where it sits in the tree is the document's to say.
     object.parentID = existing->parentID;
+    // Reads leave the picture out, so an edit that keeps the page keeps what it showed.
+    if (existing->browser && object.browser && existing->browser->url == object.browser->url)
+        object.browser->picture = existing->browser->picture;
     *existing = object;
     propose(QStringLiteral("Edit Object"), edited, {object.id});
     return {{"id", idString(object.id)}, {"bounds", rect(edited.bounds(object.id))}};

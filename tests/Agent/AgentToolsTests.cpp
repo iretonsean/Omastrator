@@ -349,6 +349,43 @@ private slots:
         QVERIFY(host.editor.document()->find(a) && host.editor.document()->find(b) && host.editor.document()->find(c));
     }
 
+    void aHeldBreakpointWidthIsNotAnEditThatKeepsTheAgentOut()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({800, 600});
+        const QUuid frame = host.editor.addBrowserView({0, 0, 400, 300}, QUrl(QStringLiteral("http://localhost/a")));
+        host.editor.beginPreview(QStringLiteral("Preview Width"));
+        host.editor.previewFrameBox(frame, {0, 0, 200, 300});
+        QVERIFY(host.editor.isPreviewOnly());
+        AgentTools tools(host);
+        const QJsonObject result = tools.call(QStringLiteral("insert_svg"), {{"svg", square}});
+        QVERIFY(!result["id"].toString().isEmpty());
+        QVERIFY(tools.hasProposal());
+        // The proposal is built on the design, not on the held width.
+        QCOMPARE(host.editor.document()->bounds(frame), QRectF(0, 0, 400, 300));
+        host.editor.cancelInteraction();
+        QCOMPARE(host.editor.document()->bounds(frame), QRectF(0, 0, 400, 300));
+    }
+
+    void updatingABrowserViewKeepsItsPictureWhileThePageStays()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({800, 600});
+        const QUuid frame = host.editor.addBrowserView({0, 0, 400, 300}, QUrl(QStringLiteral("http://localhost/a")));
+        QImage picture(40, 30, QImage::Format_ARGB32_Premultiplied);
+        picture.fill(Qt::green);
+        host.editor.setBrowserPicture(frame, picture);
+        AgentTools tools(host);
+        host.editor.select({frame});
+        QJsonObject json = tools.call(QStringLiteral("selection_get"), {})["objects"].toArray().first().toObject();
+        QVERIFY(!json.contains(QStringLiteral("browserPicture")));
+        json["name"] = "Renamed";
+        json.remove("parent");
+        tools.call(QStringLiteral("update_object"), {{"object", json}});
+        QCOMPARE(host.editor.document()->find(frame)->name, QStringLiteral("Renamed"));
+        QVERIFY(!host.editor.document()->find(frame)->browser->picture.isNull());
+    }
+
     void selectAndUpdateObject()
     {
         FakeAgentHost host;
