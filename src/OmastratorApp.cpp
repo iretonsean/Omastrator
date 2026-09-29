@@ -1,5 +1,6 @@
 #include "Agent/AgentClient.h"
 #include "Agent/AgentProtocol.h"
+#include "Agent/Capture.h"
 #include "Agent/Cli.h"
 #include "Agent/Island.h"
 #include "Logging.h"
@@ -48,6 +49,8 @@ int main(int argc, char **argv)
             // An older Omastrator without show_window: this one opens on its own, as before.
         }
     }
+    // Old screenshots the app kept (docs/OS-SUITE.md); the newest 20 always stay.
+    Capture::pruneCaptures();
     qCInfo(lcApp).noquote() << "Omastrator" << OMASTRATOR_VERSION << "on Qt" << qVersion() << "platform" << QGuiApplication::platformName()
                             << (background ? "in the background" : "");
     // The desktop's colours, retinted when the theme switches.

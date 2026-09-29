@@ -403,7 +403,9 @@ Choices the spec left open, made while building it, in build order.
   in file order, named from the key) into "Omarchy: <theme>", replacing that
   group each time.
 - **Screenshots** are kept in `$XDG_DATA_HOME/omastrator/captures/`, so the
-  image outlives the trace. The capture opens as a new document the size of
+  image outlives the trace. At startup the app deletes PNGs there older than
+  30 days, always keeping the newest 20 (`Capture::pruneCaptures`; it touches
+  only regular `.png` files directly in that folder). The capture opens as a new document the size of
   the region, places the image (one undo step) and traces it in colour (a
   second step), so Undo returns the raw screenshot. The traced group is then
   offered to Vectorize with AI: `status` carries `"offer": "vectorize"` while

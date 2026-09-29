@@ -10,8 +10,26 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(OMASTRATOR_WERROR "Treat warnings as errors" OFF)
+# Installs (install-local.sh, the PKGBUILDs, release.yml) turn this off: no test targets, no Qt Test.
+option(OMASTRATOR_BUILD_TESTS "Build the test suite" ON)
+# Link-time optimisation and dead-code removal for the shipped binary; see docs/RELEASING.md.
+option(OMASTRATOR_LTO "Build with LTO and gc-sections" OFF)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Network Test)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Network)
+if(OMASTRATOR_BUILD_TESTS)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
+endif()
+
+if(OMASTRATOR_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT oma_ipo_ok OUTPUT oma_ipo_message)
+    if(NOT oma_ipo_ok)
+        message(FATAL_ERROR "OMASTRATOR_LTO: this compiler can't do LTO: ${oma_ipo_message}")
+    endif()
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    add_compile_options(-ffunction-sections -fdata-sections)
+    add_link_options(-Wl,--gc-sections)
+endif()
 
 # Each source folder is its own library, so a folder builds and tests alone:
 # Document and Rendering (the model and how it draws), IO (files), Canvas (the
@@ -143,6 +161,9 @@ set(CPACK_RPM_PACKAGE_LICENSE MIT)
 set(CPACK_RPM_PACKAGE_REQUIRES "shared-mime-info, hicolor-icon-theme")
 include(CPack)
 
+if(NOT OMASTRATOR_BUILD_TESTS)
+    return()
+endif()
 enable_testing()
 # The fake rclone cloud tests run through OMASTRATOR_RCLONE.
 add_executable(fake_rclone tests/Cloud/FakeRclone.cpp)

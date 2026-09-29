@@ -110,6 +110,19 @@ QString capturesDirectory()
     return QDir(data).filePath(QStringLiteral("omastrator/captures"));
 }
 
+int pruneCaptures(const QString &folder, const QDateTime &now)
+{
+    constexpr int keepNewest = 20, keepSeconds = 30 * 24 * 3600;
+    // Newest first; symlinks are skipped so nothing outside the folder can be reached through one.
+    const QFileInfoList files = QDir(folder).entryInfoList({QStringLiteral("*.png")}, QDir::Files | QDir::NoSymLinks, QDir::Time);
+    int removed = 0;
+    for (qsizetype at = keepNewest; at < files.size(); ++at) {
+        if (files[at].lastModified().secsTo(now) > keepSeconds && QFile::remove(files[at].absoluteFilePath()))
+            ++removed;
+    }
+    return removed;
+}
+
 QString clipboardSvg(QString *error)
 {
     const Run types = run(QStringLiteral("wl-paste"), {QStringLiteral("--list-types")}, 5000);

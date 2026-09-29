@@ -44,7 +44,9 @@ build() {
     cd "$pkgname"
     cmake -S . -B build \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DOMASTRATOR_BUILD_TESTS=OFF \
+        -DOMASTRATOR_LTO=ON
     cmake --build build --target omastrator
 }
 
