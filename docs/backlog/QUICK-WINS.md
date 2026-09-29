@@ -23,7 +23,7 @@ file with the work. Don't delete finished items.
 - [x] 7. Settings that travel (7923e6b, 2026-09-28)
 - [x] 8. Canvas size limit (check and document) (a3899b3, 2026-09-28)
 - [ ] 9. Browser View and canvas workspaces (high effort, high priority;
-      see section 9)
+      see section 9). Phase 1, Pages: merged (b82aac5, 2026-09-28).
 
 **The queue ends here.**
 - MEDIUM-EFFORT.md is on hold until the author says otherwise.
