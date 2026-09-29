@@ -285,9 +285,21 @@ private slots:
         QVERIFY(!outcome.threw);
         QVERIFY(outcome.elapsedMs < timeLimitMs);
         QVERIFY(hasWarning(outcome, QStringLiteral("too complex")));
-        QVERIFY(pathCount(outcome.document) > 1000);
+        // Pins the raised object cap: a revert to 50k fails here.
+        QVERIFY(pathCount(outcome.document) >= 200'000);
         QVERIFY(pathCount(outcome.document) < 300'000);
         qInfo() << "flat flood:" << outcome.elapsedMs << "ms," << pathCount(outcome.document) << "paths";
+    }
+
+    void clipGroupFloodStaysFast()
+    {
+        // A clip group per q … W n … Q, the commonest PDF shape: each insert returns to an ancestor of the last object.
+        const QByteArray content = QByteArray("q 0 0 1 1 re W n 0 0 1 1 re f Q ").repeated(100'000);
+        const Outcome outcome = importPdf(pageWithContent(content));
+        QVERIFY(!outcome.threw);
+        QVERIFY(outcome.elapsedMs < timeLimitMs);
+        QVERIFY(hasWarning(outcome, QStringLiteral("too complex")));
+        qInfo() << "clip-group flood:" << outcome.elapsedMs << "ms," << outcome.document.objects.size() << "objects";
     }
 
     void hugeImageDimensionsAreRefused()

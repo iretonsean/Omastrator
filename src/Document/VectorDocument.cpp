@@ -350,10 +350,19 @@ int VectorDocument::subtreeEnd(int index) const
 void VectorDocument::insert(VectorObject object, const QUuid &parent, std::optional<QUuid> above)
 {
     object.parentID = parent;
-    // Painting in order: the parent's subtree already runs to the end, so skip the lookups.
-    if (!above && !objects.empty() && (objects.back().id == parent || objects.back().parentID == parent)) {
-        objects.push_back(std::move(object));
-        return;
+    // Painting in order: the parent is the last object or one of its ancestors, so its subtree runs to the end.
+    if (!above && !objects.empty()) {
+        int at = int(objects.size()) - 1;
+        while (objects[size_t(at)].id != parent && objects[size_t(at)].parentID && *objects[size_t(at)].parentID != parent) {
+            const QUuid up = *objects[size_t(at)].parentID;
+            while (--at >= 0 && objects[size_t(at)].id != up) {}
+            if (at < 0)
+                break;
+        }
+        if (at >= 0 && (objects[size_t(at)].id == parent || objects[size_t(at)].parentID == parent)) {
+            objects.push_back(std::move(object));
+            return;
+        }
     }
     int at = -1;
     if (above) {
