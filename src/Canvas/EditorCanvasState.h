@@ -6,6 +6,7 @@
 #include <QCursor>
 #include <QElapsedTimer>
 #include <QFontMetricsF>
+#include <QHash>
 #include <QLineF>
 #include <QPointer>
 #include <QTimer>
@@ -276,6 +277,13 @@ struct EditorCanvas::State {
     QElapsedTimer browseMoveClock;
     QPointF browseClickView;
     int browseClicks = 0;
+    // Keys sent down and not yet up, so leaving Browse can release them: a page that sees Shift stuck stays selecting.
+    struct BrowseKeyDown {
+        QUuid frame;
+        QString text;
+        Qt::KeyboardModifiers modifiers;
+    };
+    QHash<int, BrowseKeyDown> browseKeysDown;
 
     // Scissors (C) ------------------------------------------------------------------
     void scissorsPress(QPointF view);

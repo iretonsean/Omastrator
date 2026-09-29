@@ -126,6 +126,13 @@ void EditorCanvas::State::browseLeave()
     }
     browseHover.reset();
     browseClicks = 0;
+    if (browserHost) {
+        for (auto it = browseKeysDown.cbegin(); it != browseKeysDown.cend(); ++it) {
+            if (const auto params = BrowserInput::keyParams(false, it.key(), it.value().text, it.value().modifiers, false))
+                browserHost->dispatch(it.value().frame, QStringLiteral("Input.dispatchKeyEvent"), *params);
+        }
+    }
+    browseKeysDown.clear();
     setBrowseFocus(std::nullopt);
 }
 
@@ -170,6 +177,10 @@ bool EditorCanvas::State::browseKey(QKeyEvent *event, bool down)
     if (!params)
         return false;
     browserHost->dispatch(*browseFocus, QStringLiteral("Input.dispatchKeyEvent"), *params);
+    if (down)
+        browseKeysDown.insert(event->key(), {*browseFocus, event->text(), event->modifiers()});
+    else
+        browseKeysDown.remove(event->key());
     return true;
 }
 

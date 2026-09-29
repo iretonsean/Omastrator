@@ -303,6 +303,26 @@ private slots:
         QVERIFY(rig.host.of(QStringLiteral("Input.dispatchKeyEvent")).isEmpty());
     }
 
+    void leavingBrowseLiftsAKeyStillHeld()
+    {
+        Rig rig;
+        click(&rig.canvas, rig.inFrame());
+        rig.host.calls.clear();
+        QTest::keyPress(&rig.canvas, Qt::Key_Shift);
+        rig.session.selectTool(Tool::select);
+        const auto keys = rig.host.of(QStringLiteral("Input.dispatchKeyEvent"));
+        QCOMPARE(keys.size(), 2);
+        QCOMPARE(keys.last().params["type"].toString(), QStringLiteral("keyUp"));
+        QCOMPARE(keys.last().params["key"].toString(), QStringLiteral("Shift"));
+        // A key that came up on its own isn't lifted twice.
+        Rig other;
+        click(&other.canvas, other.inFrame());
+        QTest::keyClick(&other.canvas, Qt::Key_Shift);
+        other.host.calls.clear();
+        other.session.selectTool(Tool::select);
+        QVERIFY(other.host.of(QStringLiteral("Input.dispatchKeyEvent")).isEmpty());
+    }
+
     void aPageThatCantTakeAClickHoldsNothing()
     {
         Rig rig;
