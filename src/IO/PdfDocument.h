@@ -34,6 +34,7 @@ private:
     QHash<int, qint64> m_offsets;
     QHash<int, std::pair<int, int>> m_compressed; // object number -> (object-stream number, index)
     mutable QHash<int, Object> m_cache;
+    mutable int m_loadDepth = 0; // nested object() calls; a /Length chain 100k long would overflow the stack
 
     bool parseXrefChain(qint64 startOffset, QStringList *warnings);
     bool parseXrefSection(qint64 offset, QStringList *warnings, qint64 &nextOffset);
