@@ -633,6 +633,7 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
     bool waiting = false;
     Applied &done = entry.applied;
     const bool first = done.css.isEmpty();
+    const bool resized = !first && done.css != want.css;
     if (first || done.css != want.css) {
         // The frame's own size follows at once, since a resize is the point of the preview; the density waits.
         const int density = first ? want.scale : done.scale;
@@ -658,17 +659,28 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
         call(entry, QStringLiteral("Page.navigate"), {{"url", tabUrl.toString()}});
         emit frameChanged(frame);
     }
+    const auto cast = [&](QSize size) {
+        // A screencast that is running is stopped first: Chromium ignores a second start.
+        if (entry.casting)
+            call(entry, QStringLiteral("Page.stopScreencast"));
+        call(entry, QStringLiteral("Page.startScreencast"),
+             {{"format", "jpeg"}, {"quality", 80}, {"maxWidth", size.width()}, {"maxHeight", size.height()}, {"everyNthFrame", 1}});
+        entry.casting = true;
+        done.cast = size;
+    };
+    bool started = false;
     if (!entry.casting || done.cast != want.cast) {
         if (!entry.casting || now - wait.castSince >= castSettleMs) {
-            call(entry, QStringLiteral("Page.startScreencast"),
-                 {{"format", "jpeg"}, {"quality", 80}, {"maxWidth", want.cast.width()}, {"maxHeight", want.cast.height()},
-                  {"everyNthFrame", 1}});
-            entry.casting = true;
-            done.cast = want.cast;
+            cast(want.cast);
+            started = true;
         } else {
             waiting = true;
         }
     }
+    // Chromium doesn't send the reflowed page after a resize on its own: starting again asks for it, at the size the
+    // frame has been casting at until the new one settles.
+    if (resized && !started && entry.casting)
+        cast(done.cast);
     if (entry.state != State::live)
         note(frame, State::live);
     if (waiting)

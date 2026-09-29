@@ -165,6 +165,8 @@ private:
         bool holding = false;
         QByteArray pendingData;
         int pendingAck = -1;
+        // The page size, in CSS px, that the waiting frame shows.
+        QSizeF pendingCss;
     };
     struct Want {
         bool shown = false;

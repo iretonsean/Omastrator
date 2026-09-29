@@ -658,6 +658,24 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     cleared per project folder in `cleanup()` (`clearPending("")` clears
     nothing), the paused-frame test waits for the close, and the "stopping is
     quick" test waits on a condition instead of the wall clock.
+  - **The picture follows the page.** Live never stopped the stream: Chromium
+    sends no `Page.screencastFrame` after `Emulation.setDeviceMetricsOverride`
+    changes the page's size, so a resize (a drag, a held breakpoint) left the
+    old picture. `sync()` now stops and starts the screencast again after a
+    change of the frame's CSS size, at the size it was casting at until the new
+    one settles; that yields the reflowed page at once. A live picture's
+    `devicePixelRatio` is its pixels per CSS px, so its
+    `deviceIndependentSize()` is the page size it depicts. Tests:
+    `aFramesPictureKeepsFollowingThePageOnceLiveRuns`,
+    `aFramesPictureFollowsAnEditMadeThroughEditPage` (Chromium).
+  - **A stale picture is never distorted.** The renderer stretches a live
+    picture over the frame only when it depicts the frame's size (within 2 px);
+    otherwise it draws it 1:1 in CSS px, top-left, clipped to the frame, until
+    a picture of the new size arrives. The stored picture still stretches.
+    Tests: `thePictureDuringAWidthPreviewIsTheReflowedPage` (Chromium: at 390
+    the drawn pixels are the narrow layout's), `aStalePictureInANarrowerBoxIsClippedNotSqueezed`,
+    `aStalePictureInAWiderBoxKeepsItsSizeAndTopLeftCorner`,
+    `aPictureThatShowsTheFramesSizeFillsItWhateverItsDensity`.
 
 ## Follow-ups
 

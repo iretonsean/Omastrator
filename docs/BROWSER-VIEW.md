@@ -146,7 +146,9 @@ Only some of the document state is undoable:
   maxHeight}`.
   - `maxWidth` and `maxHeight` are the frame's size on screen in device
     pixels, rounded up to 64, and at most 2560. A zoom that has settled for
-    150 ms restarts the screencast at the new size.
+    150 ms restarts the screencast at the new size. So does a change of the
+    page's CSS size, since Chromium sends no reflowed frame after a metrics
+    override on its own.
   - Each `Page.screencastFrame` goes to a decode worker, with one decode in
     flight per frame. The newer frame wins, and the ack is sent when the
     decode finishes. That's the back-pressure.
@@ -437,7 +439,9 @@ The tests:
   - The picture child's id is a UUIDv5 of the frame's id, so it's stable
     across saves.
   - A stored picture is scaled to at most 2048 px on its long side.
-  - The renderer stretches the picture over the frame's box.
+  - The renderer stretches the stored picture over the frame's box. A live
+    picture is stretched only while it depicts the frame's size; a stale one
+    is drawn 1:1, top-left and clipped, until the reflowed one arrives.
   - The clipboard, the agent's reads and the library leave pictures out;
     the SVG export embeds the last picture.
   - A `browserView` URL that doesn't parse reads as "no page yet".

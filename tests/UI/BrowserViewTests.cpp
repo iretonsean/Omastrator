@@ -3,6 +3,7 @@
 #include "Live/Breakpoints.h"
 #include "Live/Registry.h"
 #include "Live/StaticServer.h"
+#include "Rendering/VectorRenderer.h"
 #include "UI/BrowserViews.h"
 #include <QEventLoop>
 #include <QJsonArray>
@@ -322,6 +323,41 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w600s0")), 10'000);
         QVERIFY(rig.session.undoNames() == steps);
         QCOMPARE(rig.session.document()->bounds(rig.frame).width(), 600.0);
+    }
+
+    void thePictureDuringAWidthPreviewIsTheReflowedPage()
+    {
+        NEEDS_CHROMIUM;
+        // The fixture is blue from 1024 px, green from 768 and red below: the colour says which layout the picture shows.
+        Rig rig(page(QStringLiteral("breakpoints.html")), {20, 20, 1280, 400});
+        const auto colour = [&] {
+            const QImage image = rig.views()->picture(rig.frame);
+            return image.isNull() ? QColor() : image.pixelColor(image.width() / 2, image.height() - 10);
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(colour().isValid() && colour().blue() > 180 && colour().red() < 100, patience);
+        rig.session.select({rig.frame});
+        rig.session.beginPreview(QStringLiteral("Preview Width"));
+        rig.session.previewFrameBox(rig.frame, {20, 20, 768, 400});
+        QTRY_VERIFY2_WITH_TIMEOUT(colour().green() > 150 && colour().red() < 100 && colour().blue() < 100, "768 didn't show the green layout", 10'000);
+        rig.session.previewFrameBox(rig.frame, {20, 20, 390, 400});
+        QTRY_VERIFY2_WITH_TIMEOUT(colour().red() > 180 && colour().green() < 100, "390 didn't show the red layout", 10'000);
+        // The picture is the page at the new width, and what the canvas draws of it is the phone layout, whole (the
+        // right edge is the page's scrollbar).
+        QTRY_VERIFY2_WITH_TIMEOUT(qAbs(rig.views()->picture(rig.frame).deviceIndependentSize().width() - 390) <= 2, "the picture isn't 390 CSS px wide", 10'000);
+        QImage drawn(1000, 800, QImage::Format_ARGB32_Premultiplied);
+        drawn.fill(Qt::white);
+        {
+            QPainter painter(&drawn);
+            VectorRenderer::Options options;
+            options.livePicture = [&](const QUuid &id) { return rig.views()->picture(id); };
+            VectorRenderer::draw(painter, *rig.session.document(), options);
+        }
+        const QRectF box = rig.session.document()->bounds(rig.frame);
+        for (const QPointF at : {QPointF(box.left() + 10, box.bottom() - 10), QPointF(box.center().x(), box.bottom() - 10), QPointF(box.right() - 40, box.bottom() - 10)}) {
+            const QColor pixel = drawn.pixelColor(at.toPoint());
+            QVERIFY2(pixel.red() > 180 && pixel.green() < 100 && pixel.blue() < 100, qPrintable(QStringLiteral("the canvas isn't drawing the narrow layout: %1 at %2,%3").arg(pixel.name()).arg(at.x()).arg(at.y())));
+        }
+        rig.session.cancelInteraction();
     }
 
     void aNewDesignWidthReflowsThePageAndUndoGivesItBack()

@@ -223,6 +223,56 @@ private slots:
         QVERIFY(!frames->snapshot(hosted.frame).canUndo);
     }
 
+    void aFramesPictureKeepsFollowingThePageOnceLiveRuns()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        BrowserViews *views = BrowserViews::of(session);
+        QTRY_VERIFY_WITH_TIMEOUT(!views->picture(hosted.frame).isNull(), patience);
+        startLive(session, hosted.frame, served->folder);
+        // Let what the page's own load and the overlay painted settle, then take the picture as the baseline.
+        QTest::qWait(1500);
+        const QImage before = views->picture(hosted.frame);
+        QVERIFY(!before.isNull());
+
+        editTitle(session, hosted.frame, QStringLiteral("background-color"), QStringLiteral("#e11d48"));
+        QTRY_VERIFY2_WITH_TIMEOUT(views->picture(hosted.frame) != before, "the picture didn't change after the Live edit", 10'000);
+
+        // A later edit still shows: the stream carries on, it doesn't just show the first change.
+        const QImage after = views->picture(hosted.frame);
+        editTitle(session, hosted.frame, QStringLiteral("padding-bottom"), QStringLiteral("120px"));
+        QTRY_VERIFY2_WITH_TIMEOUT(views->picture(hosted.frame) != after, "the picture stopped following the page", 10'000);
+    }
+
+    void aFramesPictureFollowsAnEditMadeThroughEditPage()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        ProjectRegistry::remember(page(*served), served->folder);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        BrowserViews *views = BrowserViews::of(session);
+        LiveFrames *frames = LiveFrames::of(session);
+        QTRY_VERIFY_WITH_TIMEOUT(!views->picture(hosted.frame).isNull(), patience);
+        session.select({hosted.frame});
+        QVERIFY(hosted.canvas.enterEditPage(hosted.frame));
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::running, patience);
+        waitForPage(session, hosted.frame);
+        QTest::qWait(1500);
+        const QImage before = views->picture(hosted.frame);
+        QVERIFY(!before.isNull());
+
+        frames->run(hosted.frame, [](LiveSession &live) { live.evaluate(QStringLiteral("window.__oma.select('#title', false)")); return QString(); }, [](const QString &) {});
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).selection.size(), size_t(1), 15'000);
+        QVERIFY(views->editElements(hosted.frame, {QStringLiteral("background-color")}, QStringLiteral("#e11d48"), false).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!frames->snapshot(hosted.frame).edits.empty(), 15'000);
+        QTRY_VERIFY2_WITH_TIMEOUT(views->picture(hosted.frame) != before, "the picture didn't change after the Edit Page edit", 10'000);
+    }
+
     void pendingEditsGatherEveryHostForOneProject()
     {
         NEEDS_CHROMIUM;
