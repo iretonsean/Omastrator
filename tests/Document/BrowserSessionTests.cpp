@@ -165,7 +165,7 @@ private slots:
         Board board;
         board.session.beginPreview(QStringLiteral("Preview Width"));
         board.session.previewFrameBox(board.frame, {0, 0, 200, 300});
-        board.session.addFrame({700, 0, 50, 50}, QStringLiteral("Later"));
+        const QUuid later = board.session.addFrame({700, 0, 50, 50}, QStringLiteral("Later"));
         QVERIFY(!board.session.isPreviewOnly());
         QCOMPARE(board.box(board.frame), QRectF(0, 0, 400, 300));
 
@@ -174,6 +174,10 @@ private slots:
         board.session.undo();
         QVERIFY(!board.session.isPreviewOnly());
         QCOMPARE(board.box(board.frame), QRectF(0, 0, 400, 300));
+        // The undo only ended the preview: "Later" is still there, and the next undo takes it away.
+        QVERIFY(board.session.document()->find(later));
+        board.session.undo();
+        QVERIFY(!board.session.document()->find(later));
 
         board.session.beginPreview(QStringLiteral("Preview Width"));
         board.session.previewFrameBox(board.frame, {0, 0, 200, 300});

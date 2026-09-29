@@ -500,6 +500,11 @@ void EditorSession::undo()
 {
     if (refuseWhenLocked())
         return;
+    // A held width isn't a step: the first undo puts the design back and the next one undoes the last step.
+    if (isPreviewOnly()) {
+        cancelInteraction();
+        return;
+    }
     if (m_interaction)
         cancelInteraction();
     if (const auto snapshot = m_history.undo())
