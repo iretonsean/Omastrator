@@ -247,9 +247,9 @@ existing floating panels and the frame's bar:
 
 - **Only the frame's children:** `mockup.svg`, and `mockup.png` at 2× drawn over
   the page's picture.
-- **A screenshot of the tab now,** at the design width and never a held
-  preview, taken with `Page.captureScreenshot` through the pool,
-  asynchronously.
+- **A screenshot of the page,** the frame's last picture (a tab can't be
+  captured; see "Decided while building"), saved as `page.png` in the package
+  and named in the prompt.
 - **The page's URLs:** the dev server's and the document's production URL.
 - **The breakpoint,** such as "Designed at 1280 px wide; the site's breakpoints
   are 768, 1024 and 1280."
@@ -497,8 +497,8 @@ Deploy, Changes and History on the island already go through
   - Edit Text (and a double-click on a picked text-only element) opens a
     `QLineEdit` over the pick: Enter records one text edit, Esc or losing
     focus cancels.
-  - Deferred to later commits: margin, per-corner radius, Keep Edits and Hand
-    to Agent (the ⋯ menu holds only Copy Selector for now).
+  - The ⋯ menu gains margin, per-corner radius and Keep Edits… in the fix
+    round (below). Hand to Agent is Build It.
 
 - **Commit 5 (starting on each kind of site).**
   - The document keeps the production address. When Live serves a registered
@@ -568,13 +568,72 @@ Deploy, Changes and History on the island already go through
   - The art is only the frame's visible children, copied into a blank document and moved so the frame's corner is the
     origin (page CSS px). `mockup.png` is that art at 2× over the page picture; `mockup.svg` is the same art.
     `selectors.json` has each direct child and each lifted shape with its box, the frame's scroll added.
-  - The page picture is `Page.captureScreenshot` through the pool, asynchronously, when the tab is live at the design
-    width. Otherwise it is the frame's last picture, so a paused or narrower tab still builds.
-  - The frame's pending edits go in the package and are cleared once the agent has started, so the one review holds both.
-  - One agent at a time (`m_waiting`): a second Build It says "The agent is still working on <what>." Its review is
+  - The page picture is the frame's last picture (the screencast frame, else the pool's), saved as `page.png` in the
+    package. The first version took `Page.captureScreenshot` asynchronously; a Browser View's tab can't do that ("Not
+    attached to an active page"), so that path never ran and was removed in the fix round. Build It is synchronous now.
+  - The frame's pending edits go in the package and only the edits that were sent are cleared once the package is handed
+    over, so the one review holds both and an edit made meanwhile isn't lost.
+  - One agent at a time (`m_waiting`): a second Build It says "The agent is still working on “Build it: <frame>”." Its review is
     named "Build it: <frame name>". A finished build shows "Built. Review changes" until the next Deploy, Save, Review
     Changes or History action, or a click on it; the click opens the review.
   - On a site that isn't yours the same items open the Hand to Agent sheet for the folder (nothing is remembered).
     Build It with a Note… asks one line first; an empty note cancels.
   - Not built: Before and After to Desk from a frame. Hand to Agent from a frame is Build It.
   - Reloading the tab after a build is left to the dev server's own reload.
+
+- **Fix round (review A and B).**
+  - **The island is as before.** `deployProject()` lets the Live window's project
+    win while its Live is running, then the selected Browser View, then
+    `m_lastProject`. `liveDeploy` from the island writes back only what the
+    window edited. Every frame action passes its folder explicitly.
+  - **Dev servers never block the pool.** `serveProject` continues from
+    `DevServers::acquire`'s callback. The remaining `callAndWait` paths count
+    their nesting, and a session deleted from inside one waits (`deleteWhenIdle`).
+    That ends the "nested dev-server waits stack" and "a lease can be dropped"
+    follow-ups. A session holds one lease (`m_serverProject` says whose); moving
+    to another project or leaving the web lets it go, and a non-web address keeps
+    the project it had.
+  - **Edits follow their project.** A frame's edits are tagged with the site
+    they were made on (`LiveEdit::origin`, with `m_targetOrigin` for the folder
+    the frame was opened with). Moving to another project hands the old
+    project's edits to `LiveFrames::hold` and clears the edits and undo stacks; a
+    mock-up moving to a project clears what it hadn't kept. **Edit sets show
+    only for mock-ups**: a site with a project has its edits written back.
+  - **Cleared edits stay cleared** until the session has run the clear
+    (`Frame::clearing`), so a late snapshot can't bring them back.
+  - **A dev address never reaches the document.** The swap is kept until the tab
+    leaves the dev origin (`DevSwap::retired`); navigations on the server and
+    stopping Live both write production addresses back. `ProjectRegistry`'s
+    read-modify-write is under a mutex.
+  - **Build It.** A held breakpoint preview is cancelled first, so the design is
+    what is built. It builds only the frame's children, and the picture is the
+    frame's last one (`page.png`). `Page.captureScreenshot` on a frame's tab never
+    worked and is gone from the frame path (the window's `LiveSession::screenshot`
+    still uses it). Only the edits it sent are cleared; a still-running agent gives
+    the named message from `handOff`.
+  - **Edit Page.** Bar pills don't select the frame while Edit Page is on. Edit
+    Page is in the bar's right-click menu. Enter and Esc in the element bar's
+    fields hand the keys back to the canvas, and the fields take focus by click
+    only. There is no Ask… on a site that isn't the user's.
+  - **Menus.** Object ▸ Browser View has Keep Edits…, Edit Sets, Show Original,
+    Export CSS and This Is My Site… for a site that isn't the user's (and so
+    Ctrl+K), and its items follow the frame being edited even when the frame's
+    object isn't selected.
+  - **The element bar.** Custom… uses the app's `ColorPickerSheet` in a floating
+    panel (it has no alpha, so a picked colour is opaque). The box icon swaps
+    the padding pair for four sides. The ⋯ menu holds margin (↔ ↕), per-corner
+    radius and Keep Edits… (a site that isn't yours). The overlay now reports the
+    four corner radii.
+  - **Not observable from a test:** B3 (a frame failing while the window is
+    running) and the window's project winning `deployProject()` (both need a
+    Live window and a frame at once in CI).
+
+## Follow-ups
+
+- The token as the unit ("p-4", "radius-md") and the small arrow that lists the
+  scale, in the bar's fields. The host's element state doesn't carry an edit's
+  snapped token yet; it needs to.
+- The server's full output ("Details") for a failed dev-server start.
+- Before and After to Desk from a frame.
+- Spacing handles on the element.
+- The island step above.
