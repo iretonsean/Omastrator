@@ -168,6 +168,63 @@ private slots:
         QCOMPARE(token, QStringLiteral("--brand"));
     }
 
+    // A Save clears what it wrote with a call posted to the session. If it runs while an undo or a redo waits on the page,
+    // both stacks are empty by the time the answer comes; the step being undone is not on them, and comes back to nothing.
+    void aClearThatRunsInsideAnUndoOrRedoIsSurvived()
+    {
+        openFrame();
+        navigate(QStringLiteral("/index.html"));
+        LiveSession::Target target;
+        target.frame = m_frame;
+        target.pool = m_pool;
+        onPool([&] { QVERIFY(m_live->start(target).isEmpty()); });
+        QVERIFY(waitRunning());
+        struct After {
+            QString failure = QStringLiteral("unset");
+            bool canUndo = true, canRedo = true;
+            size_t edits = 99;
+        } undone, redone, gone;
+        const auto look = [this](After &after) {
+            after.canUndo = m_live->canUndoEdit();
+            after.canRedo = m_live->canRedoEdit();
+            after.edits = m_live->edits().size();
+        };
+        onPool([&] {
+            QVERIFY(m_live->edit(QStringLiteral("#title"), QStringLiteral("opacity"), QStringLiteral("0.5")).isEmpty());
+            const std::vector<LiveEdit> taken = m_live->edits();
+            // Posted now, it runs in the event loop the undo waits in for the page's answer.
+            QMetaObject::invokeMethod(m_live, [this, taken] { m_live->removeEdits(taken); }, Qt::QueuedConnection);
+            undone.failure = m_live->undoEdit();
+            look(undone);
+        });
+        QVERIFY2(undone.failure.isEmpty(), qPrintable(undone.failure));
+        QVERIFY(!undone.canUndo && !undone.canRedo);
+        QCOMPARE(undone.edits, size_t(0));
+
+        onPool([&] {
+            QVERIFY(m_live->edit(QStringLiteral("#title"), QStringLiteral("opacity"), QStringLiteral("0.4")).isEmpty());
+            QVERIFY(m_live->undoEdit().isEmpty());
+            QVERIFY(m_live->canRedoEdit());
+            QMetaObject::invokeMethod(m_live, [this] { m_live->setEdits({}); }, Qt::QueuedConnection);
+            redone.failure = m_live->redoEdit();
+            look(redone);
+        });
+        QVERIFY2(redone.failure.isEmpty(), qPrintable(redone.failure));
+        QVERIFY(!redone.canUndo && !redone.canRedo);
+        QCOMPARE(redone.edits, size_t(0));
+
+        // An undo the page can't take leaves the step where it was.
+        onPool([&] {
+            QVERIFY(m_live->edit(QStringLiteral("#title"), QStringLiteral("opacity"), QStringLiteral("0.3")).isEmpty());
+            m_live->evaluate(QStringLiteral("document.getElementById('title').remove()"));
+            gone.failure = m_live->undoEdit();
+            look(gone);
+        });
+        QVERIFY(!gone.failure.isEmpty());
+        QVERIFY(gone.canUndo);
+        QCOMPARE(gone.edits, size_t(1));
+    }
+
     // A frame's picture is a screencast of the page, so anything the overlay drew would be in the design.
     void noLiveChromeIsDrawnInThePage()
     {

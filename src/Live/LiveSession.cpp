@@ -144,8 +144,7 @@ QString LiveSession::start(const Target &target)
             return QStringLiteral("%1 isn't a folder.").arg(target.folder);
         stop();
         m_edits.clear();
-        m_undo.clear();
-        m_redo.clear();
+        forgetSteps();
         m_selection = {};
         m_geometry = {};
         m_pool = target.pool;
@@ -168,8 +167,7 @@ QString LiveSession::start(const Target &target)
             return QStringLiteral("%1 isn't a folder.").arg(target.folder);
         stop();
         m_edits.clear();
-        m_undo.clear();
-        m_redo.clear();
+        forgetSteps();
         m_selection = {};
         setState(State::starting, QStringLiteral("Joining your tab…"));
         const int generation = m_generation;
@@ -194,8 +192,7 @@ QString LiveSession::start(const Target &target)
         return QStringLiteral("Chromium isn't installed. Install it with: sudo pacman -S chromium");
     stop();
     m_edits.clear();
-    m_undo.clear();
-    m_redo.clear();
+    forgetSteps();
     m_selection = {};
     setState(State::starting, QStringLiteral("Starting…"));
     const int generation = m_generation;
@@ -646,27 +643,50 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
 void LiveSession::clearEdits()
 {
     m_edits.clear();
-    m_undo.clear();
-    m_redo.clear();
+    forgetSteps();
     emit changed();
 }
 
 void LiveSession::setEdits(std::vector<LiveEdit> edits)
 {
     m_edits = std::move(edits);
+    forgetSteps();
+    emit changed();
+}
+
+void LiveSession::forgetSteps()
+{
     m_undo.clear();
     m_redo.clear();
-    emit changed();
+    ++m_stepsEpoch;
 }
 
 void LiveSession::removeEdits(const std::vector<LiveEdit> &edits)
 {
     const auto taken = [&](const LiveEdit &each) { return std::find(edits.begin(), edits.end(), each) != edits.end(); };
-    if (std::erase_if(m_edits, taken) == 0)
+    bool touched = std::erase_if(m_edits, taken) > 0;
+    // A change queued behind the one that was taken merges into it and is no longer equal to it, so it is kept. What
+    // the taken edit wrote is what the page's element was before the kept one, and the next write-back looks for that.
+    for (LiveEdit &kept : m_edits) {
+        for (const LiveEdit &gone : edits) {
+            if (gone.selector != kept.selector || gone.property != kept.property || gone.origin != kept.origin)
+                continue;
+            if (kept.before != gone.after || kept.classesBefore != gone.classesAfter) {
+                kept.before = gone.after;
+                kept.classesBefore = gone.classesAfter;
+                touched = true;
+            }
+            // A class swap that chained from the taken one now starts from the class the taken one added.
+            if (!gone.addClass.isEmpty() && kept.removeClass == gone.removeClass && kept.addClass != gone.addClass) {
+                kept.removeClass = gone.addClass;
+                touched = true;
+            }
+        }
+    }
+    if (!touched)
         return;
     // The steps are about edits that are now written or sent, as removeEdit's are.
-    m_undo.clear();
-    m_redo.clear();
+    forgetSteps();
     emit changed();
 }
 
@@ -674,8 +694,7 @@ void LiveSession::removeEdit(int index)
 {
     if (index >= 0 && index < int(m_edits.size())) {
         m_edits.erase(m_edits.begin() + index);
-        m_undo.clear();
-        m_redo.clear();
+        forgetSteps();
         emit changed();
     }
 }
@@ -712,14 +731,24 @@ QString LiveSession::undoStep()
         return QStringLiteral("There's no page edit to undo.");
     if (!m_page)
         return QStringLiteral("Live isn't running.");
+    // Taken off first: evaluate() waits in an event loop, and a clear posted to this session (a Save that wrote the edits)
+    // can run in it and empty both stacks.
     const UndoStep step = m_undo.back();
+    m_undo.pop_back();
+    const int epoch = m_stepsEpoch;
     QString error;
     const bool put = evaluate(QStringLiteral("window.__oma.restore(%1, %2)").arg(json(step.selector), json(step.was)), &error).toBool();
-    if (!error.isEmpty())
-        return error;
-    if (!put)
-        return QStringLiteral("That element is gone from the page.");
-    m_undo.pop_back();
+    if (!error.isEmpty() || !put) {
+        // Nothing was undone, so the step is still there to try again.
+        if (epoch == m_stepsEpoch)
+            m_undo.push_back(step);
+        return error.isEmpty() ? QStringLiteral("That element is gone from the page.") : error;
+    }
+    // The edit was written or sent while the page took the undo: it is no longer this session's to undo or redo.
+    if (epoch != m_stepsEpoch) {
+        emit changed();
+        return {};
+    }
     const auto found = std::find_if(m_edits.begin(), m_edits.end(), [&](const LiveEdit &each) {
         return each.selector == step.selector && each.property == step.property && each.origin == step.made.origin;
     });
@@ -743,13 +772,19 @@ QString LiveSession::redoStep()
     if (!m_page)
         return QStringLiteral("Live isn't running.");
     const UndoStep step = m_redo.back();
+    m_redo.pop_back();
+    const int epoch = m_stepsEpoch;
     QString error;
     const bool put = evaluate(QStringLiteral("window.__oma.restore(%1, %2)").arg(json(step.selector), json(step.now)), &error).toBool();
-    if (!error.isEmpty())
-        return error;
-    if (!put)
-        return QStringLiteral("That element is gone from the page.");
-    m_redo.pop_back();
+    if (!error.isEmpty() || !put) {
+        if (epoch == m_stepsEpoch)
+            m_redo.push_back(step);
+        return error.isEmpty() ? QStringLiteral("That element is gone from the page.") : error;
+    }
+    if (epoch != m_stepsEpoch) {
+        emit changed();
+        return {};
+    }
     const auto found = std::find_if(m_edits.begin(), m_edits.end(), [&](const LiveEdit &each) {
         return each.selector == step.selector && each.property == step.property && each.origin == step.made.origin;
     });
@@ -941,8 +976,7 @@ QString LiveSession::keepEdits(const QString &name, QString *kept)
         *kept = chosen;
     // They're in the set now, and stay on the page.
     std::erase_if(m_edits, [&](const LiveEdit &edit) { return editIsHere(edit); });
-    m_undo.clear();
-    m_redo.clear();
+    forgetSteps();
     emit changed();
     describeSite();
     notice(QStringLiteral("Kept as “%1”. It comes back every time you open this site in Omastrator.").arg(chosen));

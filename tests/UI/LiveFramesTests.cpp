@@ -368,6 +368,47 @@ private slots:
         QVERIFY(LiveFrames::held(folder).empty());
     }
 
+    // A Save takes "Hello" → "Hi" and writes "Hi". A change that reaches the session before the clear does merges into that
+    // edit (it becomes "Hello" → "Hey"), so it is not the one taken and stays. The next Save has to look for "Hi", which is
+    // what the file has.
+    void aKeptEditStartsFromWhatTheSaveWrote()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        startLive(session, hosted.frame, served->folder);
+        LiveFrames *frames = LiveFrames::of(session);
+        editTitle(session, hosted.frame, QStringLiteral("text"), QStringLiteral("Hi"));
+
+        const std::vector<LiveEdit> read = LiveFrames::pendingEdits(served->folder);
+        QCOMPARE(read.size(), size_t(1));
+        const WriteBack::Plan first = WriteBack::plan(served->folder, read);
+        QVERIFY(first.unresolved.empty() && !first.changes.empty());
+        QVERIFY(WriteBack::apply(first.changes).isEmpty());
+        QVERIFY(WriteBack::readFile(served->folder + "/index.html")->contains("<h1 id=\"title\">Hi</h1>"));
+
+        // The change is finished in the session before the clear runs, so it has merged into the edit the Save took, and the
+        // clear finds an edit that is no longer the one it read.
+        QString merged = QStringLiteral("pending");
+        frames->edit(hosted.frame, QStringLiteral("#title"), QStringLiteral("text"), QStringLiteral("Hey"), [&](const QString &error) { merged = error; });
+        QTRY_COMPARE_WITH_TIMEOUT(merged, QString(), patience);
+        LiveFrames::clearPending(served->folder, read);
+        const auto kept = [&] {
+            const std::vector<LiveEdit> pending = LiveFrames::pendingEdits(served->folder);
+            return pending.size() == 1 && pending.front().before == QLatin1String("Hi") && pending.front().after == QLatin1String("Hey");
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(kept(), 10'000);
+
+        const WriteBack::Plan second = WriteBack::plan(served->folder, LiveFrames::pendingEdits(served->folder));
+        QVERIFY(second.unresolved.empty() && !second.changes.empty());
+        QVERIFY(WriteBack::apply(second.changes).isEmpty());
+        const QByteArray written = *WriteBack::readFile(served->folder + "/index.html");
+        QVERIFY(written.contains("<h1 id=\"title\">Hey</h1>"));
+        QVERIFY(!written.contains("Hi<"));
+    }
+
     void stoppingAFrameHoldsItsEditsForDeploy()
     {
         NEEDS_CHROMIUM;

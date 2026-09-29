@@ -169,9 +169,8 @@ void LiveFrames::run(const QUuid &frame, std::function<QString(LiveSession &)> c
         return;
     }
     found->pool->run([session = QPointer<LiveSession>(found->session), command = std::move(command), done = std::move(done), owner = QPointer<LiveFrames>(this)] {
-        if (!session)
-            return;
-        const QString result = command(*session);
+        // A session that has gone still answers, so whatever waits on the answer (a clearPending's bookkeeping) is let go.
+        const QString result = session ? command(*session) : QStringLiteral("Live isn't running on that frame.");
         if (done && owner)
             QMetaObject::invokeMethod(owner.data(), [done, result] { done(result); }, Qt::QueuedConnection);
     });
@@ -293,14 +292,16 @@ void LiveFrames::clearPending(const QString &folder, const std::vector<LiveEdit>
             }
             it->clearing.push_back({taken, removes});
             const QUuid key = it.key();
+            const LiveSession *const session = it->session;
             frames->run(key, [taken](LiveSession &live) {
                 live.removeEdits(taken);
                 return QString();
-            }, [owner = QPointer<LiveFrames>(frames), key](const QString &) {
+            }, [owner = QPointer<LiveFrames>(frames), key, session](const QString &) {
                 if (!owner)
                     return;
+                // Only the session that was asked: a frame that was stopped and started again has its own list.
                 const auto found = owner->m_frames.find(key);
-                if (found != owner->m_frames.end() && !found->clearing.empty())
+                if (found != owner->m_frames.end() && found->session == session && !found->clearing.empty())
                     found->clearing.erase(found->clearing.begin());
             });
             emit frames->changed(it.key());

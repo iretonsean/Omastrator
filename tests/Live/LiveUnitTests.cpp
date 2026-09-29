@@ -289,10 +289,13 @@ private slots:
         session.setEdits({edit("#a", "opacity", "0.5"), edit("#b", "opacity", "0.6"), edit("#c", "opacity", "0.7")});
         changed.clear();
 
-        // The edit made since the caller read the list (#c) and one that shares a target but not a value stay.
+        // The edit made since the caller read the list (#c) and one that shares a target but not a value stay; the shared
+        // target now starts from the value the taken one wrote.
         session.removeEdits({edit("#a", "opacity", "0.5"), edit("#b", "opacity", "0.9")});
         QCOMPARE(session.edits().size(), size_t(2));
         QCOMPARE(session.edits()[0].selector, QStringLiteral("#b"));
+        QCOMPARE(session.edits()[0].before, QStringLiteral("0.9"));
+        QCOMPARE(session.edits()[1].before, QStringLiteral("0"));
         QCOMPARE(session.edits()[1].selector, QStringLiteral("#c"));
         QCOMPARE(changed.size(), 1);
 
@@ -300,6 +303,50 @@ private slots:
         session.removeEdits({edit("#z", "opacity", "1")});
         QCOMPARE(session.edits().size(), size_t(2));
         QCOMPARE(changed.size(), 1);
+    }
+
+    // Save takes "Hello" → "Hi" and writes "Hi"; a change queued behind it has already merged into the session's edit, which
+    // is now "Hello" → "Hey" and so is not the one taken. It stays, and starts from what the file has now.
+    void aKeptEditStartsFromWhatTheTakenOneWrote()
+    {
+        const auto text = [](const QString &before, const QString &after) {
+            LiveEdit made;
+            made.selector = QStringLiteral("#title");
+            made.property = QStringLiteral("text");
+            made.before = before;
+            made.after = after;
+            return made;
+        };
+        LiveSession session;
+        session.setEdits({text("Hello", "Hey")});
+        session.removeEdits({text("Hello", "Hi")});
+        QCOMPARE(session.edits().size(), size_t(1));
+        QCOMPARE(session.edits()[0].before, QStringLiteral("Hi"));
+        QCOMPARE(session.edits()[0].after, QStringLiteral("Hey"));
+
+        // A class swap that chained from the taken one removes the class the taken one added.
+        LiveEdit taken = text("", "");
+        taken.property = QStringLiteral("padding");
+        taken.removeClass = QStringLiteral("p-2");
+        taken.addClass = QStringLiteral("p-4");
+        taken.classesBefore = QStringLiteral("card p-2");
+        taken.classesAfter = QStringLiteral("card p-4");
+        LiveEdit chained = taken;
+        chained.addClass = QStringLiteral("p-8");
+        chained.classesAfter = QStringLiteral("card p-8");
+        session.setEdits({chained});
+        session.removeEdits({taken});
+        QCOMPARE(session.edits()[0].removeClass, QStringLiteral("p-4"));
+        QCOMPARE(session.edits()[0].addClass, QStringLiteral("p-8"));
+        QCOMPARE(session.edits()[0].classesBefore, QStringLiteral("card p-4"));
+
+        // Another element's edit, or another property's, is left as it was.
+        LiveEdit other = text("Hello", "Hey");
+        other.selector = QStringLiteral("#other");
+        session.setEdits({other, text("Hello", "Hey")});
+        session.removeEdits({text("Bye", "Hi")});
+        QCOMPARE(session.edits()[0].before, QStringLiteral("Hello"));
+        QCOMPARE(session.edits()[1].before, QStringLiteral("Hi"));
     }
 
     void viteHelperMarksSourceLocations()

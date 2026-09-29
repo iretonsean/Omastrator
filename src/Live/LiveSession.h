@@ -253,6 +253,9 @@ private:
     int m_lastGroup = 0;
     std::vector<UndoStep> m_undo;
     std::vector<UndoStep> m_redo;
+    // Both stacks emptied, and counted: an undo or redo waiting on the page sees whether that happened meanwhile.
+    void forgetSteps();
+    int m_stepsEpoch = 0;
     std::optional<Browser::Page> m_page;
     State m_state = State::off;
     QString m_message;
