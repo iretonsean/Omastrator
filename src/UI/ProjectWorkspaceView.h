@@ -2,6 +2,7 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/Menus.h"
+#include "UI/PageWorkspaces.h"
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/ShareController.h"
@@ -23,6 +24,8 @@ public:
     AgentBridge *agent() const { return m_agent; }
     // Share with client.
     ShareController *share() const { return m_share; }
+    // Pages as Workspaces (View menu).
+    PageWorkspaces *pageWorkspaces() const { return m_pageWorkspaces; }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -39,6 +42,7 @@ private:
     QToolButton *m_shareButton = nullptr;
     QToolButton *m_shareOptions = nullptr;
     Menus *m_menus = nullptr;
+    PageWorkspaces *m_pageWorkspaces = nullptr;
     QAction *m_newTab = nullptr;
     QAction *m_fit = nullptr;
     QAction *m_actualSize = nullptr;

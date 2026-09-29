@@ -69,6 +69,7 @@ QString keywordsFor(const QString &name)
         {"makeComponent", "symbol component create"},
         {"detachInstance", "break link symbol component"},
         {"contextualTaskBar", "task bar toolbar floating"},
+        {"pageWorkspaces", "hyprland workspaces pages super tab canvas spread"},
         {"shareWithClient", "share client link send upload publish copy link"},
         {"shareOptions", "share client link format destination"},
         {"sendToDevice", "airdrop iphone phone ipad mac apple send share device"},

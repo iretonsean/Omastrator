@@ -1,6 +1,7 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/Menus.h"
+#include "UI/PageWorkspaces.h"
 #include "UI/ShareController.h"
 #include "Canvas/TaskBar.h"
 
@@ -175,6 +176,12 @@ void Menus::synchronize()
     action(QStringLiteral("clearGuides"))->setEnabled(editing && guides);
     action(QStringLiteral("showHistory"))->setEnabled(drawn);
     action(QStringLiteral("contextualTaskBar"))->setChecked(TaskBar::isTurnedOn());
+    QAction *pageWorkspaces = action(QStringLiteral("pageWorkspaces"));
+    const bool onHyprland = PageWorkspaces::hyprlandReachable();
+    pageWorkspaces->setChecked(PageWorkspaces::isTurnedOn());
+    pageWorkspaces->setEnabled(onHyprland);
+    pageWorkspaces->setToolTip(onHyprland ? QStringLiteral("Each page of a document with two or more pages gets its own Hyprland workspace")
+                                          : QStringLiteral("Needs Hyprland"));
     action(QStringLiteral("showLayers"))->setChecked(ContentView::showsPanel(ContentView::layersKey));
     action(QStringLiteral("showProperties"))->setChecked(ContentView::showsPanel(ContentView::propertiesKey));
 }
