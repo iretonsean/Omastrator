@@ -94,20 +94,22 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
             return;
         const VectorObject *object = m_session.document()->find(frame);
         // The address the user gave stays as it was typed when the page merely confirmed it.
-        if (object && object->browser && !sameAddress(object->browser->url, url)) {
+        const QUrl document = toDocumentUrl(frame, url);
+        if (object && object->browser && !sameAddress(object->browser->url, document)) {
             entry.navigated = url;
             entry.scroll = {};
-            m_session.setBrowserLocation(frame, url, {});
+            m_session.setBrowserLocation(frame, document, {});
         }
         entry.loading = true;
         refreshHistory(frame);
         emit frameChanged(frame);
     } else if (method == QLatin1String("Page.navigatedWithinDocument")) {
         const QUrl url(params["url"].toString());
+        const QUrl document = toDocumentUrl(frame, url);
         const VectorObject *object = m_session.document()->find(frame);
-        if (params["frameId"].toString() == entry.mainFrame && object && object->browser && !sameAddress(object->browser->url, url)) {
+        if (params["frameId"].toString() == entry.mainFrame && object && object->browser && !sameAddress(object->browser->url, document)) {
             entry.navigated = url;
-            m_session.setBrowserLocation(frame, url, entry.scroll);
+            m_session.setBrowserLocation(frame, document, entry.scroll);
         }
         refreshHistory(frame);
         emit frameChanged(frame);

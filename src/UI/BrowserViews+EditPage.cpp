@@ -17,6 +17,9 @@ QString BrowserViews::beginEditPage(const QUuid &frame)
     LiveFrames *live = LiveFrames::of(m_session);
     // Once per session; the connection lives as long as the frames do.
     connect(live, &LiveFrames::changed, this, &BrowserViews::onLiveChanged, Qt::UniqueConnection);
+    // A session that failed (the dev server didn't start) starts again with a new Edit Page.
+    if (live->active(frame) && live->snapshot(frame).state == LiveSession::State::failed)
+        live->stop(frame);
     if (!live->active(frame)) {
         const QString failure = live->start(frame);
         if (!failure.isEmpty())

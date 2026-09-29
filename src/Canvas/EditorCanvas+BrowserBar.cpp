@@ -127,6 +127,13 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
                 right -= width + 4;
             }
         }
+        if (state.dev) {
+            const double width = metrics.horizontalAdvance(QStringLiteral("dev")) + 14;
+            if (right - x - width > 140) {
+                layout.dev = QRectF(right - width, top + 5, width, barHeight - 10);
+                right -= width + 4;
+            }
+        }
         right = addWidthButtons(layout, right, x, metrics);
         const double nameWidth = std::min(metrics.horizontalAdvance(object.name) + 8, std::max(0.0, (right - x) * 0.3));
         layout.name = QRectF(x, top + (barHeight - metrics.height()) / 2, nameWidth, metrics.height());
@@ -197,6 +204,12 @@ void EditorCanvas::State::drawBrowserBars(QPainter &painter) const
             painter.drawRoundedRect(layout.tag, 8, 8);
             painter.drawText(layout.tag, Qt::AlignCenter, QStringLiteral("Not your site"));
         }
+        if (!layout.dev.isNull()) {
+            painter.setPen(QPen(accent(), 1));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(layout.dev, 8, 8);
+            painter.drawText(layout.dev, Qt::AlignCenter, QStringLiteral("dev"));
+        }
         if (state.loading) {
             painter.setPen(QPen(accent(), 2));
             painter.drawLine(QPointF(layout.bar.left() + 6, layout.bar.bottom() + 1), QPointF(layout.bar.right() - 6, layout.bar.bottom() + 1));
@@ -226,7 +239,9 @@ QString EditorCanvas::State::browserBarTip(QPointF view) const
         if (layout.reload.contains(view))
             return browserHost->bar(layout.frame).loading ? QStringLiteral("Stop") : QStringLiteral("Reload");
         if (layout.tag.contains(view))
-            return QStringLiteral("Not your site: changes stay on this machine.");
+            return QStringLiteral("Not your site: changes stay on this machine. Click if it is.");
+        if (layout.dev.contains(view))
+            return QStringLiteral("Running from the project's dev server\n%1").arg(browserHost->bar(layout.frame).devTip);
         if (layout.editPage.contains(view))
             return editPage == layout.frame ? QStringLiteral("Stop editing the page") : QStringLiteral("Edit Page");
         for (const auto &[rect, width] : layout.widths) {
@@ -252,6 +267,8 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
             browserHost->act(layout.frame, BrowserViewHost::Action::forward);
         } else if (layout.reload.contains(view)) {
             browserHost->act(layout.frame, browserHost->bar(layout.frame).loading ? BrowserViewHost::Action::stop : BrowserViewHost::Action::reload);
+        } else if (layout.tag.contains(view)) {
+            browserHost->act(layout.frame, BrowserViewHost::Action::thisIsMySite);
         } else if (layout.editPage.contains(view)) {
             if (editPage == layout.frame)
                 leaveEditPage();
@@ -461,6 +478,7 @@ bool EditorCanvas::State::browserBarMenu(QPointF view, QPoint global)
     QObject::connect(hard, &QAction::triggered, menu, [this, id = *frame] { browserHost->act(id, BrowserViewHost::Action::reloadIgnoringCache); });
     QAction *signIn = menu->addAction(QStringLiteral("Sign in to Omastrator's browser…"));
     QObject::connect(signIn, &QAction::triggered, menu, [this] { browserHost->signIn(); });
+    browserHost->extendBarMenu(*frame, menu);
     menu->popup(global);
     return true;
 }

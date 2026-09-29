@@ -229,6 +229,12 @@ QString BrowserViews::message(const QUuid &frame) const
     default:
         break;
     }
+    // Live's own words over the last picture: the dev server starting, or why it didn't.
+    if (const LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly); live && live->active(frame)) {
+        const LiveFrames::Snapshot snapshot = live->snapshot(frame);
+        if (snapshot.startingServer || snapshot.state == LiveSession::State::failed)
+            return snapshot.message;
+    }
     return object->browser->url.isEmpty() ? QStringLiteral("No page yet.") : QString();
 }
 
@@ -409,6 +415,52 @@ bool BrowserViews::sameAddress(const QUrl &a, const QUrl &b)
     return normal(a) == normal(b);
 }
 
+namespace {
+bool sameOrigin(const QUrl &a, const QUrl &b)
+{
+    return a.scheme() == b.scheme() && a.host() == b.host() && a.port(-1) == b.port(-1);
+}
+
+QUrl moved(const QUrl &url, const QUrl &to)
+{
+    QUrl result = url;
+    result.setScheme(to.scheme());
+    result.setHost(to.host());
+    result.setPort(to.port(-1));
+    return result;
+}
+}
+
+QUrl BrowserViews::toTabUrl(const QUuid &frame, const QUrl &document) const
+{
+    const auto swap = m_swaps.constFind(frame);
+    return swap != m_swaps.constEnd() && sameOrigin(document, swap->production) ? moved(document, swap->dev) : document;
+}
+
+QUrl BrowserViews::toDocumentUrl(const QUuid &frame, const QUrl &tab) const
+{
+    const auto swap = m_swaps.constFind(frame);
+    return swap != m_swaps.constEnd() && sameOrigin(tab, swap->dev) ? moved(tab, swap->production) : tab;
+}
+
+void BrowserViews::useDevServer(const QUuid &frame, const QUrl &server)
+{
+    if (server.isEmpty()) {
+        if (!m_swaps.remove(frame))
+            return;
+    } else {
+        const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
+        if (!object || !object->browser || object->browser->url.isEmpty())
+            return;
+        m_swaps.insert(frame, DevSwap{server, object->browser->url});
+    }
+    // The next sync sees an address the tab isn't on, and goes there, keeping the scroll.
+    if (const auto found = m_entries.find(frame); found != m_entries.end())
+        found->navigated = QUrl();
+    scheduleReconcile();
+    emit frameChanged(frame);
+}
+
 void BrowserViews::note(const QUuid &frame, State state)
 {
     const auto found = m_entries.find(frame);
@@ -581,11 +633,12 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
             waiting = true;
         }
     }
-    if (!sameAddress(entry.navigated, url) || entry.navigated.isEmpty()) {
-        entry.navigated = url;
+    const QUrl tabUrl = toTabUrl(frame, url);
+    if (!sameAddress(entry.navigated, tabUrl) || entry.navigated.isEmpty()) {
+        entry.navigated = tabUrl;
         entry.loading = true;
         entry.restoreScroll = !entry.scroll.isNull();
-        call(entry, QStringLiteral("Page.navigate"), {{"url", url.toString()}});
+        call(entry, QStringLiteral("Page.navigate"), {{"url", tabUrl.toString()}});
         emit frameChanged(frame);
     }
     if (!entry.casting || done.cast != want.cast) {

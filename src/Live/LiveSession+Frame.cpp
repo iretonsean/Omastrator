@@ -63,6 +63,8 @@ void LiveSession::attachFrame()
     if (where.size() == 2 && where[0] != QLatin1String("about:blank"))
         m_url = QUrl(where[0]);
     frameProject();
+    if (m_serving)
+        return;
     setState(State::running, isMockup() ? QStringLiteral("Not your site: changes stay on this machine.") : QString());
     if (!loaded)
         return;
@@ -73,21 +75,77 @@ void LiveSession::attachFrame()
     pageLoaded();
 }
 
+namespace {
+bool isWeb(const QUrl &url)
+{
+    return url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https");
+}
+
+bool isLoopback(const QUrl &url)
+{
+    const QString host = url.host().toLower();
+    return host == QLatin1String("localhost") || host == QLatin1String("127.0.0.1") || host == QLatin1String("[::1]") || host == QLatin1String("::1");
+}
+
+bool sameOrigin(const QUrl &a, const QUrl &b)
+{
+    return a.scheme() == b.scheme() && a.host() == b.host() && a.port(-1) == b.port(-1);
+}
+}
+
 void LiveSession::frameProject()
 {
     QString folder = m_targetFolder;
-    if (!folder.isEmpty() && (m_url.scheme() == QLatin1String("http") || m_url.scheme() == QLatin1String("https")))
+    // On the dev server the address is the server's, which is nobody's to register.
+    const bool served = m_lease && !m_project.isEmpty() && sameOrigin(m_url, m_serverUrl);
+    if (served)
+        folder = m_project;
+    else if (!folder.isEmpty() && isWeb(m_url))
         ProjectRegistry::remember(m_url, folder);
     else if (folder.isEmpty() && !m_url.isEmpty())
         folder = ProjectRegistry::folderFor(m_url).value_or(QString());
     const QString project = folder.isEmpty() ? QString() : QFileInfo(folder).canonicalFilePath();
-    if (project == m_project)
-        return;
+    const bool moved = project != m_project;
     m_project = project;
+    if (m_serving) {
+        if (moved)
+            emit changed();
+        return;
+    }
+    if (needsServer()) {
+        m_serving = true;
+        const int generation = m_generation;
+        QTimer::singleShot(0, this, [this, generation] { serveProject(generation); });
+        return;
+    }
+    if (!moved)
+        return;
     if (m_state == State::running)
         setState(State::running, isMockup() ? QStringLiteral("Not your site: changes stay on this machine.") : QString());
     else
         emit changed();
+}
+
+bool LiveSession::needsServer() const
+{
+    return m_pool && !m_serving && !m_lease && !m_project.isEmpty() && isWeb(m_url) && !isLoopback(m_url);
+}
+
+void LiveSession::serveProject(int generation)
+{
+    if (generation != m_generation || !m_pool) {
+        m_serving = false;
+        return;
+    }
+    setState(State::starting, QStringLiteral("Starting the project…"));
+    const QString failure = startServer(m_project, generation);
+    m_serving = false;
+    if (generation != m_generation)
+        return;
+    if (!failure.isEmpty())
+        return fail(QStringLiteral("Couldn't start the project: %1").arg(failure.section(QLatin1Char('\n'), 0, 0).trimmed()));
+    // The frame's tab loads the dev server next; the overlay comes with that page.
+    setState(State::running);
 }
 
 void LiveSession::tabGone()

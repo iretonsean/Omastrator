@@ -10,10 +10,12 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <QWindow>
+#include <functional>
 #include <QUrl>
 #include <QUuid>
 
 class EditorCanvas;
+class QMenu;
 struct VectorObject;
 class EditorSession;
 
@@ -52,6 +54,7 @@ public:
     void signIn() override;
     void dismissSignIn() override;
     bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params) override;
+    void extendBarMenu(const QUuid &frame, QMenu *menu) override;
     QList<int> breakpoints(const QUuid &frame) const override;
     QString beginEditPage(const QUuid &frame) override;
     void endEditPage(const QUuid &frame) override;
@@ -63,6 +66,13 @@ public:
     bool canRedoPageEdit(const QUuid &frame) const override;
     void undoPageEdit(const QUuid &frame) override;
     void redoPageEdit(const QUuid &frame) override;
+    // Live runs the frame's project from its dev server: the tab shows the document's address on `server`, and the
+    // document keeps the production address. An empty `server` puts the tab back on the production page.
+    void useDevServer(const QUuid &frame, const QUrl &server);
+    // Answers This Is My Site…'s folder question in place of its dialog: the page's address in, the folder out (empty
+    // cancels). Tests set it; an empty function puts the dialog back.
+    using FolderChooser = std::function<QString(const QUrl &page)>;
+    static void setFolderChooser(FolderChooser chooser);
     // Whether the strip has been answered on this machine; tests clear it.
     static bool signInAnswered();
     static void setSignInAnswered(bool answered);
@@ -196,6 +206,12 @@ private:
     void scheduleRepaint(const QUuid &frame);
     void forgetTabs();
     static bool sameAddress(const QUrl &a, const QUrl &b);
+    // A document address as the tab shows it, and a tab address as the document keeps it (they differ on the dev server).
+    QUrl toTabUrl(const QUuid &frame, const QUrl &document) const;
+    QUrl toDocumentUrl(const QUuid &frame, const QUrl &tab) const;
+    // The bar menu's items for a site that isn't the user's, and This Is My Site… (BrowserViews+Site.cpp).
+    void addSiteActions(const QUuid &frame, QMenu *menu);
+    void chooseMySite(const QUuid &frame);
     void call(const Entry &entry, const QString &method, const QJsonObject &params = {});
     QUuid frameOf(const QUuid &key) const;
     void note(const QUuid &frame, State state);
@@ -205,6 +221,13 @@ private:
     QUuid m_scope = QUuid::createUuid();
     QHash<QUuid, Entry> m_entries;
     QHash<QUuid, QUuid> m_frameOfKey;
+    // Frames whose tab is on the dev server: {dev origin, production origin}, apart from the entries so a reopened tab
+    // still goes to the server.
+    struct DevSwap {
+        QUrl dev;
+        QUrl production;
+    };
+    QHash<QUuid, DevSwap> m_swaps;
     // Each own site's breakpoints, by origin, read again on every load.
     QHash<QString, QList<int>> m_breakpoints;
     QPointer<BrowserPool> m_connectedPool;

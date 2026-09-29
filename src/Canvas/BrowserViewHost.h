@@ -9,6 +9,8 @@
 #include <QUuid>
 #include <optional>
 
+class QMenu;
+
 // What the canvas asks of whoever streams a Browser View's page (docs/BROWSER-VIEW.md), so the canvas
 // needn't link the browser code.
 class BrowserViewHost {
@@ -26,8 +28,11 @@ public:
         bool canGoForward = false;
         // The page isn't one of the user's own sites, so edits to it stay on this machine.
         bool notYours = false;
+        // Live runs the page from the project's dev server; `devTip` is its address and command.
+        bool dev = false;
+        QString devTip;
     };
-    enum class Action { back, forward, reload, reloadIgnoringCache, stop };
+    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite };
     virtual Bar bar(const QUuid &frame) const;
     virtual void act(const QUuid &frame, Action action);
 
@@ -41,6 +46,8 @@ public:
     // Edit Page (docs/LIVE-IN-FRAME.md, section 3): the page's elements can be picked. Beginning starts Live on the frame
     // if it isn't running; the answer is why it can't, or empty.
     virtual QString beginEditPage(const QUuid &frame);
+    // The host's own items for the bar's right-click menu (Live's: keep edits, edit sets, This Is My Site…).
+    virtual void extendBarMenu(const QUuid &frame, QMenu *menu);
     virtual void endEditPage(const QUuid &frame);
     // The page's hover and selection boxes in its CSS px (the frame's box top-left is 0,0), each with a "tag  W × H" label.
     struct EditBox {
@@ -83,6 +90,7 @@ inline QList<int> BrowserViewHost::breakpoints(const QUuid &) const { return {39
 inline bool BrowserViewHost::signInOffered() const { return false; }
 inline void BrowserViewHost::signIn() {}
 inline void BrowserViewHost::dismissSignIn() {}
+inline void BrowserViewHost::extendBarMenu(const QUuid &, QMenu *) {}
 inline QString BrowserViewHost::beginEditPage(const QUuid &) { return QStringLiteral("Edit Page needs a live page."); }
 inline void BrowserViewHost::endEditPage(const QUuid &) {}
 inline BrowserViewHost::EditBoxes BrowserViewHost::editBoxes(const QUuid &) const { return {}; }

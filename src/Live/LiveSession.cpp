@@ -54,6 +54,11 @@ LiveSession::LiveSession(QObject *parent) : QObject(parent)
         if (m_state == State::starting && folder == m_serverFolder)
             setState(State::starting, message);
     });
+    connect(&DevServers::shared(), &DevServers::exited, this, [this](const QString &folder) {
+        // The lease is dead with the server: a frame goes back to the production page and says why.
+        if (m_pool && m_lease && folder == m_serverFolder)
+            fail(QStringLiteral("The project's dev server stopped."));
+    });
 }
 
 void LiveSession::setBrowserLink(BrowserLink *link)
@@ -805,8 +810,13 @@ void LiveSession::pageLoaded()
         m_url = now;
         emit changed();
     }
-    if (m_pool)
+    if (m_pool) {
         frameProject();
+        // The production page is left as it is; the dev server's page takes the edits.
+        if (m_serving)
+            return;
+    }
+    m_original = false;
     rescanTokens();
     // A frame's page is reloaded and replaced under its session, so its edits go back on every load.
     if (isMockup() || m_pool)
@@ -908,6 +918,8 @@ QString LiveSession::showOriginal(bool original)
     evaluate(QStringLiteral("window.__oma.revertAll()"), &error);
     if (error.isEmpty() && !original)
         evaluate(QStringLiteral("window.__oma.applyEdits(%1)").arg(json(EditSets::toJson(editsShown()))), &error);
+    m_original = original && error.isEmpty();
     describeSite();
+    emit changed();
     return error;
 }

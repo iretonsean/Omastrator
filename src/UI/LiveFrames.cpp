@@ -108,6 +108,8 @@ LiveFrames::Snapshot LiveFrames::capture(const LiveSession &session)
     snapshot.pageEditing = session.pageEditing();
     snapshot.serverCommand = session.serverCommand().description;
     snapshot.serverUrl = session.serverUrl();
+    snapshot.startingServer = session.startingServer();
+    snapshot.original = session.showingOriginal();
     return snapshot;
 }
 
@@ -119,7 +121,13 @@ void LiveFrames::publish(const QUuid &frame, const Snapshot &snapshot, LiveSessi
         // A session that was stopped may still have one last change in flight.
         if (found == m_frames.end() || found->session != from)
             return;
+        const QUrl before = found->snapshot.serverUrl;
         found->snapshot = snapshot;
+        // The tab moves to the dev server, or back to the production page, before anyone reads the change.
+        if (before != snapshot.serverUrl) {
+            if (BrowserViews *views = m_session.findChild<BrowserViews *>(QString(), Qt::FindDirectChildrenOnly))
+                views->useDevServer(frame, snapshot.serverUrl);
+        }
         emit changed(frame);
     }, Qt::QueuedConnection);
 }
@@ -175,6 +183,8 @@ void LiveFrames::stop(const QUuid &frame)
     if (!m_frames.contains(frame))
         return;
     teardown(frame);
+    if (BrowserViews *views = m_session.findChild<BrowserViews *>(QString(), Qt::FindDirectChildrenOnly))
+        views->useDevServer(frame, {});
     emit changed(frame);
 }
 

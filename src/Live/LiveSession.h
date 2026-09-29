@@ -79,6 +79,10 @@ public:
     // The project's dev server, while this session holds it.
     const DevCommand &serverCommand() const { return m_serverCommand; }
     QUrl serverUrl() const { return m_serverUrl; }
+    // A frame's project is starting its dev server; the tab still shows the production page.
+    bool startingServer() const { return m_serving; }
+    // Show Original is on: the page is as the site made it.
+    bool showingOriginal() const { return m_original; }
     bool inFrame() const { return m_pool != nullptr; }
     QUuid frame() const { return m_frame; }
     // The last hover and selection boxes the overlay reported (frame host): {hover, selection, scroll, viewport}.
@@ -155,6 +159,9 @@ private:
     void leaveFrame();
     // Which folder the frame's page is the code of: the one given, else the registry's for its address.
     void frameProject();
+    // A frame on one of the user's own sites at a remote address runs from the project's dev server (section 2).
+    bool needsServer() const;
+    void serveProject(int generation);
     // The dev server for `folder`, joined or started, waited for here without blocking the thread. Returns why not.
     QString startServer(const QString &folder, int generation);
     void releaseServer(bool wait);
@@ -191,6 +198,8 @@ private:
     QString m_serverFolder;
     DevCommand m_serverCommand;
     QUrl m_serverUrl;
+    bool m_serving = false;
+    bool m_original = false;
     QPointer<BrowserPool> m_pool;
     QUuid m_frame;
     QString m_targetFolder;

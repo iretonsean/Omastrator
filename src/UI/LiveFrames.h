@@ -33,6 +33,9 @@ public:
         bool pageEditing = false;
         QString serverCommand;
         QUrl serverUrl;
+        // The dev server is starting, and the tab is still on the production page.
+        bool startingServer = false;
+        bool original = false;
     };
     using Done = std::function<void(const QString &error)>;
 

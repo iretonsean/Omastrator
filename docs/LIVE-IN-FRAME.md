@@ -499,3 +499,36 @@ Deploy, Changes and History on the island already go through
     focus cancels.
   - Deferred to later commits: margin, per-corner radius, Keep Edits and Hand
     to Agent (the ⋯ menu holds only Copy Selector for now).
+
+- **Commit 5 (starting on each kind of site).**
+  - The document keeps the production address. When Live serves a registered
+    site from its project, the tab shows the same path and query on the dev
+    server's origin; `BrowserViews` converts both ways (`toTabUrl`,
+    `toDocumentUrl`, a `m_swaps` hash per frame), so typing, the address bar and
+    saving never see `localhost:port`. Stopping Live, or a failed start, takes
+    the tab back to production.
+  - `LiveSession::frameProject` decides the project: on the dev server's own
+    origin it is the served folder (nothing is written to the registry);
+    otherwise the target folder is remembered for the page's origin, or found
+    from the registry. A non-loopback web page with a project starts the
+    project's server (`serveProject`, state "Starting the project…"), on the
+    pool thread, through the shared `DevServers`.
+  - A site that isn't registered never gets a server: Live runs on its own
+    page and edits are kept on this machine.
+  - A failed start says "Couldn't start the project: <first line of the
+    server's output>" as the frame's message; the tab stays on production.
+    Choosing Edit Page again stops the failed session and starts a new one.
+    The server's full output ("Details") is not shown yet.
+  - If the dev server exits while a frame holds it, that frame's Live fails
+    with "The project's dev server stopped."
+  - The bar shows a small "dev" pill while a swap is active; its tooltip is the
+    server's address and command.
+  - The "Not your site" tag is clickable and so is This Is My Site… in the
+    bar menu: a folder dialog (suggestions from `ProjectRegistry::suggest`, or
+    Choose a Folder…) that calls `ProjectRegistry::remember`. The next load
+    starts the project's server. Tests answer the dialog with
+    `BrowserViews::setFolderChooser`.
+  - The bar menu for a site that isn't yours (`BrowserViews+Site.cpp`, through
+    `BrowserViewHost::extendBarMenu`): Keep Edits…, Edit Sets ▸ (checkable),
+    Show Original, Export CSS…, This Is My Site…. Before and After to Desk and
+    Hand to Agent… for frames come with commit 7.
