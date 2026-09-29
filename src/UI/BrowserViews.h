@@ -60,6 +60,8 @@ public:
     static bool isSigningIn();
     // The sign-in window holds the profile too, apart from Live: closing one must not free it for the other.
     static void setSignInWindow(bool open);
+    // Holds the profile for a sign-in window an earlier Omastrator left open (read from Chromium's SingletonLock).
+    static bool adoptSignInWindow();
 
     // A frame paused this long has its tab closed, so a hidden window doesn't hold Chromium up for good; showing it
     // again reopens the tab. Tests shorten it.
@@ -69,6 +71,7 @@ public:
     static void setPoolOptions(const BrowserPool::Options &options);
     static BrowserPool *pool();
     static const BrowserPool::Options &poolSettings();
+    static void watchSignInWindow(qint64 pid);
     static void shutdownPool();
     // The escape hatch: every frame everywhere pauses, the tabs close and the browser stops, and nothing restarts by itself.
     static void resetAll();

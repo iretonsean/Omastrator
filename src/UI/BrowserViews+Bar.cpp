@@ -1,3 +1,4 @@
+#include "Agent/BrowserPoolState.h"
 #include "Document/EditorSession.h"
 #include "Live/Browser.h"
 #include "Live/Registry.h"
@@ -180,17 +181,38 @@ void BrowserViews::signIn()
     if (!window.startDetached(&pid)) {
         setSignInWindow(false);
     } else {
-        const quint64 started = startTicks(pid);
-        auto *watch = new QTimer(qApp);
-        watch->setInterval(500);
-        connect(watch, &QTimer::timeout, qApp, [watch, pid, started] {
-            if (started != 0 && startTicks(pid) == started)
-                return;
-            watch->deleteLater();
-            setSignInWindow(false);
-        });
-        watch->start();
+        watchSignInWindow(pid);
     }
     if (m_canvas)
         m_canvas->update();
+}
+
+void BrowserViews::watchSignInWindow(qint64 pid)
+{
+    const quint64 started = startTicks(pid);
+    auto *watch = new QTimer(qApp);
+    watch->setInterval(500);
+    connect(watch, &QTimer::timeout, qApp, [watch, pid, started] {
+        if (started != 0 && startTicks(pid) == started)
+            return;
+        watch->deleteLater();
+        setSignInWindow(false);
+    });
+    watch->start();
+}
+
+bool BrowserViews::adoptSignInWindow()
+{
+    // A sign-in window outlives the Omastrator that opened it; a new one learns of it from Chromium's profile lock.
+    const BrowserPool::Options &options = poolSettings();
+    const QString profile = options.profile.isEmpty() ? Browser::defaultProfile() : options.profile;
+    const QString lock = QFile::symLinkTarget(QDir(profile).filePath(QStringLiteral("SingletonLock")));
+    const qsizetype dash = lock.lastIndexOf(QLatin1Char('-'));
+    bool isPid = false;
+    const qint64 pid = dash < 0 ? 0 : lock.mid(dash + 1).toLongLong(&isPid);
+    if (!isPid || pid <= 0 || isSigningIn() || !BrowserPoolState::namesProfile(pid, profile))
+        return false;
+    setSignInWindow(true);
+    watchSignInWindow(pid);
+    return true;
 }

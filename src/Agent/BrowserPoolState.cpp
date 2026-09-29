@@ -40,7 +40,7 @@ void clear()
     QFile::remove(path());
 }
 
-static bool namesProfile(qint64 pid, const QString &profile)
+bool namesProfile(qint64 pid, const QString &profile)
 {
     QFile file(QStringLiteral("/proc/%1/cmdline").arg(pid));
     if (profile.isEmpty() || !file.open(QIODevice::ReadOnly))

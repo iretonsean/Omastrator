@@ -3,11 +3,12 @@
 #include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
 #include "UI/BrowserViews.h"
-#include <QProcess>
-#include <QLineEdit>
-#include <QSignalSpy>
 #include <QDir>
+#include <QFile>
+#include <QLineEdit>
+#include <QProcess>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <algorithm>
@@ -464,6 +465,38 @@ private slots:
     {
         QVERIFY(std::find(allTools.begin(), allTools.end(), Tool::browserView) != allTools.end());
         QCOMPARE(toolNamed(QStringLiteral("browserView")), std::optional<Tool>(Tool::browserView));
+    }
+
+    void aSignInWindowLeftByAnEarlierRunStillHoldsTheProfile()
+    {
+        QTemporaryDir directory;
+        BrowserPool::Options options;
+        options.profile = directory.filePath(QStringLiteral("profile"));
+        options.writeState = false;
+        BrowserViews::setPoolOptions(options);
+        QVERIFY(QDir().mkpath(options.profile));
+        const QString lock = QDir(options.profile).filePath(QStringLiteral("SingletonLock"));
+        // A stranger holding the lock's pid (a reused pid) isn't adopted.
+        QProcess stranger;
+        stranger.start(QStringLiteral("sh"), {QStringLiteral("-c"), QStringLiteral("sleep 30")});
+        QVERIFY(stranger.waitForStarted());
+        QVERIFY(QFile::link(QStringLiteral("host-%1").arg(stranger.processId()), lock));
+        QVERIFY(!BrowserViews::adoptSignInWindow());
+        QVERIFY(!BrowserViews::isSigningIn());
+        stranger.kill();
+        stranger.waitForFinished();
+        // A window on this profile is: the profile stays held until it closes.
+        QFile::remove(lock);
+        QProcess window;
+        // Two commands, so the shell stays and keeps its arguments rather than becoming sleep.
+        window.start(QStringLiteral("sh"), {QStringLiteral("-c"), QStringLiteral("sleep 30; true"), QStringLiteral("--user-data-dir=") + options.profile});
+        QVERIFY(window.waitForStarted());
+        QVERIFY(QFile::link(QStringLiteral("host-%1").arg(window.processId()), lock));
+        QVERIFY(BrowserViews::adoptSignInWindow());
+        QVERIFY(BrowserViews::isSigningIn());
+        window.kill();
+        window.waitForFinished();
+        QTRY_VERIFY(!BrowserViews::isSigningIn());
     }
 
     void liveAndTheSignInWindowEachHoldTheProfile()

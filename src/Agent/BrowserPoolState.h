@@ -21,4 +21,6 @@ void clear();
 // Ends the browser `state` names, only if that pid's command line names the same profile (a pid that is running but
 // isn't ours was reused). Returns whether one was ended; the file is cleared either way.
 bool endLeftover();
+// Whether a running pid's command line opens `profile` (`--user-data-dir=<profile>`).
+bool namesProfile(qint64 pid, const QString &profile);
 }

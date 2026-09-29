@@ -83,6 +83,9 @@ BrowserViews *BrowserViews::of(EditorSession &session)
 BrowserViews::BrowserViews(EditorSession &session) : QObject(&session), m_session(session)
 {
     instances().append(this);
+    // Once per process, before any frame can start the headless browser on a profile a window still holds.
+    static const bool adopted = adoptSignInWindow();
+    Q_UNUSED(adopted)
     m_clock.start();
     m_decoder.setMaxThreadCount(1);
     for (QTimer *timer : {&m_reconcile, &m_repaint})
