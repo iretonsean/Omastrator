@@ -5,6 +5,13 @@ here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
+### Moving to another machine
+- **Private material** lives in the private repo
+  `github.com/iretonsean/omastrator-private`. It holds the briefs, the promo
+  and animation work, a copy of Claude's memory, and bundles of the old local
+  branches and the pre-rewrite backup. Its README has the setup steps.
+- **The unmerged phase 4 code** is the `feat/live-in-frame` branch on GitHub.
+
 ### State (2026-09-29 ~11:15, session ended for a reboot into macOS)
 - **`main` is pushed** and CI is green (run 36593059112). It holds:
   - the Off-axis icon and the size fixes;
@@ -43,7 +50,7 @@ here" just below.** Everything under "Earlier notes" is history.
 - **The island:** the interim rule stays (decided 2026-09-29). Don't build
   on it. Phase 4's "island step" isn't built: ask the author first.
 
-### The Browser View animation
+### The Browser View animation (ON HOLD: the author rejected the fast cut on 2026-09-29)
 - Everything is in `~/Projects/.omastrator-promo/media/animation/browser-view/`.
   It never goes in the repo.
   - `BRIEF.md` holds the author's interview answers and later decisions.
