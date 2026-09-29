@@ -52,6 +52,8 @@ public:
     static void setSignInAnswered(bool answered);
     // Omastrator's browser is open in a normal window on the pool's profile for the user to sign in.
     static bool isSigningIn();
+    // The sign-in window holds the profile too, apart from Live: closing one must not free it for the other.
+    static void setSignInWindow(bool open);
 
     // The pool every session shares. Tests give it their own profile and no idle wait; the app uses the defaults.
     static void setPoolOptions(const BrowserPool::Options &options);
@@ -62,6 +64,7 @@ public:
     static void resetAll();
     // Live is in Omastrator's own window on the same profile, so frames wait until it closes.
     static void setLiveOpen(bool open);
+    static bool liveWindowIsOpen();
 
 signals:
     // A frame's state, address or loading changed.
@@ -73,6 +76,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    static void profileHoldChanged();
     struct Applied {
         QSize css;
         int scale = 0;

@@ -29,10 +29,28 @@ QList<BrowserViews *> &instances()
     return all;
 }
 
-bool &liveIsOpen()
+// Live's window and the sign-in window each hold the profile; frames wait while either does.
+bool &liveWindow()
 {
     static bool open = false;
     return open;
+}
+
+bool &signInWindow()
+{
+    static bool open = false;
+    return open;
+}
+
+bool &profileWasBusy()
+{
+    static bool busy = false;
+    return busy;
+}
+
+bool liveIsOpen()
+{
+    return liveWindow() || signInWindow();
 }
 
 // Below this on screen a frame is a thumbnail, and its page isn't worth running.
@@ -263,9 +281,32 @@ void BrowserViews::resetAll()
 
 void BrowserViews::setLiveOpen(bool open)
 {
-    if (liveIsOpen() == open)
+    liveWindow() = open;
+    profileHoldChanged();
+}
+
+bool BrowserViews::liveWindowIsOpen()
+{
+    return liveWindow();
+}
+
+void BrowserViews::setSignInWindow(bool open)
+{
+    signInWindow() = open;
+    profileHoldChanged();
+}
+
+bool BrowserViews::isSigningIn()
+{
+    return signInWindow();
+}
+
+void BrowserViews::profileHoldChanged()
+{
+    const bool open = liveIsOpen();
+    if (profileWasBusy() == open)
         return;
-    liveIsOpen() = open;
+    profileWasBusy() = open;
     if (open) {
         // The profile is free before Live starts its own Chromium on it.
         if (BrowserPool *pool = poolInstance())

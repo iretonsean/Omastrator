@@ -431,6 +431,35 @@ private slots:
         QCOMPARE(toolNamed(QStringLiteral("browserView")), std::optional<Tool>(Tool::browserView));
     }
 
+    void liveAndTheSignInWindowEachHoldTheProfile()
+    {
+        BrowserPool::Options options;
+        options.profile = QDir(m_directory.path()).filePath(QStringLiteral("profile"));
+        options.cache = Browser::Cache::minimal;
+        options.writeState = false;
+        BrowserViews::setPoolOptions(options);
+        BrowserViews::setSignInAnswered(false);
+        Rig rig;
+        rig.add();
+        BrowserViews *views = BrowserViews::of(rig.session);
+        // The sign-in window is up: Live reporting "not running" must not free the profile under it.
+        BrowserViews::setSignInWindow(true);
+        QTRY_COMPARE(views->state(rig.frame), BrowserViews::State::liveOpen);
+        BrowserViews::setLiveOpen(false);
+        QCOMPARE(views->state(rig.frame), BrowserViews::State::liveOpen);
+        // Live's window is up: Sign In... is not offered, and asking for it does nothing.
+        BrowserViews::setLiveOpen(true);
+        BrowserViews::setSignInWindow(false);
+        QCOMPARE(views->state(rig.frame), BrowserViews::State::liveOpen);
+        QVERIFY(!views->signInOffered());
+        views->signIn();
+        QVERIFY(!BrowserViews::isSigningIn());
+        BrowserViews::setLiveOpen(false);
+        QTRY_VERIFY(views->state(rig.frame) != BrowserViews::State::liveOpen);
+        BrowserViews::setSignInAnswered(false);
+        BrowserViews::shutdownPool();
+    }
+
     void signingInStopsTheFramesAndResumesThemWhenTheWindowCloses()
     {
         const QDir directory(m_directory.path());

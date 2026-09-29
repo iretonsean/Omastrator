@@ -14,17 +14,10 @@ namespace {
 constexpr auto signInKey = "browserView/signInOffered";
 constexpr qint64 ownershipCheckMs = 2000;
 
-bool &signingIn()
-{
-    static bool open = false;
-    return open;
-}
-
 void windowClosed(QProcess *window)
 {
     window->deleteLater();
-    signingIn() = false;
-    BrowserViews::setLiveOpen(false);
+    BrowserViews::setSignInWindow(false);
 }
 }
 
@@ -138,14 +131,9 @@ void BrowserViews::setSignInAnswered(bool answered)
     QSettings().setValue(QLatin1String(signInKey), answered);
 }
 
-bool BrowserViews::isSigningIn()
-{
-    return signingIn();
-}
-
 bool BrowserViews::signInOffered() const
 {
-    return !signInAnswered() && !isSigningIn() && !Browser::executable().isEmpty();
+    return !signInAnswered() && !isSigningIn() && !liveWindowIsOpen() && !Browser::executable().isEmpty();
 }
 
 void BrowserViews::dismissSignIn()
@@ -158,10 +146,10 @@ void BrowserViews::dismissSignIn()
 void BrowserViews::signIn()
 {
     setSignInAnswered(true);
-    if (isSigningIn() || Browser::executable().isEmpty())
+    if (isSigningIn() || liveWindowIsOpen() || Browser::executable().isEmpty())
         return;
     // A profile opens in one process at a time: the headless browser stops before the window starts.
-    setLiveOpen(true);
+    setSignInWindow(true);
     const BrowserPool::Options &options = poolSettings();
     const QString profile = options.profile.isEmpty() ? Browser::defaultProfile() : options.profile;
     QDir().mkpath(profile);
@@ -173,7 +161,6 @@ void BrowserViews::signIn()
     arguments.removeIf([](const QString &argument) { return argument.startsWith(QLatin1String("--remote-debugging")); });
     arguments << QStringLiteral("about:blank");
     auto *window = new QProcess(qApp);
-    signingIn() = true;
     connect(window, &QProcess::finished, qApp, [window] { windowClosed(window); });
     connect(window, &QProcess::errorOccurred, qApp, [window](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart)
