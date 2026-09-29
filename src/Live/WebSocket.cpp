@@ -53,7 +53,7 @@ void WebSocketClient::open(const QUrl &url)
     m_resource = url.path(QUrl::FullyEncoded).isEmpty() ? QStringLiteral("/") : url.path(QUrl::FullyEncoded);
     if (url.hasQuery())
         m_resource += QLatin1Char('?') + url.query(QUrl::FullyEncoded);
-    m_host = QStringLiteral("%1:%2").arg(url.host()).arg(url.port(80));
+    m_host = QStringLiteral("%1:%2").arg(url.host(), QString::number(url.port(80)));
     m_state = State::handshaking;
     m_socket.connectToHost(url.host(), quint16(url.port(80)));
 }

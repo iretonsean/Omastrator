@@ -28,7 +28,7 @@ QString distinct(const QString &name, QSet<QString> &taken)
 {
     QString candidate = name;
     for (int number = 2; taken.contains(candidate.toLower()); ++number)
-        candidate = QStringLiteral("%1 %2").arg(name).arg(number);
+        candidate = QStringLiteral("%1 %2").arg(name, QString::number(number));
     taken.insert(candidate.toLower());
     return candidate;
 }
@@ -85,7 +85,7 @@ std::vector<Subject> subjects(const VectorDocument &document, const std::vector<
     for (Subject &item : result) {
         const QString base = item.name;
         for (int number = 2; takenFiles.contains((item.folder + QLatin1Char('/') + item.name).toLower()); ++number)
-            item.name = QStringLiteral("%1 %2").arg(base).arg(number);
+            item.name = QStringLiteral("%1 %2").arg(base, QString::number(number));
         takenFiles.insert((item.folder + QLatin1Char('/') + item.name).toLower());
     }
     return result;

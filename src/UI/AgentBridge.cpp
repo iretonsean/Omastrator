@@ -289,7 +289,7 @@ QString AgentBridge::waitingText() const
         return {};
     const QString text = QStringLiteral("%1 is %2…").arg(displayName(m_waiting->agent), QLatin1String(verb(m_waiting->task)));
     const qint64 seconds = (QDateTime::currentMSecsSinceEpoch() - m_waiting->started) / 1000;
-    const QString timed = seconds > 0 ? QStringLiteral("%1 %2 s").arg(text).arg(seconds) : text;
+    const QString timed = seconds > 0 ? QStringLiteral("%1 %2 s").arg(text, QString::number(seconds)) : text;
     return m_waiting->step.isEmpty() ? timed : QStringLiteral("%1 · %2").arg(timed, m_waiting->step);
 }
 

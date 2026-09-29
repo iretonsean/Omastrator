@@ -231,7 +231,7 @@ QVariant decodeOne(ByteReader &reader, const Schema &schema, const Definition &d
             break;
         const Field *field = definition.fieldWithTag(tag);
         if (!field)
-            throw KiwiError(QStringLiteral("Message \"%1\" has no field tagged %2.").arg(definition.name).arg(tag).toStdString());
+            throw KiwiError(QStringLiteral("Message \"%1\" has no field tagged %2.").arg(definition.name, QString::number(tag)).toStdString());
         result.insert(field->name, field->isArray ? decodeArray(reader, schema, field->type, depth + 1) : decodeField(reader, schema, field->type, depth + 1));
     }
     return result;

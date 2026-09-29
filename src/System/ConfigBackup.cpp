@@ -45,7 +45,7 @@ QString newFolder(const QString &title)
     QString folder = QDir(root()).filePath(stamp + QLatin1Char('-') + slugOf(title));
     // Two in the same millisecond get a number.
     for (int n = 2; QFileInfo::exists(folder); ++n)
-        folder = QDir(root()).filePath(QStringLiteral("%1-%2-%3").arg(stamp, slugOf(title)).arg(n));
+        folder = QDir(root()).filePath(QStringLiteral("%1-%2-%3").arg(stamp, slugOf(title), QString::number(n)));
     return folder;
 }
 

@@ -62,8 +62,7 @@ VectorDocument readFirstArtboard(const QString &path, QStringList *warnings)
     if (document.pageCount() > 1 || document.artboards.size() > 1) {
         // A paged file counts its pages, an unpaged one its artboards.
         localWarnings << QStringLiteral("“%1” has %2 pages; only the first was placed.")
-                             .arg(QFileInfo(path).fileName())
-                             .arg(document.pageCount() > 1 ? document.pageCount() : int(document.artboards.size()));
+                             .arg(QFileInfo(path).fileName(), QString::number(document.pageCount() > 1 ? document.pageCount() : int(document.artboards.size())));
         document = document.artboardDocument(0);
     }
     if (warnings)

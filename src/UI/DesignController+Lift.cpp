@@ -180,7 +180,7 @@ void DesignController::landLift()
         m_mode->select(0);
         updatePlacements();
     }
-    QString line = QStringLiteral("Lifted %1%2: %3 objects.").arg(lifted.name, placedWhere).arg(lifted.objects);
+    QString line = QStringLiteral("Lifted %1%2: %3 objects.").arg(lifted.name, placedWhere, QString::number(lifted.objects));
     if (!lifted.notes.isEmpty())
         line += QLatin1Char(' ') + lifted.notes.join(QLatin1Char(' '));
     say(line);

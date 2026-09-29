@@ -90,7 +90,7 @@ QString CloudStorageSheet::freeName(const QString &wanted, const QList<CloudRemo
     };
     QString name = wanted.isEmpty() ? QStringLiteral("remote") : wanted;
     for (int number = 2; used(name); ++number)
-        name = QStringLiteral("%1-%2").arg(wanted).arg(number);
+        name = QStringLiteral("%1-%2").arg(wanted, QString::number(number));
     return name;
 }
 

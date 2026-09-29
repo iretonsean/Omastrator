@@ -179,7 +179,7 @@ std::vector<Suggestion> suggest(const QUrl &url, const QStringList &givenRoots)
     const bool local = host == QLatin1String("localhost") || host == QLatin1String("127.0.0.1") || host == QLatin1String("[::1]");
     if (local && url.port() > 0) {
         if (const auto serving = folderServing(url.port()))
-            add(*serving, QStringLiteral("it is serving %1:%2").arg(host).arg(url.port()), 100);
+            add(*serving, QStringLiteral("it is serving %1:%2").arg(host, QString::number(url.port())), 100);
     }
     const QString name = stem(host);
     const QString bare = host.startsWith(QLatin1String("www.")) ? host.mid(4) : host;

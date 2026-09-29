@@ -489,9 +489,9 @@ QJsonObject AgentTools::showVariations(const QJsonObject &params)
         try {
             const VectorDocument parsed = SvgImporter::parse(variation.svg.toUtf8());
             if (parsed.objects.size() <= parsed.layers().size())
-                fail(QStringLiteral("Variation %1 (“%2”) has no shapes.").arg(index).arg(variation.name));
+                fail(QStringLiteral("Variation %1 (“%2”) has no shapes.").arg(QString::number(index), variation.name));
         } catch (const FileError &failure) {
-            fail(QStringLiteral("Variation %1 (“%2”): %3").arg(index).arg(variation.name, failure.message()));
+            fail(QStringLiteral("Variation %1 (“%2”): %3").arg(QString::number(index), variation.name, failure.message()));
         }
         variations.push_back(variation);
     }

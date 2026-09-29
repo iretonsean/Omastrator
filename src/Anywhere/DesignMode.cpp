@@ -118,7 +118,7 @@ QString desktopSignature(const std::vector<Hyprland::Window> &windows, const std
         signature += QStringLiteral("%1 %2,%3,%4,%5 %6 %7%8 %9;").arg(window.address).arg(window.rect.x()).arg(window.rect.y()).arg(window.rect.width())
                          .arg(window.rect.height()).arg(window.workspace).arg(window.mapped).arg(window.hidden).arg(window.focusHistory);
     for (const Hyprland::Monitor &monitor : monitors)
-        signature += QStringLiteral("%1 %2 %3;").arg(monitor.name).arg(monitor.activeWorkspace).arg(monitor.specialWorkspace);
+        signature += QStringLiteral("%1 %2 %3;").arg(monitor.name, QString::number(monitor.activeWorkspace), QString::number(monitor.specialWorkspace));
     return signature;
 }
 }

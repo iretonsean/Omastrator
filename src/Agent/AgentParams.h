@@ -69,11 +69,11 @@ inline std::optional<std::vector<double>> numbers(const QJsonObject &params, con
         return std::nullopt;
     const QJsonArray array = value.toArray();
     if (!value.isArray() || array.size() != count)
-        fail(QStringLiteral("“%1” must be an array of %2 numbers.").arg(key).arg(count));
+        fail(QStringLiteral("“%1” must be an array of %2 numbers.").arg(key, QString::number(count)));
     std::vector<double> result;
     for (const QJsonValue &each : array) {
         if (!each.isDouble() || !std::isfinite(each.toDouble()))
-            fail(QStringLiteral("“%1” must be an array of %2 numbers.").arg(key).arg(count));
+            fail(QStringLiteral("“%1” must be an array of %2 numbers.").arg(key, QString::number(count)));
         result.push_back(each.toDouble());
     }
     return result;
