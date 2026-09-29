@@ -104,7 +104,13 @@ private:
         const QString failure = frames->start(frame, folder);
         QVERIFY2(failure.isEmpty(), qPrintable(failure));
         QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(frame).state, LiveSession::State::running, patience);
-        // Running is the tab's; the page may still be loading.
+        waitForPage(session, frame);
+    }
+
+    // Running is the tab's; the page and its overlay may still be loading.
+    void waitForPage(EditorSession &session, const QUuid &frame)
+    {
+        LiveFrames *frames = LiveFrames::of(session);
         bool loaded = false;
         for (int i = 0; i < 300 && !loaded; ++i) {
             QString answer;
@@ -290,6 +296,7 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::running, patience);
         QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(1));
         // The overlay is back on the reopened page, so a new edit works.
+        waitForPage(session, hosted.frame);
         editTitle(session, hosted.frame, QStringLiteral("color"), QStringLiteral("#e11d48"));
         QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(2));
     }
