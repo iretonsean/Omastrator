@@ -3,6 +3,7 @@
 #include "Document/Hyphenator.h"
 #include "Document/PathOperations.h"
 #include "Document/TextLayout.h"
+#include "../FontSupport.h"
 #include <QTest>
 #include <algorithm>
 #include <cmath>
@@ -194,6 +195,8 @@ private slots:
 
     void aSoftHyphenShowsOnlyAtALineEnd()
     {
+        if (!haveInstalledFonts())
+            QSKIP("No fonts installed (a bare container): line widths mean nothing without a font");
         VectorObject wide = areaObject(QStringLiteral("super­califragilisticexpialidocious word"), QSizeF(600, 200));
         VectorObject narrow = areaObject(QStringLiteral("super­califragilisticexpialidocious word"), QSizeF(90, 200));
         const TextLayout wideLayout(wide.text), narrowLayout(narrow.text);
