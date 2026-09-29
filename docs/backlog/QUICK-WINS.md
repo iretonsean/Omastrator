@@ -35,6 +35,8 @@ file with the work. Don't delete finished items.
 
 ## Backlog, not queued
 
+- **Interactive behaviours (fourth-wall design):** see
+  docs/backlog/INTERACTIVE-BEHAVIORS.md (the author's idea, 2026-09-28).
 - **Heavy work off the UI thread:** see docs/backlog/BACKGROUND-WORK.md
   (the author, 2026-09-28).
 - **Update the screenshots on the public repo page** (the author,
