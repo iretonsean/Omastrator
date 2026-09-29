@@ -102,12 +102,23 @@ private slots:
         const double small = before.xAt(4) - before.xAt(2), large = after.xAt(4) - after.xAt(2);
         QVERIFY2(std::abs(large - 2 * small) < 0.5, qPrintable(QString("%1 %2").arg(small).arg(large)));
         QVERIFY(mixed.outline().boundingRect().height() > plain.outline().boundingRect().height() * 1.8);
-        // Fractional sizes are exact too.
+        // Fractional sizes are exact too: a run of 40.5 is laid out at 40.5, whether the run says so or the whole text does.
         TextContent fraction = plain;
         fraction.formatCharacters(0, 4, [](CharacterFormat &format) { format.size = 40.5; });
         TextContent whole = plain;
         whole.size = 40.5;
-        QVERIFY(std::abs(TextLayout(fraction).xAt(4) - TextLayout(whole).xAt(4)) < 0.05);
+        // The two are laid out at different pixel sizes (the text's 40.5 as 41 px scaled down, the run's as 648 px, sixteen
+        // times over), and a glyph's advance is kept in 1/64 px steps at the pixel size it is laid out at. So they agree to
+        // a step per glyph, not to the last digit, and which side of a step a font's advance falls on is the font's business.
+        // Neither layout is hinted.
+        const double step = 1.0 / 64;
+        const double fractionX = TextLayout(fraction).xAt(4), wholeX = TextLayout(whole).xAt(4);
+        QVERIFY2(std::abs(fractionX - wholeX) < 4 * step, qPrintable(QString("%1 %2").arg(fractionX).arg(wholeX)));
+        // What that tolerance must not hide is a size rounded to a whole one: 40 or 41 puts four Hs more than a pixel away.
+        TextContent forty = plain, fortyOne = plain;
+        fortyOne.size = 41;
+        QVERIFY(std::abs(fractionX - TextLayout(forty).xAt(4)) > 1);
+        QVERIFY(std::abs(fractionX - TextLayout(fortyOne).xAt(4)) > 1);
     }
 
     void autoLeadingFollowsTheLargestSizeOnALine()
