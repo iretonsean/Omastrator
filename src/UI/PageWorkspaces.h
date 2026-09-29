@@ -103,6 +103,8 @@ private:
     QSet<QUuid> m_watched;
     QString m_key;
     bool m_followNext = false;
+    // Stand-ins are wanted but weren't made because no Omastrator window had focus.
+    bool m_wantsStandIns = false;
     bool m_capNoticed = false;
     bool m_unreachableNoticed = false;
     bool m_lost = false;

@@ -320,7 +320,15 @@ private slots:
     // Docs/WORKSPACES.md: a page's stand-in is a placeholder, so the bar never lives on one, and Reset gives the workspaces back.
     void aStandInIsNeverTheBarsHomeAndResetTurnsPagesAsWorkspacesOff()
     {
-        const QByteArray before = qgetenv("OMASTRATOR_HYPRCTL");
+        // A failed check must not leave the fake hyprctl in the environment for the tests after this one.
+        struct Restore {
+            QByteArray before = qgetenv("OMASTRATOR_HYPRCTL");
+            ~Restore()
+            {
+                qputenv("OMASTRATOR_HYPRCTL", before);
+                PageWorkspaces::forgetReachability();
+            }
+        } restore;
         QTemporaryDir directory;
         FakeHyprctl ctl(directory.path());
         qputenv("OMASTRATOR_HYPRCTL", ctl.path().toUtf8());
@@ -331,12 +339,13 @@ private slots:
             app.window.show();
             FakeHyprlandWorld world(ctl);
             const QString editor = world.addEditor(app.window);
-            app.window.pageWorkspaces()->setFocusProbe([] { return false; });
+            app.window.pageWorkspaces()->setFocusProbe([] { return true; });
             PageWorkspaces::setTurnedOn(true);
             app.workspace.current().session.addPage();
             world.settle();
             const QStringList standIns = app.window.pageWorkspaces()->standInAddresses();
-            QCOMPARE(standIns.size(), 1);
+            // The first page's stand-in and the spare.
+            QCOMPARE(standIns.size(), 2);
 
             // Focus is on the stand-in (Super+Tab landed there): design mode starts on the editor instead.
             app.desktop->clients.clear();
@@ -357,8 +366,6 @@ private slots:
             QVERIFY(app.window.pageWorkspaces()->claimedNames().isEmpty());
             QCOMPARE(app.window.pageWorkspaces()->standInCount(), 0);
         }
-        qputenv("OMASTRATOR_HYPRCTL", before);
-        PageWorkspaces::forgetReachability();
     }
 
     void theBarFollowsFocusSettingRestoresTheOldBehaviour()

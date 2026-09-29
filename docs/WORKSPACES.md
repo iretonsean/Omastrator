@@ -49,13 +49,18 @@ reach the other pages. So:
   Stand-ins exist only to keep workspaces alive and reachable. Clicks and
   keys on a stand-in do nothing, because arriving on the workspace has
   already swapped the editor in (section 4).
-- **The swap.** When page N becomes current:
-  1. Move N's stand-in to the old page's workspace (so it's never empty)
-     and repaint it with the old page's grab.
-  2. Move the editor to N's workspace.
+- **The swap.** A **spare stand-in** waits on the special workspace
+  `special:omastrator-spare` (never shown unless toggled, and not in
+  Super+Tab's order). When page N becomes current:
+  1. The spare moves to the old page's workspace, so it is never empty.
+  2. The editor moves to N's workspace.
+  3. N's old stand-in moves to the special workspace and is the new spare.
 
-  Stand-ins are a pool, not one per page id. The app keeps
-  `address → page` in memory.
+  Every workspace holds a window at every step, so a named workspace
+  keeps its id through any number of swaps. Stand-ins are a pool, not one
+  per page id: the app keeps `address → page` in memory, and repaints a
+  stand-in with its page's grab when it takes a workspace. Giving back
+  closes the spare too.
 - **Every open document with workspaces** has stand-ins for all its pages
   except the one on screen. Arriving on another document's page selects that
   tab first. The cap is 24 claimed workspaces in total. Past that, a page has
@@ -156,7 +161,8 @@ reach the other pages. So:
 - **App → Hyprland.** A current-page change from the Pages list, Next or
   Previous Page, New Page, or undo:
   - swaps with the editor move `follow = true`, **only if an Omastrator
-    window has focus**;
+    window has focus when the move is made** (not just when it was asked
+    for; a request that finds the app unfocused is dropped);
   - otherwise (the agent's `page` tool, a background open, `raise=false`),
     the moves are silent. A page never takes the user's workspace or the
     keyboard from another app.
@@ -273,10 +279,19 @@ top of `tests/Agent/FakeHyprctl.h`. Decisions made while building:
 - **Placement is one idempotent step, `place()`.** It reads `clients`, then
   dispatches only what is not already where it belongs, so our own move
   events cause no loop. Moves are ordered so a named workspace is never
-  emptied before its next window arrives (Hyprland deletes an empty,
-  unfocused named workspace). The one thing this can't avoid: a brand-new
-  page's workspace may flicker (deleted and recreated) while the swap runs.
-  Accepted.
+  emptied (Hyprland deletes an empty, unfocused workspace): a swap goes
+  through the spare, so every workspace keeps its id. A brand-new page's
+  workspace is the only one made from nothing.
+- **Stand-ins are made only while an Omastrator window is active.** A new
+  window maps on the focused workspace and takes focus, so one made while
+  the user is in another app would land on their workspace. Without focus
+  the needy workspaces wait, and are placed when an Omastrator window
+  becomes active.
+- **The return workspace is kept as id and name.** A numbered one is
+  selected by number (`name:1` makes a new workspace named "1" when 1 is
+  gone). The editor goes back to the workspace it was on, the user's
+  dragged-in windows to the one that was focused. Old `workspaces.json`
+  files, with no id, still load.
 - **Windows are recognised** by the address we last saw, then for a
   stand-in by its first title (`omastrator-standin-N`), and for the editor
   by its exact title, else as the only other window of our pid. A window

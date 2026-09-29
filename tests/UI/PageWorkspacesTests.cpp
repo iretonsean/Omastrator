@@ -3,6 +3,7 @@
 #include "TemporaryConfig.h"
 #include "UI/ProjectWorkspaceView.h"
 #include <QDir>
+#include <QGuiApplication>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -30,7 +31,7 @@ struct Rig {
         view = std::make_unique<ProjectWorkspaceView>(workspace);
         view->show();
         world.addEditor(*view);
-        view->pageWorkspaces()->setFocusProbe([] { return false; });
+        view->pageWorkspaces()->setFocusProbe([this] { return focus; });
     }
     ~Rig() { QSettings().remove(QStringLiteral("view/pageWorkspaces")); }
 
@@ -41,6 +42,8 @@ struct Rig {
     QString editor() { return world.windows().front().address; }
     QString editorWorkspace() { return world.workspaceOf(editor()); }
 
+    // Whether an Omastrator window has focus: stand-ins are made, and the editor takes the user along, only then.
+    bool focus = true;
     QTemporaryDir dir;
     FakeHyprctl ctl{dir.path()};
     FakeHyprlandWorld world{ctl};
@@ -73,6 +76,9 @@ private slots:
     void hidingTheWindowGivesBackAndQuittingToo();
     void twentyFourWorkspacesAtMost();
     void theEditorFollowsTheUserOnlyWithFocus();
+    void aSwitchAskedWithFocusButPlacedWithoutItLeavesTheUserAlone();
+    void noStandInIsShownWhileNoWindowOfOursHasFocus();
+    void everyWorkspaceKeepsItsIdAcrossTenSwaps();
     void hyprlangAndLuaDispatchStrings();
 
 private:
@@ -160,9 +166,11 @@ void PageWorkspacesTests::theSecondPageSpreadsTheDocumentOut()
     QCOMPARE(rig.editorWorkspace(), second);
     QCOMPARE(rig.world.on(first).size(), 1);
     QVERIFY(!rig.world.stand(first).isEmpty());
-    QCOMPARE(rig.pages().standInCount(), 1);
-    // The user stays where they were: the editor was moved silently.
-    QCOMPARE(rig.world.active(), QStringLiteral("1"));
+    // A stand-in for the first page and the spare, parked out of sight.
+    QCOMPARE(rig.pages().standInCount(), 2);
+    QCOMPARE(rig.world.on(QStringLiteral("special:omastrator-spare")).size(), 1);
+    // An Omastrator window has focus, so the user is taken along with the editor.
+    QCOMPARE(rig.world.active(), second);
     QVERIFY(rig.pages().standInAddresses().contains(rig.world.stand(first)));
     const WorkspaceClaims::State state = WorkspaceClaims::read();
     QCOMPARE(state.returnWorkspace, QStringLiteral("1"));
@@ -201,11 +209,13 @@ void PageWorkspacesTests::switchingPagesSwapsTheEditorAndAStandIn()
     QCOMPARE(rig.editorWorkspace(), first);
     QCOMPARE(rig.world.on(second).size(), 1);
     QVERIFY(!rig.world.stand(second).isEmpty());
-    QCOMPARE(rig.pages().standInCount(), 1);
-    // The stand-in went to the old page's workspace first, so neither was ever empty.
-    QVERIFY(rig.world.history().size() >= 2);
+    QCOMPARE(rig.pages().standInCount(), 2);
+    // The spare filled the old page's workspace, the editor took the new one, and the stand-in it replaced was parked.
+    QCOMPARE(rig.world.history().size(), 3);
     QVERIFY(rig.world.history().at(0).contains(second));
     QVERIFY(rig.world.history().at(1).contains(first));
+    QVERIFY(rig.world.history().at(2).contains(QStringLiteral("special:omastrator-spare")));
+    QCOMPARE(rig.world.on(QStringLiteral("special:omastrator-spare")).size(), 1);
     // Settled: nothing more is dispatched.
     rig.world.clearHistory();
     rig.world.settle(3);
@@ -251,7 +261,7 @@ void PageWorkspacesTests::downToOnePageGivesBackAndUndoClaimsAgain()
     rig.session().undo();
     rig.world.settle();
     QCOMPARE(rig.pages().claimedNames().size(), 2);
-    QCOMPARE(rig.pages().standInCount(), 1);
+    QCOMPARE(rig.pages().standInCount(), 2);
     QVERIFY(rig.editorWorkspace().startsWith(prefix));
 }
 
@@ -306,9 +316,8 @@ void PageWorkspacesTests::aNumberedReturnWorkspaceComesBackByNumberEvenAfterItWa
     rig.world.settle();
     const QString first = ws(QStringLiteral("Untitled"), QStringLiteral("Page 1"));
     const QString dragged = rig.world.addForeign(first);
-    QCOMPARE(rig.world.idOf(QStringLiteral("1")), 1);
-    // The user leaves workspace 1, empty now: Hyprland deletes it.
-    rig.world.go(QStringLiteral("2"));
+    // The user is on the editor's workspace now (it took them along), so workspace 1 is empty and gone.
+    QCOMPARE(WorkspaceClaims::read().returnId, 1);
     QVERIFY(!rig.world.exists(QStringLiteral("1")));
     QCOMPARE(WorkspaceClaims::read().returnId, 1);
     rig.toggle();
@@ -387,12 +396,12 @@ void PageWorkspacesTests::closingTheDocumentGivesItsWorkspacesBack()
     rig.world.settle();
     // The front document has one page, so it claims nothing; the other one does, with stand-ins for both pages.
     QCOMPARE(rig.pages().claimedNames().size(), 2);
-    QCOMPARE(rig.pages().standInCount(), 2);
+    QCOMPARE(rig.pages().standInCount(), 3);
     QCOMPARE(rig.editorWorkspace(), QStringLiteral("1"));
     rig.workspace.select(rig.workspace.tabs().front()->id);
     rig.world.settle();
     QCOMPARE(rig.pages().claimedNames().size(), 2);
-    QCOMPARE(rig.pages().standInCount(), 1);
+    QCOMPARE(rig.pages().standInCount(), 2);
     rig.workspace.close(rig.workspace.tabs().front()->id);
     QTRY_COMPARE(rig.workspace.tabs().size(), size_t(1));
     rig.world.settle();
@@ -435,7 +444,8 @@ void PageWorkspacesTests::twentyFourWorkspacesAtMost()
     rig.toggle();
     rig.world.settle(12);
     QCOMPARE(rig.pages().claimedNames().size(), PageWorkspaces::maxClaims);
-    QCOMPARE(rig.pages().standInCount(), PageWorkspaces::maxClaims - 1);
+    // Every claim but the editor's has a stand-in, and the spare makes one more.
+    QCOMPARE(rig.pages().standInCount(), PageWorkspaces::maxClaims);
     QVERIFY(rig.workspace.cloudStatusText().contains(QStringLiteral("24")));
     // The current page (the last) has the editor though it comes last: it holds its place under the cap.
     QVERIFY(rig.pages().nameOf(rig.workspace.current().id, rig.session().currentPage()) == rig.editorWorkspace());
@@ -448,11 +458,17 @@ void PageWorkspacesTests::theEditorFollowsTheUserOnlyWithFocus()
     rig.toggle();
     rig.session().addPage();
     rig.world.settle();
-    QCOMPARE(rig.world.active(), QStringLiteral("1"));
-    rig.pages().setFocusProbe([] { return true; });
+    // The user goes to a workspace of their own and an Omastrator window isn't in front.
+    rig.world.go(QStringLiteral("1"));
+    rig.focus = false;
     rig.session().setCurrentPage(rig.page(0));
     rig.world.settle();
-    // Focused: the editor took the user along.
+    QCOMPARE(rig.world.active(), QStringLiteral("1"));
+    QVERIFY(rig.editorWorkspace().startsWith(prefix));
+    // Focused: the editor takes the user along.
+    rig.focus = true;
+    rig.session().setCurrentPage(rig.page(1));
+    rig.world.settle();
     QCOMPARE(rig.world.active(), rig.editorWorkspace());
     QVERIFY(rig.editorWorkspace().startsWith(prefix));
     // Turning it off from the window brings them back with it.
@@ -462,9 +478,76 @@ void PageWorkspacesTests::theEditorFollowsTheUserOnlyWithFocus()
     QCOMPARE(rig.editorWorkspace(), QStringLiteral("1"));
 }
 
+void PageWorkspacesTests::aSwitchAskedWithFocusButPlacedWithoutItLeavesTheUserAlone()
+{
+    Rig rig;
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    rig.world.go(QStringLiteral("1"));
+    // Asked while focused, placed after the user has already gone elsewhere.
+    rig.session().setCurrentPage(rig.page(0));
+    rig.focus = false;
+    rig.world.settle();
+    QCOMPARE(rig.world.active(), QStringLiteral("1"));
+    // The stale request was dropped: a later placement doesn't drag the user in.
+    rig.session().renamePage(rig.page(1), QStringLiteral("Back"));
+    rig.world.settle();
+    QCOMPARE(rig.world.active(), QStringLiteral("1"));
+}
+
+void PageWorkspacesTests::noStandInIsShownWhileNoWindowOfOursHasFocus()
+{
+    Rig rig;
+    rig.focus = false;
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    for (QWidget *widget : QApplication::topLevelWidgets())
+        QVERIFY(!qobject_cast<PageStandIn *>(widget) || !widget->isVisible());
+    QCOMPARE(rig.pages().standInCount(), 0);
+    // The editor still took its page's workspace, silently.
+    QVERIFY(rig.editorWorkspace().startsWith(prefix));
+    QCOMPARE(rig.world.active(), QStringLiteral("1"));
+    // Focus comes back: the stand-ins appear.
+    rig.focus = true;
+    emit qGuiApp->focusWindowChanged(nullptr);
+    rig.world.settle();
+    QCOMPARE(rig.pages().standInCount(), 2);
+    QVERIFY(!rig.world.stand(ws(QStringLiteral("Untitled"), QStringLiteral("Page 1"))).isEmpty());
+}
+
+void PageWorkspacesTests::everyWorkspaceKeepsItsIdAcrossTenSwaps()
+{
+    Rig rig;
+    rig.toggle();
+    rig.session().addPage();
+    rig.session().addPage();
+    rig.world.settle();
+    const QStringList names = rig.pages().claimedNames();
+    QCOMPARE(names.size(), 3);
+    QHash<QString, int> ids;
+    for (const QString &name : names)
+        ids[name] = rig.world.idOf(name);
+    for (int id : ids)
+        QVERIFY(id != 0);
+    rig.world.clearDeleted();
+    for (int i = 0; i < 10; ++i) {
+        rig.session().setCurrentPage(rig.page(i % 3));
+        rig.world.settle(4);
+    }
+    for (const QString &name : names)
+        QCOMPARE(rig.world.idOf(name), ids.value(name));
+    for (const QString &name : rig.world.deleted())
+        QVERIFY2(!name.startsWith(prefix), qPrintable(name));
+    QCOMPARE(rig.world.on(QStringLiteral("special:omastrator-spare")).size(), 1);
+}
+
 void PageWorkspacesTests::hyprlangAndLuaDispatchStrings()
 {
     Rig rig;
+    // Without focus there are no stand-ins, so the editor's move is the first thing dispatched.
+    rig.focus = false;
     rig.toggle();
     rig.session().addPage();
     rig.world.settle();

@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QJsonObject>
 #include <QSettings>
 #include <algorithm>
@@ -55,6 +56,10 @@ PageWorkspaces::PageWorkspaces(ProjectWorkspace &workspace, QWidget &editor) : Q
             placeSoon();
         else if (event.kind == Kind::workspace)
             workspaceEntered(event.workspaceName);
+    });
+    connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, [this] {
+        if (m_wantsStandIns && followsFocus())
+            placeSoon();
     });
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this] {
         m_lost = false;

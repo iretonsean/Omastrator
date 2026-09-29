@@ -8,6 +8,8 @@
 
 namespace {
 const QString standInPrefix = QStringLiteral("omastrator-standin-");
+// Where the spare stand-in waits: special workspaces are never shown unless toggled and don't count in Super+Tab.
+const QString spareWorkspace = QStringLiteral("special:omastrator-spare");
 constexpr int retryMs = 100;
 constexpr int retryLimit = 20;
 QString pictureKey(const QUuid &tab, const QUuid &page)
@@ -148,33 +150,65 @@ void PageWorkspaces::place()
             needy << claim.name;
     }
 
-    // Each needy workspace keeps the stand-in it has; the rest are reused, made, or deleted.
+    // Each needy workspace keeps the stand-in it holds. The free ones fill the rest, the parked spare first, and
+    // one stays parked as the spare: a swap sends it to the old page's workspace before the editor leaves it, so
+    // no workspace is ever empty (and deleted, with a new id) while its page is claimed.
     std::vector<StandIn> pool = std::move(m_standIns);
     std::vector<bool> taken(pool.size(), false);
+    auto whereIs = [&](const StandIn &standIn) {
+        const Hyprland::Window *window = find(standIn.address);
+        return window ? window->workspaceName : standIn.workspace;
+    };
     QHash<QString, int> holder;
     for (int i = 0; i < int(pool.size()); ++i) {
         const Hyprland::Window *window = find(pool[size_t(i)].address);
-        const QString where = window ? window->workspaceName : pool[size_t(i)].workspace;
+        const QString where = whereIs(pool[size_t(i)]);
         if ((window || pool[size_t(i)].address.isEmpty()) && needy.contains(where) && !holder.contains(where)) {
             holder.insert(where, i);
             taken[size_t(i)] = true;
         }
     }
+    auto takeFree = [&]() {
+        int pick = -1;
+        for (int i = 0; i < int(pool.size()); ++i) {
+            if (taken[size_t(i)])
+                continue;
+            if (pick < 0)
+                pick = i;
+            if (whereIs(pool[size_t(i)]) == spareWorkspace) {
+                pick = i;
+                break;
+            }
+        }
+        if (pick >= 0)
+            taken[size_t(pick)] = true;
+        return pick;
+    };
+    // A new window maps on the focused workspace and takes focus, so one is made only while an Omastrator window has it.
+    const bool mayCreate = followsFocus();
+    m_wantsStandIns = false;
     m_standIns.clear();
     for (const QString &name : needy) {
         int i = holder.value(name, -1);
-        if (i < 0) {
-            const auto free = std::find(taken.begin(), taken.end(), false);
-            if (free != taken.end()) {
-                i = int(free - taken.begin());
-                taken[size_t(i)] = true;
-            }
-        }
-        if (i < 0) {
-            createStandIn(name);
-        } else {
+        if (i < 0)
+            i = takeFree();
+        if (i >= 0) {
             pool[size_t(i)].workspace = name;
             m_standIns.push_back(pool[size_t(i)]);
+        } else if (mayCreate) {
+            createStandIn(name);
+        } else {
+            m_wantsStandIns = true;
+        }
+    }
+    if (!needy.isEmpty()) {
+        if (const int i = takeFree(); i >= 0) {
+            pool[size_t(i)].workspace = spareWorkspace;
+            m_standIns.push_back(pool[size_t(i)]);
+        } else if (mayCreate) {
+            createStandIn(spareWorkspace);
+        } else {
+            m_wantsStandIns = true;
         }
     }
     for (int i = 0; i < int(pool.size()); ++i) {
@@ -194,6 +228,8 @@ void PageWorkspaces::place()
             if (!standIn.address.isEmpty())
                 standIn.widget->setLabel(claim.name.mid(int(QStringLiteral("design:").size())));
         }
+        if (standIn.workspace == spareWorkspace && !standIn.address.isEmpty())
+            standIn.widget->setLabel(QStringLiteral("Spare"));
     }
 
     // What has to move, in an order that doesn't empty a workspace before its next window arrives.
@@ -221,7 +257,6 @@ void PageWorkspaces::place()
         else if (window.workspaceName.startsWith(QLatin1String("design:")) && !claimed.contains(window.workspaceName) && !m_returnName.isEmpty())
             moves.push_back({window.address, m_returnName, returnSelector, window.workspaceName, false});
     }
-    bool editorDone = editor && (target.isEmpty() || editor->workspaceName == target);
     while (!moves.empty()) {
         size_t pick = 0;
         for (size_t i = 0; i < moves.size(); ++i) {
@@ -232,17 +267,15 @@ void PageWorkspaces::place()
         }
         const Move move = moves[pick];
         moves.erase(moves.begin() + long(pick));
-        const bool follow = move.editor && m_followNext;
+        const bool follow = move.editor && m_followNext && followsFocus();
         const QString failure = Hyprland::moveWindow(move.address, move.selector, follow);
         if (!failure.isEmpty())
             qCDebug(lcApp).noquote() << "Pages as Workspaces: move failed:" << failure;
-        else if (move.editor)
-            editorDone = true;
         --occupancy[move.from];
         ++occupancy[move.workspace];
     }
-    if (editorDone)
-        m_followNext = false;
+    // Following is for the switch that asked for it, never for a later one.
+    m_followNext = false;
 
     // Someone standing on a workspace we gave back goes where their windows went.
     if (!m_released.isEmpty() && !m_returnName.isEmpty()) {

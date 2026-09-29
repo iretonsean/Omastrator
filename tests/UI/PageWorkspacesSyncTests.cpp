@@ -22,7 +22,7 @@ struct Rig {
         view = std::make_unique<ProjectWorkspaceView>(workspace);
         view->show();
         world.addEditor(*view);
-        view->pageWorkspaces()->setFocusProbe([] { return false; });
+        view->pageWorkspaces()->setFocusProbe([this] { return focus; });
         PageWorkspaces::setTurnedOn(true);
     }
     ~Rig() { QSettings().remove(QStringLiteral("view/pageWorkspaces")); }
@@ -41,6 +41,8 @@ struct Rig {
         return found;
     }
 
+    // Whether an Omastrator window has focus: stand-ins are made, and the editor takes the user along, only then.
+    bool focus = true;
     QTemporaryDir dir;
     FakeHyprctl ctl{dir.path()};
     FakeHyprlandWorld world{ctl};
@@ -123,7 +125,8 @@ void PageWorkspacesSyncTests::aWorkspaceEventMakesThePageCurrentAndSwaps()
     QCOMPARE(rig.world.workspaceOf(rig.editor()), second);
     QVERIFY(!rig.world.stand(first).isEmpty());
 
-    // Super+Tab to the first page's workspace: the stand-in is what's there.
+    // Super+Tab to the first page's workspace, from a window that isn't ours: the stand-in is what's there.
+    rig.focus = false;
     rig.world.go(first);
     heard(rig, first);
     rig.world.clearHistory();
@@ -183,7 +186,7 @@ void PageWorkspacesSyncTests::ourOwnEchoDispatchesNothing()
     rig.session().addPage();
     rig.world.settle();
     // Focused, the app takes the user to the page it just showed; Hyprland reports that arrival back.
-    rig.pages().setFocusProbe([] { return true; });
+    rig.focus = true;
     rig.session().setCurrentPage(rig.page(0));
     rig.world.settle();
     QCOMPARE(rig.world.active(), rig.name(0));
@@ -199,6 +202,9 @@ void PageWorkspacesSyncTests::theAgentsPageAddMovesSilently()
     Rig rig;
     rig.session().addPage();
     rig.world.settle();
+    // The user is in another window while the agent works.
+    rig.focus = false;
+    rig.world.go(QStringLiteral("3"));
     const QString before = rig.world.active();
     rig.world.clearHistory();
     rig.view->agent()->tools().call(QStringLiteral("page"), {{"action", "add"}});
@@ -226,7 +232,8 @@ void PageWorkspacesSyncTests::aClosedStandInStaysClosedUntilTheUserNavigatesTher
     rig.world.settle(4);
     QVERIFY(rig.world.stand(a).isEmpty());
     QVERIFY(!rig.pages().claimedNames().contains(a));
-    QCOMPARE(rig.pages().standInCount(), 1);
+    // b's stand-in and the spare.
+    QCOMPARE(rig.pages().standInCount(), 2);
     // Nothing reopens it while the user works elsewhere.
     rig.session().setCurrentPage(rig.page(1));
     rig.world.settle(4);
@@ -247,8 +254,9 @@ void PageWorkspacesSyncTests::theEditorIsFocusedOnlyWithFocusAndOnlyWhereTheySti
     rig.session().addPage();
     rig.world.settle();
     const QString first = rig.name(0);
-    rig.pages().setFocusProbe([] { return true; });
+    rig.focus = false;
     rig.world.go(first);
+    rig.focus = true;
     heard(rig, first);
     rig.world.clearHistory();
     rig.world.settle(3);
