@@ -86,6 +86,9 @@ Only some of the document state is undoable:
     context = {})` takes a context id so phase 5's Clean Session can pass a
     `Target.createBrowserContext` one.
   - `Browser.setDownloadBehavior` is set to deny.
+  - Downloads-deny and `Browser.setPermission` (denied) are applied to the
+    default context only. A `Target.createBrowserContext` context needs both
+    again, with its `browserContextId`, before its first tab loads anything.
 - **Sign in to Omastrator's browser.** The first Browser View shows a strip
   inside the frame: "Sign in to Omastrator's browser to see sites you're
   logged in to." with the buttons **Sign In…** and **Not Now**.
@@ -584,3 +587,72 @@ The tests:
     already existed, so `LiveSession::isMockup` is unchanged.
   - `BrowserViewHost::breakpoints` has a default that answers the four
     defaults, so canvas tests need no fake for it.
+- **The review round (phase 3 fixes).**
+  - **One address rule.** `BrowserAddress::allowed` (http and https only) is
+    the only test: the codec, `setBrowserLocation`, the page's own
+    navigation and Open in My Chromium all use it. A failed load reports
+    `chrome-error://`; the frame keeps `unreachableUrl`, the address that was
+    tried.
+  - **The design width is `EditorSession::designDocument()`.** During a held
+    preview it is the interaction's `before`; save, export, Share, Export for
+    Screens and the agent's export all read it, so a phone-width preview is
+    never written out as the design.
+  - **A held preview and undo.** The first Ctrl+Z ends the held width and
+    goes no further; the next one undoes a step. The canvas drops its held
+    button when the preview ended for any reason.
+  - **The picture is view state.** `setBrowserPicture` (like
+    `setBrowserLocation`) writes the same image into every history snapshot
+    and the interaction's `before` and `base`, so it is never an undo step and
+    a picture that lands during a preview survives it. A rotated or otherwise
+    transformed frame draws, exports and stores no picture
+    (`VectorObject::showsBrowserPicture`).
+  - **Two profile holds.** Live's window and the sign-in window each hold the
+    profile; it is busy while either is up, and neither can release the other.
+    Sign In… isn't offered or run while Live's window is open. The sign-in
+    window is started detached, with its pid (and start time) watched, so
+    quitting Omastrator leaves it open.
+  - **Cap bursts wait.** Opens past the tab cap (tabs plus tabs being made)
+    queue in the pool and go one at a time, so a burst never overshoots the
+    cap. The frame that starts the browser waits in the same queue, so a
+    close during the start drops it.
+  - **Chromium's own blank tab.** The pool asks `Target.getTargets` after the
+    start and closes the `about:blank` page Chromium opens by itself, so a
+    tab count is the frames' tabs.
+  - **Paused means hidden.** A canvas counts as on screen only when it is
+    shown and its window is exposed (not minimized, not on another
+    workspace). A frame paused for 5 minutes has its tab closed, so the
+    60-second idle stop can happen; showing it reopens a tab. The exposure
+    half has no automated test: offscreen keeps a minimized window exposed.
+  - **Late replies.** `onOpened` ignores a frame that a reset or Live's window
+    paused meanwhile. History and breakpoint replies hold a `QPointer` and
+    post to the app thread.
+  - **The bar works on a locked frame.** Its controls are view state, like
+    Browse. Only the address field, which is an undo step, refuses.
+  - **Palette shortcuts are read live.** The keys the page never sees are Esc
+    and whatever the `commandPalette` action is bound to at that moment
+    (Ctrl+K if it can't be found). Leaving Browse sends a keyUp for every key
+    still down.
+  - **`BrowserViews::notePicture`** is the way a picture enters an entry, and
+    tests use it in place of a page. `poolKey` is public so a test can
+    deliver a pool signal.
+  - **Share and Send to a device** flush the newest pictures first
+    (`ShareController::render`).
+  - **The breakpoints scan** stops at 2,000 media entries.
+
+## Follow-ups (found in review, not done)
+
+- **`closeAll` is synchronous** when Live opens its window: it blocks the UI
+  thread until the browser has stopped. An asynchronous version with a
+  `stopped` signal would let the frames show "Live is open" at once.
+- **Ten animated frames.** The ack delay was tuned with one or two streams. The
+  cost of ten animated frames (decode threads, ack round trips, the 66 ms gap)
+  hasn't been measured.
+- **`runReset` racing the app's stop.** The command-line reset ends the
+  browser after the app's reset, or when the app didn't answer; if the app is
+  stopping the pool at the same moment both go for the same pid. The state
+  file can't tell the pool's Chromium from Live's on the same profile if a
+  pid was reused; checking the pid's start time, or having the app's reply say
+  the pool stopped, would close it.
+- **Test isolation.** The Chromium tests don't set `HOME`, and Chromium can
+  still touch `~/.pki/nssdb` with a custom `--user-data-dir`. The Live tests
+  do the same.
