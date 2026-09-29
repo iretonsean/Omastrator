@@ -554,12 +554,14 @@ void BrowserViews::reconcile()
             entry.scroll = object.browser->scroll;
         }
         const Want want = wanted(object.id, object, streaming);
-        if (!installed && entry.state != State::resetPaused && entry.state != State::liveOpen) {
+        // A frame with no address needs no browser, so it says "No page yet." whether or not Chromium is there.
+        const bool needsChromium = !object.browser->url.isEmpty();
+        if (!installed && needsChromium && entry.state != State::resetPaused && entry.state != State::liveOpen) {
             if (entry.state != State::unavailable)
                 note(object.id, State::unavailable);
             continue;
         }
-        if (installed && entry.state == State::unavailable)
+        if ((installed || !needsChromium) && entry.state == State::unavailable)
             note(object.id, State::closed);
         if (liveIsOpen() && entry.state == State::closed) {
             note(object.id, State::liveOpen);
