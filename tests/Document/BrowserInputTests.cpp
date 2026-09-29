@@ -16,6 +16,7 @@ private slots:
     void controlShortcutsAskForTheirEditingCommand();
     void escapeAndControlKAreNeverTheirs();
     void keysWithoutAnAnswerAreLeftOut();
+    void aLetterFromAnotherLayoutIsTyped();
 };
 
 void BrowserInputTests::aPointIsCssPixelsFromTheFramesCorner()
@@ -185,6 +186,25 @@ void BrowserInputTests::keysWithoutAnAnswerAreLeftOut()
 {
     QVERIFY(!BrowserInput::keyFor(Qt::Key_MediaPlay, {}, {}));
     QVERIFY(!BrowserInput::keyParams(true, Qt::Key_MediaPlay, {}, {}, false));
+}
+
+void BrowserInputTests::aLetterFromAnotherLayoutIsTyped()
+{
+    // é, and a Cyrillic ж, as a layout makes them with no input method: Qt has a key code and the text.
+    for (const auto &[qtKey, text] : {std::pair(int(Qt::Key_Eacute), QStringLiteral("é")), std::pair(0x0436, QStringLiteral("ж")),
+                                      std::pair(int(Qt::Key_ssharp), QStringLiteral("ß"))}) {
+        const auto down = BrowserInput::keyParams(true, qtKey, text, {}, false);
+        QVERIFY2(down, qPrintable(text));
+        QCOMPARE((*down)["type"].toString(), QStringLiteral("keyDown"));
+        QCOMPARE((*down)["text"].toString(), text);
+        QCOMPARE((*down)["key"].toString(), text);
+        QVERIFY(BrowserInput::keyParams(false, qtKey, text, {}, false));
+    }
+    // With Shift it is the capital; with Ctrl it is a shortcut the page has no name for.
+    QVERIFY(BrowserInput::keyParams(true, Qt::Key_Udiaeresis, QStringLiteral("Ü"), Qt::ShiftModifier, false));
+    QVERIFY(!BrowserInput::keyParams(true, Qt::Key_Eacute, QStringLiteral("é"), Qt::ControlModifier, false));
+    // A key with no text still has no answer.
+    QVERIFY(!BrowserInput::keyParams(true, Qt::Key_Eacute, {}, {}, false));
 }
 
 QTEST_MAIN(BrowserInputTests)

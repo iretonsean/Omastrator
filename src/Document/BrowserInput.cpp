@@ -174,6 +174,9 @@ std::optional<Key> keyFor(int qtKey, const QString &text, Qt::KeyboardModifiers 
         const int number = qtKey - Qt::Key_F1 + 1;
         return Key{QStringLiteral("F%1").arg(number), QStringLiteral("F%1").arg(number), 111 + number};
     }
+    // A letter another layout makes directly (é, ü, ñ, Cyrillic, Greek) has no DOM code here, but its text is the key.
+    if (printable(text) && !(modifiers & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)))
+        return Key{text, QString(), 0};
     return std::nullopt;
 }
 
