@@ -357,6 +357,38 @@ private slots:
         QCOMPARE(texts.size(), size_t(1));
         QCOMPARE(f.session.document()->pageOf(texts.front()), first);
         QCOMPARE(f.object(texts.front()).text.text, QStringLiteral("Hi"));
+        // The Type step closed before New Page began, so undoing New Page lands back on page 1 with the text.
+        const std::vector<QString> names = f.session.undoNames();
+        QVERIFY(names.size() >= 2);
+        QCOMPARE(names[names.size() - 1], QStringLiteral("New Page"));
+        QCOMPARE(names[names.size() - 2], QStringLiteral("Type"));
+        f.session.undo();
+        QCOMPARE(f.session.currentPage(), first);
+        QCOMPARE(f.session.document()->pageCount(), 1);
+        QCOMPARE(f.session.undoName(), QStringLiteral("Type"));
+        QCOMPARE(f.object(texts.front()).text.text, QStringLiteral("Hi"));
+    }
+
+    // Empty type is deleted when typing ends; that must happen on page 1, before New Page, or a "Delete" lands after it.
+    void switchingPagesDeletesEmptyTypeOnItsOwnPage()
+    {
+        Fixture f;
+        const QUuid first = f.session.currentPage();
+        const size_t before = f.session.undoNames().size();
+        f.session.selectTool(Tool::text);
+        f.click({100, 100});
+        QTest::keyClick(&f.canvas, Qt::Key_A);
+        QTest::keyClick(&f.canvas, Qt::Key_Backspace);
+        QVERIFY(f.canvas.isEditingText());
+        f.session.addPage();
+        QVERIFY(!f.canvas.isEditingText());
+        const std::vector<QString> names = f.session.undoNames();
+        QCOMPARE(names.size(), before + 1);
+        QCOMPARE(names.back(), QStringLiteral("New Page"));
+        f.session.undo();
+        QCOMPARE(f.session.currentPage(), first);
+        for (const VectorObject &object : f.session.document()->objects)
+            QVERIFY(object.kind != ObjectKind::text);
     }
 
     void emptyTypeLeavesNothing()

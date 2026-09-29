@@ -225,7 +225,7 @@ void CommandPalette::gatherRest()
                                   [front, id] { return front().applyToken(id); }});
         }
         // Pages: go to one, and with a selection, send it there.
-        const bool sendable = selected && !document.locked;
+        const bool sendable = selected && !document.locked && !proposal;
         if (document.pageCount() > 1) {
             for (const Page &page : document.allPages()) {
                 const QUuid id = page.id;
