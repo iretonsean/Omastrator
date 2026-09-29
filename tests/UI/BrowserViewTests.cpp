@@ -278,6 +278,21 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, patience);
     }
 
+    void anOpenedThatArrivesAfterAResetOrLiveDoesNotWakeTheFrame()
+    {
+        NEEDS_CHROMIUM;
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, patience);
+        const QUuid key = rig.views()->poolKey(rig.frame);
+        BrowserViews::resetAll();
+        QCOMPARE(rig.state(), BrowserViews::State::resetPaused);
+        // The pool's `opened` for it, queued before the reset, is delivered now.
+        emit BrowserViews::pool()->opened(key);
+        QCOMPARE(rig.state(), BrowserViews::State::resetPaused);
+        QTest::qWait(300);
+        QCOMPARE(rig.state(), BrowserViews::State::resetPaused);
+    }
+
     void liveInItsWindowMakesTheFramesWait()
     {
         NEEDS_CHROMIUM;

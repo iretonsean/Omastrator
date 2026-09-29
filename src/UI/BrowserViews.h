@@ -41,6 +41,9 @@ public:
     // A streamed picture as it arrives; it goes into the document at the next flush. Tests use it in place of a page.
     void notePicture(const QUuid &frame, const QImage &image);
 
+    // The pool's name for a frame's tab; tests speak to the pool's signals with it.
+    QUuid poolKey(const QUuid &frame) const;
+
     QImage picture(const QUuid &frame) const override;
     QString message(const QUuid &frame) const override;
     Bar bar(const QUuid &frame) const override;

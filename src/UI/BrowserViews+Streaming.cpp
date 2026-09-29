@@ -14,6 +14,9 @@ void BrowserViews::onOpened(const QUuid &key)
     const auto found = m_entries.find(frame);
     if (found == m_entries.end())
         return;
+    // An open already on its way when a reset or Live's window landed: that tab closes next, so the frame stays put.
+    if (found->state == State::resetPaused || found->state == State::liveOpen)
+        return;
     // A new tab is blank and awake, whatever the last one was doing.
     found->casting = false;
     found->frozen = false;

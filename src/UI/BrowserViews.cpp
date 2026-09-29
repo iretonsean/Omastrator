@@ -194,6 +194,12 @@ BrowserViews::State BrowserViews::state(const QUuid &frame) const
     return found == m_entries.constEnd() ? State::closed : found->state;
 }
 
+QUuid BrowserViews::poolKey(const QUuid &frame) const
+{
+    const auto found = m_entries.constFind(frame);
+    return found == m_entries.constEnd() ? QUuid() : found->key;
+}
+
 QImage BrowserViews::picture(const QUuid &frame) const
 {
     const auto found = m_entries.constFind(frame);
