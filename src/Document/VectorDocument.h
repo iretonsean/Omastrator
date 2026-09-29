@@ -266,6 +266,8 @@ struct Artboard {
     QRectF rect;
     // Its paper; transparent exports leave it out.
     QColor background = Qt::white;
+    // Off keeps it on the canvas but out of every export, share and page list.
+    bool exported = true;
     friend bool operator==(const Artboard &, const Artboard &) = default;
 };
 
@@ -507,6 +509,8 @@ struct VectorDocument {
     // The artboard under `point`, the last listed first; -1 over none.
     int artboardAt(QPointF point) const;
     int artboardIndex(const QUuid &id) const;
+    // The first artboard that exports, or -1 when every one is switched off.
+    int firstExportedArtboard() const;
     // Every artboard's rect together.
     QRectF artboardBounds() const;
     // The objects directly in layers that belong to an artboard: those whose bounds,

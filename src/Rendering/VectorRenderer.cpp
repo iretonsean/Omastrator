@@ -353,8 +353,8 @@ void draw(QPainter &painter, const VectorDocument &document, const Options &opti
 
 QImage render(const VectorDocument &document, double scale, bool transparent)
 {
-    // Several artboards: render the first one alone, moved to the origin.
-    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    // Several artboards: render the first one that exports (else the first) alone, moved to the origin.
+    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(std::max(0, document.firstExportedArtboard()));
     const QSize size(std::max(1, int(std::ceil(page.size.width() * scale))),
                      std::max(1, int(std::ceil(page.size.height() * scale))));
     QImage image(size, QImage::Format_RGBA8888_Premultiplied);

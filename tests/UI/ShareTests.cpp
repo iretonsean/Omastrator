@@ -409,6 +409,24 @@ private slots:
         QVERIFY(!ghCalls().contains(QLatin1String("gist")));
     }
 
+    void anArtboardSetNotToExportIsNotSharedButASelectionOnItStillIs()
+    {
+        m_cloud->addRemote(QStringLiteral("work"), QStringLiteral("drive"));
+        Window w;
+        w.box({10, 10, 40, 20});
+        w.session().deselectAll();
+        w.session().setArtboardExported(0, false);
+        w.share().share();
+        QTRY_COMPARE_WITH_TIMEOUT(w.share().notice().kind, ShareController::Notice::Kind::failed, 10'000);
+        QVERIFY(w.share().notice().text.contains(QLatin1String("set not to export")));
+        QVERIFY(w.share().sharedList().empty());
+        QVERIFY(clipboard().isEmpty());
+        // Picking the art is asking for it by hand.
+        w.session().selectAll();
+        QCOMPARE(w.share().share(), QString());
+        QVERIFY(w.waitShared());
+    }
+
     void failuresSayWhatHappenedFirst()
     {
         m_cloud->addRemote(QStringLiteral("work"), QStringLiteral("drive"));

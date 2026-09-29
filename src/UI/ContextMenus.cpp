@@ -74,7 +74,7 @@ void emptyCanvas(QMenu *menu, Menus &menus)
     menu->addSeparator();
     share(menu, &menus, "artboardSize");
     QMenu *artboards = submenu(menu, QStringLiteral("contextArtboards"), QStringLiteral("Artboards"));
-    for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "deleteArtboard", "fitArtboardToArtwork",
+    for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "deleteArtboard", "artboardExported", "fitArtboardToArtwork",
                              "switchArtboardOrientation", "nextArtboard", "previousArtboard"})
         share(artboards, &menus, name);
 }
@@ -88,7 +88,7 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
         return menu;
     // The Artboard tool: its own commands, whatever else is selected.
     if (session.tool() == Tool::artboard) {
-        for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "deleteArtboard", "fitArtboardToArtwork", "switchArtboardOrientation"})
+        for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "deleteArtboard", "artboardExported", "fitArtboardToArtwork", "switchArtboardOrientation"})
             share(menu, &menus, name);
         menu->addSeparator();
         for (const char *name : {"nextArtboard", "previousArtboard"})

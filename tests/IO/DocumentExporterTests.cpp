@@ -1,5 +1,6 @@
 #include "Document/PathOperations.h"
 #include "IO/DocumentExporter.h"
+#include "IO/SvgExporter.h"
 #include <QFile>
 #include <QImageReader>
 #include <QRegularExpression>
@@ -191,6 +192,61 @@ private slots:
         QTemporaryDir dir;
         QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePng(sample(), dir.filePath(QStringLiteral("big.png")), 1000));
         QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePng(sample(), dir.filePath(QStringLiteral("zero.png")), 0));
+    }
+
+    // Two 200 × 100 artboards side by side: the left one red-filled at its origin, the right one
+    // blue-filled, each named by its colour.
+    static VectorDocument twoBoards(bool firstExports, bool secondExports)
+    {
+        VectorDocument document = VectorDocument::blank({200, 100});
+        for (const auto &[x, color] : {std::pair{0.0, QColor(Qt::red)}, std::pair{300.0, QColor(Qt::blue)}}) {
+            VectorObject rect;
+            rect.path = Shapes::rectangle({x, 0, 200, 100});
+            rect.fill = Paint::solid(color);
+            rect.stroke.paint = Paint::none();
+            document.insert(rect, document.layers().front());
+        }
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("Red"), QRectF(0, 0, 200, 100), Qt::white, firstExports},
+                               {QUuid::createUuid(), QStringLiteral("Blue"), QRectF(300, 0, 200, 100), Qt::white, secondExports}});
+        return document;
+    }
+
+    void anUnexportedArtboardIsLeftOutSoTheNextOneExports()
+    {
+        QTemporaryDir dir;
+        const VectorDocument document = twoBoards(false, true);
+        const QString png = dir.filePath(QStringLiteral("out.png"));
+        DocumentExporter::writePng(document, png);
+        QVERIFY(close(QImage(png).pixelColor(50, 50), Qt::blue));
+        const QString svg = dir.filePath(QStringLiteral("out.svg"));
+        SvgExporter::write(document, svg);
+        QFile file(svg);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray text = file.readAll();
+        QVERIFY(text.contains("#0000ff"));
+        QVERIFY(!text.contains("#ff0000"));
+        const QString pdf = dir.filePath(QStringLiteral("out.pdf"));
+        DocumentExporter::writePdf(document, pdf);
+        QVERIFY(QFileInfo(pdf).size() > 0);
+    }
+
+    void withEveryArtboardUnexportedNothingIsWrittenAndTheErrorSaysWhy()
+    {
+        QTemporaryDir dir;
+        const VectorDocument document = twoBoards(false, false);
+        const auto missing = [&](const char *name) { return dir.filePath(QString::fromLatin1(name)); };
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePng(document, missing("a.png")));
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writeJpeg(document, missing("a.jpg")));
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePdf(document, missing("a.pdf")));
+        QVERIFY_THROWS_EXCEPTION(FileError, SvgExporter::write(document, missing("a.svg")));
+        for (const char *name : {"a.png", "a.jpg", "a.pdf", "a.svg"})
+            QVERIFY(!QFileInfo::exists(missing(name)));
+        try {
+            DocumentExporter::exportedPage(document);
+            QFAIL("expected a FileError");
+        } catch (const FileError &error) {
+            QVERIFY(error.message().contains(QLatin1String("set not to export")));
+        }
     }
 
     void unwritablePathIsAFileError()

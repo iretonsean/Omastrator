@@ -83,6 +83,17 @@ private slots:
         ShortcutSettings::shared().reload();
     }
 
+    void artboardMenusOfferExportArtboard()
+    {
+        Window w;
+        const std::unique_ptr<QMenu> menu = w.canvasMenu();
+        QMenu *artboards = submenu(*menu, QStringLiteral("contextArtboards"));
+        QVERIFY(artboards);
+        QVERIFY(names(*artboards).contains("artboardExported"));
+        w.session().selectTool(Tool::artboard);
+        QVERIFY(names(*w.canvasMenu()).contains("artboardExported"));
+    }
+
     void emptyCanvasOffersPasteViewAndGenerate()
     {
         Window w;

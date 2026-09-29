@@ -197,12 +197,30 @@ bool ProjectWorkspace::placeFile(const QString &path)
     return true;
 }
 
+namespace {
+// Why the active artboard can't be exported, or empty when it can.
+QString notExportedReason(const EditorSession &session)
+{
+    const std::optional<VectorDocument> &document = session.document();
+    if (!document)
+        return {};
+    const Artboard board = document->artboard(session.activeArtboard());
+    if (board.exported)
+        return {};
+    return QStringLiteral("“%1” is set not to export. Turn it on in Properties ▸ Document, or pick another artboard.").arg(board.name);
+}
+}
+
 bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format format, const RasterOptions &options)
 {
     EditorSession &session = current().session;
     const std::optional<VectorDocument> &document = session.document();
     if (!document)
         return false;
+    if (const QString reason = notExportedReason(session); !reason.isEmpty()) {
+        showError(QStringLiteral("Couldn’t export “%1”").arg(QFileInfo(path).fileName()), reason);
+        return false;
+    }
     // Several artboards: the active one, not always the first.
     const VectorDocument page = document->artboards.empty() ? *document : document->artboardDocument(session.activeArtboard());
     try {
@@ -339,6 +357,10 @@ void ProjectWorkspace::exportAs(DocumentExporter::Format format)
 {
     if (!current().session.hasDocument())
         return;
+    if (const QString reason = notExportedReason(current().session); !reason.isEmpty()) {
+        showError(QStringLiteral("Couldn’t export"), reason);
+        return;
+    }
     const auto [filter, suffix] = [format]() -> std::pair<QString, QString> {
         switch (format) {
         case DocumentExporter::Format::pdf: return {QStringLiteral("PDF document (*.pdf)"), QStringLiteral("pdf")};

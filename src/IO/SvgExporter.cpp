@@ -1,5 +1,6 @@
 #include "IO/SvgExporter.h"
 #include "Document/StrokeGeometry.h"
+#include "IO/DocumentExporter.h"
 #include "Logging.h"
 #include "Document/FontFeatures.h"
 #include "Document/TextLayout.h"
@@ -795,9 +796,9 @@ private:
 namespace SvgExporter {
 QByteArray serialize(const VectorDocument &document, const Options &options)
 {
-    // Several artboards: this exports the first one alone, so single-artboard
+    // Several artboards: this exports the first one that exports, alone, so single-artboard
     // output (the common case) stays byte-identical to before.
-    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    const VectorDocument page = DocumentExporter::exportedPage(document);
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);

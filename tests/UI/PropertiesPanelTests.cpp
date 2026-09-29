@@ -46,6 +46,7 @@ private slots:
     void transformFieldsMoveAndScaleFromTheTopLeft();
     void rotationTurnsThenReadsZero();
     void withoutSelectionTheArtboardShows();
+    void theDocumentSectionSwitchesAnArtboardSExportOffAndOn();
     void fillKindKeepsTheColour();
     void strokeSettingsApplyToTheSelection();
     void anOpacityDragIsOneStep();
@@ -160,6 +161,29 @@ void PropertiesPanelTests::withoutSelectionTheArtboardShows()
     QCOMPARE(session.document()->size, QSizeF(800, 600));
     session.addPath(Shapes::rectangle(QRectF(0, 0, 10, 10)), QStringLiteral("Box"));
     QVERIFY(!artboard->isVisible() && transform->isVisible());
+}
+
+void PropertiesPanelTests::theDocumentSectionSwitchesAnArtboardSExportOffAndOn()
+{
+    EditorSession session;
+    PropertiesPanel panel(session);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    session.createDocument(QSizeF(400, 300));
+    session.addArtboard(QRectF(500, 0, 400, 300));
+    auto *box = panel.findChild<QCheckBox *>("artboardExported");
+    QVERIFY(box && box->isChecked());
+    box->click();
+    QVERIFY(!session.document()->artboard(1).exported);
+    QVERIFY(session.document()->artboard(0).exported);
+    QCOMPARE(session.undoName(), QString("Don’t Export Artboard"));
+    // The box follows the active artboard.
+    session.setActiveArtboard(0);
+    QVERIFY(box->isChecked());
+    session.setActiveArtboard(1);
+    QVERIFY(!box->isChecked());
+    session.undo();
+    QVERIFY(box->isChecked());
 }
 
 void PropertiesPanelTests::fillKindKeepsTheColour()

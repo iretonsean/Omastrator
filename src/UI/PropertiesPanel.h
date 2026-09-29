@@ -161,6 +161,7 @@ private:
     NumberField *m_artboardHeight = nullptr;
     PaintSwatch *m_background = nullptr;
     QListWidget *m_artboards = nullptr;
+    QCheckBox *m_artboardExported = nullptr;
     QCheckBox *m_grid = nullptr;
     QCheckBox *m_snap = nullptr;
     QCheckBox *m_outline = nullptr;

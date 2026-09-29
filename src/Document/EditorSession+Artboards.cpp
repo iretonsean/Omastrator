@@ -142,6 +142,19 @@ void EditorSession::renameArtboard(int index, const QString &name)
     });
 }
 
+void EditorSession::setArtboardExported(int index, bool exported)
+{
+    if (!m_document || index < 0 || index >= m_document->artboardCount())
+        return;
+    if (m_document->artboard(index).exported == exported)
+        return;
+    edit(exported ? QStringLiteral("Export Artboard") : QStringLiteral("Don’t Export Artboard"), [&](VectorDocument &document) {
+        std::vector<Artboard> boards = document.allArtboards();
+        boards[size_t(index)].exported = exported;
+        document.setArtboards(boards);
+    });
+}
+
 void EditorSession::deleteArtboard(int index)
 {
     if (!m_document || m_document->artboardCount() <= 1 || index < 0 || index >= m_document->artboardCount())

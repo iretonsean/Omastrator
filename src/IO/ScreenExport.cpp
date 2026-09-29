@@ -34,6 +34,8 @@ std::vector<Subject> subjects(const VectorDocument &document, const std::vector<
         if (index < 0 || index >= document.artboardCount())
             continue;
         const Artboard board = document.artboard(index);
+        if (!board.exported)
+            continue;
         result.push_back({sanitize(board.name), document.artboards.empty() ? document : document.artboardDocument(index)});
     }
     for (const QUuid &id : assetIds) {

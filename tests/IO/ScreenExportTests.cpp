@@ -30,6 +30,23 @@ private slots:
         QCOMPARE(ScreenExport::scaleSuffix(3), QStringLiteral("@3x"));
     }
 
+    void anUnexportedArtboardIsSkippedEvenWhenAskedFor()
+    {
+        VectorDocument document = VectorDocument::blank({100, 100});
+        document.insert(rectangle({10, 10, 20, 20}, QStringLiteral("Art")), document.layers().front());
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("Phone"), QRectF(0, 0, 100, 100), Qt::white},
+                               {QUuid::createUuid(), QStringLiteral("Scratch"), QRectF(150, 0, 100, 100), Qt::white, false}});
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.folder = dir.path();
+        settings.formats = {QStringLiteral("png"), QStringLiteral("svg"), QStringLiteral("pdf")};
+        const QStringList written = ScreenExport::run(document, {0, 1}, {}, settings);
+        QCOMPARE(written.size(), 3);
+        for (const QString &path : written)
+            QVERIFY(QFileInfo(path).fileName().startsWith(QLatin1String("Phone")));
+        QVERIFY(!QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Scratch.png"))));
+    }
+
     void twoArtboardsExportToTwoPngsNamedAfterThem()
     {
         VectorDocument document = VectorDocument::blank({100, 100});
