@@ -2,6 +2,7 @@
 #include "Agent/AgentClient.h"
 #include "Agent/AgentProtocol.h"
 #include "Agent/Island.h"
+#include "Agent/WorkspaceClaims.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 
@@ -295,6 +296,10 @@ int runReset(QTextStream &out, QTextStream &err)
     state.expanded = false;
     Island::write(state);
     Island::resetKeys();
+    // Pages' workspaces next: the file names them, so this needs no app either.
+    const WorkspaceClaims::GiveBack workspaces = WorkspaceClaims::giveBackFromFile();
+    if (workspaces.moved > 0)
+        out << "Moved " << workspaces.moved << (workspaces.moved == 1 ? " window" : " windows") << " back to workspace " << workspaces.to << ".\n";
     if (Island::appIsRunning()) {
         try {
             AgentClient::Connection connection;

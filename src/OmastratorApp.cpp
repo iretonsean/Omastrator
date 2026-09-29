@@ -2,6 +2,7 @@
 #include "Agent/AgentProtocol.h"
 #include "Agent/Cli.h"
 #include "Agent/Island.h"
+#include "Agent/WorkspaceClaims.h"
 #include "Logging.h"
 #include "UI/DesignController.h"
 #include "UI/FigmaPasteHandler.h"
@@ -48,6 +49,8 @@ int main(int argc, char **argv)
             // An older Omastrator without show_window: this one opens on its own, as before.
         }
     }
+    // A crash can leave the pages' workspaces claimed; hand them back before this run makes its own.
+    WorkspaceClaims::cleanUp();
     qCInfo(lcApp).noquote() << "Omastrator" << OMASTRATOR_VERSION << "on Qt" << qVersion() << "platform" << QGuiApplication::platformName()
                             << (background ? "in the background" : "");
     // The desktop's colours, retinted when the theme switches.
