@@ -434,7 +434,7 @@ QUrl moved(const QUrl &url, const QUrl &to)
 QUrl BrowserViews::toTabUrl(const QUuid &frame, const QUrl &document) const
 {
     const auto swap = m_swaps.constFind(frame);
-    return swap != m_swaps.constEnd() && sameOrigin(document, swap->production) ? moved(document, swap->dev) : document;
+    return swap != m_swaps.constEnd() && !swap->retired && sameOrigin(document, swap->production) ? moved(document, swap->dev) : document;
 }
 
 QUrl BrowserViews::toDocumentUrl(const QUuid &frame, const QUrl &tab) const
@@ -443,11 +443,25 @@ QUrl BrowserViews::toDocumentUrl(const QUuid &frame, const QUrl &tab) const
     return swap != m_swaps.constEnd() && sameOrigin(tab, swap->dev) ? moved(tab, swap->production) : tab;
 }
 
+void BrowserViews::settleSwap(const QUuid &frame, const QUrl &tab)
+{
+    const auto swap = m_swaps.constFind(frame);
+    if (swap != m_swaps.constEnd() && swap->retired && !sameOrigin(tab, swap->dev))
+        m_swaps.remove(frame);
+}
+
 void BrowserViews::useDevServer(const QUuid &frame, const QUrl &server)
 {
+    const auto entry = m_entries.find(frame);
     if (server.isEmpty()) {
-        if (!m_swaps.remove(frame))
+        const auto swap = m_swaps.find(frame);
+        if (swap == m_swaps.end() || swap->retired)
             return;
+        // Still on the server's page when Live ends: the tab goes back to production, and its events keep the swap until then.
+        if (entry != m_entries.end() && !entry->navigated.isEmpty() && !sameOrigin(entry->navigated, swap->dev))
+            m_swaps.erase(swap);
+        else
+            swap->retired = true;
     } else {
         const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
         if (!object || !object->browser || object->browser->url.isEmpty())
@@ -455,8 +469,11 @@ void BrowserViews::useDevServer(const QUuid &frame, const QUrl &server)
         m_swaps.insert(frame, DevSwap{server, object->browser->url});
     }
     // The next sync sees an address the tab isn't on, and goes there, keeping the scroll.
-    if (const auto found = m_entries.find(frame); found != m_entries.end())
-        found->navigated = QUrl();
+    if (entry != m_entries.end()) {
+        const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
+        if (!object || !object->browser || entry->navigated != toTabUrl(frame, object->browser->url))
+            entry->navigated = QUrl();
+    }
     scheduleReconcile();
     emit frameChanged(frame);
 }

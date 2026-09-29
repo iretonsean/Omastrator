@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QThread>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -278,6 +279,64 @@ private slots:
         other.deleteSelection();
         QTRY_VERIFY_WITH_TIMEOUT(!LiveFrames::of(other)->active(second.frame), 10'000);
         QCOMPARE(LiveFrames::held(served->folder).size(), size_t(1));
+    }
+
+    void browsingToAnotherSiteHoldsTheProjectsEditsAndStartsClean()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        const auto other = site();
+        QVERIFY(served && other);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        startLive(session, hosted.frame, served->folder);
+        editOpacity(session, hosted.frame, QStringLiteral("0.6"));
+        LiveFrames *frames = LiveFrames::of(session);
+        QVERIFY(!frames->snapshot(hosted.frame).mockup);
+
+        session.setBrowserLocation(hosted.frame, page(*other), {});
+        QTRY_VERIFY_WITH_TIMEOUT(frames->snapshot(hosted.frame).mockup, patience);
+        // The first project's edit is held for its Deploy; the new page starts with none and nothing to undo.
+        QTRY_COMPARE_WITH_TIMEOUT(LiveFrames::held(served->folder).size(), size_t(1), 10'000);
+        QVERIFY(frames->snapshot(hosted.frame).edits.empty());
+        QVERIFY(!frames->snapshot(hosted.frame).canUndo);
+        QVERIFY(!LiveFrames::projectInUse(served->folder));
+
+        // Coming back doesn't bring them back onto the page, and stopping doesn't hold them twice.
+        session.setBrowserLocation(hosted.frame, page(*served), {});
+        QTRY_VERIFY_WITH_TIMEOUT(!frames->snapshot(hosted.frame).mockup, patience);
+        QVERIFY(frames->snapshot(hosted.frame).edits.empty());
+        frames->stop(hosted.frame);
+        QCOMPARE(LiveFrames::held(served->folder).size(), size_t(1));
+    }
+
+    void editsClearedByAWriteBackDontComeBackFromASessionThatHasntCaughtUp()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        startLive(session, hosted.frame, served->folder);
+        editOpacity(session, hosted.frame, QStringLiteral("0.6"));
+        LiveFrames *frames = LiveFrames::of(session);
+
+        // The session is busy when the write-back clears: its next snapshot still holds an edit made before the clear ran.
+        frames->run(hosted.frame, [](LiveSession &live) {
+            QThread::msleep(700);
+            emit live.changed();
+            return QString();
+        });
+        size_t most = 0;
+        const QUuid frame = hosted.frame;
+        connect(frames, &LiveFrames::changed, this, [&most, frames, frame] { most = std::max(most, frames->snapshot(frame).edits.size()); });
+        LiveFrames::clearPending(served->folder);
+        QTest::qWait(2500);
+        QCOMPARE(most, size_t(0));
+        QVERIFY(frames->snapshot(hosted.frame).edits.empty());
+        QVERIFY(!frames->snapshot(hosted.frame).canUndo);
+        QVERIFY(LiveFrames::pendingEdits(served->folder).empty());
+        QObject::disconnect(frames, nullptr, this, nullptr);
     }
 
     void closingTheDocumentStopsItsSessions()

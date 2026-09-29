@@ -216,6 +216,8 @@ private:
     // A document address as the tab shows it, and a tab address as the document keeps it (they differ on the dev server).
     QUrl toTabUrl(const QUuid &frame, const QUrl &document) const;
     QUrl toDocumentUrl(const QUuid &frame, const QUrl &tab) const;
+    // A navigation to somewhere other than the dev server ends a retired swap.
+    void settleSwap(const QUuid &frame, const QUrl &tab);
     // The bar menu's items for a site that isn't the user's, and This Is My Site… (BrowserViews+Site.cpp).
     void addSiteActions(const QUuid &frame, QMenu *menu);
     void chooseMySite(const QUuid &frame);
@@ -241,9 +243,12 @@ private:
     QHash<QUuid, QUuid> m_frameOfKey;
     // Frames whose tab is on the dev server: {dev origin, production origin}, apart from the entries so a reopened tab
     // still goes to the server.
+    // A retired swap no longer sends the tab to the server, but still names the server's pages by their production
+    // address until the tab leaves the dev origin, so a dev address never reaches the document.
     struct DevSwap {
         QUrl dev;
         QUrl production;
+        bool retired = false;
     };
     QHash<QUuid, DevSwap> m_swaps;
     QPointer<AgentBridge> m_agent;

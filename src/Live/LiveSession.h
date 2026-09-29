@@ -29,8 +29,10 @@ struct LiveEdit {
     QString classesAfter;
     // The element as it was before its first edit.
     QJsonObject element;
-    // The page it was made on (EditSets::pathOf).
+    // The page it was made on (EditSets::pathOf), and the site (EditSets::originOf), so a frame that
+    // browses on never shows or keeps an edit on another site's page.
     QString path;
+    QString origin;
     QJsonObject toJson() const;
 };
 
@@ -67,6 +69,9 @@ public:
     // Checks the target, then starts in the background. Returns why it can't start, or empty.
     QString start(const Target &target);
     void stop();
+    // Deletes the session once none of its own DevTools waits is on the stack: a wait runs the thread's events,
+    // and a delete from elsewhere would run inside it. Call it on the session's thread, after stop().
+    void deleteWhenIdle();
 
     State state() const { return m_state; }
     QString message() const { return m_message; }
@@ -149,6 +154,8 @@ signals:
     void askRequested(const QString &prompt, const QJsonArray &elements);
     // The page's "Not your site" strip: keep, export, beforeAfter, handoff or toggle, with a set's name.
     void siteRequested(const QString &action, const QJsonObject &params);
+    // A frame left one project for another site: the edits it had made on the first, which its owner keeps.
+    void editsLeft(const QString &project, const std::vector<LiveEdit> &edits);
 
 private:
     void run(Target target);
@@ -161,11 +168,23 @@ private:
     void frameProject();
     // A frame on one of the user's own sites at a remote address runs from the project's dev server (section 2).
     bool needsServer() const;
+    // Joins or starts the project's dev server and carries on from its answer, so the thread is never held.
     void serveProject(int generation);
-    // The dev server for `folder`, joined or started, waited for here without blocking the thread. Returns why not.
+    // The window's own start: the dev server for `folder`, waited for here. Returns why not.
     QString startServer(const QString &folder, int generation);
     void releaseServer(bool wait);
     static QString frameOverlayScript();
+    // Every DevTools wait goes through here, so the session knows it is on the stack.
+    QJsonObject call(CdpConnection &connection, const QString &method, const QJsonObject &params, const QString &sessionId,
+                     QString *error = nullptr, int timeoutMs = 15'000);
+    struct Busy {
+        explicit Busy(LiveSession &session) : session(session) { ++session.m_depth; }
+        ~Busy();
+        LiveSession &session;
+    };
+    // A frame's edits belong to its project or, on a site that isn't the user's, to that site's origin.
+    void leaveProject();
+    bool editIsHere(const LiveEdit &edit) const;
     // The binding and the overlay script, before the page loads.
     QString prepare();
     void fail(const QString &message);
@@ -196,6 +215,12 @@ private:
     QString m_title;
     quint64 m_lease = 0;
     QString m_serverFolder;
+    // The project the held lease serves, so coming back to the dev server finds it again.
+    QString m_serverProject;
+    // The origin the frame's explicit folder was given for.
+    QString m_targetOrigin;
+    int m_depth = 0;
+    bool m_deleteWhenIdle = false;
     DevCommand m_serverCommand;
     QUrl m_serverUrl;
     bool m_serving = false;

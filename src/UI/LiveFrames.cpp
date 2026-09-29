@@ -78,6 +78,11 @@ QString LiveFrames::start(const QUuid &frame, const QString &folder)
     const auto report = [this, frame, session] { publish(frame, capture(*session), session); };
     connect(session, &LiveSession::changed, session, report);
     connect(session, &LiveSession::geometryChanged, session, report);
+    // Edits left behind by a frame that browsed to another project are the owner's to hold, in the order they happened.
+    connect(session, &LiveSession::editsLeft, session, [owner = QPointer<LiveFrames>(this)](const QString &project, const std::vector<LiveEdit> &edits) {
+        if (owner)
+            QMetaObject::invokeMethod(owner.data(), [project, edits] { hold(project, edits); }, Qt::QueuedConnection);
+    });
 
     LiveSession::Target target;
     target.frame = key;
@@ -123,6 +128,12 @@ void LiveFrames::publish(const QUuid &frame, const Snapshot &snapshot, LiveSessi
             return;
         const QUrl before = found->snapshot.serverUrl;
         found->snapshot = snapshot;
+        // Edits that were cleared here are still on the session until its command runs; they mustn't come back meanwhile.
+        if (found->clearing > 0) {
+            found->snapshot.edits.clear();
+            found->snapshot.canUndo = false;
+            found->snapshot.canRedo = false;
+        }
         // The tab moves to the dev server, or back to the production page, before anyone reads the change.
         if (before != snapshot.serverUrl) {
             if (BrowserViews *views = m_session.findChild<BrowserViews *>(QString(), Qt::FindDirectChildrenOnly))
@@ -203,10 +214,11 @@ void LiveFrames::teardown(const QUuid &frame)
             last = capture(*session);
             session->disconnect();
             session->stop();
+            // A DevTools wait of the session's may be on this thread's stack, and it runs every event: the delete waits for it.
+            session->deleteWhenIdle();
         }, Qt::BlockingQueuedConnection);
-        session->deleteLater();
     } else {
-        // The pool's thread is gone, and so is anything it could still say.
+        // The pool's thread is gone, and so is anything it could still say; stop() in the destructor lets its lease go.
         delete session;
     }
     if (!last.mockup && !last.project.isEmpty() && !last.edits.empty())
@@ -255,9 +267,17 @@ void LiveFrames::clearPending(const QString &folder)
             snapshot.edits.clear();
             snapshot.canUndo = false;
             snapshot.canRedo = false;
-            frames->run(it.key(), [](LiveSession &live) {
+            ++it->clearing;
+            const QUuid key = it.key();
+            frames->run(key, [](LiveSession &live) {
                 live.setEdits({});
                 return QString();
+            }, [owner = QPointer<LiveFrames>(frames), key](const QString &) {
+                if (!owner)
+                    return;
+                const auto found = owner->m_frames.find(key);
+                if (found != owner->m_frames.end() && found->clearing > 0)
+                    --found->clearing;
             });
             emit frames->changed(it.key());
         }

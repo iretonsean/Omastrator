@@ -14,6 +14,8 @@
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
+#include <thread>
+#include <vector>
 
 // Phase 5 of docs/OS-SUITE.md without a browser: tokens, dev commands, the registry, the static server.
 namespace {
@@ -215,6 +217,29 @@ private slots:
         QVERIFY(ProjectRegistry::remember(site, roots + "/missing").contains(QLatin1String("isn't a folder")));
         QVERIFY(ProjectRegistry::forget(site).isEmpty());
         QVERIFY(!ProjectRegistry::folderFor(site));
+    }
+
+    void sitesRememberedFromSeveralThreadsAreAllKept()
+    {
+        const QString folder = m_directory.filePath(QStringLiteral("shared-registry-folder"));
+        QDir().mkpath(folder);
+        constexpr int threads = 6;
+        constexpr int each = 12;
+        std::vector<std::thread> workers;
+        for (int t = 0; t < threads; ++t)
+            workers.emplace_back([folder, t] {
+                for (int i = 0; i < each; ++i)
+                    ProjectRegistry::remember(QUrl(QStringLiteral("https://thread%1-site%2.example.test").arg(t).arg(i)), folder);
+            });
+        for (std::thread &worker : workers)
+            worker.join();
+        // Each remember is a read, a change and a write: two at once would lose one of the changes.
+        int found = 0;
+        for (int t = 0; t < threads; ++t)
+            for (int i = 0; i < each; ++i)
+                if (ProjectRegistry::folderFor(QUrl(QStringLiteral("https://thread%1-site%2.example.test").arg(t).arg(i))))
+                    ++found;
+        QCOMPARE(found, threads * each);
     }
 
     void localhostPortsNameTheirFolder()

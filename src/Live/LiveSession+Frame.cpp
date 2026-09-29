@@ -47,7 +47,7 @@ void LiveSession::attachFrame()
     const int generation = m_generation;
     m_page = Browser::Page{tab.targetId, tab.sessionId};
     QString error;
-    cdp().callAndWait(QStringLiteral("Runtime.enable"), {}, tab.sessionId, &error);
+    call(cdp(), QStringLiteral("Runtime.enable"), {}, tab.sessionId, &error);
     if (generation != m_generation || !m_page)
         return;
     if (!error.isEmpty())
@@ -95,18 +95,32 @@ bool sameOrigin(const QUrl &a, const QUrl &b)
 
 void LiveSession::frameProject()
 {
-    QString folder = m_targetFolder;
+    if (!m_targetFolder.isEmpty() && m_targetOrigin.isEmpty() && isWeb(m_url))
+        m_targetOrigin = EditSets::originOf(m_url);
+    QString folder;
     // On the dev server the address is the server's, which is nobody's to register.
-    const bool served = m_lease && !m_project.isEmpty() && sameOrigin(m_url, m_serverUrl);
-    if (served)
-        folder = m_project;
-    else if (!folder.isEmpty() && isWeb(m_url))
-        ProjectRegistry::remember(m_url, folder);
-    else if (folder.isEmpty() && !m_url.isEmpty())
+    const bool served = m_lease && !m_serverProject.isEmpty() && sameOrigin(m_url, m_serverUrl);
+    // The folder the frame was opened with is for the site it was opened on; browsing to another site looks it up.
+    const bool targeted = !m_targetFolder.isEmpty() && (m_targetOrigin.isEmpty() || (isWeb(m_url) && EditSets::originOf(m_url) == m_targetOrigin));
+    if (served) {
+        folder = m_serverProject;
+    } else if (targeted) {
+        folder = m_targetFolder;
+        if (isWeb(m_url))
+            ProjectRegistry::remember(m_url, folder);
+    } else if (isWeb(m_url)) {
         folder = ProjectRegistry::folderFor(m_url).value_or(QString());
+    } else {
+        folder = m_project;
+    }
     const QString project = folder.isEmpty() ? QString() : QFileInfo(folder).canonicalFilePath();
     const bool moved = project != m_project;
+    if (moved)
+        leaveProject();
     m_project = project;
+    // A dev server for the project the frame has left is let go; the new one starts below.
+    if (m_lease && !served && project != m_serverProject)
+        releaseServer(false);
     if (m_serving) {
         if (moved)
             emit changed();
@@ -126,6 +140,17 @@ void LiveSession::frameProject()
         emit changed();
 }
 
+// The frame is about to show another project or a site that isn't the user's. What it had edited on the project goes to
+// its owner, who holds it for Deploy; a mock-up's edits that weren't kept are left behind, and so are the undo steps.
+void LiveSession::leaveProject()
+{
+    if (!m_project.isEmpty() && !m_edits.empty())
+        emit editsLeft(m_project, m_edits);
+    m_edits.clear();
+    m_undo.clear();
+    m_redo.clear();
+}
+
 bool LiveSession::needsServer() const
 {
     return m_pool && !m_serving && !m_lease && !m_project.isEmpty() && isWeb(m_url) && !isLoopback(m_url);
@@ -137,15 +162,37 @@ void LiveSession::serveProject(int generation)
         m_serving = false;
         return;
     }
-    setState(State::starting, QStringLiteral("Starting the project…"));
-    const QString failure = startServer(m_project, generation);
-    m_serving = false;
-    if (generation != m_generation)
+    const QString folder = m_project;
+    if (folder.isEmpty()) {
+        m_serving = false;
         return;
-    if (!failure.isEmpty())
-        return fail(QStringLiteral("Couldn't start the project: %1").arg(failure.section(QLatin1Char('\n'), 0, 0).trimmed()));
-    // The frame's tab loads the dev server next; the overlay comes with that page.
-    setState(State::running);
+    }
+    setState(State::starting, QStringLiteral("Starting the project…"));
+    m_serverFolder = DevServers::keyFor(folder);
+    m_serverProject = folder;
+    // Carries on from the answer instead of waiting for it: this is the pool's thread, and it has every tab to serve.
+    m_lease = DevServers::shared().acquire(folder, this, [this, generation, folder](const DevServers::Result &result) {
+        if (generation != m_generation)
+            return;
+        m_serving = false;
+        if (!result.error.isEmpty()) {
+            m_lease = 0;
+            m_serverProject.clear();
+            return fail(QStringLiteral("Couldn't start the project: %1").arg(result.error.section(QLatin1Char('\n'), 0, 0).trimmed()));
+        }
+        if (m_project != folder) {
+            // The frame went to another site while the server started.
+            releaseServer(false);
+            frameProject();
+            if (!m_serving)
+                setState(State::running, isMockup() ? QStringLiteral("Not your site: changes stay on this machine.") : QString());
+            return;
+        }
+        m_serverUrl = result.url;
+        m_serverCommand = result.command;
+        // The frame's tab loads the dev server next; the overlay comes with that page.
+        setState(State::running);
+    });
 }
 
 void LiveSession::tabGone()
@@ -168,7 +215,7 @@ void LiveSession::leaveFrame()
     if (m_page && m_pool->cdp()) {
         CdpConnection &pool = *m_pool->cdp();
         // Short waits: leaving never hangs on a browser that has stopped answering.
-        pool.callAndWait(QStringLiteral("Runtime.evaluate"), {{"expression", "window.__oma && window.__oma.leave()"}}, m_page->sessionId, nullptr, 2000);
+        call(pool, QStringLiteral("Runtime.evaluate"), {{"expression", "window.__oma && window.__oma.leave()"}}, m_page->sessionId, nullptr, 2000);
         if (!m_scriptId.isEmpty())
             pool.call(QStringLiteral("Page.removeScriptToEvaluateOnNewDocument"), {{"identifier", m_scriptId}}, m_page->sessionId);
     }

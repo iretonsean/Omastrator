@@ -98,6 +98,30 @@ LiveSession::~LiveSession()
     stop();
 }
 
+LiveSession::Busy::~Busy()
+{
+    if (--session.m_depth == 0 && session.m_deleteWhenIdle) {
+        session.m_deleteWhenIdle = false;
+        // From the session's own thread, so the delete waits for the loop it was asked in, not for a nested one.
+        session.deleteLater();
+    }
+}
+
+void LiveSession::deleteWhenIdle()
+{
+    if (m_depth == 0)
+        deleteLater();
+    else
+        m_deleteWhenIdle = true;
+}
+
+QJsonObject LiveSession::call(CdpConnection &connection, const QString &method, const QJsonObject &params, const QString &sessionId,
+                              QString *error, int timeoutMs)
+{
+    Busy busy(*this);
+    return connection.callAndWait(method, params, sessionId, error, timeoutMs);
+}
+
 QString LiveSession::overlayScript()
 {
     return QString::fromUtf8(OmastratorLive::overlay);
@@ -126,6 +150,8 @@ QString LiveSession::start(const Target &target)
         m_pool = target.pool;
         m_frame = target.frame;
         m_targetFolder = target.folder;
+        m_targetOrigin.clear();
+        m_project.clear();
         setState(State::starting, QStringLiteral("Waiting for the page…"));
         const int generation = m_generation;
         QTimer::singleShot(0, this, [this, target, generation] {
@@ -269,7 +295,7 @@ void LiveSession::runInTab(const Target &target)
     auto cancelled = [&] { return generation != m_generation; };
     m_inTab = true;
     QString error;
-    const QJsonObject attached = cdp().callAndWait(QStringLiteral("Omastrator.attach"), {{"tabId", target.tab}}, {}, &error);
+    const QJsonObject attached = call(cdp(), QStringLiteral("Omastrator.attach"), {{"tabId", target.tab}}, {}, &error);
     if (cancelled())
         return;
     if (!error.isEmpty())
@@ -278,7 +304,7 @@ void LiveSession::runInTab(const Target &target)
     m_url = QUrl(attached["url"].toString());
     m_title = attached["title"].toString();
     for (const char *domain : {"Page.enable", "Runtime.enable"}) {
-        cdp().callAndWait(QLatin1String(domain), {}, m_page->sessionId, &error);
+        call(cdp(), QLatin1String(domain), {}, m_page->sessionId, &error);
         if (cancelled())
             return;
         if (!error.isEmpty())
@@ -310,7 +336,7 @@ void LiveSession::leaveTab()
         return;
     if (m_page && m_link && m_link->isConnected()) {
         // Short waits: leaving never hangs on a browser that has stopped answering.
-        cdp().callAndWait(QStringLiteral("Runtime.evaluate"), {{"expression", "window.__oma && window.__oma.leave()"}}, m_page->sessionId, nullptr, 2000);
+        call(cdp(), QStringLiteral("Runtime.evaluate"), {{"expression", "window.__oma && window.__oma.leave()"}}, m_page->sessionId, nullptr, 2000);
         cdp().call(QStringLiteral("Omastrator.detach"), {{"sessionId", m_page->sessionId}}, {});
     }
     m_inTab = false;
@@ -321,10 +347,10 @@ QString LiveSession::prepare()
 {
     QString error;
     CdpConnection &cdp = this->cdp();
-    cdp.callAndWait(QStringLiteral("Runtime.addBinding"), {{"name", "omastratorSend"}}, m_page->sessionId, &error);
+    call(cdp, QStringLiteral("Runtime.addBinding"), {{"name", "omastratorSend"}}, m_page->sessionId, &error);
     if (error.isEmpty()) {
-        const QJsonObject added = cdp.callAndWait(QStringLiteral("Page.addScriptToEvaluateOnNewDocument"),
-                                                  {{"source", m_pool ? frameOverlayScript() : overlayScript()}}, m_page->sessionId, &error);
+        const QJsonObject added = call(cdp, QStringLiteral("Page.addScriptToEvaluateOnNewDocument"),
+                                       {{"source", m_pool ? frameOverlayScript() : overlayScript()}}, m_page->sessionId, &error);
         m_scriptId = added["identifier"].toString();
     }
     return error.isEmpty() ? QString() : QStringLiteral("Couldn't prepare the page: %1").arg(error);
@@ -332,11 +358,13 @@ QString LiveSession::prepare()
 
 void LiveSession::fail(const QString &message)
 {
+    // Read before leaveFrame() lets go of the pool: a frame's thread is the pool's, and it mustn't wait for a server to stop.
+    const bool framed = !m_frame.isNull();
     leaveTab();
     leaveFrame();
-    if (!m_pool)
+    if (!framed)
         m_browser.stop();
-    releaseServer(!m_pool);
+    releaseServer(!framed);
     m_page.reset();
     setState(State::failed, message);
 }
@@ -344,6 +372,7 @@ void LiveSession::fail(const QString &message)
 void LiveSession::stop()
 {
     ++m_generation;
+    m_serving = false;
     leaveTab();
     leaveFrame();
     m_page.reset();
@@ -377,7 +406,10 @@ QString LiveSession::startServer(const QString &folder, int generation)
         finished = true;
         loop.quit();
     });
-    loop.exec();
+    {
+        Busy busy(*this);
+        loop.exec();
+    }
     if (!finished)
         return QStringLiteral("Live was stopped.");
     if (!got.error.isEmpty()) {
@@ -395,6 +427,7 @@ void LiveSession::releaseServer(bool wait)
         DevServers::shared().release(m_lease, wait);
     m_lease = 0;
     m_serverUrl.clear();
+    m_serverProject.clear();
 }
 
 void LiveSession::setState(State state, const QString &message)
@@ -435,9 +468,9 @@ QJsonValue LiveSession::evaluate(const QString &expression, QString *error)
         return {};
     }
     QString failure;
-    const QJsonObject result = cdp().callAndWait(QStringLiteral("Runtime.evaluate"),
-                                                           {{"expression", expression}, {"returnByValue", true}, {"awaitPromise", true}},
-                                                           m_page->sessionId, &failure);
+    const QJsonObject result = call(cdp(), QStringLiteral("Runtime.evaluate"),
+                                    {{"expression", expression}, {"returnByValue", true}, {"awaitPromise", true}},
+                                    m_page->sessionId, &failure);
     if (failure.isEmpty() && result.contains("exceptionDetails"))
         failure = result["exceptionDetails"].toObject()["exception"].toObject()["description"].toString();
     if (error)
@@ -566,6 +599,7 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
     edit.classesAfter = after["classes"].toString();
     edit.element = element;
     edit.path = element["path"].toString(EditSets::pathOf(m_url));
+    edit.origin = EditSets::originOf(m_url);
     const bool isText = resolution.property == QLatin1String("text");
     UndoStep step;
     step.selector = selector;
@@ -584,7 +618,7 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
     };
     // A second change to the same thing keeps the first one's "before".
     for (LiveEdit &existing : m_edits) {
-        if (existing.selector == selector && existing.property == edit.property) {
+        if (existing.selector == selector && existing.property == edit.property && existing.origin == edit.origin) {
             edit.before = existing.before;
             edit.classesBefore = existing.classesBefore;
             edit.element = existing.element;
@@ -673,8 +707,9 @@ QString LiveSession::undoStep()
     if (!put)
         return QStringLiteral("That element is gone from the page.");
     m_undo.pop_back();
-    const auto found = std::find_if(m_edits.begin(), m_edits.end(),
-                                    [&](const LiveEdit &each) { return each.selector == step.selector && each.property == step.property; });
+    const auto found = std::find_if(m_edits.begin(), m_edits.end(), [&](const LiveEdit &each) {
+        return each.selector == step.selector && each.property == step.property && each.origin == step.made.origin;
+    });
     if (found != m_edits.end()) {
         if (step.replaced)
             *found = *step.replaced;
@@ -702,8 +737,9 @@ QString LiveSession::redoStep()
     if (!put)
         return QStringLiteral("That element is gone from the page.");
     m_redo.pop_back();
-    const auto found = std::find_if(m_edits.begin(), m_edits.end(),
-                                    [&](const LiveEdit &each) { return each.selector == step.selector && each.property == step.property; });
+    const auto found = std::find_if(m_edits.begin(), m_edits.end(), [&](const LiveEdit &each) {
+        return each.selector == step.selector && each.property == step.property && each.origin == step.made.origin;
+    });
     if (found != m_edits.end())
         *found = step.made;
     else
@@ -790,7 +826,7 @@ QString LiveSession::screenshot(const QString &path, const QString &selector)
         params["captureBeyondViewport"] = true;
     }
     QString error;
-    const QJsonObject shot = cdp().callAndWait(QStringLiteral("Page.captureScreenshot"), params, m_page->sessionId, &error);
+    const QJsonObject shot = call(cdp(), QStringLiteral("Page.captureScreenshot"), params, m_page->sessionId, &error);
     if (!error.isEmpty())
         return QStringLiteral("Couldn't take a screenshot of the page: %1").arg(error);
     QFile file(path);
@@ -837,8 +873,14 @@ void LiveSession::describeSite()
     QJsonArray sets;
     for (const EditSets::Set &set : editSets())
         sets.append(set.summary());
-    const QJsonObject site{{"origin", origin()}, {"sets", sets}, {"pending", int(m_edits.size())}, {"suggested", EditSets::suggestedName(origin())}};
+    const int pending = int(std::count_if(m_edits.begin(), m_edits.end(), [&](const LiveEdit &edit) { return editIsHere(edit); }));
+    const QJsonObject site{{"origin", origin()}, {"sets", sets}, {"pending", pending}, {"suggested", EditSets::suggestedName(origin())}};
     evaluate(QStringLiteral("window.__oma && window.__oma.setSite(%1)").arg(json(site)));
+}
+
+bool LiveSession::editIsHere(const LiveEdit &edit) const
+{
+    return !isMockup() || edit.origin.isEmpty() || edit.origin == origin();
 }
 
 QString LiveSession::origin() const
@@ -863,7 +905,7 @@ std::vector<EditSets::Edit> LiveSession::editsShown(const QString &name) const
     // The sets belong to a site that isn't the user's.
     std::vector<EditSets::Edit> edits = isMockup() ? EditSets::active(origin(), path) : std::vector<EditSets::Edit>{};
     for (const LiveEdit &edit : m_edits)
-        if (edit.path.isEmpty() || edit.path == path)
+        if ((edit.path.isEmpty() || edit.path == path) && editIsHere(edit))
             edits.push_back(EditSets::Edit::fromLive(edit));
     return edits;
 }
@@ -872,18 +914,20 @@ QString LiveSession::keepEdits(const QString &name, QString *kept)
 {
     if (!isMockup())
         return QStringLiteral("This is your site: its edits go to the code with Deploy.");
-    if (m_edits.empty())
-        return QStringLiteral("There are no edits on this page to keep.");
-    const QString chosen = name.trimmed().isEmpty() ? EditSets::suggestedName(origin()) : name.trimmed();
+    // A frame that browsed on may hold edits made on other sites; only this one's are kept here.
     std::vector<EditSets::Edit> edits;
     for (const LiveEdit &edit : m_edits)
-        edits.push_back(EditSets::Edit::fromLive(edit));
+        if (editIsHere(edit))
+            edits.push_back(EditSets::Edit::fromLive(edit));
+    if (edits.empty())
+        return QStringLiteral("There are no edits on this page to keep.");
+    const QString chosen = name.trimmed().isEmpty() ? EditSets::suggestedName(origin()) : name.trimmed();
     if (const QString failure = EditSets::keep(origin(), chosen, edits); !failure.isEmpty())
         return failure;
     if (kept)
         *kept = chosen;
     // They're in the set now, and stay on the page.
-    m_edits.clear();
+    std::erase_if(m_edits, [&](const LiveEdit &edit) { return editIsHere(edit); });
     m_undo.clear();
     m_redo.clear();
     emit changed();

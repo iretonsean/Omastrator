@@ -1,5 +1,6 @@
 #include "Canvas/EditorCanvas.h"
 #include "Document/EditorSession.h"
+#include "Live/DevServers.h"
 #include "Live/Registry.h"
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
@@ -10,6 +11,7 @@
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QElapsedTimer>
 #include <QTemporaryDir>
 #include <QTest>
 #include <atomic>
@@ -173,11 +175,90 @@ private slots:
         QCOMPARE(session.document()->find(hosted.frame)->browser->url, production.url());
         QVERIFY(host->bar(hosted.frame).dev);
         QVERIFY(host->bar(hosted.frame).devTip.contains(frames->snapshot(hosted.frame).serverUrl.host()));
+        QCOMPARE(DevServers::shared().holders(folder), 1);
 
         frames->stop(hosted.frame);
+        QCOMPARE(DevServers::shared().holders(folder), 0);
         QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("production"), patience);
         QVERIFY(!host->bar(hosted.frame).dev);
         QCOMPARE(session.document()->find(hosted.frame)->browser->url, production.url());
+    }
+
+    void everyWayALiveEndsLetsItsDevServerGo()
+    {
+        NEEDS_CHROMIUM;
+        Production production;
+        QVERIFY(production.listen());
+        const QString folder = project();
+        QVERIFY(ProjectRegistry::remember(production.url(), folder).isEmpty());
+
+        const auto served = [&](EditorSession &session, Hosted &hosted) {
+            QTRY_VERIFY_WITH_TIMEOUT(!BrowserViews::of(session)->poolKey(hosted.frame).isNull(), patience);
+            QVERIFY2(BrowserViews::of(session)->beginEditPage(hosted.frame).isEmpty(), "Edit Page must start");
+            QTRY_COMPARE_WITH_TIMEOUT(LiveFrames::of(session)->snapshot(hosted.frame).state, LiveSession::State::running, patience);
+            QTRY_COMPARE_WITH_TIMEOUT(DevServers::shared().holders(folder), 1, patience);
+        };
+        {
+            // Reset.
+            EditorSession session;
+            Hosted hosted(session, production.url());
+            served(session, hosted);
+            BrowserViews::resetAll();
+            QCOMPARE(DevServers::shared().holders(folder), 0);
+        }
+        {
+            // Deleting the frame.
+            EditorSession session;
+            Hosted hosted(session, production.url());
+            served(session, hosted);
+            session.select({hosted.frame});
+            session.deleteSelection();
+            QTRY_COMPARE_WITH_TIMEOUT(DevServers::shared().holders(folder), 0, 10'000);
+        }
+        {
+            // Closing the document.
+            auto session = std::make_unique<EditorSession>();
+            auto hosted = std::make_unique<Hosted>(*session, production.url());
+            served(*session, *hosted);
+            hosted.reset();
+            session.reset();
+            QCOMPARE(DevServers::shared().holders(folder), 0);
+        }
+    }
+
+    void stoppingAFrameWhileItsDevServerStartsIsQuickAndLeavesNothingBehind()
+    {
+        NEEDS_CHROMIUM;
+        Production production;
+        QVERIFY(production.listen());
+        const QString folder = project(QStringLiteral("sleep 6; echo it came up late; exit 3"));
+        QVERIFY(ProjectRegistry::remember(production.url(), folder).isEmpty());
+
+        EditorSession session;
+        Hosted hosted(session, production.url());
+        BrowserViewHost *host = BrowserViews::of(session);
+        LiveFrames *frames = LiveFrames::of(session);
+        QTRY_VERIFY_WITH_TIMEOUT(!BrowserViews::of(session)->poolKey(hosted.frame).isNull(), patience);
+        QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("production"), patience);
+        QVERIFY2(host->beginEditPage(hosted.frame).isEmpty(), "Edit Page must start");
+        QTRY_VERIFY_WITH_TIMEOUT(frames->snapshot(hosted.frame).message.contains(QLatin1String("Starting the project")), patience);
+        QCOMPARE(DevServers::shared().holders(folder), 1);
+
+        // The pool's thread isn't held by the wait: other work on it goes on meanwhile.
+        bool answered = false;
+        frames->run(hosted.frame, [](LiveSession &) { return QString(); }, [&answered](const QString &) { answered = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(answered, 2000);
+
+        QElapsedTimer clock;
+        clock.start();
+        frames->stop(hosted.frame);
+        QVERIFY2(clock.elapsed() < 3000, "Stopping mustn't wait for the server");
+        QCOMPARE(DevServers::shared().holders(folder), 0);
+        QVERIFY(!frames->active(hosted.frame));
+        // The session went with it: nothing of it is left to answer when the server would have failed.
+        QTest::qWait(7000);
+        QCOMPARE(where(session, hosted.frame), QStringLiteral("production"));
+        QCOMPARE(DevServers::shared().holders(folder), 0);
     }
 
     void aSiteThatIsntYoursStaysOnItsOwnServer()

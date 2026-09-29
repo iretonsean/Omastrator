@@ -86,6 +86,8 @@ private:
         // Lives on the pool's thread; only touched there once started.
         LiveSession *session = nullptr;
         Snapshot snapshot;
+        // clearPending commands the session hasn't run yet: until they have, its snapshots show no edits.
+        int clearing = 0;
     };
 
     void publish(const QUuid &frame, const Snapshot &snapshot, LiveSession *from);

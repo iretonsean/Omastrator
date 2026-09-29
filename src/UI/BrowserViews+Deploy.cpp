@@ -109,7 +109,7 @@ void BrowserViews::fillDeploy(const QUuid &frame, Bar &bar) const
         return;
     }
     // Something to send: edits still pending, or a write-back made since this project last deployed.
-    bool pending = !LiveFrames::pendingEdits(project).empty();
+    bool pending = !m_agent->pendingEdits(project).empty();
     const qint64 deployed = m_deployedAt.value(project, 0);
     for (const WriteBack::Review &review : m_agent->liveReviews()) {
         if (pending)

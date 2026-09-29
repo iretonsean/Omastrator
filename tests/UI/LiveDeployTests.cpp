@@ -273,6 +273,32 @@ private slots:
         QVERIFY(!views->bar(frames[0]).deployBusy && !views->bar(frames[0]).deployFailed);
     }
 
+    void theIslandsDeployWritesBackOnlyWhatTheWindowEditedNotAFramesHeldEdits()
+    {
+        const QString site = repository(true, QStringLiteral("true"));
+        Deploy::saveSettings(site, {true, false});
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        bridge.useProject(site);
+        LiveFrames::hold(site, {headline(QStringLiteral("Goodbye"))});
+
+        // No folder is the island's call: the Live window has no edits here, so nothing is written, as before frames had Live.
+        AgentBridge::DeployRequest request;
+        request.deploy = false;
+        QVERIFY(bridge.liveDeploy(request).isEmpty());
+        QVERIFY(finished(bridge));
+        QVERIFY(!read(site + "/index.html").contains("Goodbye"));
+        QCOMPARE(LiveFrames::held(site).size(), size_t(1));
+
+        // The frame's own Save names its folder, and writes everything pending for it.
+        QVERIFY(bridge.liveSave(site).isEmpty());
+        QVERIFY(finished(bridge));
+        QVERIFY(read(site + "/index.html").contains("Goodbye"));
+        QVERIFY(LiveFrames::held(site).empty());
+    }
+
     void saveFromAFrameCommitsAndPushesWithoutDeploying()
     {
         const QString site = repository(true, QStringLiteral("echo deployed > \"$ENV_DUMP\""));

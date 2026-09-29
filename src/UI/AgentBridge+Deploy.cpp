@@ -85,7 +85,9 @@ void AgentBridge::wireDeploy()
 
 QString AgentBridge::deployProject()
 {
-    // A selected Browser View that runs Live on the user's own site is the page being worked on.
+    // The Live window's project wins while it runs, as it did before frames had Live; then the selected Browser View.
+    if (m_live.state() == LiveSession::State::running && !m_live.project().isEmpty())
+        return canonical(m_live.project());
     if (const QString framed = LiveFrames::selectedProject(session()); !framed.isEmpty())
         return framed;
     return m_live.project().isEmpty() ? m_lastProject : canonical(m_live.project());
@@ -187,9 +189,14 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     for (const auto &[id, work] : m_liveJobs)
         if (canonical(work.project) == folder)
             m_pipeline.waitingFor << id;
-    if (!pendingEdits(folder).empty()) {
+    // The island (no folder) writes back only what the window edited, as before; a frame's action names its folder
+    // and writes everything pending for it, the held edits included.
+    const bool fromIsland = request.folder.isEmpty();
+    const bool writeBack = fromIsland ? m_live.state() == LiveSession::State::running && canonical(m_live.project()) == folder && !m_live.edits().empty()
+                                      : !pendingEdits(folder).empty();
+    if (writeBack) {
         QString agentRequest;
-        if (const QString failure = liveWriteBack(&agentRequest, folder); !failure.isEmpty()) {
+        if (const QString failure = liveWriteBack(&agentRequest, fromIsland ? QString() : folder); !failure.isEmpty()) {
             if (m_pipeline.active)
                 pipelineFailed(failure);
             return failure;
