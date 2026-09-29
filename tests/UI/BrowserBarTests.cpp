@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QLineEdit>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -106,6 +107,12 @@ private:
     QTemporaryDir m_directory;
 
 private slots:
+    // The profile holds are process-wide: one test's failure must not leave them set for the next.
+    void init()
+    {
+        BrowserViews::setSignInWindow(false);
+        BrowserViews::setLiveOpen(false);
+    }
     // Before any EditorSession: QSettings caches its paths on first use, so a later change would reach the real config.
     void initTestCase()
     {
@@ -492,7 +499,10 @@ private slots:
         window.start(QStringLiteral("sh"), {QStringLiteral("-c"), QStringLiteral("sleep 30; true"), QStringLiteral("--user-data-dir=") + options.profile});
         QVERIFY(window.waitForStarted());
         QVERIFY(QFile::link(QStringLiteral("host-%1").arg(window.processId()), lock));
-        QVERIFY(BrowserViews::adoptSignInWindow());
+        QFile cmdline(QStringLiteral("/proc/%1/cmdline").arg(window.processId()));
+        const QByteArray seen = cmdline.open(QIODevice::ReadOnly) ? cmdline.readAll().replace('\0', ' ') : QByteArray("(unreadable)");
+        QVERIFY2(BrowserViews::adoptSignInWindow(),
+                 qPrintable(QStringLiteral("lock %1, cmdline %2").arg(QFile::symLinkTarget(lock), QString::fromLocal8Bit(seen))));
         QVERIFY(BrowserViews::isSigningIn());
         window.kill();
         window.waitForFinished();
@@ -501,6 +511,21 @@ private slots:
 
     void liveAndTheSignInWindowEachHoldTheProfile()
     {
+        // The holds are what's tested, not Chromium: a stand-in keeps "not installed" from winning.
+        const QString script = QDir(m_directory.path()).filePath(QStringLiteral("chromium-idle"));
+        QFile file(script);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("#!/bin/sh\nexit 1\n");
+        file.close();
+        QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        const QByteArray before = qgetenv("OMASTRATOR_CHROMIUM");
+        qputenv("OMASTRATOR_CHROMIUM", script.toUtf8());
+        const auto restore = qScopeGuard([&before] {
+            if (before.isEmpty())
+                qunsetenv("OMASTRATOR_CHROMIUM");
+            else
+                qputenv("OMASTRATOR_CHROMIUM", before);
+        });
         BrowserPool::Options options;
         options.profile = QDir(m_directory.path()).filePath(QStringLiteral("profile"));
         options.cache = Browser::Cache::minimal;
