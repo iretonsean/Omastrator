@@ -242,7 +242,8 @@ private slots:
         w.box({100, 50, 30, 30});
         w.session().select({picked});
         w.view.menus()->action(QStringLiteral("sendToDevice"))->trigger();
-        auto *popover = w.view.findChild<DevicePopover *>(QStringLiteral("deviceSendPopover"));
+        // Tracked: the popover deletes itself once the send ends.
+        QPointer<DevicePopover> popover = w.view.findChild<DevicePopover *>(QStringLiteral("deviceSendPopover"));
         QVERIFY(popover);
         QVERIFY(popover->findChild<QLabel *>(QStringLiteral("deviceScope"))->text().contains(QLatin1String("the selection (1 object)")));
         QVERIFY(w.waitSearch());
@@ -274,7 +275,7 @@ private slots:
         // The temporary file goes when the send ends.
         const QString path = call.mid(call.indexOf(QLatin1String("-- ")) + 3).trimmed();
         QVERIFY(!QFile::exists(path));
-        QVERIFY(!popover->isVisible() || popover->isHidden());
+        QVERIFY(popover.isNull() || popover->isHidden());
 
         // The next time, that device is the one chosen.
         w.view.menus()->action(QStringLiteral("sendToDevice"))->trigger();
