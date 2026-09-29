@@ -7,9 +7,11 @@
 #include "Anywhere/DesktopSource.h"
 #include "IO/ProjectStore.h"
 #include "UI/DesignController.h"
+#include "UI/PageWorkspaces.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "../Agent/FakeAgents.h"
 #include "../Anywhere/FakeDesktop.h"
+#include "FakeHyprlandWorld.h"
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -313,6 +315,50 @@ private slots:
         QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
         QCOMPARE(app.status()["home"].toObject()["key"].toString(), QStringLiteral("window:foot"));
         app.call(QStringLiteral("deselect"));
+    }
+
+    // Docs/WORKSPACES.md: a page's stand-in is a placeholder, so the bar never lives on one, and Reset gives the workspaces back.
+    void aStandInIsNeverTheBarsHomeAndResetTurnsPagesAsWorkspacesOff()
+    {
+        const QByteArray before = qgetenv("OMASTRATOR_HYPRCTL");
+        QTemporaryDir directory;
+        FakeHyprctl ctl(directory.path());
+        qputenv("OMASTRATOR_HYPRCTL", ctl.path().toUtf8());
+        PageWorkspaces::forgetReachability();
+        {
+            App app;
+            app.workspace.createDocument(QSizeF(100, 100));
+            app.window.show();
+            FakeHyprlandWorld world(ctl);
+            const QString editor = world.addEditor(app.window);
+            app.window.pageWorkspaces()->setFocusProbe([] { return false; });
+            PageWorkspaces::setTurnedOn(true);
+            app.workspace.current().session.addPage();
+            world.settle();
+            const QStringList standIns = app.window.pageWorkspaces()->standInAddresses();
+            QCOMPARE(standIns.size(), 1);
+
+            // Focus is on the stand-in (Super+Tab landed there): design mode starts on the editor instead.
+            app.desktop->clients.clear();
+            auto &editorWindow = app.desktop->addWindow(QStringLiteral("io.github.iretonsean.Omastrator"), QRect(0, 0, 800, 600), QCoreApplication::applicationPid());
+            editorWindow.address = editor;
+            editorWindow.focusHistory = 1;
+            auto &standInWindow = app.desktop->addWindow(QStringLiteral("io.github.iretonsean.Omastrator"), QRect(0, 0, 800, 600), QCoreApplication::applicationPid());
+            standInWindow.address = standIns.front();
+            standInWindow.focusHistory = 0;
+            app.call(QStringLiteral("on"));
+            QCOMPARE(app.status()["home"].toObject()["address"].toString(), editor);
+
+            // Reset: the setting goes off (and stays off), the pages give their workspaces back, and it says so.
+            app.call(QStringLiteral("reset"));
+            QVERIFY(!PageWorkspaces::isTurnedOn());
+            QCOMPARE(app.status()["message"].toString(), QStringLiteral("Reset. Pages as Workspaces is off. Turn it on again from View."));
+            world.settle(3);
+            QVERIFY(app.window.pageWorkspaces()->claimedNames().isEmpty());
+            QCOMPARE(app.window.pageWorkspaces()->standInCount(), 0);
+        }
+        qputenv("OMASTRATOR_HYPRCTL", before);
+        PageWorkspaces::forgetReachability();
     }
 
     void theBarFollowsFocusSettingRestoresTheOldBehaviour()

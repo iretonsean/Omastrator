@@ -41,6 +41,8 @@ public:
     // Addresses (with 0x) of the stand-ins that have been placed; design mode never treats them as an app's home.
     QStringList standInAddresses() const;
     int standInCount() const;
+    // Every stand-in of every window, for design mode.
+    static QStringList allStandInAddresses();
     // Asks whether an Omastrator window has focus; tests answer it.
     void setFocusProbe(std::function<bool()> probe) { m_focusProbe = std::move(probe); }
 

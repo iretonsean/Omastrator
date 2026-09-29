@@ -188,6 +188,14 @@ QStringList PageWorkspaces::standInAddresses() const
     return addresses;
 }
 
+QStringList PageWorkspaces::allStandInAddresses()
+{
+    QStringList addresses;
+    for (const PageWorkspaces *instance : instances())
+        addresses << instance->standInAddresses();
+    return addresses;
+}
+
 int PageWorkspaces::standInCount() const
 {
     return int(std::count_if(m_standIns.begin(), m_standIns.end(), [](const StandIn &standIn) { return !standIn.widget.isNull(); }));

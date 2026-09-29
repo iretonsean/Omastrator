@@ -7,6 +7,7 @@
 #include "Document/PathOperations.h"
 #include "UI/AgentBridge.h"
 #include "UI/DesignController.h"
+#include "UI/PageWorkspaces.h"
 #include "UI/ProjectWorkspace.h"
 #include <QDateTime>
 #include <QDir>
@@ -112,10 +113,17 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
             m_overlays.clear(key);
         m_overlays.save();
         m_mode->setOn(false);
+        // The pages' workspaces go back to the desktop, and stay given back until View turns them on again.
+        const bool hadPages = PageWorkspaces::isTurnedOn();
+        PageWorkspaces::setTurnedOn(false);
         Island::resetKeys();
         // Live in the user's own tab takes that page's clicks: the tab goes back to them. Omastrator's own browser stays.
         if (m_bridge.liveSession().inUserBrowser())
             m_bridge.liveSession().stop();
+        if (hadPages) {
+            say(QStringLiteral("Reset. Pages as Workspaces is off. Turn it on again from View."));
+            return {};
+        }
         say(surfaces.isEmpty() ? QStringLiteral("Reset. Design mode is off and nothing is left on the screen.")
                                : QStringLiteral("Reset. Design mode is off and the drawings are cleared; Undo on the island brings them back."));
         return {};
