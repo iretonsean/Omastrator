@@ -187,6 +187,24 @@ private slots:
         QCOMPARE(rig.session.undoNames().size(), steps);
     }
 
+    // Replies to the history and breakpoint questions come on the pool's thread; a document that closes first must not be
+    // reached by them. A use-after-free isn't certain to crash, so this is a guard that runs the race at several delays.
+    void aDocumentClosedWhileAReplyIsInFlightIsLeftAlone()
+    {
+        NEEDS_CHROMIUM;
+        using Action = BrowserViewHost::Action;
+        for (const int delay : {0, 3, 10, 25, 60}) {
+            auto rig = std::make_unique<Rig>(page(QStringLiteral("index.html")));
+            QTRY_VERIFY_WITH_TIMEOUT(rig->state() == BrowserViews::State::live, patience);
+            // Every navigation and load asks Chromium for the history and scans the stylesheets.
+            rig->views()->act(rig->frame, Action::reload);
+            QTest::qWait(delay);
+            rig.reset();
+            QTest::qWait(150);
+        }
+        QVERIFY(BrowserViews::pool());
+    }
+
     void aHiddenCanvasPausesTheFrameAndKeepsItsPicture()
     {
         NEEDS_CHROMIUM;

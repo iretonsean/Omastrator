@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QJsonArray>
+#include <QPointer>
 #include <QProcess>
 #include <QSettings>
 
@@ -66,8 +67,9 @@ void BrowserViews::refreshHistory(const QUuid &frame)
     if (found == m_entries.constEnd())
         return;
     const QUuid key = found->key;
-    // The reply arrives on the pool's thread; the answer is taken to the main one by key.
-    BrowserViews::pool()->call(key, QStringLiteral("Page.getNavigationHistory"), {}, [this, frame](const QJsonObject &result, const QString &error) {
+    // The reply arrives on the pool's thread, possibly after this is gone: it is taken to the main thread through a guard.
+    const QPointer<BrowserViews> guard(this);
+    BrowserViews::pool()->call(key, QStringLiteral("Page.getNavigationHistory"), {}, [guard, frame](const QJsonObject &result, const QString &error) {
         if (!error.isEmpty())
             return;
         const int index = result["currentIndex"].toInt();
@@ -77,9 +79,11 @@ void BrowserViews::refreshHistory(const QUuid &frame)
         int first = 0;
         while (first < count && entries[first]["url"].toString() == QLatin1String("about:blank"))
             ++first;
-        QMetaObject::invokeMethod(this, [this, frame, index, count, first] {
-            const auto entry = m_entries.find(frame);
-            if (entry == m_entries.end())
+        QMetaObject::invokeMethod(qApp, [guard, frame, index, count, first] {
+            if (!guard)
+                return;
+            const auto entry = guard->m_entries.find(frame);
+            if (entry == guard->m_entries.end())
                 return;
             const bool back = index > first;
             const bool forward = index + 1 < count;
@@ -87,8 +91,8 @@ void BrowserViews::refreshHistory(const QUuid &frame)
                 return;
             entry->canGoBack = back;
             entry->canGoForward = forward;
-            emit frameChanged(frame);
-            scheduleRepaint(frame);
+            emit guard->frameChanged(frame);
+            guard->scheduleRepaint(frame);
         }, Qt::QueuedConnection);
     });
 }
