@@ -88,7 +88,7 @@ and the real width disagree.
 Suggested fix: round a Browser View's width and height to whole CSS px when
 the tool (and a resize) commits them.
 
-## 6. [ ] Edit Page fills every selection box after the first with solid blue
+## 6. [x] Edit Page fills every selection box after the first with solid blue (2026-09-29)
 
 **Confirmed, with the fix tested.** In Edit Page, Shift-click a second
 element. Its selection box is drawn filled with the accent colour, and the

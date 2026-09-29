@@ -281,6 +281,30 @@ private slots:
         QVERIFY(zoomed.pixel(moved) != zoomed.pixel(moved + QPoint(0, -6)));
     }
 
+    void everySelectionBoxIsAnOutlineNotJustTheFirst()
+    {
+        Rig rig;
+        rig.enter();
+        BrowserViewHost::EditBoxes bare;
+        BrowserViewHost::EditBoxes two;
+        two.selection << BrowserViewHost::EditBox{QRectF(20, 30, 200, 60), QStringLiteral("h1  200 × 60")}
+                      << BrowserViewHost::EditBox{QRectF(20, 200, 300, 100), QStringLiteral("p  300 × 100")};
+        rig.host.boxes = bare;
+        rig.canvas.update();
+        const QImage empty = rig.canvas.grab().toImage();
+        rig.host.boxes = two;
+        rig.canvas.update();
+        const QImage shown = rig.canvas.grab().toImage();
+        // The middle of each box: the page shows through, as it does without any box.
+        const QPoint first = rig.view({100 + 20 + 100, 200 + 30 + 30});
+        const QPoint second = rig.view({100 + 20 + 150, 200 + 200 + 50});
+        QCOMPARE(shown.pixel(first), empty.pixel(first));
+        QCOMPARE(shown.pixel(second), empty.pixel(second));
+        // The second box is there: its top edge differs from a canvas without it.
+        const QPoint edge = rig.view({100 + 20 + 150, 200 + 200});
+        QVERIFY(shown.pixel(edge) != empty.pixel(edge));
+    }
+
     void theHoverBoxIsRightUnderAHeldPreview()
     {
         Rig rig;
