@@ -142,7 +142,12 @@ UUID strings.
 
 **Files**
 - `open {path}`, `save {path?}`, `export {path, format?, scale?, quality?,
-  transparent?}`
+  transparent?}`. With several artboards, `export` writes the first one that
+  is set to export and names it in the reply (`artboard`); a board set not to
+  export is skipped, and if none exports the call fails. `document_get` lists
+  each artboard with `exported`, so the agent can tell which one that will be.
+  `render` is a view, not an export: it draws the first artboard whether or
+  not it exports.
 - `place {path}`
 
 **Results for the panels** (these are not document edits)

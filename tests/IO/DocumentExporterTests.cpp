@@ -1,5 +1,6 @@
 #include "Document/PathOperations.h"
 #include "IO/DocumentExporter.h"
+#include "IO/PdfImporter.h"
 #include "IO/SvgExporter.h"
 #include <QFile>
 #include <QImageReader>
@@ -194,8 +195,7 @@ private slots:
         QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePng(sample(), dir.filePath(QStringLiteral("zero.png")), 0));
     }
 
-    // Two 200 × 100 artboards side by side: the left one red-filled at its origin, the right one
-    // blue-filled, each named by its colour.
+    // Two artboards side by side, red 200 × 100 and blue 150 × 300, each named by its colour.
     static VectorDocument twoBoards(bool firstExports, bool secondExports)
     {
         VectorDocument document = VectorDocument::blank({200, 100});
@@ -207,7 +207,7 @@ private slots:
             document.insert(rect, document.layers().front());
         }
         document.setArtboards({{QUuid::createUuid(), QStringLiteral("Red"), QRectF(0, 0, 200, 100), Qt::white, firstExports},
-                               {QUuid::createUuid(), QStringLiteral("Blue"), QRectF(300, 0, 200, 100), Qt::white, secondExports}});
+                               {QUuid::createUuid(), QStringLiteral("Blue"), QRectF(300, 0, 150, 300), Qt::white, secondExports}});
         return document;
     }
 
@@ -227,7 +227,9 @@ private slots:
         QVERIFY(!text.contains("#ff0000"));
         const QString pdf = dir.filePath(QStringLiteral("out.pdf"));
         DocumentExporter::writePdf(document, pdf);
-        QVERIFY(QFileInfo(pdf).size() > 0);
+        // The page is the blue board's size, not the first board's.
+        const VectorDocument page = PdfImporter::read(pdf);
+        QVERIFY(qAbs(page.size.width() - 150) < 1 && qAbs(page.size.height() - 300) < 1);
     }
 
     void withEveryArtboardUnexportedNothingIsWrittenAndTheErrorSaysWhy()

@@ -76,6 +76,7 @@ private slots:
     void aBadFileAlertsAndAddsNoTab();
     void placingAddsAGroupOrAnImage();
     void exportsWriteEachFormat();
+    void exportRefusesAnArtboardSetNotToExport();
     void recentFilesAreNewestFirstAndLimited();
 
 private:
@@ -348,6 +349,27 @@ void ProjectWorkspaceTests::exportsWriteEachFormat()
     QCOMPARE(QImage(m_dir->filePath("art.png")).size(), QSize(200, 100));
     QCOMPARE(QImage(m_dir->filePath("art.jpg")).size(), QSize(200, 100));
     QVERIFY(QFile(m_dir->filePath("art.svg")).open(QIODevice::ReadOnly));
+}
+
+void ProjectWorkspaceTests::exportRefusesAnArtboardSetNotToExport()
+{
+    ProjectWorkspace workspace;
+    QString title, message;
+    workspace.errorHandler = [&](const QString &t, const QString &m) { title = t; message = m; };
+    workspace.createDocument(QSizeF(100, 50));
+    EditorSession &session = workspace.current().session;
+    drawBox(session);
+    session.renameArtboard(0, QStringLiteral("Scratch"));
+    session.setArtboardExported(0, false);
+    const QString path = m_dir->filePath("refused.png");
+    QVERIFY(!workspace.exportTo(path, DocumentExporter::Format::png));
+    QVERIFY(!QFileInfo::exists(path));
+    QVERIFY2(message.contains(QStringLiteral("“Scratch” is set not to export")), qPrintable(message));
+    QVERIFY(title.contains(QLatin1String("refused.png")));
+    // Turned back on, the same call writes the file.
+    session.setArtboardExported(0, true);
+    QVERIFY(workspace.exportTo(path, DocumentExporter::Format::png));
+    QVERIFY(QFileInfo::exists(path));
 }
 
 void ProjectWorkspaceTests::recentFilesAreNewestFirstAndLimited()
