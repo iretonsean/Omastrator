@@ -256,6 +256,8 @@ struct LiveRectangle {
 struct Guide {
     Qt::Orientation orientation = Qt::Horizontal;
     double position = 0;
+    // The page it belongs to; null is the first (docs/PAGES.md).
+    QUuid page = QUuid();
     friend bool operator==(const Guide &, const Guide &) = default;
 };
 
@@ -266,9 +268,19 @@ struct Artboard {
     QRectF rect;
     // Its paper; transparent exports leave it out.
     QColor background = Qt::white;
-    // Off keeps it on the canvas but out of every export, share and page list.
+    // The page it sits on; null is the first.
+    QUuid page = QUuid();
+    // Off keeps it on the canvas but out of every export and share.
     bool exported = true;
     friend bool operator==(const Artboard &, const Artboard &) = default;
+};
+
+// A page is its own canvas of layers, artboards and guides (docs/PAGES.md). Its id never changes;
+// its name is unique in the document.
+struct Page {
+    QUuid id = QUuid::createUuid();
+    QString name;
+    friend bool operator==(const Page &, const Page &) = default;
 };
 
 // Select ▸ Same: what an object must share with the one picked.
@@ -348,6 +360,8 @@ struct VectorObject {
     LayerBlendMode blendMode = LayerBlendMode::normal;
     // Layers: the colour of their selection outlines.
     QColor layerColor;
+    // Layers: the page they're on; null is the first. Children are on their layer's page.
+    QUuid page;
 
     // Paths: document coordinates. Text and images: local, placed by `transform`.
     VectorPath path;
@@ -432,6 +446,10 @@ struct VectorDocument {
     std::vector<DesignToken> tokens;
     QStringList tokenModes;
     QString tokenMode;
+    // Pages in order; empty is one implicit page, "Page 1" (docs/PAGES.md).
+    std::vector<Page> pages;
+    // The page shown; null, or one that names no page, is the first. View state, not an undo step.
+    QUuid currentPage;
     // File ▸ Lock Document: read-only until unlocked. Saved in the file; EditorSession enforces it.
     bool locked = false;
 
@@ -444,7 +462,9 @@ struct VectorDocument {
     // Direct children, bottom to top.
     std::vector<QUuid> children(const std::optional<QUuid> &parent) const;
     std::vector<QUuid> descendants(const QUuid &id) const;
+    // The current page's layers; allLayers() is every page's.
     std::vector<QUuid> layers() const;
+    std::vector<QUuid> allLayers() const;
     bool isAncestor(const QUuid &ancestor, const QUuid &of) const;
     // The layer an object sits in (a layer is its own).
     std::optional<QUuid> layerOf(const QUuid &id) const;
@@ -467,16 +487,18 @@ struct VectorDocument {
     std::optional<QUuid> hitTest(QPointF point, double tolerance) const;
     // Every selectable leaf under `point`, topmost first, up to `limit`.
     std::vector<QUuid> hitTestAll(QPointF point, double tolerance, size_t limit = SIZE_MAX) const;
-    // Visible, unlocked leaves that share `attribute` with `like`, `like` included.
+    // Visible, unlocked leaves on the current page that share `attribute` with `like`, `like` included.
     std::vector<QUuid> matching(const QUuid &like, SameAttribute attribute) const;
     std::vector<QUuid> matching(ObjectFilter filter) const;
-    // Inserts above `below` within `parent`, or on top of it.
+    // Inserts above `below` within `parent`, or on top of it. A layer with no page takes the current one.
     void insert(VectorObject object, const QUuid &parent, std::optional<QUuid> above = std::nullopt);
+    // Adds a layer at the top of the current page's stack (or of the whole stack when it has no pages).
+    void appendLayer(VectorObject layer);
     // Removes objects and all their descendants.
     void remove(const std::vector<QUuid> &ids);
     // Moves one object and its subtree under `parent` at child `index`.
     bool move(const QUuid &id, const QUuid &parent, int index);
-    // Moves a layer and its contents to `index` among the layers, bottom-up.
+    // Moves a layer and its contents to `index` among its page's layers, bottom-up.
     bool moveLayer(const QUuid &id, int index);
     // Applies `transform` to an object and its descendants. With Scale Corners off, a live
     // rectangle's radii stay put (clamped to the new rect); on, they scale with it.
@@ -506,12 +528,49 @@ struct VectorDocument {
     // no-op, clearing any stale flow, when nothing wraps or threads.
     void reflowText();
 
+    // Pages (VectorDocument+Pages.cpp) --------------------------------------------
+    // The id of the implicit page a document without `pages` has.
+    static QUuid implicitPageId();
+    // The pages as listed, or the implicit "Page 1".
+    std::vector<Page> allPages() const;
+    int pageCount() const { return pages.empty() ? 1 : int(pages.size()); }
+    QUuid firstPageId() const;
+    // The page shown: `currentPage` when it names one, else the first.
+    QUuid currentPageId() const;
+    // A page tag as it reads: null, or one naming no page, is the first page.
+    QUuid resolvePage(const QUuid &tag) const;
+    // Index among allPages(), -1 for none.
+    int pageIndex(const QUuid &id) const;
+    // The page an object is on (its layer's); null for no such object.
+    QUuid pageOf(const QUuid &id) const;
+    bool isOnCurrentPage(const QUuid &id) const;
+    bool isOnCurrentPage(const Guide &guide) const { return resolvePage(guide.page) == currentPageId(); }
+    std::vector<Guide> guidesOnCurrentPage() const;
+    // The size the viewport centres on: the current page's first artboard (`size` with one page).
+    QSizeF viewSize() const { return artboard(0).rect.size(); }
+    // The layers of one page, bottom to top.
+    std::vector<QUuid> layersOn(const QUuid &page) const;
+    // Blank page names become "Page N" and repeats "Name 2", in order: importers copy names from files that allow both.
+    void repairPageNames();
+    // `base` if no page has it, else `base 2`, `base 3`...
+    QString uniquePageName(const QString &base) const;
+    // Fresh copies of these layers and everything under them, in document order, for Duplicate Page.
+    // Parents and text threads are remapped among the copies; a component copied becomes an
+    // instance of its original, and an instance keeps its main.
+    std::vector<VectorObject> copyLayers(const std::vector<QUuid> &layers) const;
+    // Makes the implicit page and artboard explicit, and stamps every untagged (or stray) layer,
+    // artboard and guide with its page, so reordering pages can't move art. Also fixes `currentPage`.
+    void ensurePages();
+
     // Artboards (VectorDocument+Artboards.cpp) ----------------------------------
-    // The artboards as listed, or the one `size` makes, named "Artboard 1".
+    // The current page's artboards as listed, or the one `size` makes, named "Artboard 1".
+    // Every artboard call below counts and indexes the current page's.
     std::vector<Artboard> allArtboards() const;
-    int artboardCount() const { return artboards.empty() ? 1 : int(artboards.size()); }
+    std::vector<Artboard> artboardsOn(const QUuid &page) const;
+    int artboardCount() const;
     Artboard artboard(int index) const;
-    // Replaces every artboard; the first sets `size` and `background`. Empty leaves one.
+    // Replaces the current page's artboards; the first one listed on the first artboard's
+    // slot sets `size` and `background`. Empty leaves one.
     void setArtboards(std::vector<Artboard> boards);
     // The artboard under `point`, the last listed first; -1 over none.
     int artboardAt(QPointF point) const;
@@ -533,6 +592,7 @@ struct VectorDocument {
     friend bool operator==(const VectorDocument &, const VectorDocument &) = default;
 
 private:
+    Artboard implicitArtboard() const;
     int subtreeEnd(int index) const;
     bool moveUnder(const QUuid &id, const std::optional<QUuid> &parent, int index);
 };

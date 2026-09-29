@@ -34,6 +34,14 @@ VectorDocument VectorDocument::croppedTo(const std::vector<QUuid> &ids) const
             drop.push_back(object.id);
     }
     cropped.remove(drop);
+    // One page: what was kept sat on one, and the rest go.
+    std::erase_if(cropped.guides, [&](const Guide &guide) { return !isOnCurrentPage(guide); });
+    cropped.pages.clear();
+    cropped.currentPage = QUuid();
+    for (VectorObject &object : cropped.objects)
+        object.page = QUuid();
+    for (Guide &guide : cropped.guides)
+        guide.page = QUuid();
     for (const QUuid &layer : cropped.layers())
         cropped.transform(layer, QTransform::fromTranslate(-box.left(), -box.top()), false, false);
     cropped.size = box.size();

@@ -62,8 +62,9 @@ VectorDocument buildDocument(std::unique_ptr<Pdf::Document> document, QStringLis
     std::vector<Artboard> artboards;
     Pdf::Interpreter interpreter(*document, result, warnings);
 
-    constexpr double gap = 40;
-    double xOffset = 0;
+    // A PDF of several pages makes a page each; one page stays the plain document.
+    const bool paged = pages.size() > 1;
+    std::vector<Page> pageList;
     for (int i = 0; i < pages.size(); ++i) {
         const Dict &pageDict = pages[i];
         QRectF box = boxFromArray(toDoubleList(*document, pageDict.value(QStringLiteral("CropBox"))));
@@ -79,14 +80,19 @@ VectorDocument buildDocument(std::unique_ptr<Pdf::Document> document, QStringLis
 
         Artboard artboard;
         artboard.name = QStringLiteral("Page %1").arg(i + 1);
-        artboard.rect = QRectF(QPointF(xOffset, 0), size);
+        artboard.rect = QRectF(QPointF(0, 0), size);
         artboard.background = Qt::white;
+        if (paged) {
+            pageList.push_back(Page{QUuid::createUuid(), artboard.name});
+            artboard.page = pageList.back().id;
+        }
         artboards.push_back(artboard);
 
         VectorObject layer;
         layer.kind = ObjectKind::layer;
         layer.name = artboard.name;
         layer.layerColor = nextLayerColor(i);
+        layer.page = artboard.page;
         const QUuid layerId = layer.id;
         result.objects.push_back(layer);
 
@@ -98,16 +104,20 @@ VectorDocument buildDocument(std::unique_ptr<Pdf::Document> document, QStringLis
             flip *= QTransform(-1, 0, 0, -1, box.width(), box.height());
         else if (rotation == 270)
             flip *= QTransform(0, -1, 1, 0, 0, box.width());
-        const QTransform pageTransform = flip * QTransform::fromTranslate(xOffset, 0);
-
+        
         const Dict resources = document->resolve(pageDict.value(QStringLiteral("Resources"))).toDict();
         const QByteArray content = concatenatedContent(*document, pageDict, warnings);
-        interpreter.runPage(content, resources, pageTransform, artboard.rect, layerId);
+        interpreter.runPage(content, resources, flip, artboard.rect, layerId);
 
-        xOffset += size.width() + gap;
     }
 
-    result.setArtboards(artboards);
+    if (paged) {
+        result.pages = pageList;
+        result.artboards = artboards;
+        result.currentPage = pageList.front().id;
+    } else {
+        result.setArtboards(artboards);
+    }
     if (!artboards.empty()) {
         result.size = artboards.front().rect.size();
         result.background = artboards.front().background;

@@ -73,6 +73,10 @@ bool DocumentHistory::amend(const QString &name, const std::optional<VectorDocum
 {
     if (m_depth != 0 || m_past.empty() || !m_future.empty() || m_past.back().name != name || m_revision != m_past.back().after.revision)
         return false;
+    // A step never absorbs an edit made after the page changed: undo would land on the wrong page.
+    const std::optional<VectorDocument> &last = m_past.back().after.document;
+    if (last && document && last->currentPageId() != document->currentPageId())
+        return false;
     m_revision = QUuid::createUuid();
     m_past.back().after = Snapshot{document, selection, m_revision};
     trim(document);

@@ -163,10 +163,9 @@ void arrange(VectorDocument &document, const std::vector<QUuid> &ids, ArrangeOrd
     }
 }
 
-void align(VectorDocument &document, const std::vector<QUuid> &ids, AlignEdge edge, AlignTarget target)
+void align(VectorDocument &document, const std::vector<QUuid> &ids, AlignEdge edge, AlignTarget target, const QRectF &artboard)
 {
-    const QRectF reference = target == AlignTarget::artboard || ids.size() == 1 ? document.artboard(0).rect
-                                                                                : document.bounds(ids);
+    const QRectF reference = target == AlignTarget::artboard || ids.size() == 1 ? artboard : document.bounds(ids);
     for (const QUuid &id : ids) {
         const QRectF bounds = document.bounds(id);
         QPointF delta;

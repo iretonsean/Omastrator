@@ -75,8 +75,8 @@ void EditorCanvas::State::dragFrame(const QRectF &rect)
         const VectorDocument &document = *session.document();
         std::optional<QUuid> host;
         for (const VectorObject &object : document.objects) {
-            if (object.kind == ObjectKind::frame && document.isEffectivelyVisible(object.id) && !document.isEffectivelyLocked(object.id)
-                && object.path.painterPath().contains(drag->pressDocument))
+            if (object.kind == ObjectKind::frame && document.isOnCurrentPage(object.id) && document.isEffectivelyVisible(object.id)
+                && !document.isEffectivelyLocked(object.id) && object.path.painterPath().contains(drag->pressDocument))
                 host = object.id;
         }
         session.beginInteraction(QStringLiteral("Draw Frame"));

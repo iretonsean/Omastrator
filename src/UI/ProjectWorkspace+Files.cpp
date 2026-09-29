@@ -190,7 +190,7 @@ bool ProjectWorkspace::placeFile(const QString &path)
             session.moveObject(id, parent, -1);
         }
         session.select({groupID});
-        const QPointF middle(session.document()->size.width() / 2, session.document()->size.height() / 2);
+        const QPointF middle = session.document()->artboard(session.activeArtboard()).rect.center();
         const QPointF shift = middle - session.selectionBounds().center();
         session.transformSelection(QTransform::fromTranslate(shift.x(), shift.y()), QStringLiteral("Place"));
         session.endEdit();
@@ -229,7 +229,8 @@ bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format fo
     const VectorDocument page = document->artboards.empty() ? *document : document->artboardDocument(session.activeArtboard());
     try {
         switch (format) {
-        case DocumentExporter::Format::pdf: DocumentExporter::writePdf(page, path); break;
+        // The PDF is the whole document: every artboard on every page.
+        case DocumentExporter::Format::pdf: DocumentExporter::writePdf(*document, path); break;
         case DocumentExporter::Format::png: DocumentExporter::writePng(page, path, options.scale, options.transparent); break;
         case DocumentExporter::Format::jpeg: DocumentExporter::writeJpeg(page, path, options.scale, options.quality); break;
         case DocumentExporter::Format::svg: SvgExporter::write(page, path); break;

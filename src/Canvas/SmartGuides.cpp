@@ -49,7 +49,7 @@ SmartGuides::SmartGuides(const VectorDocument &document, const std::vector<QUuid
         return std::any_of(excluded.begin(), excluded.end(), [&](const QUuid &gone) { return gone == id || document.isAncestor(gone, id); });
     };
     for (const VectorObject &object : document.objects) {
-        if (object.kind == ObjectKind::layer || !document.isEffectivelyVisible(object.id) || isExcluded(object.id))
+        if (object.kind == ObjectKind::layer || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id) || isExcluded(object.id))
             continue;
         // Groups snap by their whole box; their members by their own.
         const QRectF bounds = document.bounds(object.id);

@@ -295,6 +295,9 @@ VectorDocument map(const Tree &tree, QStringList &warnings)
     document.objects.clear();
     Context ctx{tree, document, warnings, {}, {}, tree.imagesByHash};
     std::vector<Artboard> boards;
+    // Several Figma pages become pages, each from the origin; one stays the plain document.
+    const bool paged = tree.pages.size() > 1;
+    std::vector<Page> pageList;
     double x = 0;
     constexpr double gutter = 100;
     for (const Guid &page : tree.pages) {
@@ -303,6 +306,10 @@ VectorDocument map(const Tree &tree, QStringList &warnings)
         layer.kind = ObjectKind::layer;
         layer.name = str(pageNode.fields, "name", QStringLiteral("Page"));
         layer.layerColor = nextLayerColor(int(boards.size()));
+        if (paged) {
+            pageList.push_back(Page{QUuid::createUuid(), layer.name});
+            layer.page = pageList.back().id;
+        }
         document.objects.push_back(layer);
         const QUuid layerId = document.objects.back().id;
         const size_t firstInstance = ctx.pendingInstances.size();
@@ -321,12 +328,22 @@ VectorDocument map(const Tree &tree, QStringList &warnings)
         Artboard board;
         board.name = layer.name;
         board.rect = QRectF(x, 0, box.width(), box.height());
+        if (paged)
+            board.page = pageList.back().id;
         boards.push_back(board);
-        x += box.width() + gutter;
+        if (!paged)
+            x += box.width() + gutter;
     }
     resolveInstances(ctx);
     Components::sync(document);
-    if (!boards.empty()) {
+    if (paged) {
+        document.pages = pageList;
+        document.repairPageNames();
+        document.currentPage = pageList.front().id;
+        document.artboards = boards;
+        document.size = boards.front().rect.size();
+        document.background = boards.front().background;
+    } else if (!boards.empty()) {
         document.size = boards.front().rect.size();
         document.setArtboards(boards);
     } else if (document.layers().empty()) {

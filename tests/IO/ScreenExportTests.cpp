@@ -1,4 +1,5 @@
 #include "Document/PathOperations.h"
+#include "Document/EditorSession.h"
 #include "IO/ScreenExport.h"
 #include <QDir>
 #include <QImageReader>
@@ -35,12 +36,12 @@ private slots:
         VectorDocument document = VectorDocument::blank({100, 100});
         document.insert(rectangle({10, 10, 20, 20}, QStringLiteral("Art")), document.layers().front());
         document.setArtboards({{QUuid::createUuid(), QStringLiteral("Phone"), QRectF(0, 0, 100, 100), Qt::white},
-                               {QUuid::createUuid(), QStringLiteral("Scratch"), QRectF(150, 0, 100, 100), Qt::white, false}});
+                               {QUuid::createUuid(), QStringLiteral("Scratch"), QRectF(150, 0, 100, 100), Qt::white, QUuid(), false}});
         QTemporaryDir dir;
         ScreenExport::Settings settings;
         settings.folder = dir.path();
         settings.formats = {QStringLiteral("png"), QStringLiteral("svg"), QStringLiteral("pdf")};
-        const QStringList written = ScreenExport::run(document, {0, 1}, {}, settings);
+        const QStringList written = ScreenExport::run(document, {document.artboard(0).id, document.artboard(1).id}, {}, settings);
         QCOMPARE(written.size(), 3);
         for (const QString &path : written)
             QVERIFY(QFileInfo(path).fileName().startsWith(QLatin1String("Phone")));
@@ -56,7 +57,7 @@ private slots:
         QTemporaryDir dir;
         ScreenExport::Settings settings;
         settings.folder = dir.path();
-        const QStringList written = ScreenExport::run(document, {0, 1}, {}, settings);
+        const QStringList written = ScreenExport::run(document, {document.artboard(0).id, document.artboard(1).id}, {}, settings);
         QCOMPARE(written.size(), 2);
         QVERIFY(QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Phone.png"))));
         QVERIFY(QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Desktop.png"))));
@@ -95,9 +96,128 @@ private slots:
         settings.scales = {1, 2, 3};
         settings.formats = {QStringLiteral("svg")};
         settings.folder = dir.path();
-        const QStringList written = ScreenExport::run(document, {0}, {}, settings);
+        const QStringList written = ScreenExport::run(document, {document.artboard(0).id}, {}, settings);
         QCOMPARE(written.size(), 1);
         QCOMPARE(QFileInfo(written.front()).fileName(), QStringLiteral("Artboard 1.svg"));
+    }
+
+    void everyPageExportsIntoAFolderOfItsOwn()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        session.addPath(Shapes::rectangle({10, 10, 20, 20}), QStringLiteral("Icon"));
+        const QUuid icon = session.selection().front();
+        session.renameArtboard(0, QStringLiteral("Home"));
+        session.addPage(QStringLiteral("Settings"));
+        session.renameArtboard(0, QStringLiteral("Home"));
+        session.addPath(Shapes::rectangle({30, 30, 20, 20}), QStringLiteral("Gear"));
+        const QUuid gear = session.selection().front();
+        VectorDocument document = *session.document();
+        document.exportAssets = {icon, gear};
+        const std::vector<QUuid> boards = {document.artboardsOn(document.allPages()[0].id).front().id,
+                                           document.artboardsOn(document.allPages()[1].id).front().id};
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.scales = {2};
+        settings.folder = dir.path();
+        // The current page is the second; both pages' artboards and both assets still come out.
+        const QStringList written = ScreenExport::run(document, boards, {icon, gear}, settings);
+        QCOMPARE(written.size(), 4);
+        for (const QString &name : {QStringLiteral("Page 1/Home@2x.png"), QStringLiteral("Settings/Home@2x.png"),
+                                    QStringLiteral("Page 1/Icon@2x.png"), QStringLiteral("Settings/Gear@2x.png")})
+            QVERIFY2(QFileInfo::exists(QDir(dir.path()).filePath(name)), qPrintable(name));
+        // Each artboard carries its own page's art: the icon on one, the gear on the other.
+        const QImage first(QDir(dir.path()).filePath(QStringLiteral("Page 1/Home@2x.png")));
+        const QImage second(QDir(dir.path()).filePath(QStringLiteral("Settings/Home@2x.png")));
+        QVERIFY(first.pixelColor(20, 20) != first.pixelColor(0, 0));
+        QCOMPARE(first.pixelColor(100, 100), first.pixelColor(0, 0));
+        QVERIFY(second.pixelColor(100, 100) != second.pixelColor(0, 0));
+        QCOMPARE(second.pixelColor(20, 20), second.pixelColor(0, 0));
+    }
+
+    void anUnexportedArtboardOnAnotherPageIsSkippedToo()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        session.renameArtboard(0, QStringLiteral("Home"));
+        session.addPage(QStringLiteral("Drafts"));
+        session.renameArtboard(0, QStringLiteral("Sketch"));
+        session.setArtboardExported(0, false);
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        const VectorDocument document = *session.document();
+        const std::vector<QUuid> boards = {document.artboardsOn(document.allPages()[0].id).front().id,
+                                           document.artboardsOn(document.allPages()[1].id).front().id};
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.folder = dir.path();
+        const QStringList written = ScreenExport::run(document, boards, {}, settings);
+        QCOMPARE(written.size(), 1);
+        QVERIFY(QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Page 1/Home.png"))));
+        QVERIFY(!QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Drafts/Sketch.png"))));
+    }
+
+    void aPageNamedDotDotStaysInsideTheExportFolder()
+    {
+        EditorSession session;
+        session.createDocument({40, 40});
+        session.renameArtboard(0, QStringLiteral("Home"));
+        session.renamePage(session.currentPage(), QStringLiteral(".."));
+        session.addPage(QStringLiteral("Other"));
+        session.renameArtboard(0, QStringLiteral("Home"));
+        const VectorDocument document = *session.document();
+        const std::vector<QUuid> boards = {document.artboardsOn(document.allPages()[0].id).front().id,
+                                           document.artboardsOn(document.allPages()[1].id).front().id};
+        QTemporaryDir outer;
+        QVERIFY(QDir(outer.path()).mkdir(QStringLiteral("out")));
+        const QString folder = QDir(outer.path()).filePath(QStringLiteral("out"));
+        ScreenExport::Settings settings;
+        settings.folder = folder;
+        const QStringList written = ScreenExport::run(document, boards, {}, settings);
+        QCOMPARE(written.size(), 2);
+        for (const QString &path : written)
+            QVERIFY2(QFileInfo(path).canonicalFilePath().startsWith(QFileInfo(folder).canonicalFilePath() + '/'), qPrintable(path));
+        QVERIFY(!QFileInfo::exists(QDir(outer.path()).filePath(QStringLiteral("Home.png"))));
+        QVERIFY(QFileInfo::exists(QDir(folder).filePath(QStringLiteral("_/Home.png"))));
+    }
+
+    void pagesWhoseNamesSanitizeAlikeGetFoldersOfTheirOwn()
+    {
+        EditorSession session;
+        session.createDocument({40, 40});
+        session.renameArtboard(0, QStringLiteral("Home"));
+        session.renamePage(session.currentPage(), QStringLiteral("A/B"));
+        session.addPage(QStringLiteral("A_B"));
+        session.renameArtboard(0, QStringLiteral("Home"));
+        const VectorDocument document = *session.document();
+        const std::vector<QUuid> boards = {document.artboardsOn(document.allPages()[0].id).front().id,
+                                           document.artboardsOn(document.allPages()[1].id).front().id};
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.folder = dir.path();
+        const QStringList written = ScreenExport::run(document, boards, {}, settings);
+        QCOMPARE(written.size(), 2);
+        QCOMPARE(QSet<QString>(written.begin(), written.end()).size(), 2);
+        QVERIFY(QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("A_B/Home.png"))));
+        QVERIFY(QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("A_B 2/Home.png"))));
+    }
+
+    void twoArtboardsOfOnePageWithTheSameNameDoNotOverwrite()
+    {
+        EditorSession session;
+        session.createDocument({40, 40});
+        session.renameArtboard(0, QStringLiteral("Home"));
+        session.addArtboard(QRectF(100, 0, 40, 40));
+        session.renameArtboard(1, QStringLiteral("Home"));
+        session.addPage(QStringLiteral("Other"));
+        const VectorDocument document = *session.document();
+        std::vector<QUuid> boards;
+        for (const Artboard &board : document.allArtboards())
+            boards.push_back(board.id);
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.folder = dir.path();
+        const QStringList written = ScreenExport::run(document, boards, {}, settings);
+        QCOMPARE(QSet<QString>(written.begin(), written.end()).size(), int(boards.size()));
     }
 
     void aBadFolderFailsThatFormatWithoutStoppingTheRest()
@@ -108,7 +228,7 @@ private slots:
         settings.formats = {QStringLiteral("png"), QStringLiteral("svg")};
         // No writable folder at all: every write fails, but run() itself doesn't throw.
         settings.folder = QStringLiteral("/nonexistent/definitely/not/here");
-        const QStringList written = ScreenExport::run(document, {0}, {}, settings);
+        const QStringList written = ScreenExport::run(document, {document.artboard(0).id}, {}, settings);
         QVERIFY(written.isEmpty());
     }
 };

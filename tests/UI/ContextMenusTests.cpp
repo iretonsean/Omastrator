@@ -229,6 +229,64 @@ private slots:
         QVERIFY(!names(*menu).contains("duplicate") && names(*menu).contains("layerRename"));
     }
 
+    void moveToPageNeedsTwoPagesAndASelection()
+    {
+        Window w;
+        EditorSession &session = w.session();
+        const QUuid a = box(session, 10);
+        NativeLayerList &list = *w.view.findChild<NativeLayerList *>();
+        // One page: nothing to move to, on the canvas or in the row.
+        std::unique_ptr<QMenu> menu = w.canvasMenu();
+        QVERIFY(!names(*menu).contains("contextMoveToPage"));
+        menu.reset(ContextMenus::forLayerRow(&w.menus(), session, list, a, nullptr));
+        QVERIFY(!names(*menu).contains("contextMoveToPage"));
+        const QUuid first = session.currentPage();
+        session.addPage(QStringLiteral("Cover"));
+        session.addPage(QStringLiteral("Back"));
+        session.setCurrentPage(first);
+        session.select({a});
+        menu = w.canvasMenu();
+        QMenu *move = submenu(*menu, "contextMoveToPage");
+        QVERIFY(move);
+        // The other pages, not this one.
+        QStringList pages;
+        for (QAction *entry : move->actions())
+            pages << entry->text();
+        QCOMPARE(pages, (QStringList{"Cover", "Back"}));
+        menu.reset(ContextMenus::forLayerRow(&w.menus(), session, list, a, nullptr));
+        QVERIFY(submenu(*menu, "contextMoveToPage"));
+        // Nothing selected: not on the canvas.
+        session.deselectAll();
+        menu = w.canvasMenu();
+        QVERIFY(!names(*menu).contains("contextMoveToPage"));
+        session.select({a});
+        menu = w.canvasMenu();
+        move = submenu(*menu, "contextMoveToPage");
+        move->actions().first()->trigger();
+        QCOMPARE(session.undoName(), QStringLiteral("Move to Page"));
+        QVERIFY(!session.document()->isOnCurrentPage(a));
+    }
+
+    void aLayerRowMovesItsWholeLayerToAnotherPage()
+    {
+        Window w;
+        EditorSession &session = w.session();
+        const QUuid a = box(session, 10);
+        const QUuid layer = *session.document()->layerOf(a);
+        const QUuid first = session.currentPage();
+        const QUuid second = session.addPage(QStringLiteral("Cover"));
+        session.setCurrentPage(first);
+        NativeLayerList &list = *w.view.findChild<NativeLayerList *>();
+        std::unique_ptr<QMenu> menu(ContextMenus::forLayerRow(&w.menus(), session, list, layer, nullptr));
+        QMenu *move = submenu(*menu, "layerMoveToPage");
+        QVERIFY(move);
+        const size_t steps = session.undoNames().size();
+        move->actions().first()->trigger();
+        QCOMPARE(session.undoNames().size(), steps + 1);
+        QCOMPARE(session.undoName(), QStringLiteral("Move to Page"));
+        QCOMPARE(session.document()->pageOf(a), second);
+    }
+
     void altClickingAnEyeHidesTheOthers()
     {
         Window w;

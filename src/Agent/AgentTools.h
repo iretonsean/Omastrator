@@ -87,6 +87,7 @@ private:
     QJsonObject place(const QJsonObject &params);
     // Session.
     QJsonObject selectTool(const QJsonObject &params);
+    QJsonObject page(const QJsonObject &params);
     // Desktop: the user's own actions from the island, each a normal undo step.
     QJsonObject applyColor(const QJsonObject &params);
     QJsonObject swatchesGet(const QJsonObject &params);

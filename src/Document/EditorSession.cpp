@@ -78,6 +78,8 @@ EditorSession::EditorSession(QObject *parent) : QObject(parent)
 
 void EditorSession::notify(bool documentToo)
 {
+    // Whatever changed the page (a switch, an edit, an undo) lands here, once.
+    const bool pageChanged = enterPage();
     // A drag previews its instances too.
     if (documentToo && m_interaction)
         settle();
@@ -88,14 +90,16 @@ void EditorSession::notify(bool documentToo)
     }
     // Artboard 1's size double as the viewport's reference point; keep the document
     // origin still on screen when it changes (a drag on the Artboard tool, or undo).
-    if (documentToo && m_document && m_document->size != m_viewportDocumentSize) {
-        const QSizeF delta = m_document->size - m_viewportDocumentSize;
+    if (documentToo && m_document && m_document->viewSize() != m_viewportDocumentSize) {
+        const QSizeF delta = m_document->viewSize() - m_viewportDocumentSize;
         viewport.pan += QSizeF(delta.width() * viewport.pointsPerPixel() / 2, delta.height() * viewport.pointsPerPixel() / 2);
-        m_viewportDocumentSize = m_document->size;
+        m_viewportDocumentSize = m_document->viewSize();
     }
     if (documentToo)
         emit documentChanged();
     emit changed();
+    if (pageChanged)
+        emit currentPageChanged(m_shownPage);
 }
 
 void EditorSession::createDocument(QSizeF size)
@@ -121,8 +125,10 @@ void EditorSession::loadDocument(VectorDocument document)
     m_activeLayer = layers.empty() ? std::nullopt : std::optional(layers.back());
     m_activeArtboard = 0;
     m_artboardSelected = false;
-    viewport.fit(m_document->size);
-    m_viewportDocumentSize = m_document->size;
+    viewport.fit(m_document->viewSize());
+    m_viewportDocumentSize = m_document->viewSize();
+    m_pageViews.clear();
+    m_shownPage = m_document->currentPageId();
     notify();
 }
 
@@ -139,6 +145,8 @@ void EditorSession::closeDocument()
     m_keyObject.reset();
     m_activeLayer.reset();
     m_artboardSelected = false;
+    m_pageViews.clear();
+    m_shownPage = QUuid();
     notify();
 }
 
@@ -239,6 +247,14 @@ void EditorSession::select(const std::vector<QUuid> &ids)
             if (object && object->kind != ObjectKind::layer && std::find(kept.begin(), kept.end(), id) == kept.end())
                 kept.push_back(id);
         }
+        // Ids all on one other page take the view there; a mixed or refused set keeps only this page's.
+        if (!kept.empty() && m_document->pageCount() > 1) {
+            const QUuid first = m_document->pageOf(kept.front());
+            if (first != m_document->currentPageId()
+                && std::all_of(kept.begin(), kept.end(), [&](const QUuid &id) { return m_document->pageOf(id) == first; }))
+                setCurrentPage(first);
+            std::erase_if(kept, [&](const QUuid &id) { return !m_document->isOnCurrentPage(id); });
+        }
     }
     if (kept == m_selection)
         return;
@@ -310,7 +326,8 @@ std::vector<QUuid> EditorSession::objectsIn(const QRectF &rect, bool deep) const
             continue;
         if (isolated && !m_document->isAncestor(*isolated, object.id))
             continue;
-        if (object.kind == ObjectKind::layer || !m_document->isEffectivelyVisible(object.id) || m_document->isEffectivelyLocked(object.id))
+        if (object.kind == ObjectKind::layer || !m_document->isEffectivelyVisible(object.id) || m_document->isEffectivelyLocked(object.id)
+            || !m_document->isOnCurrentPage(object.id))
             continue;
         if (deep ? object.isContainer() : (!isolated && (!object.parentID || m_document->topLevelObject(object.id) != object.id)))
             continue;
@@ -380,7 +397,7 @@ std::optional<QUuid> EditorSession::activeLayer() const
 {
     if (!m_document)
         return std::nullopt;
-    if (m_activeLayer && m_document->find(*m_activeLayer))
+    if (m_activeLayer && m_document->find(*m_activeLayer) && m_document->isOnCurrentPage(*m_activeLayer))
         return m_activeLayer;
     const auto layers = m_document->layers();
     return layers.empty() ? std::nullopt : std::optional(layers.back());
@@ -407,7 +424,7 @@ void EditorSession::pruneSelection()
     m_document->expandEditedShapes();
     m_document->applyAutoLayout();
     m_document->reflowText();
-    std::erase_if(m_selection, [&](const QUuid &id) { return !m_document->find(id); });
+    std::erase_if(m_selection, [&](const QUuid &id) { return !m_document->find(id) || !m_document->isOnCurrentPage(id); });
     if (m_keyObject && (m_selection.size() < 2 || !isSelected(*m_keyObject)))
         m_keyObject.reset();
     // Isolation ends at the first group gone.
@@ -461,6 +478,8 @@ void EditorSession::edit(const QString &name, const std::function<void(VectorDoc
 
 void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
 {
+    // A step across pages lands on its page; notify() restores that page's view.
+    rememberPageView();
     const bool locked = isDocumentLocked();
     m_document = snapshot.document;
     if (m_document)
@@ -584,7 +603,7 @@ void EditorSession::zoomIn()
 {
     if (!m_document)
         return;
-    viewport.setZoom(viewport.zoom() * 2, viewport.center(), m_document->size);
+    viewport.setZoom(viewport.zoom() * 2, viewport.center(), m_document->viewSize());
     notify(false);
 }
 
@@ -592,7 +611,7 @@ void EditorSession::zoomOut()
 {
     if (!m_document)
         return;
-    viewport.setZoom(viewport.zoom() / 2, viewport.center(), m_document->size);
+    viewport.setZoom(viewport.zoom() / 2, viewport.center(), m_document->viewSize());
     notify(false);
 }
 
@@ -602,7 +621,7 @@ void EditorSession::zoomToFit()
         return;
     const Artboard first = m_document->artboard(0);
     if (m_document->artboardCount() == 1 && first.rect.topLeft() == QPointF(0, 0)) {
-        viewport.fit(m_document->size);
+        viewport.fit(m_document->viewSize());
         notify(false);
         return;
     }
@@ -613,7 +632,7 @@ void EditorSession::actualSize()
 {
     if (!m_document)
         return;
-    viewport.setZoom(viewport.backingScale, viewport.center(), m_document->size);
+    viewport.setZoom(viewport.backingScale, viewport.center(), m_document->viewSize());
     notify(false);
 }
 
@@ -621,7 +640,7 @@ void EditorSession::setZoom(double zoom, QPointF anchoredAt)
 {
     if (!m_document)
         return;
-    viewport.setZoom(zoom, anchoredAt, m_document->size);
+    viewport.setZoom(zoom, anchoredAt, m_document->viewSize());
     notify(false);
 }
 
@@ -637,7 +656,7 @@ void EditorSession::resizeView(QSizeF size, double backingScale)
 {
     if (viewport.viewSize == size && viewport.backingScale == backingScale)
         return;
-    viewport.resize(size, backingScale, m_document ? std::optional(m_document->size) : std::nullopt);
+    viewport.resize(size, backingScale, m_document ? std::optional(m_document->viewSize()) : std::nullopt);
     notify(false);
 }
 

@@ -8,9 +8,14 @@ std::vector<QRectF> exclusionsFor(const VectorDocument &document, const VectorOb
 {
     std::vector<QRectF> exclusions;
     const QTransform toLocal = box.transform.inverted();
+    const bool paged = document.pages.size() > 1;
+    const QUuid boxPage = paged ? document.pageOf(box.id) : QUuid();
     for (int index = boxIndex + 1; index < int(document.objects.size()); ++index) {
         const VectorObject &wrap = document.objects[size_t(index)];
         if (!wrap.textWrap)
+            continue;
+        // A wrap on another page is nowhere near this text, whatever its coordinates say.
+        if (paged && document.pageOf(wrap.id) != boxPage)
             continue;
         const QRectF grown = document.bounds(wrap.id).adjusted(-*wrap.textWrap, -*wrap.textWrap, *wrap.textWrap, *wrap.textWrap);
         exclusions.push_back(toLocal.mapRect(grown));

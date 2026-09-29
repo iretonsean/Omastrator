@@ -74,6 +74,7 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("show_variations"), &AgentTools::showVariations},
         {QStringLiteral("show_roast"), &AgentTools::showRoast},
         {QStringLiteral("select_tool"), &AgentTools::selectTool},
+        {QStringLiteral("page"), &AgentTools::page},
         {QStringLiteral("apply_color"), &AgentTools::applyColor},
         {QStringLiteral("swatches_get"), &AgentTools::swatchesGet},
         {QStringLiteral("swatches_add"), &AgentTools::swatchesAdd},
@@ -129,7 +130,7 @@ const VectorDocument &AgentTools::document()
 bool AgentTools::ownsProposal(const EditorSession &session) const
 {
     // The name rules out a user's drag begun after the proposal was kept, before it moved anything.
-    return m_session == &session && session.isInteracting() && session.interactionName() == QStringLiteral("AI: ") + m_title && m_preview
+    return m_session == &session && session.isInteracting() && session.interactionName() == EditorSession::proposalPrefix() + m_title && m_preview
         && session.document() && *session.document() == *m_preview;
 }
 
@@ -145,7 +146,7 @@ EditorSession *AgentTools::proposalSession() const
 
 QString AgentTools::proposalTitle() const
 {
-    return hasProposal() ? QStringLiteral("AI: ") + m_title : QString();
+    return hasProposal() ? EditorSession::proposalPrefix() + m_title : QString();
 }
 
 QJsonObject AgentTools::status()
@@ -201,7 +202,7 @@ void AgentTools::propose(const QString &title, const VectorDocument &document, c
     if (!ownsProposal(current)) {
         if (current.isInteracting())
             throw Error(AgentProtocol::busy, QStringLiteral("The user is in the middle of an edit. Try again in a moment."));
-        current.beginInteraction(QStringLiteral("AI: ") + title);
+        current.beginInteraction(EditorSession::proposalPrefix() + title);
         m_session = &current;
         m_title = title;
     }
@@ -245,7 +246,28 @@ QJsonObject AgentTools::documentGet(const QJsonObject &params)
 {
     const bool images = boolean(params, QStringLiteral("includeImages"), false);
     EditorSession &current = session();
-    QJsonObject json = DocumentCodec::encode(*current.document());
+    VectorDocument shown = *current.document();
+    const QString pageText = string(params, QStringLiteral("page")).value_or(QString());
+    if (pageText != QLatin1String("all") && shown.pageCount() > 1) {
+        // One page's objects, artboards and guides; `pages` still lists them all.
+        const QUuid keep = pageParam(params, shown).value_or(shown.currentPageId());
+        std::vector<QUuid> others;
+        for (const Page &page : shown.allPages()) {
+            if (page.id != keep) {
+                const std::vector<QUuid> layers = shown.layersOn(page.id);
+                others.insert(others.end(), layers.begin(), layers.end());
+            }
+        }
+        shown.remove(others);
+        std::erase_if(shown.artboards, [&](const Artboard &board) { return shown.resolvePage(board.page) != keep; });
+        std::erase_if(shown.guides, [&](const Guide &guide) { return shown.resolvePage(guide.page) != keep; });
+        shown.currentPage = keep;
+    }
+    QJsonObject json = DocumentCodec::encode(shown);
+    QJsonArray pages;
+    for (const Page &page : current.document()->allPages())
+        pages.append(QJsonObject{{"id", idString(page.id)}, {"name", page.name}, {"current", page.id == current.document()->currentPageId()}});
+    json["pages"] = pages;
     if (!images) {
         QJsonArray objects = json["objects"].toArray();
         for (qsizetype index = 0; index < objects.size(); ++index) {
@@ -299,6 +321,13 @@ QJsonObject AgentTools::render(const QJsonObject &params)
     const QString path = string(params, QStringLiteral("path")).value_or(QString());
     EditorSession &current = session();
     VectorDocument copy = *current.document();
+    const QUuid page = pageParam(params, copy).value_or(copy.currentPageId());
+    if (selectionOnly && page != copy.currentPageId())
+        fail(QStringLiteral("The selection is on the current page. Leave out “page”, or leave out “selectionOnly”."));
+    // One rule for any number of pages: the page's first artboard, from the origin.
+    copy.currentPage = page;
+    if (!selectionOnly && !copy.artboards.empty())
+        copy = copy.artboardDocument(0);
     QRectF area(QPointF(0, 0), copy.size);
     if (selectionOnly) {
         if (!current.hasSelection())
@@ -327,12 +356,12 @@ QJsonObject AgentTools::proposalFinish(const QJsonObject &params)
     const QString summary = string(params, QStringLiteral("summary")).value_or(QString()).trimmed();
     const bool open = hasProposal();
     if (open && !title.isEmpty()) {
-        m_title = title.startsWith(QLatin1String("AI: ")) ? title.mid(4) : title;
+        m_title = title.startsWith(EditorSession::proposalPrefix()) ? title.mid(EditorSession::proposalPrefix().size()) : title;
         // Renames the open interaction: undo it, reopen it named, show it again.
         const VectorDocument preview = *m_preview;
         const std::vector<QUuid> selection = m_session->selection();
         m_session->cancelInteraction();
-        m_session->beginInteraction(QStringLiteral("AI: ") + m_title);
+        m_session->beginInteraction(EditorSession::proposalPrefix() + m_title);
         m_session->previewDocument(preview, selection);
         m_preview = *m_session->document();
         emit proposalChanged();
@@ -378,9 +407,10 @@ QJsonObject AgentTools::exportFile(const QJsonObject &params)
     if (quality < 0 || quality > 100)
         fail(QStringLiteral("“quality” must be 0 to 100."));
     const VectorDocument &current = document();
+    int sheets = 0;
     switch (format) {
     case DocumentExporter::Format::pdf:
-        DocumentExporter::writePdf(current, path);
+        sheets = DocumentExporter::writePdf(current, path);
         break;
     case DocumentExporter::Format::png:
         DocumentExporter::writePng(current, path, scale, transparent);
@@ -394,8 +424,10 @@ QJsonObject AgentTools::exportFile(const QJsonObject &params)
     }
     static const char *names[] = {"pdf", "png", "jpeg", "svg"};
     QJsonObject reply{{"path", QFileInfo(path).absoluteFilePath()}, {"format", names[int(format)]}, {"includesProposal", hasProposal()}};
-    // Several artboards: which one was written (the first that exports).
-    if (!current.artboards.empty())
+    // A PDF holds every exported artboard of every page; the rest write the first that exports.
+    if (format == DocumentExporter::Format::pdf)
+        reply["sheets"] = sheets;
+    else if (!current.artboards.empty())
         reply["artboard"] = current.artboard(current.firstExportedArtboard()).name;
     return reply;
 }

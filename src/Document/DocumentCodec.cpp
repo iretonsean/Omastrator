@@ -496,6 +496,9 @@ QJsonObject encode(const VectorObject &object)
         json["blendMode"] = rawValue(object.blendMode);
     if (object.layerColor.isValid())
         json["layerColor"] = color(object.layerColor);
+    // Additive, optional key: the page a layer is on (docs/PAGES.md).
+    if (!object.page.isNull())
+        json["page"] = object.page.toString(QUuid::WithoutBraces);
     if (object.isClipGroup)
         json["clip"] = true;
     if (object.mask)
@@ -592,6 +595,7 @@ VectorObject decodeObject(const QJsonObject &json)
     object.blendMode = layerBlendMode(json["blendMode"].toString()).value_or(LayerBlendMode::normal);
     if (json.contains("layerColor"))
         object.layerColor = readColor(json["layerColor"]);
+    object.page = QUuid::fromString(json["page"].toString());
     object.isClipGroup = json["clip"].toBool();
     if (json.contains("mask")) {
         const QJsonObject mask = json["mask"].toObject();
@@ -708,8 +712,12 @@ std::optional<LiveRectangle> decodeShape(const QJsonObject &json)
 QJsonArray encode(const std::vector<Guide> &guides)
 {
     QJsonArray array;
-    for (const Guide &guide : guides)
-        array.append(QJsonObject{{"axis", guide.orientation == Qt::Horizontal ? "horizontal" : "vertical"}, {"position", guide.position}});
+    for (const Guide &guide : guides) {
+        QJsonObject json{{"axis", guide.orientation == Qt::Horizontal ? "horizontal" : "vertical"}, {"position", guide.position}};
+        if (!guide.page.isNull())
+            json["page"] = guide.page.toString(QUuid::WithoutBraces);
+        array.append(json);
+    }
     return array;
 }
 
@@ -721,7 +729,8 @@ std::vector<Guide> decodeGuides(const QJsonArray &json)
         const double position = guide["position"].toDouble(std::nan(""));
         if (!std::isfinite(position))
             continue;
-        guides.push_back({guide["axis"].toString() == QLatin1String("vertical") ? Qt::Vertical : Qt::Horizontal, position});
+        guides.push_back({guide["axis"].toString() == QLatin1String("vertical") ? Qt::Vertical : Qt::Horizontal, position,
+                          QUuid::fromString(guide["page"].toString())});
     }
     return guides;
 }
@@ -744,7 +753,7 @@ std::vector<VectorObject> decodeObjects(const QJsonArray &json)
 
 QJsonObject encode(const VectorDocument &document)
 {
-    QJsonObject json{{"format", "omastrator"}, {"version", version},
+    QJsonObject json{{"format", "omastrator"}, {"version", document.pages.size() >= 2 ? pagesVersion : version},
                      {"width", document.size.width()}, {"height", document.size.height()},
                      {"background", color(document.background)}, {"objects", encode(document.objects)},
                      {"guides", encode(document.guides)}};
@@ -760,6 +769,13 @@ QJsonObject encode(const VectorDocument &document)
         json["tokenModes"] = QJsonArray::fromStringList(document.tokenModes);
         json["tokenMode"] = document.tokenMode;
     }
+    if (!document.pages.empty()) {
+        QJsonArray pages;
+        for (const Page &page : document.pages)
+            pages.append(QJsonObject{{"id", page.id.toString(QUuid::WithoutBraces)}, {"name", page.name}});
+        json["pages"] = pages;
+        json["currentPage"] = document.currentPageId().toString(QUuid::WithoutBraces);
+    }
     if (!document.artboards.empty()) {
         QJsonArray boards;
         for (const Artboard &board : document.artboards) {
@@ -767,6 +783,8 @@ QJsonObject encode(const VectorDocument &document)
                               {"x", board.rect.x()}, {"y", board.rect.y()},
                               {"width", board.rect.width()}, {"height", board.rect.height()},
                               {"background", color(board.background)}};
+            if (!board.page.isNull())
+                entry["page"] = board.page.toString(QUuid::WithoutBraces);
             // Additive: only a board switched off writes the key, so older builds read the rest.
             if (!board.exported)
                 entry["exported"] = false;
@@ -790,7 +808,7 @@ VectorDocument decode(const QJsonObject &json)
 {
     if (json["format"].toString() != QLatin1String("omastrator"))
         throw CodecError("not an Omastrator document");
-    if (json["version"].toInt() < 1 || json["version"].toInt() > version)
+    if (json["version"].toInt() < 1 || json["version"].toInt() > pagesVersion)
         throw CodecError("made by a newer Omastrator");
     VectorDocument document;
     document.size = {json["width"].toDouble(), json["height"].toDouble()};
@@ -818,7 +836,32 @@ VectorDocument decode(const QJsonObject &json)
         const QRectF rect(board["x"].toDouble(), board["y"].toDouble(), board["width"].toDouble(), board["height"].toDouble());
         if (!(rect.width() > 0 && rect.height() > 0))
             continue;
-        document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white), board["exported"].toBool(true)});
+        document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white),
+                                      QUuid::fromString(board["page"].toString()), board["exported"].toBool(true)});
+    }
+    // Version 6 (or any file with the keys): pages. A file without them is one implicit page.
+    if (json.contains("pages")) {
+        std::set<QUuid> pageIds;
+        for (const QJsonValue &value : json["pages"].toArray()) {
+            const QJsonObject entry = value.toObject();
+            const QUuid pageId = QUuid::fromString(entry["id"].toString());
+            if (pageId.isNull() || !pageIds.insert(pageId).second)
+                continue;
+            Page page;
+            page.id = pageId;
+            QString name = entry["name"].toString().trimmed();
+            if (name.isEmpty())
+                name = QStringLiteral("Page %1").arg(document.pages.size() + 1);
+            const QString base = name;
+            const auto taken = [&](const QString &candidate) {
+                return std::any_of(document.pages.begin(), document.pages.end(), [&](const Page &other) { return other.name == candidate; });
+            };
+            for (int number = 2; taken(name); ++number)
+                name = QStringLiteral("%1 %2").arg(base).arg(number);
+            page.name = name;
+            document.pages.push_back(page);
+        }
+        document.currentPage = QUuid::fromString(json["currentPage"].toString());
     }
     document.locked = json["locked"].toBool(false);
     for (const QJsonValue &value : json["exportAssets"].toArray()) {
@@ -845,8 +888,15 @@ VectorDocument decode(const QJsonObject &json)
             throw CodecError("an object sits outside every layer");
         }
     }
-    if (document.layers().empty())
-        document = VectorDocument::blank(document.size);
+    if (document.allLayers().empty()) {
+        if (document.pages.empty())
+            document = VectorDocument::blank(document.size);
+        else
+            document.appendLayer(VectorDocument::blank(document.size).objects.front());
+    }
+    // Tags that name no page go to the first, a page with no artboard gets one, currentPage is repaired.
+    if (!document.pages.empty())
+        document.ensurePages();
     document.applyAutoLayout();
     document.reflowText();
     return document;

@@ -18,11 +18,10 @@ Penpot.
   land inside that region. Each Sketch *page* becomes one Omastrator
   *layer* holding every artboard's content for that page, plus whatever
   loose (non-artboard) layers sit directly on it.
-- **Pages are laid out left to right on one shared canvas**, since Sketch
-  gives each page its own coordinate space but Omastrator has one. Each
-  page's own artboards keep their relative positions; a running x-offset
-  (that page's content width plus a gap) separates one page's artboards
-  from the next page's, so nothing from two different pages overlaps.
+- **A file with several pages makes several pages** (docs/PAGES.md), the
+  Symbols page among them. Sketch gives each page its own coordinate space
+  and so do we now: each page's artboards keep their own positions, with no
+  x-offset between pages. A one-page file stays a plain one-page document.
 - **A page with no real Sketch artboards gets one synthetic artboard**
   sized to its content's bounds, named after the page — matching
   SHARED.md's "everything becomes an artboard" rule for the common case of

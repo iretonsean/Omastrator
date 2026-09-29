@@ -10,18 +10,20 @@ namespace {
 // JSON Schemas once, as text: MCP's tools/list and the CLI's help both read them.
 constexpr const char *methodTable = R"json([
 {"name": "document_get", "group": "read",
- "description": "The whole document as DocumentCodec JSON (objects bottom to top, children after their parent), plus selection, activeLayer and whether a proposal is open. Each artboard carries \"exported\": false when it is set not to export. Placed images are summarised unless includeImages is true.",
+ "description": "The current page (or the `page` asked for) as DocumentCodec JSON (objects bottom to top, children after their parent), plus `pages` ([{id, name, current}]), selection, activeLayer and whether a proposal is open. Each artboard carries \"exported\": false when it is set not to export. Placed images are summarised unless includeImages is true.",
  "inputSchema": {"type": "object", "properties": {
-   "includeImages": {"type": "boolean", "description": "Include placed images as base64 PNG. Default false."}}}},
+   "includeImages": {"type": "boolean", "description": "Include placed images as base64 PNG. Default false."},
+   "page": {"type": "string", "description": "A page's id or name, or \"all\". Default: the current page's objects and artboards. `pages` always lists every page."}}}},
 {"name": "selection_get", "group": "read",
  "description": "The selected objects (and their descendants) as JSON, and the selection's bounds [x, y, width, height].",
  "inputSchema": {"type": "object", "properties": {}}},
 {"name": "render", "group": "read",
- "description": "Renders the artboard, or just the selection's bounds, to a PNG so you can look at it. Returns its path, width and height.",
+ "description": "Renders a page's first artboard (the current page's, unless `page` names another), or just the selection's bounds, to a PNG so you can look at it. Returns its path, width and height.",
  "inputSchema": {"type": "object", "properties": {
    "scale": {"type": "number", "exclusiveMinimum": 0, "description": "Pixels per point. Default 1."},
    "selectionOnly": {"type": "boolean", "description": "Crop to the selection's bounds. Default false."},
-   "path": {"type": "string", "description": "Where to write the PNG. Default: a new temporary file."}}}},
+   "path": {"type": "string", "description": "Where to write the PNG. Default: a new temporary file."},
+   "page": {"type": "string", "description": "A page's id or name to render instead of the current one."}}}},
 {"name": "insert_svg", "group": "edit",
  "description": "Imports SVG as editable paths, grouped, on top of the active layer, into the proposal. SVG user units are points. Returns the group's id.",
  "inputSchema": {"type": "object", "required": ["svg"], "properties": {
@@ -57,7 +59,8 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "required": ["edge"], "properties": {
    "ids": {"type": "array", "items": {"type": "string"}, "description": "Object ids. Default: the selection."},
    "edge": {"type": "string", "enum": ["left", "horizontalCenter", "right", "top", "verticalCenter", "bottom"]},
-   "target": {"type": "string", "enum": ["selection", "artboard"]}}}},
+   "target": {"type": "string", "enum": ["selection", "artboard"]},
+   "page": {"type": "string", "description": "A page's id or name; \"artboard\" then means that page's first artboard. Default: the current page's active artboard."}}}},
 {"name": "distribute", "group": "edit",
  "description": "Spaces three or more objects' centres evenly between the outermost two.",
  "inputSchema": {"type": "object", "required": ["axis"], "properties": {
@@ -114,7 +117,7 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "properties": {
    "path": {"type": "string"}}}},
 {"name": "export", "group": "files",
- "description": "Exports the artboard as it shows now, proposal included. With several artboards it writes the first one that exports, and the reply's \"artboard\" names it; artboards set not to export are skipped.",
+ "description": "Exports the document as it shows now, proposal included. PDF writes one sheet per artboard that exports, across every page, and the reply's \"sheets\" counts them. PNG, JPEG and SVG write the current page's first artboard that exports, and the reply's \"artboard\" names it. Artboards set not to export are skipped.",
  "inputSchema": {"type": "object", "required": ["path"], "properties": {
    "path": {"type": "string"},
    "format": {"type": "string", "enum": ["pdf", "svg", "png", "jpeg"], "description": "Default: from the file name."},
@@ -150,6 +153,14 @@ constexpr const char *methodTable = R"json([
  "description": "Chooses the canvas tool, as clicking it in the toolbar does. Works with no document open. Returns the tool now chosen.",
  "inputSchema": {"type": "object", "required": ["tool"], "properties": {
    "tool": {"type": "string", "description": "select, directSelect, pen, pencil, text, line, rectangle, roundedRectangle, ellipse, polygon, star, shapeBuilder, scissors, rotate, scale, gradient, eyedropper, hand or zoom (move, direct, type and eyedrop work too)."}}}},
+{"name": "page", "group": "session",
+ "description": "The designer's own page operations, each a normal undo step (no proposal). Pages hold their own artboards and layers; everything else works on the current page. There is no delete. Returns the page and the list of pages.",
+ "inputSchema": {"type": "object", "required": ["action"], "properties": {
+   "action": {"type": "string", "enum": ["add", "rename", "duplicate", "reorder", "move_objects", "show"], "description": "add makes a page after the current one (and shows it); rename and duplicate act on `page` (default the current one); reorder moves `page` to `index`; move_objects sends `ids` (default the selection, on the current page) to `page`; show makes `page` the current page."},
+   "page": {"type": "string", "description": "A page's id or name."},
+   "name": {"type": "string", "description": "add: the new page's name. rename: the new name."},
+   "index": {"type": "integer", "minimum": 0, "description": "reorder: the new position, counting from 0."},
+   "ids": {"type": "array", "items": {"type": "string"}, "description": "move_objects: object ids. Default: the selection."}}}},
 {"name": "status_get", "group": "session",
  "description": "What the app is doing: the tool, whether a document is open, the proposal waiting for the user, the agent task it waits on and the variations ready. Not a document read.",
  "inputSchema": {"type": "object", "properties": {}}},

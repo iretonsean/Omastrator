@@ -9,8 +9,9 @@
 #include <QSettings>
 #include <array>
 
-PanelSection::PanelSection(const QString &title, const QString &key, QWidget *parent, bool folded)
-    : QWidget(parent), body(new QVBoxLayout), trailing(new QHBoxLayout), m_key(key), m_toggle(new QToolButton(this)),
+PanelSection::PanelSection(const QString &title, const QString &key, QWidget *parent, bool folded, const QString &settings)
+    : QWidget(parent), body(new QVBoxLayout), trailing(new QHBoxLayout), m_key(key),
+      m_settings(settings.isEmpty() ? settingsKey(key) : settings), m_toggle(new QToolButton(this)),
       m_summary(new QLabel(this)), m_content(new QWidget(this))
 {
     setObjectName(key + QStringLiteral("Section"));
@@ -51,10 +52,10 @@ PanelSection::PanelSection(const QString &title, const QString &key, QWidget *pa
     column->addWidget(m_content);
     connect(m_toggle, &QToolButton::clicked, this, [this] {
         const bool collapse = !isCollapsed();
-        QSettings().setValue(settingsKey(m_key), collapse);
+        QSettings().setValue(m_settings, collapse);
         setCollapsed(collapse);
     });
-    setCollapsed(QSettings().value(settingsKey(key), folded).toBool());
+    setCollapsed(QSettings().value(m_settings, folded).toBool());
 }
 
 void PanelSection::refreshSummary()

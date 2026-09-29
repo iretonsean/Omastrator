@@ -25,8 +25,23 @@ private slots:
         QCOMPARE(list->count(), 2);
         for (int row = 0; row < list->count(); ++row)
             QVERIFY(list->item(row)->text() != QLatin1String("Scratch"));
-        // The rows keep their artboard's index, so the last one is still artboard 2.
-        QCOMPARE(list->item(1)->data(Qt::UserRole).toInt(), 2);
+        // The rows carry their artboard's id, so the last one is still the third board.
+        QCOMPARE(list->item(1)->data(Qt::UserRole).toString(), session.document()->artboard(2).id.toString(QUuid::WithoutBraces));
+    }
+
+    void aPageWhoseArtboardsAreAllUnexportedHasNoHeadingOrRows()
+    {
+        QSettings().clear();
+        EditorSession session;
+        session.createDocument({400, 300});
+        session.addPage(QStringLiteral("Scratch"));
+        session.setArtboardExported(0, false);
+        ExportForScreensSheet sheet(session);
+        auto *list = sheet.findChild<QListWidget *>(QStringLiteral("screenExportArtboards"));
+        QVERIFY(list);
+        // Two pages: the first's heading and board, nothing of the second.
+        QCOMPARE(list->count(), 2);
+        QCOMPARE(list->item(0)->text(), QStringLiteral("Page 1"));
     }
 };
 

@@ -516,7 +516,7 @@ void LargeArtboardTests::screenExportSaysWhatItSkipped()
     settings.scales = {1, 0.005};
     settings.formats = {QStringLiteral("png"), QStringLiteral("jpg")};
     QStringList skipped;
-    const QStringList written = ScreenExport::run(document, {0}, {}, settings, {}, &skipped);
+    const QStringList written = ScreenExport::run(document, {document.artboard(0).id}, {}, settings, {}, &skipped);
     // Only the 0.005× files were made (709 px); the 1× ones were named as skipped, once each.
     QCOMPARE(written.size(), 2);
     for (const QString &path : written) {

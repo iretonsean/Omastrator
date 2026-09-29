@@ -227,6 +227,9 @@ void KeyboardShortcutsTests::menusAndSheetsTakeTheirRemappedKeys()
     QCOMPARE(settings.menu(QKeySequence(Qt::CTRL | Qt::Key_G)), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H));
     QCOMPARE(settings.menu(QKeySequence(Qt::CTRL | Qt::Key_L)), QKeySequence(Qt::CTRL | Qt::Key_L));
     QCOMPARE(settings.menu(QKeySequence(Qt::Key_F7)), QKeySequence(Qt::Key_F7));
+    // The page keys are fixed, like the artboard ones.
+    QCOMPARE(settings.menu(QKeySequence(Qt::ALT | Qt::Key_PageDown)), QKeySequence(Qt::ALT | Qt::Key_PageDown));
+    QCOMPARE(settings.menu(QKeySequence(Qt::ALT | Qt::Key_PageUp)), QKeySequence(Qt::ALT | Qt::Key_PageUp));
     QCOMPARE(settings.menu(QKeySequence()), QKeySequence());
     // Sheets read the canvas's Apply and Cancel.
     QCOMPARE(settings.native(ShortcutChord("\r")), ShortcutChord("e"));

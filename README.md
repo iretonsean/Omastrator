@@ -70,6 +70,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   editable, its label reads "not exported", and Export, Export for Screens
   and Share leave it out. Export assets you collect on such a board still
   export from Export for Screens, since you picked them one by one.
+- Pages: each page is its own canvas of layers, artboards and guides. The
+  Pages list tops the Layers panel (click to switch, double-click to rename,
+  drag to reorder), Object ▸ Pages has New, Duplicate, Rename, Delete and
+  Move to Page, and Alt+PgDn/PgUp step between them. PDF, Figma, Sketch and
+  Penpot files with several pages open as pages, and File ▸ Export ▸ PDF
+  writes every exported artboard of every page.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.

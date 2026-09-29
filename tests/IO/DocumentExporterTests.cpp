@@ -1,3 +1,4 @@
+#include "Document/EditorSession.h"
 #include "Document/PathOperations.h"
 #include "IO/DocumentExporter.h"
 #include "IO/PdfImporter.h"
@@ -55,6 +56,102 @@ private slots:
         const QRegularExpression mediaBox(QStringLiteral(R"(/MediaBox \[0 0 200(\.0+)? 100(\.0+)?\])"));
         QVERIFY(mediaBox.match(QString::fromLatin1(bytes)).hasMatch());
         QVERIFY(!bytes.contains("/Subtype /Image"));
+    }
+
+    void pdfHasOnePagePerArtboardAcrossPages()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addArtboard(QRectF(300, 0, 120, 80));
+        session.addPage(QStringLiteral("Second"));
+        session.renameArtboard(0, QStringLiteral("Wide"));
+        session.addArtboard(QRectF(300, 0, 50, 60));
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("all.pdf"));
+        DocumentExporter::writePdf(*session.document(), path);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString text = QString::fromLatin1(file.readAll());
+        // Four artboards, four pages, sized page 1's two then page 2's two, whichever page is current.
+        QRegularExpression box(QStringLiteral(R"(/MediaBox \[0 0 (\d+)(?:\.0+)? (\d+)(?:\.0+)?\])"));
+        QStringList sizes;
+        for (auto it = box.globalMatch(text); it.hasNext();) {
+            const auto match = it.next();
+            sizes << match.captured(1) + QLatin1Char('x') + match.captured(2);
+        }
+        QCOMPARE(sizes, (QStringList{"200x100", "120x80", "200x100", "50x60"}));
+    }
+
+    void aFlaggedArtboardOnPageTwoIsLeftOutOfTheAllPagesPdf()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addArtboard(QRectF(300, 0, 120, 80));
+        session.addPage(QStringLiteral("Second"));
+        session.addArtboard(QRectF(300, 0, 50, 60));
+        session.setArtboardExported(1, false);
+        // Page 1 is the current page, so the flag is on a page the export isn't showing.
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("all.pdf"));
+        DocumentExporter::writePdf(*session.document(), path);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString text = QString::fromLatin1(file.readAll());
+        QRegularExpression box(QStringLiteral(R"(/MediaBox \[0 0 (\d+)(?:\.0+)? (\d+)(?:\.0+)?\])"));
+        QStringList sizes;
+        for (auto it = box.globalMatch(text); it.hasNext();) {
+            const auto match = it.next();
+            sizes << match.captured(1) + QLatin1Char('x') + match.captured(2);
+        }
+        QCOMPARE(sizes, (QStringList{"200x100", "120x80", "200x100"}));
+    }
+
+    void aPageWithNothingToExportIsSkippedAndAllPagesOffIsAnError()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addPage(QStringLiteral("Second"));
+        session.setArtboardExported(0, false);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("one.pdf"));
+        DocumentExporter::writePdf(*session.document(), path);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromLatin1(file.readAll()).count(QStringLiteral("/MediaBox")), 1);
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        session.setArtboardExported(0, false);
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePdf(*session.document(), dir.filePath(QStringLiteral("none.pdf"))));
+        QVERIFY(!QFileInfo::exists(dir.filePath(QStringLiteral("none.pdf"))));
+    }
+
+    void pngSkipsAFlaggedFirstArtboardOnTheCurrentPageOnly()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.setArtboardExported(0, false);
+        session.addArtboard(QRectF(300, 0, 80, 40));
+        session.addPage(QStringLiteral("Second"));
+        session.setArtboardSize(QSizeF(60, 30));
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("page.png"));
+        DocumentExporter::writePng(*session.document(), path);
+        QCOMPARE(QImageReader(path).size(), QSize(80, 40));
+    }
+
+    void pngExportsTheCurrentPagesFirstArtboard()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addPage(QStringLiteral("Second"));
+        session.renameArtboard(0, QStringLiteral("Wide"));
+        session.setArtboardSize(QSizeF(80, 40));
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("page.png"));
+        DocumentExporter::writePng(*session.document(), path);
+        QCOMPARE(QImageReader(path).size(), QSize(80, 40));
     }
 
     void typeExportsAsItDraws()
@@ -206,8 +303,8 @@ private slots:
             rect.stroke.paint = Paint::none();
             document.insert(rect, document.layers().front());
         }
-        document.setArtboards({{QUuid::createUuid(), QStringLiteral("Red"), QRectF(0, 0, 200, 100), Qt::white, firstExports},
-                               {QUuid::createUuid(), QStringLiteral("Blue"), QRectF(300, 0, 150, 300), Qt::white, secondExports}});
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("Red"), QRectF(0, 0, 200, 100), Qt::white, QUuid(), firstExports},
+                               {QUuid::createUuid(), QStringLiteral("Blue"), QRectF(300, 0, 150, 300), Qt::white, QUuid(), secondExports}});
         return document;
     }
 

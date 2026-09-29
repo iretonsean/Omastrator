@@ -14,8 +14,10 @@ class PanelSection : public QWidget {
     Q_OBJECT
 public:
     // `key` names the section in settings and in object names; `folded` is how it starts
-    // until the user folds or opens it.
-    PanelSection(const QString &title, const QString &key, QWidget *parent, bool folded = false);
+    // until the user folds or opens it. `settings` is where the fold is remembered; Layers' Pages list
+    // keeps its own.
+    PanelSection(const QString &title, const QString &key, QWidget *parent, bool folded = false,
+                 const QString &settings = {});
     QVBoxLayout *const body;
     // Controls at the heading's right end, such as an options button.
     QHBoxLayout *const trailing;
@@ -36,6 +38,7 @@ protected:
 private:
     void applyChevron();
     const QString m_key;
+    const QString m_settings;
     QToolButton *const m_toggle;
     QLabel *const m_summary;
     QWidget *const m_content;

@@ -1,6 +1,8 @@
+#include "Document/DocumentCodec.h"
 #include "Document/PathOperations.h"
 #include "IO/ProjectStore.h"
 #include <QFile>
+#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -47,6 +49,31 @@ private:
         image.transform = QTransform::fromScale(10, 10);
         image.isLocked = true;
         document.insert(image, layer);
+        return document;
+    }
+
+    // "Page 1" holds sample()'s art, "Page 2" a layer, an artboard and a guide of its own.
+    static VectorDocument twoPages(QUuid *second = nullptr)
+    {
+        VectorDocument document = sample();
+        document.guides.push_back({Qt::Vertical, 12});
+        document.ensurePages();
+        const QUuid page = QUuid::createUuid();
+        document.pages.push_back({page, QStringLiteral("Page 2")});
+        VectorObject layer;
+        layer.kind = ObjectKind::layer;
+        layer.name = QStringLiteral("Layer 2");
+        layer.page = page;
+        document.objects.push_back(layer);
+        VectorObject rect;
+        rect.name = QStringLiteral("Second");
+        rect.path = Shapes::rectangle({5, 5, 20, 20});
+        document.insert(rect, layer.id);
+        document.artboards.push_back({QUuid::createUuid(), QStringLiteral("Artboard 1"), QRectF(0, 0, 200, 100), Qt::white, page});
+        document.guides.push_back({Qt::Horizontal, 40, page});
+        document.currentPage = page;
+        if (second)
+            *second = page;
         return document;
     }
 
@@ -123,6 +150,146 @@ private slots:
         } catch (const FileError &error) {
             QVERIFY2(error.message().contains(QStringLiteral("newer")), qPrintable(error.message()));
         }
+    }
+
+    void pagesRoundTripThroughAFile()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("pages.omai"));
+        QUuid second;
+        const VectorDocument document = twoPages(&second);
+        ProjectStore::write(document, path);
+        const VectorDocument read = ProjectStore::read(path);
+        QVERIFY(read == document);
+        QCOMPARE(read.pages.size(), size_t(2));
+        QCOMPARE(read.pages.back().name, QStringLiteral("Page 2"));
+        QCOMPARE(read.currentPageId(), second);
+        QCOMPARE(read.layers().size(), size_t(1));
+        QCOMPARE(read.allLayers().size(), size_t(2));
+        QCOMPARE(read.guides.back().page, second);
+        QCOMPARE(read.allArtboards().front().page, second);
+    }
+
+    void anArtboardKeepsBothItsPageAndItsExportFlagThroughAFile()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("both.omai"));
+        QUuid second;
+        VectorDocument document = twoPages(&second);
+        document.artboards.back().exported = false;
+        ProjectStore::write(document, path);
+        const VectorDocument read = ProjectStore::read(path);
+        QVERIFY(read == document);
+        QCOMPARE(read.artboards.back().page, second);
+        QVERIFY(!read.artboards.back().exported);
+        QVERIFY(read.artboards.front().exported);
+    }
+
+    void onePageWritesVersion5AndTwoWriteVersion6()
+    {
+        QCOMPARE(DocumentCodec::encode(sample())["version"].toInt(), 5);
+        VectorDocument one = sample();
+        one.ensurePages();
+        const QJsonObject oneJson = DocumentCodec::encode(one);
+        QCOMPARE(oneJson["version"].toInt(), 5);
+        QCOMPARE(oneJson["pages"].toArray().size(), 1);
+        QVERIFY(DocumentCodec::decode(oneJson) == one);
+        QCOMPARE(DocumentCodec::encode(twoPages())["version"].toInt(), 6);
+    }
+
+    void aFileNewerThanPagesIsRefusedAndAnOldOneReencodesWithoutPageKeys()
+    {
+        QJsonObject newer = DocumentCodec::encode(twoPages());
+        newer["version"] = DocumentCodec::pagesVersion + 1;
+        bool refused = false;
+        try {
+            DocumentCodec::decode(newer);
+        } catch (const CodecError &) {
+            refused = true;
+        }
+        QVERIFY(refused);
+        const QJsonObject plain = DocumentCodec::encode(DocumentCodec::decode(DocumentCodec::encode(sample())));
+        QCOMPARE(plain["version"].toInt(), 5);
+        QVERIFY(!plain.contains(QStringLiteral("pages")));
+        QVERIFY(!QJsonDocument(plain).toJson().contains("\"page\""));
+    }
+
+    void aVersion5FileLoadsAsOnePage()
+    {
+        const VectorDocument read = DocumentCodec::decode(DocumentCodec::encode(sample()));
+        QVERIFY(read.pages.empty());
+        QCOMPARE(read.pageCount(), 1);
+        QCOMPARE(read.currentPageId(), VectorDocument::implicitPageId());
+        QCOMPARE(read.allPages().front().name, QStringLiteral("Page 1"));
+    }
+
+    void anUnknownPageTagGoesToTheFirstPage()
+    {
+        QUuid second;
+        QJsonObject json = DocumentCodec::encode(twoPages(&second));
+        QJsonArray objects = json["objects"].toArray();
+        for (int index = 0; index < objects.size(); ++index) {
+            QJsonObject object = objects[index].toObject();
+            if (object.contains("page") && object["page"].toString() == second.toString(QUuid::WithoutBraces)) {
+                object["page"] = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                objects[index] = object;
+            }
+        }
+        json["objects"] = objects;
+        QJsonArray guides = json["guides"].toArray();
+        QJsonObject guide = guides.at(1).toObject();
+        guide["page"] = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        guides[1] = guide;
+        json["guides"] = guides;
+        const VectorDocument read = DocumentCodec::decode(json);
+        const QUuid first = read.pages.front().id;
+        QCOMPARE(read.layersOn(first).size(), size_t(2));
+        // The page the objects left is not left without a layer.
+        QCOMPARE(read.layersOn(second).size(), size_t(1));
+        QCOMPARE(read.guides.back().page, first);
+    }
+
+    void duplicatePageIdsAndNamesAreRepaired()
+    {
+        QUuid second;
+        QJsonObject json = DocumentCodec::encode(twoPages(&second));
+        QJsonArray pages = json["pages"].toArray();
+        QJsonObject dupeId = pages.at(1).toObject();
+        dupeId["name"] = QStringLiteral("Dropped");
+        pages.append(dupeId);
+        pages.append(QJsonObject{{"id", QUuid::createUuid().toString(QUuid::WithoutBraces)}, {"name", QStringLiteral("Page 1")}});
+        pages.append(QJsonObject{{"id", QUuid::createUuid().toString(QUuid::WithoutBraces)}, {"name", QStringLiteral("  ")}});
+        pages.append(QJsonObject{{"name", QStringLiteral("No id")}});
+        json["pages"] = pages;
+        const VectorDocument read = DocumentCodec::decode(json);
+        QCOMPARE(read.pages.size(), size_t(4));
+        QCOMPARE(read.pages[1].id, second);
+        QCOMPARE(read.pages[1].name, QStringLiteral("Page 2"));
+        QCOMPARE(read.pages[2].name, QStringLiteral("Page 1 2"));
+        QCOMPARE(read.pages[3].name, QStringLiteral("Page 4"));
+        // The pages added by hand each got an artboard.
+        QCOMPARE(read.artboardsOn(read.pages[2].id).size(), size_t(1));
+    }
+
+    void aCurrentPageThatNamesNoPageMeansTheFirst()
+    {
+        QJsonObject json = DocumentCodec::encode(twoPages());
+        json["currentPage"] = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const VectorDocument read = DocumentCodec::decode(json);
+        QCOMPARE(read.currentPage, read.pages.front().id);
+        json.remove("currentPage");
+        QCOMPARE(DocumentCodec::decode(json).currentPage, read.pages.front().id);
+    }
+
+    void aCopiedLayerCarriesItsPageKey()
+    {
+        QUuid second;
+        const VectorDocument document = twoPages(&second);
+        const QJsonObject json = DocumentCodec::encode(*document.find(document.layers().front()));
+        QCOMPARE(json["page"].toString(), second.toString(QUuid::WithoutBraces));
+        QCOMPARE(DocumentCodec::decodeObject(json).page, second);
+        const VectorDocument plain = sample();
+        QVERIFY(!DocumentCodec::encode(*plain.find(plain.layers().front())).contains("page"));
     }
 
     void unwritableFolderIsAFileError()

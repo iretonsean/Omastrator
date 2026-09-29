@@ -122,6 +122,8 @@ public:
             return a.value(QStringLiteral("index")).toInt() < b.value(QStringLiteral("index")).toInt();
         });
 
+        // Several Penpot pages become pages; one stays the plain document.
+        paged = pages.size() > 1;
         std::vector<std::pair<std::pair<int, int>, Artboard>> orderedArtboards;
         for (int p = 0; p < int(pages.size()); ++p)
             buildPage(pages[size_t(p)], pagesPrefix, p, orderedArtboards);
@@ -162,13 +164,27 @@ public:
 
         std::stable_sort(orderedArtboards.begin(), orderedArtboards.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
         std::vector<Artboard> finalArtboards;
-        for (auto &entry : orderedArtboards)
+        for (auto &entry : orderedArtboards) {
+            if (paged)
+                entry.second.page = pageList[size_t(entry.first.first)].id;
             finalArtboards.push_back(std::move(entry.second));
-        document.setArtboards(std::move(finalArtboards));
+        }
+        if (paged) {
+            document.pages = pageList;
+            document.repairPageNames();
+            document.currentPage = pageList.front().id;
+            document.artboards = std::move(finalArtboards);
+            document.size = document.artboards.front().rect.size();
+            document.background = document.artboards.front().background;
+        } else {
+            document.setArtboards(std::move(finalArtboards));
+        }
         warnings.removeDuplicates();
     }
 
 private:
+    bool paged = false;
+    std::vector<Page> pageList;
     struct PendingInstance {
         QUuid object;
         QString componentID;
@@ -285,6 +301,10 @@ private:
         if (layer.name.isEmpty())
             layer.name = QStringLiteral("Page");
         layer.layerColor = nextLayerColor(int(document.layers().size()));
+        if (paged) {
+            pageList.push_back(Page{QUuid::createUuid(), layer.name});
+            layer.page = pageList.back().id;
+        }
         document.objects.push_back(layer);
         const QUuid layerID = document.objects.back().id;
 

@@ -577,18 +577,31 @@ private slots:
                  "relativeTransform": [[1, 0, -30], [0, 1, 510]]}]}]}})";
         const VectorDocument document = FigmaImporter::parseRestFile(json, QString());
         QCOMPARE(document.artboards.size(), size_t(2));
+        QCOMPARE(document.pageCount(), 2);
+        const QUuid one = document.allPages()[0].id;
+        const QUuid two = document.allPages()[1].id;
+        QCOMPARE(document.allPages()[0].name, QStringLiteral("One"));
+        QCOMPARE(document.allPages()[1].name, QStringLiteral("Two"));
+        QCOMPARE(document.currentPageId(), one);
         const VectorObject *a = named(document, QStringLiteral("A"));
         const VectorObject *b = named(document, QStringLiteral("B"));
         QVERIFY(a && b);
-        QVERIFY(document.artboards[0].rect.contains(a->path.bounds()));
-        QVERIFY(document.artboards[1].rect.contains(b->path.bounds()));
-        QVERIFY(!document.artboards[0].rect.intersects(document.artboards[1].rect));
+        QCOMPARE(document.pageOf(a->id), one);
+        QCOMPARE(document.pageOf(b->id), two);
+        // Each page's content sits inside its own artboard, both from the origin.
+        const QRectF boardOne = document.artboardsOn(one).front().rect;
+        const QRectF boardTwo = document.artboardsOn(two).front().rect;
+        QCOMPARE(boardOne.topLeft(), QPointF(0, 0));
+        QCOMPARE(boardTwo.topLeft(), QPointF(0, 0));
+        QVERIFY(boardOne.contains(a->path.bounds()));
+        QVERIFY(boardTwo.contains(b->path.bounds()));
         // An instance made on page two, of a component on page one, stays on page two.
         const VectorObject *copy = named(document, QStringLiteral("Copy"));
         QVERIFY(copy && copy->instance.has_value());
+        QCOMPARE(document.pageOf(copy->id), two);
         const QRectF copyBounds = document.bounds(copy->id, true);
         QVERIFY(copyBounds.isValid());
-        QVERIFY(document.artboards[1].rect.contains(copyBounds));
+        QVERIFY(boardTwo.contains(copyBounds));
     }
 
     void tokenRoundTripsWithRestrictivePermissions()

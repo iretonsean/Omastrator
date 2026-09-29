@@ -135,7 +135,7 @@ private slots:
     {
         VectorDocument document = VectorDocument::blank({400, 300});
         document.setArtboards({{QUuid::createUuid(), QStringLiteral("Phone"), QRectF(0, 0, 375, 812), Qt::white},
-                               {QUuid::createUuid(), QStringLiteral("Notes"), QRectF(400, 0, 100, 100), Qt::white, false}});
+                               {QUuid::createUuid(), QStringLiteral("Notes"), QRectF(400, 0, 100, 100), Qt::white, QUuid(), false}});
         QVERIFY(document.artboards[0].exported);
         QCOMPARE(document.firstExportedArtboard(), 0);
         const QJsonObject json = DocumentCodec::encode(document);
@@ -152,7 +152,7 @@ private slots:
     {
         VectorDocument document = VectorDocument::blank({100, 100});
         QCOMPARE(document.firstExportedArtboard(), 0);
-        document.setArtboards({{QUuid::createUuid(), QStringLiteral("A"), QRectF(0, 0, 100, 100), Qt::white, false},
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("A"), QRectF(0, 0, 100, 100), Qt::white, QUuid(), false},
                                {QUuid::createUuid(), QStringLiteral("B"), QRectF(200, 0, 100, 100), Qt::white}});
         QCOMPARE(document.firstExportedArtboard(), 1);
         document.artboards[1].exported = false;

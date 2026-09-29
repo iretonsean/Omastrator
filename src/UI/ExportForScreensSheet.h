@@ -23,7 +23,7 @@ private:
     void runExport();
     void restoreSettings();
     void saveSettings() const;
-    std::vector<int> checkedArtboards() const;
+    std::vector<QUuid> checkedArtboards() const;
     std::vector<QUuid> checkedAssets() const;
     std::vector<double> checkedScales() const;
     QStringList checkedFormats() const;

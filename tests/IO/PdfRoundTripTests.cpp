@@ -1,3 +1,4 @@
+#include "Document/EditorSession.h"
 #include "IO/DocumentExporter.h"
 #include "IO/PdfImporter.h"
 #include <QTemporaryDir>
@@ -73,6 +74,24 @@ private slots:
         // "Round Trip" (9 non-space glyphs) becomes one black filled path
         // with one contour per glyph, more for glyphs with counters (o, R, d).
         QVERIFY(textContours >= 9);
+    }
+
+    // Export writes a PDF page per artboard across pages; import makes a page per PDF page.
+    void pagesComeBackAsPages()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addPage(QStringLiteral("Second"));
+        session.setArtboardSize({120, 80});
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("pages.pdf"));
+        DocumentExporter::writePdf(*session.document(), path);
+        const VectorDocument imported = PdfImporter::read(path, nullptr);
+        QCOMPARE(imported.pageCount(), 2);
+        QCOMPARE(imported.artboardsOn(imported.allPages()[0].id).front().rect.size(), QSizeF(200, 100));
+        QCOMPARE(imported.artboardsOn(imported.allPages()[1].id).front().rect.size(), QSizeF(120, 80));
+        QCOMPARE(imported.currentPageId(), imported.allPages()[0].id);
     }
 };
 

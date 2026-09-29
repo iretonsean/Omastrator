@@ -100,12 +100,17 @@ QJsonObject solidFill(const QString &hex)
     return QJsonObject{{"fillColor", hex}, {"fillOpacity", 1}};
 }
 
-// A whole .penpot file: manifest + one file record + one page (with an
-// implicit zero-uuid root listing `topLevelIDs`) + each shape's own entry.
-QByteArray penpotFile(const QList<QJsonObject> &shapes, const QStringList &topLevelIDs)
+struct PageSpec {
+    QString name;
+    QList<QJsonObject> shapes;
+    QStringList topLevelIDs;
+};
+
+// A whole .penpot file: manifest + one file record + the pages (each with an
+// implicit zero-uuid root listing its `topLevelIDs`) + each shape's own entry.
+QByteArray penpotPages(const QList<PageSpec> &specs)
 {
     const QString fileID = newID();
-    const QString pageID = newID();
     const QString zeroID = QStringLiteral("00000000-0000-0000-0000-000000000000");
 
     QList<std::pair<QString, QByteArray>> entries;
@@ -114,20 +119,29 @@ QByteArray penpotFile(const QList<QJsonObject> &shapes, const QStringList &topLe
     entries.append({QStringLiteral("manifest.json"), QJsonDocument(manifest).toJson(QJsonDocument::Compact)});
     entries.append({QStringLiteral("files/%1.json").arg(fileID), QJsonDocument(QJsonObject{{"id", fileID}, {"name", "Test"}}).toJson()});
 
-    const QJsonObject page{{"id", pageID}, {"name", "Page 1"}, {"index", 0}};
-    entries.append({QStringLiteral("files/%1/pages/%2.json").arg(fileID, pageID), QJsonDocument(page).toJson(QJsonDocument::Compact)});
+    int index = 0;
+    for (const PageSpec &spec : specs) {
+        const QString pageID = newID();
+        const QJsonObject page{{"id", pageID}, {"name", spec.name}, {"index", index++}};
+        entries.append({QStringLiteral("files/%1/pages/%2.json").arg(fileID, pageID), QJsonDocument(page).toJson(QJsonDocument::Compact)});
 
-    QJsonArray topLevel;
-    for (const QString &id : topLevelIDs)
-        topLevel.append(id);
-    const QJsonObject root{{"id", zeroID}, {"type", "frame"}, {"shapes", topLevel}};
-    entries.append({QStringLiteral("files/%1/pages/%2/%3.json").arg(fileID, pageID, zeroID), QJsonDocument(root).toJson(QJsonDocument::Compact)});
+        QJsonArray topLevel;
+        for (const QString &id : spec.topLevelIDs)
+            topLevel.append(id);
+        const QJsonObject root{{"id", zeroID}, {"type", "frame"}, {"shapes", topLevel}};
+        entries.append({QStringLiteral("files/%1/pages/%2/%3.json").arg(fileID, pageID, zeroID), QJsonDocument(root).toJson(QJsonDocument::Compact)});
 
-    for (const QJsonObject &shape : shapes) {
-        const QString id = shape.value(QStringLiteral("id")).toString();
-        entries.append({QStringLiteral("files/%1/pages/%2/%3.json").arg(fileID, pageID, id), QJsonDocument(shape).toJson(QJsonDocument::Compact)});
+        for (const QJsonObject &shape : spec.shapes) {
+            const QString id = shape.value(QStringLiteral("id")).toString();
+            entries.append({QStringLiteral("files/%1/pages/%2/%3.json").arg(fileID, pageID, id), QJsonDocument(shape).toJson(QJsonDocument::Compact)});
+        }
     }
     return buildZip(entries);
+}
+
+QByteArray penpotFile(const QList<QJsonObject> &shapes, const QStringList &topLevelIDs)
+{
+    return penpotPages({{QStringLiteral("Page 1"), shapes, topLevelIDs}});
 }
 
 const VectorObject *named(const VectorDocument &document, const QString &name)
@@ -159,6 +173,30 @@ private slots:
         QVERIFY(PenpotImporter::canRead(penpotFile({}, {})));
         QVERIFY(!PenpotImporter::canRead(QByteArrayLiteral("not a zip")));
         QVERIFY(!PenpotImporter::canRead(buildZip({{QStringLiteral("hello.txt"), QByteArrayLiteral("hi")}})));
+    }
+
+    void penpotPagesBecomePagesEachFromItsOwnOrigin()
+    {
+        const QString one = newID();
+        const QString two = newID();
+        QJsonObject first = baseShape(one, "frame", 0, 0, 400, 300);
+        first["name"] = "Desktop";
+        first["shapes"] = QJsonArray();
+        QJsonObject second = baseShape(two, "frame", 0, 0, 100, 200);
+        second["name"] = "Phone";
+        second["shapes"] = QJsonArray();
+        const VectorDocument document = PenpotImporter::parse(penpotPages({{"Web", {first}, {one}}, {"App", {second}, {two}}}));
+        QCOMPARE(document.pageCount(), 2);
+        QCOMPARE(document.allPages()[0].name, QString("Web"));
+        QCOMPARE(document.allPages()[1].name, QString("App"));
+        QCOMPARE(document.currentPageId(), document.allPages()[0].id);
+        QCOMPARE(document.artboardsOn(document.allPages()[0].id).front().rect, QRectF(0, 0, 400, 300));
+        QCOMPARE(document.artboardsOn(document.allPages()[1].id).front().rect, QRectF(0, 0, 100, 200));
+        QCOMPARE(document.layers().size(), size_t(1));
+        QCOMPARE(document.find(document.layersOn(document.allPages()[1].id).front())->name, QString("App"));
+        QCOMPARE(document.pageOf(document.find(document.children(document.layersOn(document.allPages()[1].id).front()).front())->id),
+                 document.allPages()[1].id);
+        QCOMPARE(document.size, QSizeF(400, 300));
     }
 
     void boardBecomesAFrameAndAnArtboard()

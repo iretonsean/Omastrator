@@ -198,7 +198,7 @@ private slots:
         QVERIFY(image->image.pixelColor(1, 0).alpha() < 50);
     }
 
-    void twoPagesBecomeTwoArtboards()
+    void twoPagesBecomeTwoPages()
     {
         PdfFixtureBuilder pdf;
         const int content1 = pdf.addStream("", "0 0 1 rg 0 0 10 10 re f");
@@ -219,11 +219,18 @@ private slots:
         pdf.addDict(QByteArray("/Type /Catalog /Pages %1 0 R").replace("%1", QByteArray::number(pagesObj)));
 
         const VectorDocument document = PdfImporter::parse(pdf.build(catalogObj));
+        // A page each, the first showing, each artboard at the origin of its own page.
+        QCOMPARE(document.pageCount(), 2);
+        QCOMPARE(document.allPages()[0].name, QStringLiteral("Page 1"));
+        QCOMPARE(document.allPages()[1].name, QStringLiteral("Page 2"));
+        QCOMPARE(document.currentPageId(), document.allPages()[0].id);
         QCOMPARE(document.artboards.size(), size_t(2));
-        QCOMPARE(document.artboards[0].rect.size(), QSizeF(50, 50));
-        QCOMPARE(document.artboards[1].rect.size(), QSizeF(80, 60));
-        QVERIFY(document.artboards[1].rect.left() >= document.artboards[0].rect.right());
-        QCOMPARE(document.layers().size(), size_t(2));
+        QCOMPARE(document.artboardsOn(document.allPages()[0].id).front().rect, QRectF(0, 0, 50, 50));
+        QCOMPARE(document.artboardsOn(document.allPages()[1].id).front().rect, QRectF(0, 0, 80, 60));
+        QCOMPARE(document.layers().size(), size_t(1));
+        QCOMPARE(document.layersOn(document.allPages()[1].id).size(), size_t(1));
+        QCOMPARE(document.allLayers().size(), size_t(2));
+        QCOMPARE(document.size, QSizeF(50, 50));
     }
 
     void hiddenOcgImportsAsAHiddenLayer()
@@ -256,6 +263,36 @@ private slots:
             }
         }
         QVERIFY(found);
+    }
+
+    void anOcgUsedOnTwoPagesGetsALayerOnEachPage()
+    {
+        PdfFixtureBuilder pdf;
+        const int ocgObj = pdf.addDict("/Type /OCG /Name (Notes)");
+        const int content1 = pdf.addStream("", "/OC /MC0 BDC 0 0 1 rg 0 0 10 10 re f EMC");
+        const int content2 = pdf.addStream("", "/OC /MC0 BDC 0 1 0 rg 0 0 10 10 re f EMC");
+        const int page1 = pdf.nextNumber();
+        const int page2 = page1 + 1;
+        const int pagesObj = page2 + 1;
+        const int catalogObj = pagesObj + 1;
+        for (const int content : {content1, content2})
+            pdf.addDict(QByteArray("/Type /Page /Parent %1 0 R /MediaBox [0 0 50 50] /Contents %2 0 R "
+                                    "/Resources << /Properties << /MC0 %3 0 R >> >>")
+                            .replace("%1", QByteArray::number(pagesObj))
+                            .replace("%2", QByteArray::number(content))
+                            .replace("%3", QByteArray::number(ocgObj)));
+        pdf.addDict(QByteArray("/Type /Pages /Kids [%1 0 R %2 0 R] /Count 2")
+                        .replace("%1", QByteArray::number(page1))
+                        .replace("%2", QByteArray::number(page2)));
+        pdf.addDict(QByteArray("/Type /Catalog /Pages %1 0 R").replace("%1", QByteArray::number(pagesObj)));
+
+        const VectorDocument document = PdfImporter::parse(pdf.build(catalogObj));
+        for (const Page &page : document.allPages()) {
+            int notes = 0;
+            for (const QUuid &id : document.layersOn(page.id))
+                notes += document.find(id)->name == QStringLiteral("Notes") ? 1 : 0;
+            QCOMPARE(notes, 1);
+        }
     }
 
     void xrefStreamWithObjectStreamLoads()

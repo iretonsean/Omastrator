@@ -48,7 +48,12 @@ void EditorSession::insertNew(VectorDocument &document, VectorObject object)
     const QUuid id = object.id;
     std::optional<QUuid> parent = insertionParent();
     if (!parent) {
-        document = VectorDocument::blank(document.size);
+        if (document.pages.empty()) {
+            document = VectorDocument::blank(document.size);
+        } else {
+            // A page with no layer gets one; the pages stay.
+            document.appendLayer(VectorDocument::blank(document.size).objects.front());
+        }
         parent = document.layers().back();
     }
     // Locked or hidden layers take no new objects; the topmost open one does.
@@ -150,8 +155,9 @@ QUuid EditorSession::placeImage(const QImage &image, const QString &name, std::o
     object.name = name;
     QSizeF size = image.size();
     // Larger than the artboard: fit it, as Place does.
-    const double scale = std::min({1.0, m_document->size.width() / size.width(), m_document->size.height() / size.height()});
-    const QPointF middle = center.value_or(QPointF(m_document->size.width() / 2, m_document->size.height() / 2));
+    const QRectF board = m_document->artboard(activeArtboard()).rect;
+    const double scale = std::min({1.0, board.width() / size.width(), board.height() / size.height()});
+    const QPointF middle = center.value_or(board.center());
     object.transform = QTransform::fromScale(scale, scale)
         * QTransform::fromTranslate(middle.x() - size.width() * scale / 2, middle.y() - size.height() * scale / 2);
     return addObject(object, QStringLiteral("Place"));
@@ -186,13 +192,13 @@ void EditorSession::deleteObjects(const std::vector<QUuid> &ids)
                 doomed.push_back(id);
         }
         document.remove(doomed);
-        // A document always keeps one layer.
+        // A page always keeps one layer.
         if (document.layers().empty()) {
             VectorObject layer;
             layer.kind = ObjectKind::layer;
             layer.name = QStringLiteral("Layer 1");
             layer.layerColor = nextLayerColor(0);
-            document.objects.push_back(layer);
+            document.appendLayer(layer);
         }
         std::erase_if(m_selection, [&](const QUuid &id) { return !document.find(id); });
     });
@@ -502,8 +508,8 @@ QUuid EditorSession::addFrame(const QRectF &rect, const QString &name)
         // Drawn inside a frame, it nests in the innermost one there, as Figma's do.
         std::optional<QUuid> host;
         for (const VectorObject &object : document.objects) {
-            if (object.kind == ObjectKind::frame && document.isEffectivelyVisible(object.id) && !document.isEffectivelyLocked(object.id)
-                && object.path.painterPath().contains(rect.normalized()))
+            if (object.kind == ObjectKind::frame && document.isOnCurrentPage(object.id) && document.isEffectivelyVisible(object.id)
+                && !document.isEffectivelyLocked(object.id) && object.path.painterPath().contains(rect.normalized()))
                 host = object.id;
         }
         if (host)
@@ -1198,7 +1204,7 @@ QUuid EditorSession::addLayer()
     layer.name = QStringLiteral("Layer %1").arg(count + 1);
     layer.layerColor = nextLayerColor(count);
     const QUuid id = layer.id;
-    edit(QStringLiteral("New Layer"), [&](VectorDocument &document) { document.objects.push_back(layer); });
+    edit(QStringLiteral("New Layer"), [&](VectorDocument &document) { document.appendLayer(layer); });
     m_activeLayer = id;
     notify(false);
     return id;
@@ -1286,7 +1292,7 @@ void EditorSession::unlockAll()
     edit(QStringLiteral("Unlock All"), [&](VectorDocument &document) {
         std::vector<QUuid> unlocked;
         for (VectorObject &object : document.objects) {
-            if (object.isLocked && object.kind != ObjectKind::layer) {
+            if (object.isLocked && object.kind != ObjectKind::layer && document.isOnCurrentPage(object.id)) {
                 object.isLocked = false;
                 unlocked.push_back(object.id);
             }
@@ -1311,7 +1317,7 @@ void EditorSession::showAll()
     edit(QStringLiteral("Show All"), [&](VectorDocument &document) {
         std::vector<QUuid> shown;
         for (VectorObject &object : document.objects) {
-            if (!object.isVisible && object.kind != ObjectKind::layer) {
+            if (!object.isVisible && object.kind != ObjectKind::layer && document.isOnCurrentPage(object.id)) {
                 object.isVisible = true;
                 shown.push_back(object.id);
             }
@@ -1427,6 +1433,7 @@ void EditorSession::pasteObjects(std::vector<VectorObject> objects, PastePositio
             const QUuid fresh = QUuid::createUuid();
             renamed.emplace_back(object.id, fresh);
             object.id = fresh;
+            object.page = QUuid();
         }
         // A thread stays within what's pasted together; one that leaves it is dropped.
         for (VectorObject &object : objects) {

@@ -45,6 +45,12 @@ QString keywordsFor(const QString &name)
 {
     static const QHash<QString, QString> words{
         {"artboardSize", "document setup canvas dimensions width height"},
+        {"newPage", "page canvas add"},
+        {"duplicatePage", "page canvas copy"},
+        {"renamePage", "page canvas name"},
+        {"deletePage", "page canvas remove"},
+        {"nextPage", "page canvas switch"},
+        {"previousPage", "page canvas switch back"},
         {"showGrid", "grid"},
         {"snapToGrid", "snapping grid"},
         {"outline", "outline mode wireframe preview"},
@@ -155,7 +161,8 @@ void CommandPalette::gatherContext()
             }
             const QString name = entry->objectName();
             const QString id = QStringLiteral("action:") + name;
-            if (name.isEmpty() || entry->isSeparator() || known.contains(id) || name == QLatin1String("askAI") || name == QLatin1String("selectLayer"))
+            if (name.isEmpty() || entry->isSeparator() || known.contains(id) || name == QLatin1String("askAI") || name == QLatin1String("selectLayer")
+                || name == QLatin1String("moveToPage"))
                 continue;
             known.insert(id);
             const QString title = name.startsWith(QLatin1String("contextAlign")) ? QStringLiteral("Align ") + plain(entry->text()) : plain(entry->text());
@@ -176,7 +183,7 @@ void CommandPalette::gatherRest()
     ProjectWorkspace &workspace = m_menus.workspace();
     EditorSession &session = workspace.current().session;
     AgentBridge *agent = m_menus.agent();
-    const bool proposal = agent && agent->hasProposalIn(session);
+    const bool proposal = session.isProposalOpen() || (agent && agent->hasProposalIn(session));
     // The front session when it runs, not when the palette opened.
     const auto front = [&workspace]() -> EditorSession & { return workspace.current().session; };
     for (const Tool tool : allTools) {
@@ -216,6 +223,26 @@ void CommandPalette::gatherRest()
                                   QStringLiteral("Design System · %1").arg(token.displayValue(document.tokenMode)), QString(),
                                   QStringLiteral("token design system ") + title(token.kind).toLower(), selected, false,
                                   [front, id] { return front().applyToken(id); }});
+        }
+        // Pages: go to one, and with a selection, send it there.
+        const bool sendable = selected && !document.locked && !proposal;
+        if (document.pageCount() > 1) {
+            for (const Page &page : document.allPages()) {
+                const QUuid id = page.id;
+                const bool here = id == document.currentPageId();
+                m_commands.push_back({QStringLiteral("page:") + id.toString(QUuid::WithoutBraces), QStringLiteral("Go to Page: ") + page.name,
+                                      QStringLiteral("Pages"), QString(), QStringLiteral("page canvas switch"), !here && !proposal, here, [front, id] {
+                                          front().setCurrentPage(id);
+                                          return QString();
+                                      }});
+                if (!sendable)
+                    continue;
+                m_commands.push_back({QStringLiteral("moveToPage:") + id.toString(QUuid::WithoutBraces), QStringLiteral("Move to Page: ") + page.name,
+                                      QStringLiteral("Pages"), QString(), QStringLiteral("page canvas send selection"), !here, false, [front, id] {
+                                          front().moveSelectionToPage(id);
+                                          return QString();
+                                      }});
+            }
         }
         QStringList sets;
         for (const QUuid &master : Components::masters(document)) {
@@ -269,8 +296,11 @@ std::optional<CommandPalette::Command> CommandPalette::ask(const QString &reques
     if (!agent || request.isEmpty() || !session.hasDocument())
         return std::nullopt;
     const bool selected = session.hasSelection();
-    const bool empty = std::none_of(session.document()->objects.begin(), session.document()->objects.end(),
-                                    [](const VectorObject &object) { return object.kind != ObjectKind::layer; });
+    // Empty means this page: art on another page doesn't make Generate an edit.
+    const VectorDocument &document = *session.document();
+    const bool empty = std::none_of(document.objects.begin(), document.objects.end(), [&](const VectorObject &object) {
+        return object.kind != ObjectKind::layer && document.isOnCurrentPage(object.id);
+    });
     // Nothing selected and new art asked for, or nothing drawn yet: Generate; otherwise an edit, previewed.
     const bool generate = !selected && (empty || asksForNewArt(request));
     Command command;

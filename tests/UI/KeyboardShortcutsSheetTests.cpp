@@ -64,6 +64,7 @@ private slots:
     void recordingWaitsForARealKey();
     void aClashRestsSaveAndDefaultsComeBack();
     void cancelKeepsWhatWasSaved();
+    void theSheetNamesThePageKeys();
 };
 
 void KeyboardShortcutsSheetTests::initTestCase()
@@ -199,6 +200,19 @@ void KeyboardShortcutsSheetTests::cancelKeepsWhatWasSaved()
     QTest::keyClick(QApplication::focusWidget() ? QApplication::focusWidget() : &again, Qt::Key_Escape);
     QTRY_VERIFY(!shownPanel());
     QCOMPARE(ShortcutSettings::shared().overrides().size(), 1);
+}
+
+void KeyboardShortcutsSheetTests::theSheetNamesThePageKeys()
+{
+    Bar bar;
+    bar.workspace.createDocument(QSizeF(200, 200));
+    QWidget &panel = opened(bar);
+    QString all;
+    for (const QLabel *label : panel.findChildren<QLabel *>())
+        all += label->text() + QLatin1Char('\n');
+    QVERIFY(all.contains(QStringLiteral("Alt+PageDown and Alt+PageUp")));
+    QCOMPARE(bar.action("nextPage").shortcut(), QKeySequence(Qt::ALT | Qt::Key_PageDown));
+    panel.close();
 }
 
 QTEST_MAIN(KeyboardShortcutsSheetTests)

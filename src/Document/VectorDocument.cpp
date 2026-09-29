@@ -190,11 +190,6 @@ std::vector<QUuid> VectorDocument::descendants(const QUuid &id) const
     return result;
 }
 
-std::vector<QUuid> VectorDocument::layers() const
-{
-    return children(std::nullopt);
-}
-
 bool VectorDocument::isAncestor(const QUuid &ancestor, const QUuid &of) const
 {
     const VectorObject *object = find(of);
@@ -347,9 +342,18 @@ int VectorDocument::subtreeEnd(int index) const
     return end;
 }
 
+void VectorDocument::appendLayer(VectorObject layer)
+{
+    if (!pages.empty() && layer.page.isNull())
+        layer.page = currentPageId();
+    objects.push_back(std::move(layer));
+}
+
 void VectorDocument::insert(VectorObject object, const QUuid &parent, std::optional<QUuid> above)
 {
     object.parentID = parent;
+    if (object.kind == ObjectKind::layer && object.page.isNull() && !pages.empty())
+        object.page = currentPageId();
     // Painting in order: the parent is the last object or one of its ancestors, so its subtree runs to the end.
     if (!above && !objects.empty()) {
         int at = int(objects.size()) - 1;
@@ -407,7 +411,20 @@ bool VectorDocument::moveLayer(const QUuid &id, int index)
     const VectorObject *object = find(id);
     if (!object || object->kind != ObjectKind::layer)
         return false;
-    return moveUnder(id, std::nullopt, index);
+    if (pages.size() < 2)
+        return moveUnder(id, std::nullopt, index);
+    // `index` counts this page's layers; moveUnder counts every page's.
+    std::vector<QUuid> mine = layersOn(object->page);
+    std::erase(mine, id);
+    std::vector<QUuid> siblings = children(std::nullopt);
+    std::erase(siblings, id);
+    int at = -1;
+    if (!mine.empty()) {
+        const bool inside = index >= 0 && index < int(mine.size());
+        const auto found = std::find(siblings.begin(), siblings.end(), inside ? mine[size_t(index)] : mine.back());
+        at = int(found - siblings.begin()) + (inside ? 0 : 1);
+    }
+    return moveUnder(id, std::nullopt, at);
 }
 
 bool VectorDocument::moveUnder(const QUuid &id, const std::optional<QUuid> &parent, int index)

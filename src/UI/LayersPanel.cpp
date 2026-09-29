@@ -1,5 +1,6 @@
 #include "UI/LayersPanel.h"
 #include "UI/NativeLayerList.h"
+#include "UI/PagesList.h"
 #include "UI/PanelIcons.h"
 #include <QEvent>
 #include <QFrame>
@@ -38,6 +39,9 @@ LayersPanel::LayersPanel(EditorSession &session, QWidget *parent)
     auto *column = new QVBoxLayout(this);
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(0);
+    m_pages = new PagesList(session, this);
+    column->addWidget(m_pages);
+    column->addWidget(divider(this));
     auto *heading = new QHBoxLayout;
     heading->setContentsMargins(18, 14, 18, 12);
     heading->addWidget(text(QStringLiteral("Layers"), 12, QFont::DemiBold, this));

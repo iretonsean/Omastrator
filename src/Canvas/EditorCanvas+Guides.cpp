@@ -27,6 +27,8 @@ std::optional<int> EditorCanvas::State::guideAt(QPointF view) const
     double bestDistance = guideReach;
     for (int index = 0; index < int(document->guides.size()); ++index) {
         const Guide &guide = document->guides[size_t(index)];
+        if (!document->isOnCurrentPage(guide))
+            continue;
         const QPointF at = toView(QPointF(guide.position, guide.position));
         const double distance = std::abs(guide.orientation == Qt::Horizontal ? view.y() - at.y() : view.x() - at.x());
         if (distance <= bestDistance) {
@@ -122,7 +124,7 @@ void EditorCanvas::State::drawGuides(QPainter &painter) const
     painter.setPen(cosmetic(shown));
     if (session.showsGuides) {
         for (int index = 0; index < int(document->guides.size()); ++index) {
-            if (!(dragging && drag->guide == index))
+            if (!(dragging && drag->guide == index) && document->isOnCurrentPage(document->guides[size_t(index)]))
                 line(document->guides[size_t(index)]);
         }
     }

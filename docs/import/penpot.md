@@ -122,6 +122,9 @@ at `develop`, 2026-09.
   importer instead looks for any `objects/` entry whose name contains the
   shape's own media id and decodes whichever one is found; if that fails,
   it warns instead of guessing further.
+- **A file with several pages makes several pages** (docs/PAGES.md), each
+  keeping its own coordinates (they used to overlap on one canvas); a
+  one-page file stays a plain document. The first page shows.
 - **A top-level board becomes its own `Artboard`; loose top-level shapes
   (outside any board) share one synthetic `Artboard` sized to their own
   combined bounds.** Unlike Sketch, where content nearly always sits

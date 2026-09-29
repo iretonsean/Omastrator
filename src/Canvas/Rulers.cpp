@@ -35,7 +35,7 @@ void Rulers::paintEvent(QPaintEvent *)
 {
     if (!m_session.document())
         return;
-    const QSizeF documentSize = m_session.document()->size;
+    const QSizeF documentSize = m_session.document()->viewSize();
     const double step = labelStep(m_session.viewport.pointsPerPixel());
     const double minor = step / 5;
     QPainter painter(this);

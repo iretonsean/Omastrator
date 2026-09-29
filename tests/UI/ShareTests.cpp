@@ -243,6 +243,18 @@ private slots:
         QVERIFY(!clipboard().contains(QLatin1String(FakeCloud::secret)));
     }
 
+    void theScopeNamesThePageFromTwoPagesOn()
+    {
+        Window w;
+        w.box({10, 10, 40, 20});
+        w.session().deselectAll();
+        QCOMPARE(w.share().scopeText(), QStringLiteral("the artboard"));
+        w.session().addPage(QStringLiteral("Second"));
+        QCOMPARE(w.share().scopeText(), QStringLiteral("the artboard on “Second”"));
+        w.session().addArtboard(QRectF(500, 0, 100, 100));
+        QCOMPARE(w.share().scopeText(), QStringLiteral("the artboard “Artboard 2” on “Second”"));
+    }
+
     void theSelectionIsSharedAloneAndTheToastSaysSo()
     {
         m_cloud->addRemote(QStringLiteral("work"), QStringLiteral("dropbox"));

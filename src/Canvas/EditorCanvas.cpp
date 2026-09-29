@@ -36,6 +36,17 @@ EditorCanvas::EditorCanvas(EditorSession &session, QWidget *parent)
         m_state->documentChanged();
         update();
     });
+    // Typing ends on the page it began on, before the switch or the undo step that follows.
+    connect(&m_session, &EditorSession::aboutToChangePage, this, [this] { m_state->finishText(); });
+    // A page switch is no document change, but everything the canvas built belongs to the old page.
+    connect(&m_session, &EditorSession::currentPageChanged, this, [this] {
+        m_state->finishText();
+        m_state->drag.reset();
+        m_state->pen.reset();
+        m_state->documentChanged();
+        m_state->updateCursor();
+        update();
+    });
     connect(&m_session, &EditorSession::changed, this, [this] {
         m_state->toolChanged();
         m_state->syncRulers();
@@ -129,7 +140,7 @@ void EditorCanvas::noteGesture()
 
 QSizeF EditorCanvas::State::documentSize() const
 {
-    return session.document() ? session.document()->size : QSizeF(1, 1);
+    return session.document() ? session.document()->viewSize() : QSizeF(1, 1);
 }
 
 double EditorCanvas::State::scale() const

@@ -33,7 +33,7 @@ SmartGuides EditorCanvas::State::guidesExcluding(const std::vector<QUuid> &exclu
     SmartGuides guides = session.usesSmartGuides ? SmartGuides(*session.document(), excluded, excludedBoard) : SmartGuides();
     // Ruler guides pull whether or not smart guides are on, while they show.
     if (session.showsGuides)
-        guides.addGuides(session.document()->guides);
+        guides.addGuides(session.document()->guidesOnCurrentPage());
     return guides;
 }
 
