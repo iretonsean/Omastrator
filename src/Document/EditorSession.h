@@ -10,6 +10,7 @@
 #include <QUuid>
 #include <array>
 #include <functional>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -110,6 +111,22 @@ public:
     void removeFromExport(const std::vector<QUuid> &ids);
     // The Artboard tool's "Move art with artboard" option.
     bool artboardMovesArt = true;
+
+    // Pages (EditorSession+Pages.cpp; docs/PAGES.md) -------------------------------
+    QUuid currentPage() const;
+    // After the current page, with one layer and one artboard; it becomes current.
+    QUuid addPage(const QString &name = {});
+    // After the original, "<name> Copy"; the copy becomes current.
+    QUuid duplicatePage(const QUuid &id);
+    void renamePage(const QUuid &id, const QString &name);
+    // Never the last page. Returns whether it went.
+    bool deletePage(const QUuid &id);
+    void movePage(const QUuid &id, int index);
+    // Keeps positions; the view stays and the selection empties.
+    void moveSelectionToPage(const QUuid &id);
+    // Not undo steps: they commit an interaction, remember the page's view and restore the next one's.
+    void setCurrentPage(const QUuid &id);
+    void showPage(bool next);
 
     // Tools and default style ------------------------------------------------
     Tool tool() const { return m_tool; }
@@ -596,6 +613,8 @@ signals:
     void documentChanged();
     // A paste from another app left some things out.
     void pasteLeftOut(const QStringList &warnings);
+    // The page shown changed: a switch, a new or deleted page, or an undo across pages.
+    void currentPageChanged(const QUuid &page);
 
 private:
     void notify(bool documentToo = true);
@@ -604,6 +623,10 @@ private:
     void pasteObjects(std::vector<VectorObject> objects, PastePosition position);
     void insertNew(VectorDocument &document, VectorObject object);
     void restore(const DocumentHistory::Snapshot &snapshot);
+    // Pages' view memory: what leaving a page keeps, and what entering one restores.
+    void rememberPageView();
+    bool enterPage();
+    bool frameView(const QRectF &rect);
     void pruneSelection();
     std::vector<QUuid> selectionInOrder() const;
     std::optional<QUuid> insertionParent() const;
@@ -643,6 +666,15 @@ private:
         bool duplicated = false;
     };
     std::optional<Interaction> m_interaction;
+    struct PageView {
+        CanvasViewport viewport;
+        int activeArtboard = 0;
+        bool artboardSelected = false;
+        std::vector<QUuid> selection;
+    };
+    // Per page, not saved. `m_shownPage` is the page these fields describe.
+    std::map<QUuid, PageView> m_pageViews;
+    QUuid m_shownPage;
     mutable int m_pasteCount = 0;
     // When the last coalescing text step ran.
     qint64 m_lastTextStep = 0;

@@ -132,3 +132,38 @@ std::vector<Guide> VectorDocument::guidesOnCurrentPage() const
     }
     return result;
 }
+
+std::vector<VectorObject> VectorDocument::copyLayers(const std::vector<QUuid> &layerIds) const
+{
+    std::vector<QUuid> wanted;
+    for (const QUuid &layer : layerIds) {
+        wanted.push_back(layer);
+        const std::vector<QUuid> nested = descendants(layer);
+        wanted.insert(wanted.end(), nested.begin(), nested.end());
+    }
+    std::vector<VectorObject> copies;
+    std::vector<std::pair<QUuid, QUuid>> renamed;
+    for (const VectorObject &object : objects) {
+        if (std::find(wanted.begin(), wanted.end(), object.id) == wanted.end())
+            continue;
+        copies.push_back(object);
+        renamed.emplace_back(object.id, QUuid::createUuid());
+        copies.back().id = renamed.back().second;
+    }
+    const auto fresh = [&](const QUuid &old) {
+        const auto found = std::find_if(renamed.begin(), renamed.end(), [&](const auto &pair) { return pair.first == old; });
+        return found == renamed.end() ? QUuid() : found->second;
+    };
+    for (size_t index = 0; index < copies.size(); ++index) {
+        VectorObject &copy = copies[index];
+        if (copy.parentID)
+            copy.parentID = fresh(*copy.parentID);
+        if (!copy.text.threadNext.isNull())
+            copy.text.threadNext = fresh(copy.text.threadNext);
+        if (copy.component) {
+            copy.instance = InstanceInfo{renamed[index].first, copy.component->placement, {}, {}};
+            copy.component.reset();
+        }
+    }
+    return copies;
+}

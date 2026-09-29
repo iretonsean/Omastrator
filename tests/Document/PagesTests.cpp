@@ -1,5 +1,6 @@
 #include "Document/EditorSession.h"
 #include "Rendering/VectorRenderer.h"
+#include <QSignalSpy>
 #include <QTest>
 
 // Pages (docs/PAGES.md): the model, then the session's operations.
@@ -356,6 +357,398 @@ private slots:
         QCOMPARE(f.document.viewSize(), QSizeF(640, 480));
         f.document.currentPage = f.first;
         QCOMPARE(f.document.viewSize(), QSizeF(100, 100));
+    }
+
+    void addPageIsOneStepWithALayerAndAnArtboard()
+    {
+        EditorSession session;
+        session.createDocument({300, 200});
+        const QUuid first = session.currentPage();
+        const int steps = int(session.undoNames().size());
+        const QUuid page = session.addPage();
+        QCOMPARE(int(session.undoNames().size()), steps + 1);
+        QCOMPARE(session.undoName(), QStringLiteral("New Page"));
+        const VectorDocument &document = *session.document();
+        QCOMPARE(document.pageCount(), 2);
+        QCOMPARE(document.pages.back().name, QStringLiteral("Page 2"));
+        QCOMPARE(session.currentPage(), page);
+        QCOMPARE(document.layers().size(), size_t(1));
+        QCOMPARE(document.layersOn(first).size(), size_t(1));
+        QCOMPARE(document.artboardCount(), 1);
+        QCOMPARE(document.artboard(0).rect, QRectF(0, 0, 300, 200));
+        QCOMPARE(document.allArtboards().front().page, page);
+        session.undo();
+        QCOMPARE(session.currentPage(), first);
+        QCOMPARE(session.document()->pageCount(), 1);
+        session.redo();
+        QCOMPARE(session.currentPage(), page);
+    }
+
+    void addPageAfterTheCurrentOneAndNamedOnRequest()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        const QUuid one = session.currentPage();
+        const QUuid two = session.addPage();
+        session.setCurrentPage(one);
+        const QUuid between = session.addPage(QStringLiteral("  Cover  "));
+        const std::vector<Page> &pages = session.document()->pages;
+        QCOMPARE(pages.size(), size_t(3));
+        QCOMPARE(pages[1].id, between);
+        QCOMPARE(pages[1].name, QStringLiteral("Cover"));
+        QCOMPARE(pages[2].id, two);
+        const QUuid third = session.addPage(QStringLiteral("Cover"));
+        QCOMPARE(session.document()->pages[session.document()->pageIndex(third)].name, QStringLiteral("Cover 2"));
+    }
+
+    void switchingPagesIsNotAnUndoStepAndKeepsTheFileClean()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.markSaved();
+        QSignalSpy pageChanged(&session, &EditorSession::currentPageChanged);
+        QSignalSpy documentChanged(&session, &EditorSession::documentChanged);
+        QSignalSpy changed(&session, &EditorSession::changed);
+        session.setCurrentPage(f.second);
+        QCOMPARE(session.currentPage(), f.second);
+        QVERIFY(!session.canUndo());
+        QVERIFY(!session.isModified());
+        QCOMPARE(pageChanged.size(), 1);
+        QCOMPARE(pageChanged.front().front().toUuid(), f.second);
+        QCOMPARE(documentChanged.size(), 0);
+        QVERIFY(changed.size() >= 1);
+        // The same page again says nothing.
+        session.setCurrentPage(f.second);
+        QCOMPARE(pageChanged.size(), 1);
+        session.setCurrentPage(QUuid::createUuid());
+        QCOMPARE(session.currentPage(), f.second);
+    }
+
+    void nextAndPreviousPageWrap()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.showPage(true);
+        QCOMPARE(session.currentPage(), f.second);
+        session.showPage(true);
+        QCOMPARE(session.currentPage(), f.first);
+        session.showPage(false);
+        QCOMPARE(session.currentPage(), f.second);
+        QVERIFY(!session.canUndo());
+    }
+
+    void eachPageRemembersItsSelectionAndArtboard()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.select({f.red});
+        session.setCurrentPage(f.second);
+        QVERIFY(session.selection().empty());
+        session.select({f.blue});
+        session.setCurrentPage(f.first);
+        QCOMPARE(session.selection(), std::vector<QUuid>{f.red});
+        session.setCurrentPage(f.second);
+        QCOMPARE(session.selection(), std::vector<QUuid>{f.blue});
+    }
+
+    void eachPageRemembersItsViewport()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.viewport.resize({800, 600}, 1, f.document.viewSize());
+        session.viewport.setZoom(2, session.viewport.center(), f.document.viewSize());
+        session.viewport.translate({30, 10});
+        const double zoom = session.viewport.zoom();
+        const QSizeF pan = session.viewport.pan;
+        session.setCurrentPage(f.second);
+        // A first visit fits.
+        QVERIFY(session.viewport.followsFit());
+        session.viewport.setZoom(0.5, session.viewport.center(), f.document.viewSize());
+        session.setCurrentPage(f.first);
+        QCOMPARE(session.viewport.zoom(), zoom);
+        QCOMPARE(session.viewport.pan, pan);
+        session.setCurrentPage(f.second);
+        QCOMPARE(session.viewport.zoom(), 0.5);
+    }
+
+    void switchingCommitsAnInteractionInProgress()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.select({f.red});
+        session.beginInteraction(QStringLiteral("Move"));
+        session.previewTransform(QTransform::fromTranslate(5, 0));
+        session.setCurrentPage(f.second);
+        QCOMPARE(session.undoName(), QStringLiteral("Move"));
+        QCOMPARE(session.document()->bounds(f.red).left(), 15.0);
+        QCOMPARE(session.currentPage(), f.second);
+    }
+
+    void undoLandsOnTheStepsPage()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.setCurrentPage(f.second);
+        session.select({f.blue});
+        session.moveSelection({4, 0});
+        session.setCurrentPage(f.first);
+        session.showPage(true);
+        session.setCurrentPage(f.first);
+        QSignalSpy pageChanged(&session, &EditorSession::currentPageChanged);
+        session.undo();
+        QCOMPARE(session.currentPage(), f.second);
+        QCOMPARE(pageChanged.size(), 1);
+        QCOMPARE(session.document()->bounds(f.blue).left(), 50.0);
+        session.redo();
+        QCOMPARE(session.currentPage(), f.second);
+        QCOMPARE(session.document()->bounds(f.blue).left(), 54.0);
+    }
+
+    void renamePageTrimsRefusesEmptyAndNumbersDuplicates()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.renamePage(f.second, QStringLiteral("   "));
+        QVERIFY(!session.canUndo());
+        session.renamePage(f.second, QStringLiteral("  Cover "));
+        QCOMPARE(session.undoName(), QStringLiteral("Rename Page"));
+        QCOMPARE(session.document()->pages.back().name, QStringLiteral("Cover"));
+        session.renamePage(f.first, QStringLiteral("Cover"));
+        QCOMPARE(session.document()->pages.front().name, QStringLiteral("Cover 2"));
+        const size_t steps = session.undoNames().size();
+        session.renamePage(f.first, QStringLiteral("Cover 2"));
+        QCOMPARE(session.undoNames().size(), steps);
+    }
+
+    void renamingTheImplicitPageMakesItExplicit()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        session.renamePage(session.currentPage(), QStringLiteral("Home"));
+        QCOMPARE(session.document()->pages.size(), size_t(1));
+        QCOMPARE(session.document()->allPages().front().name, QStringLiteral("Home"));
+        QCOMPARE(session.currentPage(), VectorDocument::implicitPageId());
+    }
+
+    void deletePageRefusesTheLastAndRemovesItsArt()
+    {
+        Fixture f = twoPages();
+        f.document.guides.push_back({Qt::Vertical, 6, f.second});
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.collectForExport({f.red});
+        session.setCurrentPage(f.second);
+        session.collectForExport({f.blue});
+        QVERIFY(session.deletePage(f.second));
+        QCOMPARE(session.undoName(), QStringLiteral("Delete Page"));
+        const VectorDocument &document = *session.document();
+        QCOMPARE(document.pageCount(), 1);
+        QCOMPARE(session.currentPage(), f.first);
+        QVERIFY(!document.find(f.blue));
+        QVERIFY(!document.find(f.layerTwo));
+        QVERIFY(document.find(f.red));
+        QCOMPARE(document.artboards.size(), size_t(1));
+        QVERIFY(document.guides.empty());
+        QCOMPARE(document.exportAssets, std::vector<QUuid>{f.red});
+        QVERIFY(!session.deletePage(f.first));
+        QCOMPARE(document.pageCount(), 1);
+        session.undo();
+        QCOMPARE(session.currentPage(), f.second);
+        QVERIFY(session.document()->find(f.blue));
+        QCOMPARE(session.document()->pageCount(), 2);
+    }
+
+    void deletingTheCurrentPageShowsTheNextElseThePrevious()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        const QUuid one = session.currentPage();
+        const QUuid two = session.addPage();
+        const QUuid three = session.addPage();
+        session.setCurrentPage(two);
+        session.deletePage(two);
+        QCOMPARE(session.currentPage(), three);
+        session.deletePage(three);
+        QCOMPARE(session.currentPage(), one);
+        QCOMPARE(session.document()->pageCount(), 1);
+    }
+
+    void deletingAnotherPageKeepsTheCurrentOne()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.deletePage(f.second);
+        QCOMPARE(session.currentPage(), f.first);
+        QVERIFY(session.document()->find(f.red));
+    }
+
+    void movePageReordersOnly()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        const QUuid one = session.currentPage();
+        const QUuid two = session.addPage();
+        const QUuid three = session.addPage();
+        const size_t objects = session.document()->objects.size();
+        session.movePage(three, 0);
+        QCOMPARE(session.undoName(), QStringLiteral("Reorder Pages"));
+        QCOMPARE(session.document()->pages[0].id, three);
+        QCOMPARE(session.document()->pages[1].id, one);
+        QCOMPARE(session.document()->pages[2].id, two);
+        QCOMPARE(session.document()->objects.size(), objects);
+        QCOMPARE(session.currentPage(), three);
+        const size_t steps = session.undoNames().size();
+        session.movePage(three, 0);
+        session.movePage(three, -4);
+        QCOMPARE(session.undoNames().size(), steps);
+        session.movePage(three, 99);
+        QCOMPARE(session.document()->pages.back().id, three);
+    }
+
+    void duplicatePageCopiesLayersArtboardsAndGuidesWithFreshIds()
+    {
+        Fixture f = twoPages();
+        f.document.guides.push_back({Qt::Vertical, 7, f.first});
+        VectorObject group;
+        group.kind = ObjectKind::group;
+        group.name = QStringLiteral("Group");
+        f.document.insert(group, f.layerOne);
+        VectorObject inner = rectangleObject({0, 0, 5, 5}, Qt::green);
+        f.document.insert(inner, group.id);
+        EditorSession session;
+        session.loadDocument(f.document);
+        const QUuid copy = session.duplicatePage(f.first);
+        QCOMPARE(session.undoName(), QStringLiteral("Duplicate Page"));
+        const VectorDocument &document = *session.document();
+        QCOMPARE(document.pageCount(), 3);
+        QCOMPARE(document.pages[1].id, copy);
+        QCOMPARE(document.pages[1].name, QStringLiteral("Page 1 Copy"));
+        QCOMPARE(session.currentPage(), copy);
+        // The copy: its layer, the square, the group and its child, all new.
+        QCOMPARE(document.layers().size(), size_t(1));
+        const std::vector<QUuid> art = document.descendants(document.layers().front());
+        QCOMPARE(art.size(), size_t(3));
+        for (const QUuid &id : art)
+            QVERIFY(id != f.red && id != group.id && id != inner.id);
+        QCOMPARE(document.layersOn(f.first), std::vector<QUuid>{f.layerOne});
+        QCOMPARE(document.allArtboards().size(), size_t(1));
+        QVERIFY(document.allArtboards().front().id != f.document.artboardsOn(f.first).front().id);
+        QCOMPARE(document.guidesOnCurrentPage().size(), size_t(1));
+        const QUuid newGroup = *std::find_if(art.begin(), art.end(), [&](const QUuid &id) { return document.find(id)->kind == ObjectKind::group; });
+        const std::vector<QUuid> under = document.children(newGroup);
+        QCOMPARE(under.size(), size_t(1));
+        QCOMPARE(*document.find(under.front())->parentID, newGroup);
+        session.undo();
+        QCOMPARE(session.document()->pageCount(), 2);
+        QCOMPARE(session.currentPage(), f.first);
+        QCOMPARE(session.document()->objects.size(), f.document.objects.size());
+    }
+
+    void duplicatePageOfTheImplicitPageMakesTwo()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        session.addObject(rectangleObject({5, 5, 20, 20}, Qt::red), QStringLiteral("Draw"));
+        const QUuid copy = session.duplicatePage(session.currentPage());
+        QCOMPARE(session.document()->pageCount(), 2);
+        QCOMPARE(session.document()->pages[0].id, VectorDocument::implicitPageId());
+        QCOMPARE(session.currentPage(), copy);
+        QCOMPARE(session.document()->allLayers().size(), size_t(2));
+        QCOMPARE(session.document()->children(session.document()->layers().front()).size(), size_t(1));
+    }
+
+    void anInstanceOnAnotherPageFollowsItsMain()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.select({f.red});
+        const std::optional<QUuid> made = session.makeComponent();
+        QVERIFY(made);
+        const QUuid main = *made;
+        session.duplicatePage(f.first);
+        // The copy of a main is an instance of the original.
+        const VectorDocument &document = *session.document();
+        std::vector<QUuid> instances;
+        for (const VectorObject &object : document.objects) {
+            if (object.instance)
+                instances.push_back(object.id);
+        }
+        QCOMPARE(instances.size(), size_t(1));
+        QCOMPARE(document.find(instances.front())->instance->master, main);
+        QVERIFY(document.pageOf(instances.front()) != document.pageOf(main));
+    }
+
+    void moveSelectionToPageKeepsPositionsAndEmptiesTheSelection()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        const QRectF before = f.document.bounds(f.red);
+        session.select({f.red});
+        session.moveSelectionToPage(f.second);
+        QCOMPARE(session.undoName(), QStringLiteral("Move to Page"));
+        QVERIFY(session.selection().empty());
+        const VectorDocument &document = *session.document();
+        QCOMPARE(session.currentPage(), f.first);
+        QCOMPARE(document.pageOf(f.red), f.second);
+        QCOMPARE(document.bounds(f.red), before);
+        // It went into a layer of the target page, not a new one.
+        QCOMPARE(document.layersOn(f.second).size(), size_t(1));
+        QCOMPARE(*document.find(f.red)->parentID, f.layerTwo);
+        // The page it left still has its layer.
+        QCOMPARE(document.layers(), std::vector<QUuid>{f.layerOne});
+        session.undo();
+        QCOMPARE(session.document()->pageOf(f.red), f.first);
+    }
+
+    void moveSelectionToPageMatchesLayersByNameElseTopOpenLayer()
+    {
+        Fixture f = twoPages();
+        f.document.find(f.layerOne)->name = QStringLiteral("Icons");
+        f.document.find(f.layerTwo)->name = QStringLiteral("Other");
+        VectorObject named;
+        named.kind = ObjectKind::layer;
+        named.name = QStringLiteral("Icons");
+        named.page = f.second;
+        const QUuid iconsTwo = named.id;
+        f.document.objects.insert(f.document.objects.begin(), named);
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.select({f.red});
+        session.moveSelectionToPage(f.second);
+        QCOMPARE(*session.document()->find(f.red)->parentID, iconsTwo);
+    }
+
+    void moveSelectionToPageIgnoresTheCurrentPageAndNothingSelected()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.moveSelectionToPage(f.second);
+        session.select({f.red});
+        session.moveSelectionToPage(f.first);
+        QVERIFY(!session.canUndo());
+    }
+
+    void editingOnASecondPageLeavesTheFirstAlone()
+    {
+        Fixture f = twoPages();
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.setCurrentPage(f.second);
+        session.addObject(rectangleObject({1, 1, 5, 5}, Qt::green), QStringLiteral("Draw"));
+        QCOMPARE(session.document()->layersOn(f.first), std::vector<QUuid>{f.layerOne});
+        QCOMPARE(session.document()->children(f.layerOne).size(), size_t(1));
+        QCOMPARE(session.document()->children(f.layerTwo).size(), size_t(2));
     }
 
     void uniquePageNamesNumberFromTwo()

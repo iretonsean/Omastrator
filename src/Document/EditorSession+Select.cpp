@@ -264,13 +264,19 @@ void EditorSession::zoomToSelection()
 
 void EditorSession::zoomToRect(const QRectF &rect)
 {
+    if (frameView(rect))
+        notify(false);
+}
+
+bool EditorSession::frameView(const QRectF &rect)
+{
     if (!m_document || viewport.viewSize.isEmpty() || (rect.isNull() && rect.topLeft().isNull()))
-        return;
+        return false;
     // A line or a point still gets a sensible frame.
     const double width = std::max(rect.width(), 1.0), height = std::max(rect.height(), 1.0);
     const double fitted = std::min(std::max(1.0, viewport.viewSize.width() - 96) / width, std::max(1.0, viewport.viewSize.height() - 96) / height);
     viewport.setZoom(fitted * viewport.backingScale, viewport.center(), m_document->viewSize());
     const QPointF shown = viewport.viewPoint(rect.center(), m_document->viewSize());
     viewport.translate(QSizeF(viewport.center().x() - shown.x(), viewport.center().y() - shown.y()));
-    notify(false);
+    return true;
 }

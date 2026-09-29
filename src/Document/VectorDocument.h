@@ -543,6 +543,10 @@ struct VectorDocument {
     std::vector<QUuid> layersOn(const QUuid &page) const;
     // `base` if no page has it, else `base 2`, `base 3`...
     QString uniquePageName(const QString &base) const;
+    // Fresh copies of these layers and everything under them, in document order, for Duplicate Page.
+    // Parents and text threads are remapped among the copies; a component copied becomes an
+    // instance of its original, and an instance keeps its main.
+    std::vector<VectorObject> copyLayers(const std::vector<QUuid> &layers) const;
     // Makes the implicit page and artboard explicit, and stamps every untagged (or stray) layer,
     // artboard and guide with its page, so reordering pages can't move art. Also fixes `currentPage`.
     void ensurePages();

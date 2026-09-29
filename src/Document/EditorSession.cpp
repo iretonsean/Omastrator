@@ -78,6 +78,8 @@ EditorSession::EditorSession(QObject *parent) : QObject(parent)
 
 void EditorSession::notify(bool documentToo)
 {
+    // Whatever changed the page (a switch, an edit, an undo) lands here, once.
+    const bool pageChanged = enterPage();
     // A drag previews its instances too.
     if (documentToo && m_interaction)
         settle();
@@ -96,6 +98,8 @@ void EditorSession::notify(bool documentToo)
     if (documentToo)
         emit documentChanged();
     emit changed();
+    if (pageChanged)
+        emit currentPageChanged(m_shownPage);
 }
 
 void EditorSession::createDocument(QSizeF size)
@@ -121,6 +125,8 @@ void EditorSession::loadDocument(VectorDocument document)
     m_artboardSelected = false;
     viewport.fit(m_document->viewSize());
     m_viewportDocumentSize = m_document->viewSize();
+    m_pageViews.clear();
+    m_shownPage = m_document->currentPageId();
     notify();
 }
 
@@ -135,6 +141,8 @@ void EditorSession::closeDocument()
     m_keyObject.reset();
     m_activeLayer.reset();
     m_artboardSelected = false;
+    m_pageViews.clear();
+    m_shownPage = QUuid();
     notify();
 }
 
@@ -404,7 +412,7 @@ void EditorSession::pruneSelection()
     m_document->expandEditedShapes();
     m_document->applyAutoLayout();
     m_document->reflowText();
-    std::erase_if(m_selection, [&](const QUuid &id) { return !m_document->find(id); });
+    std::erase_if(m_selection, [&](const QUuid &id) { return !m_document->find(id) || !m_document->isOnCurrentPage(id); });
     if (m_keyObject && (m_selection.size() < 2 || !isSelected(*m_keyObject)))
         m_keyObject.reset();
     // Isolation ends at the first group gone.
@@ -447,6 +455,8 @@ void EditorSession::edit(const QString &name, const std::function<void(VectorDoc
 
 void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
 {
+    // A step across pages lands on its page; notify() restores that page's view.
+    rememberPageView();
     m_document = snapshot.document;
     m_selection = snapshot.selection;
     if (!m_selection.empty())
