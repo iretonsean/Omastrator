@@ -1,6 +1,7 @@
 #include "Agent/AgentProtocol.h"
 #include "Agent/Setup.h"
 #include "Document/EditorSession.h"
+#include "Live/Counted.h"
 #include "Live/Registry.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
@@ -87,10 +88,12 @@ QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
         if (!elements.contains(edit.element))
             elements.append(edit.element);
     const QString agentFailure = liveAsk(QString(), elements, agentRequest, folder.isEmpty() ? QString() : project);
-    if (!agentFailure.isEmpty())
-        m_liveMessage = QStringLiteral("%1 edits weren't certain enough to write directly, and the agent couldn't take them: %2")
-                            .arg(plan.unresolved.size())
-                            .arg(agentFailure);
+    if (!agentFailure.isEmpty()) {
+        const bool one = plan.unresolved.size() == 1;
+        m_liveMessage = QStringLiteral("%1 %2 certain enough to write directly, and the agent couldn't take %3: %4")
+                            .arg(counted(plan.unresolved.size(), QStringLiteral("edit")), one ? QStringLiteral("wasn't") : QStringLiteral("weren't"),
+                                 one ? QStringLiteral("it") : QStringLiteral("them"), agentFailure);
+    }
     emit liveReviewChanged();
     return agentFailure.isEmpty() ? QString() : m_liveMessage;
 }

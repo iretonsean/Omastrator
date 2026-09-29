@@ -260,6 +260,8 @@ public:
         qint64 finishedAt = 0;
         // The run deployed (a save doesn't), and it went through.
         bool deployed = false;
+        // What the run is for: false for a Save, so a failure isn't called a failed deploy.
+        bool deploy = true;
         // A Browser View started it: the island and the status stream don't show it.
         bool fromFrame = false;
     };
@@ -372,6 +374,8 @@ private:
     void commitAndShip();
     // `log` replaces the job's for Details, when an agent's run is what failed.
     void pipelineFailed(const QString &line, const QString &log = QString());
+    // What a failed run left on disk: changes written and recorded but not committed, or empty.
+    QString uncommittedNote(const QString &folder) const;
     void launchDeployAgent();
     QString startSave(const QString &folder, const QString &doneMessage);
     struct Pipeline {

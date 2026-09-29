@@ -26,7 +26,7 @@ lasting fix is one of these:
   `qt6-base-dev`);
 - raising the minimum in AGENTS.md and in `find_package(Qt6 6.4 …)`.
 
-## 2. [ ] A failed Save says "Deploy failed" in the frame's bar
+## 2. [x] A failed Save says "Deploy failed" in the frame's bar (2026-09-29)
 
 **Confirmed in code and on screen.** Choose Save (not Deploy) from a
 Browser View's bar menu. When the save fails, the bar's pill says
@@ -47,7 +47,7 @@ Browser View's bar menu. When the save fails, the bar's pill says
 4. The pill says "Deploy failed". Its tooltip says "1 edits weren't
    certain enough to write directly, and the agent couldn't take them: …".
 
-## 3. [ ] A failed Save leaves the certain edits written but not committed
+## 3. [x] A failed Save leaves the certain edits written but not committed (2026-09-29)
 
 **Seen once. Check whether it's intended.** In the case in item 2, the text
 edit was written to `index.html`, but the save failed before the commit. So:
@@ -64,7 +64,7 @@ Decide one of these:
 Also check that a later Save, once an agent is available, doesn't write the
 text edit twice.
 
-## 4. [ ] Two messages that don't fit
+## 4. [x] Two messages that don't fit (2026-09-29)
 
 **Confirmed, minor.**
 - The failure message in item 2 says "1 edits"

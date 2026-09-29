@@ -1,4 +1,5 @@
 #include "UI/LivePanel.h"
+#include "Live/Counted.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
 #include <QCheckBox>
@@ -87,10 +88,10 @@ void LivePanel::addSite(QVBoxLayout *column)
     const std::vector<EditSets::Set> sets = live.editSets();
     const int pending = int(live.edits().size());
     column->addWidget(label(pending == 0 ? QStringLiteral("No edits waiting to be kept.")
-                                         : QStringLiteral("%1 edits not kept yet. Keep them as an edit set to have them back next visit.").arg(pending),
+                                         : QStringLiteral("%1 not kept yet. Keep %2 as an edit set to have %2 back next visit.").arg(counted(pending, QStringLiteral("edit")), pending == 1 ? QStringLiteral("it") : QStringLiteral("them")),
                             QStringLiteral("liveSitePending"), self));
     for (const EditSets::Set &set : sets) {
-        auto *box = new QCheckBox(QStringLiteral("%1 (%2 edits)").arg(set.name).arg(set.edits.size()), self);
+        auto *box = new QCheckBox(QStringLiteral("%1 (%2)").arg(set.name, counted(set.edits.size(), QStringLiteral("edit"))), self);
         box->setObjectName(QStringLiteral("liveEditSet"));
         box->setChecked(set.enabled);
         box->setToolTip(QStringLiteral("Shown on %1 every time it opens in Omastrator").arg(live.origin()));
@@ -228,16 +229,19 @@ void LivePanel::rebuild()
     if (!project.isEmpty() && !mockup) {
         const GitHub::Auth auth = m_bridge.githubAuth();
         const QString page = History::githubPage(project);
+        // History could live on GitHub only where there is no remote yet or the remote is already there.
+        const bool couldUseGitHub = !page.isEmpty() || History::remotes(project).isEmpty();
         auto *row = new QHBoxLayout;
         QString text;
         if (!auth.installed)
-            text = QStringLiteral("GitHub: install the gh CLI to keep history there (sudo pacman -S github-cli).");
+            text = couldUseGitHub ? QStringLiteral("GitHub: install the gh CLI to keep history there (sudo pacman -S github-cli).") : QString();
         else if (!auth.loggedIn)
             text = QStringLiteral("GitHub isn't connected.");
         else
             text = page.isEmpty() ? QStringLiteral("GitHub: signed in as %1. This project isn't on GitHub yet; Deploy offers to create it.").arg(auth.account)
                                   : QStringLiteral("GitHub: %1").arg(page);
-        row->addWidget(label(text, QStringLiteral("liveGitHub"), self), 1);
+        if (!text.isEmpty())
+            row->addWidget(label(text, QStringLiteral("liveGitHub"), self), 1);
         if (auth.installed && !auth.loggedIn) {
             QPushButton *connectButton = button(QStringLiteral("Connect GitHub"), QStringLiteral("liveConnectGitHub"), self);
             connectButton->setToolTip(QStringLiteral("Opens a terminal running gh auth login"));

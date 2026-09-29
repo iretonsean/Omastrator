@@ -215,7 +215,8 @@ existing floating panels and the frame's bar:
     edits, or write-backs that aren't deployed yet.
   - During a run the stage replaces it: "Writing…", then "Deploying…", then
     "Live at <host>" for 8 s (click to open it).
-  - A failure shows "Deploy failed", and a click opens Details.
+  - A failure shows "Deploy failed" (or "Save failed" when the run was a Save),
+    and a click opens Details.
   - The first-deploy sheet still asks once.
 - **The bar's menu** (also in Object ▸ Browser View, and Ctrl+K as "Browser
   View: …"):
@@ -552,9 +553,22 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     in this session (`m_deployedAt`; it is not read back from history). While
     it runs it says Writing…, Committing…, Creating repository…, Pushing…,
     Deploying…; a result is "Live at <host>" for 8 seconds (click opens it);
-    a failure stays as "Deploy failed" until the next attempt (click opens the
-    log). A running or finished deploy shows only on frames of its own
-    project (`DeployState::folder`).
+    a failure stays as "Deploy failed", or "Save failed" for a Save
+    (`DeployState::deploy`), until the next attempt (click opens the log). A
+    running or finished deploy shows only on frames of its own project
+    (`DeployState::folder`).
+  - **A failed Save keeps what it wrote (decided 2026-09-29).** Write-back
+    writes the certain edits and records them before the agent is asked for the
+    rest. If the run then fails (no agent, the agent's change can't be
+    written, the commit fails), nothing is rolled back and no half of the Save
+    is committed. The written part is already a Review Changes record with no
+    commit, and the next Save or Deploy commits every uncommitted record for
+    that folder in one commit (`commitAndShip`). Those edits left the pending
+    list when they were written, so they are not written twice. The failure
+    message says so (`AgentBridge::uncommittedNote`): "1 change is written to
+    index.html but not committed; the next Save or Deploy commits it." Tests:
+    `aFailedSaveSaysSaveFailedAndLeavesTheWrittenEditsForTheNextSave`,
+    `theFailureMessageAgreesWithTheCountAndOnlyNamesWhatIsOnDisk`.
   - The menu (bar menu and Object ▸ Browser View) has Deploy, Save, Review
     Changes, History and Stop Live. Stop Live keeps the frame's edits held
     for the project, as before.

@@ -2,6 +2,7 @@
 #include "IO/DocumentExporter.h"
 #include "IO/FileError.h"
 #include "IO/SvgExporter.h"
+#include "Live/Counted.h"
 #include "UI/AgentBridge.h"
 #include "UI/DesignController.h"
 #include <QCoreApplication>
@@ -210,7 +211,7 @@ QString AgentBridge::siteAction(const QString &action, const QJsonObject &params
             return failure;
         result["path"] = path;
         result["edits"] = int(edits.size());
-        live.notice(QStringLiteral("Exported %1 edits to %2.").arg(edits.size()).arg(QFileInfo(path).fileName()));
+        live.notice(QStringLiteral("Exported %1 to %2.").arg(counted(edits.size(), QStringLiteral("edit")), QFileInfo(path).fileName()));
         return {};
     }
     if (action == QLatin1String("beforeAfter"))
