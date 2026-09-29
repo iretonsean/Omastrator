@@ -409,8 +409,12 @@ void BrowserViews::reconcile()
             ++streaming;
     }
     // An override that names nothing runnable counts as no Chromium too.
-    const QString chromium = Browser::executable();
-    const bool installed = !chromium.isEmpty() && QFileInfo(chromium).isExecutable();
+    // Looked for only when there is a frame to run: reconcile follows every edit, drag moves included.
+    bool installed = true;
+    if (!present.isEmpty()) {
+        const QString chromium = Browser::executable();
+        installed = !chromium.isEmpty() && QFileInfo(chromium).isExecutable();
+    }
     for (const VectorObject &object : document.objects) {
         if (!object.browser)
             continue;
