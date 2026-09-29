@@ -2,6 +2,8 @@
 #include "Agent/Hyprland.h"
 #include "Agent/WorkspaceClaims.h"
 #include "FakeHyprctl.h"
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -116,11 +118,43 @@ private slots:
                               QStringLiteral("dispatch movetoworkspacesilent name:3,address:0x778")}));
     }
 
+    void aNumberedReturnWorkspaceIsSelectedByNumber()
+    {
+        // Named "1" it might be gone by now, and `name:1` would make a new named workspace.
+        WorkspaceClaims::State state = sample(4242);
+        state.returnId = 3;
+        QVERIFY(WorkspaceClaims::write(state).isEmpty());
+        QCOMPARE(WorkspaceClaims::read(), state);
+        m_hyprctl->answer(QStringLiteral("clients"), clients({{QStringLiteral("0x777"), 999, pageA}}));
+        WorkspaceClaims::giveBack(state);
+        QCOMPARE(m_hyprctl->dispatches(), QStringList{QStringLiteral("dispatch movetoworkspacesilent 3,address:0x777")});
+        m_hyprctl->clearLog();
+        m_hyprctl->answer(QStringLiteral("activeworkspace"), activeWorkspace(pageB));
+        WorkspaceClaims::giveBack(state);
+        QVERIFY(m_hyprctl->dispatches().contains(QStringLiteral("dispatch workspace 3")));
+    }
+
+    void aFileFromBeforeReturnIdsStillLoads()
+    {
+        QDir().mkpath(QFileInfo(WorkspaceClaims::path()).absolutePath());
+        QFile file(WorkspaceClaims::path());
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(R"({"signature":"sig1","pid":4242,"return":"3","claims":[{"name":"design:Poster · Front","tab":"t","page":"p","windows":["0x5a1"]}]})");
+        file.close();
+        const WorkspaceClaims::State state = WorkspaceClaims::read();
+        QCOMPARE(state.returnWorkspace, QStringLiteral("3"));
+        QCOMPARE(state.returnId, 0);
+        QCOMPARE(state.claims.size(), 1);
+        m_hyprctl->answer(QStringLiteral("clients"), clients({{QStringLiteral("0x777"), 999, pageA}}));
+        WorkspaceClaims::giveBack(state);
+        QCOMPARE(m_hyprctl->dispatches(), QStringList{QStringLiteral("dispatch movetoworkspacesilent name:3,address:0x777")});
+    }
+
     void standingOnAClaimedWorkspaceGoesBackToo()
     {
         m_hyprctl->answer(QStringLiteral("activeworkspace"), activeWorkspace(pageB));
         WorkspaceClaims::giveBack(sample(4242));
-        QCOMPARE(m_hyprctl->dispatches(), QStringList{QStringLiteral("dispatch workspace 3")});
+        QCOMPARE(m_hyprctl->dispatches(), QStringList{QStringLiteral("dispatch workspace name:3")});
     }
 
     void nothingClaimedDispatchesNothing()

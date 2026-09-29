@@ -20,7 +20,10 @@ struct State {
     // The Hyprland instance and app that made the claims.
     QString signature;
     qint64 pid = 0;
-    // The workspace that was focused when the first claim was made: where the user's windows go back to.
+    // The workspace that was focused when the first claim was made: where the user's windows go back to. Its
+    // id says how to select it (a numbered one by number: by name it may be gone, and a bare name would make a
+    // new one); files from before had only the name, and 0 then.
+    int returnId = 0;
     QString returnWorkspace;
     QList<Claim> claims;
     bool isEmpty() const { return claims.isEmpty(); }

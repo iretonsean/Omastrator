@@ -76,6 +76,7 @@ private:
     void standInClosed(PageStandIn *widget);
     QImage pictureFor(const QUuid &tab, const QUuid &page);
     void writeClaims() const;
+    void forgetReturn();
     void startEvents();
     void hyprlandLeft();
     bool followsFocus() const;
@@ -87,8 +88,12 @@ private:
     std::vector<Claim> m_claims;
     std::vector<StandIn> m_standIns;
     QString m_editorAddress;
-    // The workspace focused when the first claim was made, where the user's windows go back to.
-    QString m_return;
+    // The workspace focused when the first claim was made, where the user's windows go back to (id and name: a
+    // numbered one is selected by number). The editor goes back to the one it was on, which may differ.
+    int m_returnId = 0;
+    QString m_returnName;
+    int m_editorReturnId = 0;
+    QString m_editorReturnName;
     // Names given back or renamed since the last placement: what their leftover windows follow.
     QHash<QString, QString> m_renamed;
     QSet<QString> m_released;

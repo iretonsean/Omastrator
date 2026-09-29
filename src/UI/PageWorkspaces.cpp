@@ -372,8 +372,9 @@ void PageWorkspaces::reconcile()
     if (!wasClaiming) {
         QString error;
         const QJsonValue current = Hyprland::query(QStringLiteral("activeworkspace"), &error);
-        m_return = current.toObject()["name"].toString();
-        if (m_return.isEmpty()) {
+        m_returnName = current.toObject()["name"].toString();
+        m_returnId = current.toObject()["id"].toInt();
+        if (m_returnName.isEmpty()) {
             m_key.clear();
             return;
         }
@@ -393,7 +394,7 @@ void PageWorkspaces::reconcile()
     if (m_claims.empty()) {
         m_events.stop();
         m_pictures.clear();
-        m_return.clear();
+        forgetReturn();
     } else {
         startEvents();
     }
@@ -422,13 +423,21 @@ void PageWorkspaces::hyprlandLeft()
     writeClaims();
 }
 
+void PageWorkspaces::forgetReturn()
+{
+    m_returnId = m_editorReturnId = 0;
+    m_returnName.clear();
+    m_editorReturnName.clear();
+}
+
 void PageWorkspaces::writeClaims() const
 {
     WorkspaceClaims::State state;
     if (!m_claims.empty()) {
         state.signature = qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE");
         state.pid = QCoreApplication::applicationPid();
-        state.returnWorkspace = m_return;
+        state.returnWorkspace = m_returnName;
+        state.returnId = m_returnId;
         for (const Claim &claim : m_claims) {
             WorkspaceClaims::Claim entry{claim.name, claim.tab.toString(QUuid::WithoutBraces), claim.page.toString(QUuid::WithoutBraces), {}};
             for (const StandIn &standIn : m_standIns) {

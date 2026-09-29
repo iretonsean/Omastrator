@@ -65,6 +65,8 @@ private slots:
     void downToOnePageGivesBackAndUndoClaimsAgain();
     void renamingAPageMovesItsWorkspace();
     void theUsersWindowsGoBackToTheReturnWorkspace();
+    void aNumberedReturnWorkspaceComesBackByNumberEvenAfterItWasDeleted();
+    void theEditorGoesBackToItsOwnWorkspaceAndTheUsersWindowsToTheFocusedOne();
     void saveAsRenamesAndSameNamesGetSuffixes();
     void longNamesThatClashGetSuffixesAndForeignOnesToo();
     void closingTheDocumentGivesItsWorkspacesBack();
@@ -294,6 +296,43 @@ void PageWorkspacesTests::theUsersWindowsGoBackToTheReturnWorkspace()
     QCOMPARE(rig.world.workspaceOf(dragged), QStringLiteral("1"));
     QCOMPARE(rig.world.workspaces().count(QStringLiteral("2")), 1);
     QVERIFY(!rig.world.exists(first));
+}
+
+void PageWorkspacesTests::aNumberedReturnWorkspaceComesBackByNumberEvenAfterItWasDeleted()
+{
+    Rig rig;
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    const QString first = ws(QStringLiteral("Untitled"), QStringLiteral("Page 1"));
+    const QString dragged = rig.world.addForeign(first);
+    QCOMPARE(rig.world.idOf(QStringLiteral("1")), 1);
+    // The user leaves workspace 1, empty now: Hyprland deletes it.
+    rig.world.go(QStringLiteral("2"));
+    QVERIFY(!rig.world.exists(QStringLiteral("1")));
+    QCOMPARE(WorkspaceClaims::read().returnId, 1);
+    rig.toggle();
+    rig.world.settle();
+    // Given back by number, so it's workspace 1 again and not a new one named "1".
+    QCOMPARE(rig.world.idOf(QStringLiteral("1")), 1);
+    QCOMPARE(rig.world.workspaceOf(dragged), QStringLiteral("1"));
+    QCOMPARE(rig.editorWorkspace(), QStringLiteral("1"));
+    QVERIFY(rig.world.rejected().isEmpty());
+}
+
+void PageWorkspacesTests::theEditorGoesBackToItsOwnWorkspaceAndTheUsersWindowsToTheFocusedOne()
+{
+    Rig rig;
+    // The editor is on 1 while the user is looking at 2 (say, the window was opened from the launcher there).
+    rig.world.go(QStringLiteral("2"));
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    const QString dragged = rig.world.addForeign(ws(QStringLiteral("Untitled"), QStringLiteral("Page 1")));
+    rig.toggle();
+    rig.world.settle();
+    QCOMPARE(rig.editorWorkspace(), QStringLiteral("1"));
+    QCOMPARE(rig.world.workspaceOf(dragged), QStringLiteral("2"));
 }
 
 void PageWorkspacesTests::saveAsRenamesAndSameNamesGetSuffixes()

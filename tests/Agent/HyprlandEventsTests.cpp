@@ -157,7 +157,7 @@ private slots:
     {
         FakeHyprctl hyprctl(m_directory.path());
         qputenv("OMASTRATOR_HYPRCTL", hyprctl.path().toUtf8());
-        const QString name = QStringLiteral("design:Poster · Front");
+        const QString name = Hyprland::workspaceSelector(-1337, QStringLiteral("design:Poster · Front"));
 
         // hyprlang: no hyprland.lua.
         QVERIFY(Hyprland::moveWindow(QStringLiteral("5588a1"), name, false).isEmpty());
@@ -167,7 +167,7 @@ private slots:
         QCOMPARE(hyprctl.log(),
                  (QStringList{QStringLiteral("dispatch movetoworkspacesilent name:design:Poster · Front,address:0x5588a1"),
                               QStringLiteral("dispatch movetoworkspace name:design:Poster · Front,address:0x5588a1"),
-                              QStringLiteral("dispatch workspace design:Poster · Front"),
+                              QStringLiteral("dispatch workspace name:design:Poster · Front"),
                               QStringLiteral("dispatch focuswindow address:0x5588a1")}));
 
         // Lua: a hyprland.lua exists.
@@ -177,14 +177,51 @@ private slots:
         lua.close();
         hyprctl.clearLog();
         Hyprland::moveWindow(QStringLiteral("5588a1"), name, false);
-        Hyprland::moveWindow(QStringLiteral("5588a1"), QStringLiteral("we\"ird\\"), true);
+        Hyprland::moveWindow(QStringLiteral("5588a1"), Hyprland::workspaceSelector(0, QStringLiteral("we\"ird\\")), true);
         Hyprland::focusWorkspace(name);
         Hyprland::focusWindow(QStringLiteral("5588a1"));
         QCOMPARE(hyprctl.log(),
                  (QStringList{QStringLiteral("eval hl.dispatch(hl.dsp.window.move({ workspace = \"name:design:Poster · Front\", follow = false, window = \"address:0x5588a1\" }))"),
                               QStringLiteral("eval hl.dispatch(hl.dsp.window.move({ workspace = \"name:we\\\"ird\\\\\", follow = true, window = \"address:0x5588a1\" }))"),
-                              QStringLiteral("eval hl.dispatch(hl.dsp.focus({ workspace = \"design:Poster · Front\" }))"),
+                              QStringLiteral("eval hl.dispatch(hl.dsp.focus({ workspace = \"name:design:Poster · Front\" }))"),
                               QStringLiteral("eval hl.dispatch(hl.dsp.focus({ window = \"address:0x5588a1\" }))")}));
+        QFile::remove(lua.fileName());
+        qunsetenv("OMASTRATOR_HYPRCTL");
+    }
+
+    void aWorkspaceIsSelectedByNumberWhenItHasOne()
+    {
+        // A bare name would make a new named workspace, even for "1".
+        QCOMPARE(Hyprland::workspaceSelector(1, QStringLiteral("1")), QStringLiteral("1"));
+        QCOMPARE(Hyprland::workspaceSelector(7, QStringLiteral("seven")), QStringLiteral("7"));
+        QCOMPARE(Hyprland::workspaceSelector(-1337, QStringLiteral("design:A")), QStringLiteral("name:design:A"));
+        QCOMPARE(Hyprland::workspaceSelector(0, QStringLiteral("3")), QStringLiteral("name:3"));
+        QCOMPARE(Hyprland::workspaceSelector(-99, QStringLiteral("special:omastrator-spare")), QStringLiteral("special:omastrator-spare"));
+
+        FakeHyprctl hyprctl(m_directory.path());
+        hyprctl.clearLog();
+        qputenv("OMASTRATOR_HYPRCTL", hyprctl.path().toUtf8());
+        Hyprland::moveWindow(QStringLiteral("5588a1"), Hyprland::workspaceSelector(2, QStringLiteral("2")), false);
+        Hyprland::focusWorkspace(Hyprland::workspaceSelector(2, QStringLiteral("2")));
+        Hyprland::moveWindow(QStringLiteral("5588a1"), Hyprland::workspaceSelector(-99, QStringLiteral("special:omastrator-spare")), false);
+        QCOMPARE(hyprctl.log(),
+                 (QStringList{QStringLiteral("dispatch movetoworkspacesilent 2,address:0x5588a1"), QStringLiteral("dispatch workspace 2"),
+                              QStringLiteral("dispatch movetoworkspacesilent special:omastrator-spare,address:0x5588a1")}));
+        qunsetenv("OMASTRATOR_HYPRCTL");
+    }
+
+    void luaStringsEscapeNewlines()
+    {
+        FakeHyprctl hyprctl(m_directory.path());
+        hyprctl.clearLog();
+        qputenv("OMASTRATOR_HYPRCTL", hyprctl.path().toUtf8());
+        QVERIFY(QDir().mkpath(m_directory.filePath(QStringLiteral("config/hypr"))));
+        QFile lua(m_directory.filePath(QStringLiteral("config/hypr/hyprland.lua")));
+        QVERIFY(lua.open(QIODevice::WriteOnly));
+        lua.close();
+        // A line break in a name would end the Lua string, and with it the dispatcher.
+        Hyprland::focusWorkspace(QStringLiteral("name:a\nb\rc"));
+        QCOMPARE(hyprctl.log(), QStringList{QStringLiteral("eval hl.dispatch(hl.dsp.focus({ workspace = \"name:a\\nb\\rc\" }))")});
         QFile::remove(lua.fileName());
         qunsetenv("OMASTRATOR_HYPRCTL");
     }

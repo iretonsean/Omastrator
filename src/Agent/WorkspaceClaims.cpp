@@ -27,6 +27,7 @@ State read()
     state.signature = object["signature"].toString();
     state.pid = object["pid"].toInteger();
     state.returnWorkspace = object["return"].toString();
+    state.returnId = object["returnId"].toInt();
     for (const QJsonValue &value : object["claims"].toArray()) {
         const QJsonObject each = value.toObject();
         Claim claim;
@@ -48,6 +49,7 @@ QString write(const State &state)
         object["signature"] = state.signature;
         object["pid"] = state.pid;
         object["return"] = state.returnWorkspace;
+        object["returnId"] = state.returnId;
         QJsonArray claims;
         for (const Claim &claim : state.claims) {
             claims.append(QJsonObject{{"name", claim.name},
@@ -79,6 +81,7 @@ GiveBack giveBack(const State &state)
         for (const QString &window : claim.windows)
             ours.insert(window.startsWith(QLatin1String("0x")) ? window : QStringLiteral("0x") + window);
     }
+    const QString back = Hyprland::workspaceSelector(state.returnId, state.returnWorkspace);
     QString error;
     const QJsonValue clients = Hyprland::query(QStringLiteral("clients"), &error);
     if (!error.isEmpty()) {
@@ -88,7 +91,7 @@ GiveBack giveBack(const State &state)
     for (const Hyprland::Window &window : Hyprland::parseClients(clients)) {
         if (!claimed.contains(window.workspaceName) || ours.contains(window.address) || (state.pid > 0 && window.pid == state.pid))
             continue;
-        const QString failure = Hyprland::moveWindow(window.address, state.returnWorkspace, false);
+        const QString failure = Hyprland::moveWindow(window.address, back, false);
         if (failure.isEmpty())
             ++result.moved;
         else if (result.error.isEmpty())
@@ -97,7 +100,7 @@ GiveBack giveBack(const State &state)
     // Standing on a claimed workspace, the user goes back with their windows.
     const QJsonValue active = Hyprland::query(QStringLiteral("activeworkspace"), &error);
     if (claimed.contains(active.toObject()["name"].toString())) {
-        const QString failure = Hyprland::focusWorkspace(state.returnWorkspace);
+        const QString failure = Hyprland::focusWorkspace(back);
         if (!failure.isEmpty() && result.error.isEmpty())
             result.error = failure;
     }

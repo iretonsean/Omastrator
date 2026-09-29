@@ -89,6 +89,7 @@ void PageWorkspaces::place()
         const auto it = std::find_if(clients.begin(), clients.end(), [&](const Hyprland::Window &w) { return w.address == address; });
         return it == clients.end() ? nullptr : &*it;
     };
+    const QString returnSelector = Hyprland::workspaceSelector(m_returnId, m_returnName);
     QHash<QString, int> occupancy;
     for (const Hyprland::Window &window : clients)
         ++occupancy[window.workspaceName];
@@ -127,11 +128,20 @@ void PageWorkspaces::place()
     }
     ours.insert(m_editorAddress);
     const Hyprland::Window *editor = find(m_editorAddress);
+    // Where the editor stands before it is first moved is where it goes back to; not a workspace of ours.
+    if (editor && m_editorReturnName.isEmpty() && !m_claims.empty() && !editor->workspaceName.startsWith(QLatin1String("design:"))) {
+        m_editorReturnName = editor->workspaceName;
+        m_editorReturnId = editor->workspace;
+    }
 
     const QString front = nameOf(m_workspace.selectedID(), m_workspace.current().session.currentPage());
     QString target = front;
-    if (target.isEmpty() && editor && editor->workspaceName.startsWith(QLatin1String("design:")) && !m_return.isEmpty())
-        target = m_return;
+    QString targetSelector = Hyprland::workspaceSelector(0, front);
+    if (target.isEmpty() && editor && editor->workspaceName.startsWith(QLatin1String("design:"))) {
+        const bool own = !m_editorReturnName.isEmpty();
+        target = own ? m_editorReturnName : m_returnName;
+        targetSelector = own ? Hyprland::workspaceSelector(m_editorReturnId, m_editorReturnName) : returnSelector;
+    }
     QStringList needy;
     for (const Claim &claim : m_claims) {
         if (claim.name != front)
@@ -190,6 +200,7 @@ void PageWorkspaces::place()
     struct Move {
         QString address;
         QString workspace;
+        QString selector;
         QString from;
         bool editor = false;
     };
@@ -197,18 +208,18 @@ void PageWorkspaces::place()
     for (const StandIn &standIn : m_standIns) {
         const Hyprland::Window *window = find(standIn.address);
         if (window && window->workspaceName != standIn.workspace)
-            moves.push_back({standIn.address, standIn.workspace, window->workspaceName, false});
+            moves.push_back({standIn.address, standIn.workspace, Hyprland::workspaceSelector(0, standIn.workspace), window->workspaceName, false});
     }
     if (editor && !target.isEmpty() && editor->workspaceName != target)
-        moves.push_back({editor->address, target, editor->workspaceName, true});
+        moves.push_back({editor->address, target, targetSelector, editor->workspaceName, true});
     const QStringList claimed = claimedNames();
     for (const Hyprland::Window &window : clients) {
         if (ours.contains(window.address) || window.pid == pid)
             continue;
         if (m_renamed.contains(window.workspaceName) && claimed.contains(m_renamed.value(window.workspaceName)))
-            moves.push_back({window.address, m_renamed.value(window.workspaceName), window.workspaceName, false});
-        else if (window.workspaceName.startsWith(QLatin1String("design:")) && !claimed.contains(window.workspaceName) && !m_return.isEmpty())
-            moves.push_back({window.address, m_return, window.workspaceName, false});
+            moves.push_back({window.address, m_renamed.value(window.workspaceName), Hyprland::workspaceSelector(0, m_renamed.value(window.workspaceName)), window.workspaceName, false});
+        else if (window.workspaceName.startsWith(QLatin1String("design:")) && !claimed.contains(window.workspaceName) && !m_returnName.isEmpty())
+            moves.push_back({window.address, m_returnName, returnSelector, window.workspaceName, false});
     }
     bool editorDone = editor && (target.isEmpty() || editor->workspaceName == target);
     while (!moves.empty()) {
@@ -222,7 +233,7 @@ void PageWorkspaces::place()
         const Move move = moves[pick];
         moves.erase(moves.begin() + long(pick));
         const bool follow = move.editor && m_followNext;
-        const QString failure = Hyprland::moveWindow(move.address, move.workspace, follow);
+        const QString failure = Hyprland::moveWindow(move.address, move.selector, follow);
         if (!failure.isEmpty())
             qCDebug(lcApp).noquote() << "Pages as Workspaces: move failed:" << failure;
         else if (move.editor)
@@ -234,11 +245,11 @@ void PageWorkspaces::place()
         m_followNext = false;
 
     // Someone standing on a workspace we gave back goes where their windows went.
-    if (!m_released.isEmpty() && !m_return.isEmpty()) {
+    if (!m_released.isEmpty() && !m_returnName.isEmpty()) {
         const QJsonValue active = Hyprland::query(QStringLiteral("activeworkspace"), &error);
         const QString name = active.toObject()["name"].toString();
         if (m_released.contains(name) && !claimed.contains(name))
-            Hyprland::focusWorkspace(m_return);
+            Hyprland::focusWorkspace(returnSelector);
     }
     m_released.clear();
     m_renamed.clear();

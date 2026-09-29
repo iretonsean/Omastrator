@@ -226,7 +226,10 @@ QString dispatch(const QString &lua, const QString &legacy)
 namespace {
 QString luaString(QString text)
 {
-    return text.replace(QLatin1Char('\\'), QStringLiteral("\\\\")).replace(QLatin1Char('"'), QStringLiteral("\\\""));
+    return text.replace(QLatin1Char('\\'), QStringLiteral("\\\\"))
+        .replace(QLatin1Char('"'), QStringLiteral("\\\""))
+        .replace(QLatin1Char('\n'), QStringLiteral("\\n"))
+        .replace(QLatin1Char('\r'), QStringLiteral("\\r"));
 }
 
 QString withZeroX(const QString &address)
@@ -235,12 +238,21 @@ QString withZeroX(const QString &address)
 }
 }
 
+QString workspaceSelector(int id, const QString &name)
+{
+    if (id > 0)
+        return QString::number(id);
+    if (name.startsWith(QLatin1String("special:")))
+        return name;
+    return QStringLiteral("name:") + name;
+}
+
 QString moveWindow(const QString &address, const QString &workspace, bool follow)
 {
     const QString window = withZeroX(address);
-    return dispatch(QStringLiteral("hl.dispatch(hl.dsp.window.move({ workspace = \"name:%1\", follow = %2, window = \"address:%3\" }))")
+    return dispatch(QStringLiteral("hl.dispatch(hl.dsp.window.move({ workspace = \"%1\", follow = %2, window = \"address:%3\" }))")
                         .arg(luaString(workspace), follow ? QStringLiteral("true") : QStringLiteral("false"), window),
-                    QStringLiteral("%1 name:%2,address:%3")
+                    QStringLiteral("%1 %2,address:%3")
                         .arg(follow ? QStringLiteral("movetoworkspace") : QStringLiteral("movetoworkspacesilent"), workspace, window));
 }
 
