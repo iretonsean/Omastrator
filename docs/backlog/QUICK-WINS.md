@@ -14,7 +14,7 @@ Tick each item when it's done. Change `[ ]` to `[x]` and add the merge
 commit and date, for example `[x] … (a1b2c3d, 2026-09-29)`, then commit this
 file with the work. Don't delete finished items.
 
-- [ ] 1. Text stroke inside/outside (check first)
+- [x] 1. Text stroke inside/outside (check first) (cefed5e, 2026-09-28)
 - [x] 2. Non-printing / non-exporting artboards (a711523, 2026-09-28)
 - [ ] 3. Editable document presets
 - [ ] 4. Frame presets
