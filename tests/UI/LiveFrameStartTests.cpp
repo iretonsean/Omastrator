@@ -11,7 +11,6 @@
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <QElapsedTimer>
 #include <QTemporaryDir>
 #include <QTest>
 #include <atomic>
@@ -88,11 +87,13 @@ class LiveFrameStartTests : public QObject {
 private:
     QTemporaryDir m_directory;
     int m_sites = 0;
+    QStringList m_folders;
 
     // A project folder that the shared static server can serve, with an optional dev override.
     QString project(const QString &dev = QString())
     {
         const QString folder = QFileInfo(m_directory.path()).canonicalFilePath() + QStringLiteral("/project%1").arg(++m_sites);
+        m_folders.append(folder);
         write(folder + QStringLiteral("/index.html"), pageSaying("dev"));
         if (!dev.isEmpty())
             write(folder + QStringLiteral("/omastrator.json"), QJsonDocument(QJsonObject{{"dev", dev}}).toJson());
@@ -154,11 +155,14 @@ private slots:
         BrowserViews::setPoolOptions(options);
         BrowserViews::setSignInAnswered(false);
         BrowserViews::setFolderChooser({});
+        QFile::remove(ProjectRegistry::path());
     }
 
     void cleanup()
     {
-        LiveFrames::clearPending(QString());
+        for (const QString &folder : std::as_const(m_folders))
+            LiveFrames::clearPending(folder);
+        m_folders.clear();
         BrowserViews::shutdownPool();
         BrowserViews::setFolderChooser({});
     }
@@ -300,15 +304,49 @@ private slots:
         frames->run(hosted.frame, [](LiveSession &) { return QString(); }, [&answered](const QString &) { answered = true; });
         QTRY_VERIFY_WITH_TIMEOUT(answered, 2000);
 
-        QElapsedTimer clock;
-        clock.start();
+        // Stopping mustn't wait for the server, which has five more seconds to go.
         frames->stop(hosted.frame);
-        QVERIFY2(clock.elapsed() < 3000, "Stopping mustn't wait for the server");
-        QCOMPARE(DevServers::shared().holders(folder), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(DevServers::shared().holders(folder), 0, 3000);
         QVERIFY(!frames->active(hosted.frame));
         // The session went with it: nothing of it is left to answer when the server would have failed.
         QTest::qWait(7000);
         QCOMPARE(where(session, hosted.frame), QStringLiteral("production"));
+        QCOMPARE(DevServers::shared().holders(folder), 0);
+    }
+
+    void navigatingAwayWhileTheDevServerStartsEndsTheStartAndComingBackServesAgain()
+    {
+        NEEDS_CHROMIUM;
+        Production production;
+        Production elsewhere;
+        QVERIFY(production.listen() && elsewhere.listen());
+        const QString folder = project(QStringLiteral("sleep 6; echo it came up late; exit 3"));
+        QVERIFY(ProjectRegistry::remember(production.url(), folder).isEmpty());
+
+        EditorSession session;
+        Hosted hosted(session, production.url());
+        BrowserViewHost *host = BrowserViews::of(session);
+        LiveFrames *frames = LiveFrames::of(session);
+        QTRY_VERIFY_WITH_TIMEOUT(!BrowserViews::of(session)->poolKey(hosted.frame).isNull(), patience);
+        QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("production"), patience);
+        QVERIFY2(host->beginEditPage(hosted.frame).isEmpty(), "Edit Page must start");
+        QTRY_VERIFY_WITH_TIMEOUT(frames->snapshot(hosted.frame).message.contains(QLatin1String("Starting the project")), patience);
+        QCOMPARE(DevServers::shared().holders(folder), 1);
+
+        // Another site's page, in the middle of the start: the project's server is let go and the frame is a mock-up, not stuck.
+        inTab(session, hosted.frame, QStringLiteral("location.href = '%1'").arg(elsewhere.url().toString()));
+        QTRY_VERIFY2_WITH_TIMEOUT(frames->snapshot(hosted.frame).state == LiveSession::State::running, qPrintable(frames->snapshot(hosted.frame).message), 10'000);
+        QVERIFY(frames->snapshot(hosted.frame).mockup);
+        QVERIFY(!frames->snapshot(hosted.frame).startingServer);
+        QVERIFY(!frames->snapshot(hosted.frame).message.contains(QLatin1String("Starting the project")));
+        QCOMPARE(DevServers::shared().holders(folder), 0);
+
+        // Back on the project's site, it is served again.
+        inTab(session, hosted.frame, QStringLiteral("location.href = '%1'").arg(production.url().toString()));
+        QTRY_COMPARE_WITH_TIMEOUT(DevServers::shared().holders(folder), 1, 10'000);
+        QTRY_VERIFY_WITH_TIMEOUT(frames->snapshot(hosted.frame).message.contains(QLatin1String("Starting the project")), 10'000);
+        QVERIFY(!frames->snapshot(hosted.frame).mockup);
+        frames->stop(hosted.frame);
         QCOMPARE(DevServers::shared().holders(folder), 0);
     }
 

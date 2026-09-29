@@ -9,6 +9,25 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QTimer>
+#include <utility>
+
+namespace {
+bool isWeb(const QUrl &url)
+{
+    return url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https");
+}
+
+bool isLoopback(const QUrl &url)
+{
+    const QString host = url.host().toLower();
+    return host == QLatin1String("localhost") || host == QLatin1String("127.0.0.1") || host == QLatin1String("[::1]") || host == QLatin1String("::1");
+}
+
+bool sameOrigin(const QUrl &a, const QUrl &b)
+{
+    return a.scheme() == b.scheme() && a.host() == b.host() && a.port(-1) == b.port(-1);
+}
+}
 
 // Live in a Browser View's tab (docs/LIVE-IN-FRAME.md).
 void LiveSession::runFrame(const Target &target)
@@ -62,6 +81,9 @@ void LiveSession::attachFrame()
     const bool loaded = where.size() == 2 && where[0] != QLatin1String("about:blank") && where[1] == QLatin1String("complete");
     if (where.size() == 2 && where[0] != QLatin1String("about:blank"))
         m_url = QUrl(where[0]);
+    // A folder given without a page to name its site belongs to the first site the tab shows, once.
+    if (!m_targetFolder.isEmpty() && m_targetOrigin.isEmpty() && isWeb(m_url))
+        m_targetOrigin = EditSets::originOf(m_url);
     frameProject();
     if (m_serving)
         return;
@@ -75,28 +97,8 @@ void LiveSession::attachFrame()
     pageLoaded();
 }
 
-namespace {
-bool isWeb(const QUrl &url)
-{
-    return url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https");
-}
-
-bool isLoopback(const QUrl &url)
-{
-    const QString host = url.host().toLower();
-    return host == QLatin1String("localhost") || host == QLatin1String("127.0.0.1") || host == QLatin1String("[::1]") || host == QLatin1String("::1");
-}
-
-bool sameOrigin(const QUrl &a, const QUrl &b)
-{
-    return a.scheme() == b.scheme() && a.host() == b.host() && a.port(-1) == b.port(-1);
-}
-}
-
 void LiveSession::frameProject()
 {
-    if (!m_targetFolder.isEmpty() && m_targetOrigin.isEmpty() && isWeb(m_url))
-        m_targetOrigin = EditSets::originOf(m_url);
     QString folder;
     // On the dev server the address is the server's, which is nobody's to register.
     const bool served = m_lease && !m_serverProject.isEmpty() && sameOrigin(m_url, m_serverUrl);
@@ -119,8 +121,12 @@ void LiveSession::frameProject()
         leaveProject();
     m_project = project;
     // A dev server for the project the frame has left is let go; the new one starts below.
-    if (m_lease && !served && project != m_serverProject)
+    // Letting go mid-start drops the answer, so the start ends here.
+    bool abandoned = false;
+    if (m_lease && !served && project != m_serverProject) {
         releaseServer(false);
+        abandoned = std::exchange(m_serving, false);
+    }
     if (m_serving) {
         if (moved)
             emit changed();
@@ -132,9 +138,9 @@ void LiveSession::frameProject()
         QTimer::singleShot(0, this, [this, generation] { serveProject(generation); });
         return;
     }
-    if (!moved)
+    if (!moved && !abandoned)
         return;
-    if (m_state == State::running)
+    if (m_state == State::running || abandoned)
         setState(State::running, isMockup() ? QStringLiteral("Not your site: changes stay on this machine.") : QString());
     else
         emit changed();

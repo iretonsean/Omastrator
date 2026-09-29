@@ -150,7 +150,7 @@ QString LiveSession::start(const Target &target)
         m_pool = target.pool;
         m_frame = target.frame;
         m_targetFolder = target.folder;
-        m_targetOrigin.clear();
+        m_targetOrigin = (target.url.scheme() == QLatin1String("http") || target.url.scheme() == QLatin1String("https")) ? EditSets::originOf(target.url) : QString();
         m_project.clear();
         setState(State::starting, QStringLiteral("Waiting for the page…"));
         const int generation = m_generation;
@@ -511,8 +511,9 @@ void LiveSession::onEvent(const QString &method, const QJsonObject &params, cons
     }
     if (method == QLatin1String("Runtime.bindingCalled") && params["name"].toString() == QLatin1String("omastratorSend")) {
         handle(QJsonDocument::fromJson(params["payload"].toString().toUtf8()).object());
-    } else if (method == QLatin1String("Page.loadEventFired") && m_state == State::running) {
-        // A reload (a dev server's, or the user's) brings a fresh overlay that needs the tokens again.
+    } else if (method == QLatin1String("Page.loadEventFired") && (m_state == State::running || (m_pool && m_serving))) {
+        // A reload (a dev server's, or the user's) brings a fresh overlay that needs the tokens again. A page the frame
+        // goes to while its project's server starts is looked at too: it may be another site's.
         QTimer::singleShot(0, this, &LiveSession::pageLoaded);
     }
 }
