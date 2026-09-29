@@ -65,7 +65,7 @@ private:
     QUrl unique() { return QUrl(QStringLiteral("http://127.0.0.2:%1/page.html").arg(20'000 + ++m_ports)); }
 
     // One Browser View on `url`, 300 wide; with `designed`, a shape drawn on it.
-    QUuid frameFor(EditorSession &session, EditorCanvas &canvas, const QUrl &url, bool designed)
+    QUuid frameFor(EditorSession &session, EditorCanvas &canvas, const QUrl &url, bool designed, bool sibling = false)
     {
         VectorDocument document = VectorDocument::blank({1000, 800});
         VectorObject view = VectorObject::frame({20, 20, 300, 200}, QStringLiteral("Pricing"));
@@ -74,6 +74,9 @@ private:
         document.insert(view, document.layers().front());
         if (designed)
             document.insert(VectorObject::frame({50, 80, 100, 40}, QStringLiteral("Button")), frame);
+        // Drawn on the canvas beside the frame, not on the page: it is no part of the design.
+        if (sibling)
+            document.insert(VectorObject::frame({500, 500, 80, 40}, QStringLiteral("Outside")), document.layers().front());
         session.loadDocument(document);
         BrowserViews::of(session)->attach(&canvas);
         for (int i = 0; i < 200 && BrowserViews::of(session)->poolKey(frame).isNull(); ++i)
@@ -125,10 +128,19 @@ private slots:
         qputenv("FAKE_OUT", m_directory.filePath(QStringLiteral("prompt")).toUtf8());
     }
 
+    void init()
+    {
+        BrowserPool::Options options;
+        options.profile = m_directory.filePath(QStringLiteral("profile"));
+        options.cache = Browser::Cache::minimal;
+        BrowserViews::setPoolOptions(options);
+    }
+
     void cleanup()
     {
         QFile::remove(m_directory.filePath(QStringLiteral("prompt")));
         BrowserViews::setNoteChooser({});
+        BrowserViews::shutdownPool();
     }
 
     void theButtonAndItsMenuItemsAppearOnlyForAFrameWithADesign()
@@ -183,6 +195,7 @@ private slots:
         QVERIFY(text.contains(QLatin1String("mockup.png")));
         QVERIFY(text.contains(QLatin1String("selectors.json")));
         QVERIFY(text.contains(QLatin1String("24px")));
+        QVERIFY(text.contains(QLatin1String("Don't commit, push or deploy")));
         QVERIFY(LiveFrames::pendingEdits(folder).empty());
         QCOMPARE(bridge.buildingFrame(), frame);
         QVERIFY(views->bar(frame).buildBusy);
@@ -192,7 +205,7 @@ private slots:
         QSignalSpy notices(views, &BrowserViews::notice);
         views->act(frame, BrowserViewHost::Action::buildIt);
         QVERIFY(!notices.isEmpty());
-        QVERIFY(notices.last().at(0).toString().contains(QLatin1String("still working")));
+        QVERIFY(notices.last().at(0).toString().contains(QStringLiteral("The agent is still working on \u201cBuild it: Pricing\u201d")));
 
         QVERIFY(bridge.liveAgentDone(requestOf(text), QStringLiteral("Padded the title")).isEmpty());
         QVERIFY(bridge.buildingFrame().isNull());
@@ -209,6 +222,70 @@ private slots:
         views->act(frame, BrowserViewHost::Action::buildButton);
         QCOMPARE(views->bar(frame).build, QStringLiteral("Build It"));
         QVERIFY(bridge.reviewPanel().isVisible() || window.isHidden());
+    }
+
+    void onlyTheFramesChildrenAndThePageGoInThePackage()
+    {
+        const QString folder = site();
+        const QUrl url = unique();
+        QVERIFY(ProjectRegistry::remember(url, folder).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas, url, true, true);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+        // The frame's last picture is the page under the design, and it goes in the package with the rest.
+        QImage picture(300, 200, QImage::Format_ARGB32);
+        picture.fill(Qt::white);
+        VectorDocument document = *session.document();
+        document.find(frame)->browser->picture = picture;
+        session.loadDocument(document);
+
+        views->act(frame, BrowserViewHost::Action::buildIt);
+        const QString text = prompt();
+        QVERIFY2(!text.isEmpty(), "the agent was never launched");
+        const QDir package(QDir::temp().filePath(QStringLiteral("omastrator-handoff-%1").arg(requestOf(text))));
+        QVERIFY(package.exists());
+        const QString svg = QString::fromUtf8(read(package.filePath(QStringLiteral("mockup.svg"))));
+        const QString selectors = QString::fromUtf8(read(package.filePath(QStringLiteral("selectors.json"))));
+        QVERIFY(svg.contains(QLatin1String("Button")));
+        QVERIFY(!svg.contains(QLatin1String("Outside")));
+        QVERIFY(selectors.contains(QLatin1String("Button")));
+        QVERIFY(!selectors.contains(QLatin1String("Outside")));
+        QVERIFY(QFileInfo::exists(package.filePath(QStringLiteral("page.png"))));
+        QVERIFY(text.contains(package.filePath(QStringLiteral("page.png"))));
+        views->act(frame, BrowserViewHost::Action::stopBuild);
+    }
+
+    void aHeldBreakpointPreviewDoesNotChangeWhatIsBuilt()
+    {
+        const QString folder = site();
+        const QUrl url = unique();
+        QVERIFY(ProjectRegistry::remember(url, folder).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas, url, true);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+
+        session.beginPreview(QStringLiteral("Preview Width"));
+        session.previewFrameBox(frame, QRectF(20, 20, 520, 200));
+        QVERIFY(session.isPreviewOnly());
+
+        views->act(frame, BrowserViewHost::Action::buildIt);
+        const QString text = prompt();
+        QVERIFY2(!text.isEmpty(), "the agent was never launched");
+        QVERIFY(text.contains(QLatin1String("Designed at 300 px wide")));
+        QVERIFY(!session.isPreviewOnly());
+        views->act(frame, BrowserViewHost::Action::stopBuild);
     }
 
     void stopBuildEndsTheAgent()

@@ -326,7 +326,14 @@ void Menus::buildObject(QMenuBar &bar)
     QMenu *browserView = object->addMenu(QStringLiteral("Browser View"));
     browserView->menuAction()->setObjectName(QStringLiteral("browserViewMenu"));
     // The bar's right-click menu, for the selected frame; they name the Browser View in Ctrl+K.
-    const auto browserFrame = [this] { return m_canvas && m_canvas->browserViewHost() ? session().selectedBrowserView() : std::nullopt; };
+    // Edit Page deselects the document, so its frame stands in for the selected one.
+    const auto browserFrame = [this]() -> std::optional<QUuid> {
+        if (!m_canvas || !m_canvas->browserViewHost())
+            return std::nullopt;
+        if (const auto selected = session().selectedBrowserView())
+            return selected;
+        return m_canvas->editPageFrame();
+    };
     add(browserView, QStringLiteral("browserViewEditPage"), QStringLiteral("Edit Page"), QKeySequence(), [this, browserFrame] {
         if (!m_canvas)
             return;
@@ -364,6 +371,22 @@ void Menus::buildObject(QMenuBar &bar)
                           {"browserViewStopBuild", "Stop Build", BrowserViewHost::Action::stopBuild},
                           {"browserViewStopLive", "Stop Live", BrowserViewHost::Action::stopLive}};
     for (const auto &each : projectActions)
+        add(browserView, QString::fromLatin1(each.name), QString::fromLatin1(each.title), QKeySequence(), [this, browserFrame, action = each.action] {
+            if (const auto frame = browserFrame())
+                m_canvas->browserViewHost()->act(*frame, action);
+        });
+    browserView->addSeparator();
+    // For a site that isn't yours: the bar menu's own items (BrowserViews+Site.cpp).
+    const struct {
+        const char *name;
+        const char *title;
+        BrowserViewHost::Action action;
+    } siteActions[] = {{"browserViewKeepEdits", "Keep Edits…", BrowserViewHost::Action::keepEdits},
+                       {"browserViewEditSets", "Edit Sets…", BrowserViewHost::Action::editSets},
+                       {"browserViewShowOriginal", "Show Original", BrowserViewHost::Action::showOriginal},
+                       {"browserViewExportCss", "Export CSS…", BrowserViewHost::Action::exportCss},
+                       {"browserViewThisIsMySite", "This Is My Site…", BrowserViewHost::Action::thisIsMySite}};
+    for (const auto &each : siteActions)
         add(browserView, QString::fromLatin1(each.name), QString::fromLatin1(each.title), QKeySequence(), [this, browserFrame, action = each.action] {
             if (const auto frame = browserFrame())
                 m_canvas->browserViewHost()->act(*frame, action);

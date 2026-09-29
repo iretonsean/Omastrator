@@ -3,6 +3,8 @@
 #include <QJsonObject>
 #include <QColor>
 #include <QString>
+#include <QUuid>
+#include <functional>
 #include <optional>
 
 class AgentBridge;
@@ -13,6 +15,8 @@ class EditorCanvas;
 // colours, spacing, size, type and radius, then Ask… and More. Each change is Live's own edit, snapped to a token.
 namespace ElementBarActions {
 ElementBar *attach(AgentBridge *agent, EditorCanvas &canvas);
+// Tests say which project a frame's Live runs on; empty means the site isn't the user's. Pass {} to reset.
+void setProjectResolver(std::function<QString(const QUuid &frame)> resolver);
 
 // The number in a computed length such as "16px" or "700"; nullopt for auto, normal and the like.
 std::optional<double> numberOf(const QString &css);

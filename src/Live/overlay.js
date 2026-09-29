@@ -10,7 +10,8 @@
   };
 
   const styleProperties = ["color", "background-color", "padding", "margin", "padding-top", "padding-right", "padding-bottom", "padding-left",
-    "margin-top", "margin-right", "margin-bottom", "margin-left", "width", "height", "font-size", "font-weight", "border-radius"];
+    "margin-top", "margin-right", "margin-bottom", "margin-left", "width", "height", "font-size", "font-weight", "border-radius",
+    "border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"];
 
   // Live inside a Browser View draws nothing: the app draws the boxes and the bar from what is reported here.
   let frameHost = window.__omaHost === "frame";

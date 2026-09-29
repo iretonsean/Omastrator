@@ -281,6 +281,30 @@ private slots:
         QVERIFY(zoomed.pixel(moved) != zoomed.pixel(moved + QPoint(0, -6)));
     }
 
+    void theHoverBoxIsRightUnderAHeldPreview()
+    {
+        Rig rig;
+        rig.enter();
+        BrowserViewHost::EditBoxes boxes;
+        boxes.hover = BrowserViewHost::EditBox{QRectF(20, 30, 200, 60), QStringLiteral("h1  200 \u00d7 60")};
+        rig.host.boxes = boxes;
+        // The preview narrows the frame and moves its corner: the box is the previewed page's, so it moves with it.
+        rig.session.beginPreview(QStringLiteral("Preview Width"));
+        rig.session.previewFrameBox(rig.frame, QRectF(160, 260, 300, 400));
+        QVERIFY(rig.session.isPreviewOnly());
+        QCOMPARE(rig.canvas.editPageFrame(), std::optional<QUuid>(rig.frame));
+        rig.canvas.update();
+        const QImage shown = rig.canvas.grab().toImage();
+        rig.host.boxes = {};
+        rig.canvas.update();
+        const QImage bare = rig.canvas.grab().toImage();
+        const QPoint edge = rig.view({160 + 20 + 100, 260 + 30});
+        QVERIFY(shown.pixel(edge) != bare.pixel(edge));
+        // Not where the box would be on the frame's own corner.
+        const QPoint unpreviewed = rig.view({100 + 20 + 100, 200 + 30});
+        QCOMPARE(shown.pixel(unpreviewed), bare.pixel(unpreviewed));
+    }
+
     void theBarsPencilTogglesTheMode()
     {
         Rig rig;
@@ -310,36 +334,80 @@ private slots:
     void aRealPickSelectsALinkWithoutFollowingItAndShiftAddsAnother()
     {
         NEEDS_CHROMIUM;
-        const QString folder = QFileInfo(m_directory.path()).canonicalFilePath() + QStringLiteral("/site");
-        QDir().mkpath(folder);
-        for (const char *name : {"index.html", "second.html"})
-            QVERIFY(QFile::copy(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/liveframe/") + QLatin1String(name), folder + QLatin1Char('/') + QLatin1String(name)));
-        StaticServer server;
-        QVERIFY(server.serve(folder).isEmpty());
-
-        EditorSession session;
-        EditorCanvas canvas(session);
-        VectorDocument document = VectorDocument::blank({4000, 3000});
-        VectorObject view = VectorObject::frame({100, 100, 800, 600}, QStringLiteral("Site"));
-        view.browser = BrowserView{QUrl(server.url().toString() + QStringLiteral("index.html")), {}, {}};
-        const QUuid frame = view.id;
-        document.insert(view, document.layers().front());
-        session.loadDocument(document);
-        canvas.resize(1000, 800);
-        canvas.show();
-        session.zoomToRect(QRectF(50, 50, 900, 700));
-        BrowserViews *views = BrowserViews::of(session);
-        views->attach(&canvas);
-        session.selectTool(Tool::select);
-        QTRY_VERIFY_WITH_TIMEOUT(!views->poolKey(frame).isNull(), patience);
-        QTRY_VERIFY_WITH_TIMEOUT(views->state(frame) == BrowserViews::State::live, patience);
-
+        RealPage page;
+        openReal(page);
+        if (QTest::currentTestFailed())
+            return;
+        EditorCanvas &canvas = page.canvas;
+        BrowserViews *views = page.views;
+        const QUuid frame = page.frame;
         QVERIFY(canvas.enterEditPage(frame));
-        LiveFrames *frames = LiveFrames::of(session);
-        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(frame).state, LiveSession::State::running, patience);
-        QVERIFY(frames->snapshot(frame).pageEditing);
+        QTRY_COMPARE_WITH_TIMEOUT(page.frames->snapshot(frame).state, LiveSession::State::running, patience);
+        QVERIFY(page.frames->snapshot(frame).pageEditing);
 
-        auto pageRect = [&](const QString &selector) {
+        QRectF link;
+        for (int i = 0; i < 300 && link.isEmpty(); ++i) {
+            link = page.pageRect(QStringLiteral("#link"));
+            if (link.isEmpty())
+                QTest::qWait(100);
+        }
+        QVERIFY(!link.isEmpty());
+        const QRectF title = page.pageRect(QStringLiteral("#title"));
+        QVERIFY(!title.isEmpty());
+
+        QTest::mouseMove(&canvas, page.at(link));
+        QTRY_VERIFY_WITH_TIMEOUT(views->editBoxes(frame).hover.has_value(), 15'000);
+        const auto hover = views->editBoxes(frame).hover;
+        QVERIFY(qAbs(hover->rect.x() - link.x()) < 1.5);
+        QVERIFY(qAbs(hover->rect.width() - link.width()) < 1.5);
+
+        click(&canvas, page.at(link));
+        QTRY_COMPARE_WITH_TIMEOUT(views->editBoxes(frame).selection.size(), qsizetype(1), 15'000);
+        click(&canvas, page.at(title), Qt::ShiftModifier);
+        QTRY_COMPARE_WITH_TIMEOUT(views->editBoxes(frame).selection.size(), qsizetype(2), 15'000);
+        // The click was the overlay's, so the link didn't navigate.
+        QVERIFY(page.session.document()->find(frame)->browser->url.toString().endsWith(QStringLiteral("index.html")));
+
+        canvas.leaveEditPage();
+        QTRY_VERIFY_WITH_TIMEOUT(!page.frames->snapshot(frame).pageEditing, 15'000);
+    }
+
+    void browseFollowsTheLinkAfterEditPage()
+    {
+        NEEDS_CHROMIUM;
+        RealPage page;
+        openReal(page);
+        if (QTest::currentTestFailed())
+            return;
+        const QUuid frame = page.frame;
+        QVERIFY(page.canvas.enterEditPage(frame));
+        QTRY_VERIFY_WITH_TIMEOUT(page.frames->snapshot(frame).pageEditing, patience);
+        QRectF link;
+        for (int i = 0; i < 300 && link.isEmpty(); ++i) {
+            link = page.pageRect(QStringLiteral("#link"));
+            if (link.isEmpty())
+                QTest::qWait(100);
+        }
+        QVERIFY(!link.isEmpty());
+        // Edit Page's overlay takes the click as a pick; once it is left the page is the user's again.
+        page.canvas.leaveEditPage();
+        QTRY_VERIFY_WITH_TIMEOUT(!page.frames->snapshot(frame).pageEditing, 15'000);
+        page.session.selectTool(Tool::browse);
+        click(&page.canvas, page.at(link));
+        QTRY_VERIFY_WITH_TIMEOUT(page.session.document()->find(frame)->browser->url.toString().endsWith(QStringLiteral("second.html")), 15'000);
+    }
+
+private:
+    struct RealPage {
+        StaticServer server;
+        EditorSession session;
+        EditorCanvas canvas{session};
+        QUuid frame;
+        BrowserViews *views = nullptr;
+        LiveFrames *frames = nullptr;
+
+        QRectF pageRect(const QString &selector)
+        {
             QRectF found;
             bool done = false;
             frames->run(frame, [&](LiveSession &live) {
@@ -350,33 +418,36 @@ private slots:
             for (int i = 0; i < 150 && !done; ++i)
                 QTest::qWait(100);
             return found;
-        };
-        QRectF link;
-        for (int i = 0; i < 300 && link.isEmpty(); ++i) {
-            link = pageRect(QStringLiteral("#link"));
-            if (link.isEmpty())
-                QTest::qWait(100);
         }
-        QVERIFY(!link.isEmpty());
-        const QRectF title = pageRect(QStringLiteral("#title"));
-        QVERIFY(!title.isEmpty());
+        QPoint at(const QRectF &rect) const { return canvas.documentToView().map(QPointF(100 + rect.center().x(), 100 + rect.center().y())).toPoint(); }
+    };
 
-        auto at = [&](const QRectF &rect) { return canvas.documentToView().map(QPointF(100 + rect.center().x(), 100 + rect.center().y())).toPoint(); };
-        QTest::mouseMove(&canvas, at(link));
-        QTRY_VERIFY_WITH_TIMEOUT(views->editBoxes(frame).hover.has_value(), 15'000);
-        const auto hover = views->editBoxes(frame).hover;
-        QVERIFY(qAbs(hover->rect.x() - link.x()) < 1.5);
-        QVERIFY(qAbs(hover->rect.width() - link.width()) < 1.5);
-
-        click(&canvas, at(link));
-        QTRY_COMPARE_WITH_TIMEOUT(views->editBoxes(frame).selection.size(), qsizetype(1), 15'000);
-        click(&canvas, at(title), Qt::ShiftModifier);
-        QTRY_COMPARE_WITH_TIMEOUT(views->editBoxes(frame).selection.size(), qsizetype(2), 15'000);
-        // The click was the overlay's, so the link didn't navigate.
-        QVERIFY(session.document()->find(frame)->browser->url.toString().endsWith(QStringLiteral("index.html")));
-
-        canvas.leaveEditPage();
-        QTRY_VERIFY_WITH_TIMEOUT(!frames->snapshot(frame).pageEditing, 15'000);
+    // The fixture site in a Browser View at (100, 100), loaded and live.
+    void openReal(RealPage &page)
+    {
+        const QString folder = QFileInfo(m_directory.path()).canonicalFilePath() + QStringLiteral("/site");
+        QDir().mkpath(folder);
+        for (const char *name : {"index.html", "second.html"}) {
+            const QString target = folder + QLatin1Char('/') + QLatin1String(name);
+            QFile::remove(target);
+            QVERIFY(QFile::copy(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/liveframe/") + QLatin1String(name), target));
+        }
+        QVERIFY(page.server.serve(folder).isEmpty());
+        VectorDocument document = VectorDocument::blank({4000, 3000});
+        VectorObject view = VectorObject::frame({100, 100, 800, 600}, QStringLiteral("Site"));
+        view.browser = BrowserView{QUrl(page.server.url().toString() + QStringLiteral("index.html")), {}, {}};
+        page.frame = view.id;
+        document.insert(view, document.layers().front());
+        page.session.loadDocument(document);
+        page.canvas.resize(1000, 800);
+        page.canvas.show();
+        page.session.zoomToRect(QRectF(50, 50, 900, 700));
+        page.views = BrowserViews::of(page.session);
+        page.views->attach(&page.canvas);
+        page.session.selectTool(Tool::select);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.views->poolKey(page.frame).isNull(), patience);
+        QTRY_VERIFY_WITH_TIMEOUT(page.views->state(page.frame) == BrowserViews::State::live, patience);
+        page.frames = LiveFrames::of(page.session);
     }
 };
 

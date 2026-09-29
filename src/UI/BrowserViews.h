@@ -221,6 +221,8 @@ private:
     // The bar menu's items for a site that isn't the user's, and This Is My Site… (BrowserViews+Site.cpp).
     void addSiteActions(const QUuid &frame, QMenu *menu);
     void chooseMySite(const QUuid &frame);
+    void runSiteAction(const QUuid &frame, Action action);
+    void fillEditSets(const QUuid &frame, QMenu *menu);
     // The frame's own-site project, or empty (BrowserViews+Deploy.cpp).
     QString projectOf(const QUuid &frame) const;
     void fillDeploy(const QUuid &frame, Bar &bar) const;

@@ -5,6 +5,7 @@
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
 #include <QComboBox>
+#include <QCursor>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -83,51 +84,100 @@ void BrowserViews::extendBarMenu(const QUuid &frame, QMenu *menu)
 void BrowserViews::addSiteActions(const QUuid &frame, QMenu *menu)
 {
     LiveFrames *live = LiveFrames::of(m_session);
-    const bool running = live->active(frame) && live->snapshot(frame).state == LiveSession::State::running;
     const LiveFrames::Snapshot snapshot = live->snapshot(frame);
-    const QUrl page = snapshot.url.isEmpty() ? m_session.document()->find(frame)->browser->url : snapshot.url;
-    const QString origin = EditSets::originOf(page);
-    const auto report = [this](const QString &error) {
-        if (!error.isEmpty())
-            emit notice(error);
-    };
+    const bool running = live->active(frame) && snapshot.state == LiveSession::State::running;
 
     QAction *keep = menu->addAction(QStringLiteral("Keep Edits…"));
     keep->setEnabled(running && !snapshot.edits.empty());
-    connect(keep, &QAction::triggered, menu, [this, live, frame, origin, report] {
-        bool ok = false;
-        const QString name = QInputDialog::getText(nullptr, QStringLiteral("Keep Edits"), QStringLiteral("Name for this set of edits:"), QLineEdit::Normal,
-                                                   EditSets::suggestedName(origin), &ok);
-        if (ok)
-            live->run(frame, [name](LiveSession &session) { return session.keepEdits(name); }, report);
-    });
+    connect(keep, &QAction::triggered, menu, [this, frame] { runSiteAction(frame, Action::keepEdits); });
 
     QMenu *sets = menu->addMenu(QStringLiteral("Edit Sets"));
-    const std::vector<EditSets::Set> kept = EditSets::read(origin);
-    sets->setEnabled(running && !kept.empty());
-    for (const EditSets::Set &set : kept) {
-        QAction *toggle = sets->addAction(set.name);
-        toggle->setCheckable(true);
-        toggle->setChecked(set.enabled);
-        connect(toggle, &QAction::toggled, menu, [live, frame, name = set.name, report](bool on) {
-            live->run(frame, [name, on](LiveSession &session) { return session.setEditSetEnabled(name, on); }, report);
-        });
-    }
+    fillEditSets(frame, sets);
 
     QAction *original = menu->addAction(QStringLiteral("Show Original"));
     original->setCheckable(true);
     original->setChecked(snapshot.original);
     original->setEnabled(running);
-    connect(original, &QAction::triggered, menu, [live, frame, report](bool on) {
-        live->run(frame, [on](LiveSession &session) { return session.showOriginal(on); }, report);
-    });
+    connect(original, &QAction::triggered, menu, [this, frame] { runSiteAction(frame, Action::showOriginal); });
 
     QAction *exportCss = menu->addAction(QStringLiteral("Export CSS…"));
     exportCss->setEnabled(running);
-    connect(exportCss, &QAction::triggered, menu, [this, live, frame, page, report] {
+    connect(exportCss, &QAction::triggered, menu, [this, frame] { runSiteAction(frame, Action::exportCss); });
+
+    menu->addSeparator();
+    addBuildActions(frame, menu);
+    menu->addSeparator();
+    QAction *mine = menu->addAction(QStringLiteral("This Is My Site…"));
+    connect(mine, &QAction::triggered, menu, [this, frame] { chooseMySite(frame); });
+}
+
+void BrowserViews::fillEditSets(const QUuid &frame, QMenu *menu)
+{
+    LiveFrames *live = LiveFrames::of(m_session);
+    const LiveFrames::Snapshot snapshot = live->snapshot(frame);
+    const bool running = live->active(frame) && snapshot.state == LiveSession::State::running;
+    const QUrl page = snapshot.url.isEmpty() ? m_session.document()->find(frame)->browser->url : snapshot.url;
+    const std::vector<EditSets::Set> kept = EditSets::read(EditSets::originOf(page));
+    menu->setEnabled(running && !kept.empty());
+    for (const EditSets::Set &set : kept) {
+        QAction *toggle = menu->addAction(set.name);
+        toggle->setCheckable(true);
+        toggle->setChecked(set.enabled);
+        connect(toggle, &QAction::toggled, menu, [this, live, frame, name = set.name](bool on) {
+            live->run(frame, [name, on](LiveSession &session) { return session.setEditSetEnabled(name, on); }, [this](const QString &error) {
+                if (!error.isEmpty())
+                    emit notice(error);
+            });
+        });
+    }
+}
+
+// The items of the bar's menu for a site that isn't yours, from anywhere: the menu bar and Ctrl+K name them too.
+void BrowserViews::runSiteAction(const QUuid &frame, Action action)
+{
+    if (!m_session.hasDocument())
+        return;
+    const VectorObject *object = m_session.document()->find(frame);
+    LiveFrames *live = LiveFrames::of(m_session);
+    if (!object || !object->browser || !live->active(frame))
+        return;
+    const LiveFrames::Snapshot snapshot = live->snapshot(frame);
+    const QUrl page = snapshot.url.isEmpty() ? object->browser->url : snapshot.url;
+    const auto report = [this](const QString &error) {
+        if (!error.isEmpty())
+            emit notice(error);
+    };
+    QWidget *window = m_canvas ? m_canvas->window() : nullptr;
+    switch (action) {
+    case Action::keepEdits: {
+        if (snapshot.edits.empty())
+            return;
+        bool ok = false;
+        const QString name = QInputDialog::getText(window, QStringLiteral("Keep Edits"), QStringLiteral("Name for this set of edits:"), QLineEdit::Normal,
+                                                   EditSets::suggestedName(EditSets::originOf(page)), &ok);
+        if (ok)
+            live->run(frame, [name](LiveSession &session) { return session.keepEdits(name); }, report);
+        return;
+    }
+    case Action::editSets: {
+        auto *sets = new QMenu(window);
+        sets->setAttribute(Qt::WA_DeleteOnClose);
+        fillEditSets(frame, sets);
+        if (sets->isEmpty()) {
+            sets->deleteLater();
+            emit notice(QStringLiteral("There are no kept edit sets for this site yet."));
+            return;
+        }
+        sets->popup(QCursor::pos());
+        return;
+    }
+    case Action::showOriginal:
+        live->run(frame, [on = !snapshot.original](LiveSession &session) { return session.showOriginal(on); }, report);
+        return;
+    case Action::exportCss: {
         const QString folder = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
         const QString host = page.host().isEmpty() ? QStringLiteral("page") : page.host();
-        const QString path = QFileDialog::getSaveFileName(nullptr, QStringLiteral("Export CSS"),
+        const QString path = QFileDialog::getSaveFileName(window, QStringLiteral("Export CSS"),
                                                           QDir(folder.isEmpty() ? QDir::homePath() : folder).filePath(host + QStringLiteral(".user.css")),
                                                           QStringLiteral("Userstyle (*.user.css);;CSS (*.css)"));
         if (path.isEmpty())
@@ -142,13 +192,11 @@ void BrowserViews::addSiteActions(const QUuid &frame, QMenu *menu)
                 return QStringLiteral("Couldn't write %1.").arg(path);
             return QString();
         }, report);
-    });
-
-    menu->addSeparator();
-    addBuildActions(frame, menu);
-    menu->addSeparator();
-    QAction *mine = menu->addAction(QStringLiteral("This Is My Site…"));
-    connect(mine, &QAction::triggered, menu, [this, frame] { chooseMySite(frame); });
+        return;
+    }
+    default:
+        return;
+    }
 }
 
 void BrowserViews::chooseMySite(const QUuid &frame)

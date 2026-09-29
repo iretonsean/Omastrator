@@ -44,10 +44,11 @@ public:
         bool buildDone = false;
         QString buildTip;
     };
-    // `deployButton` is the bar's pill (it opens Details after a failure and the site after a deploy); `deploy` and
+    // `keepEdits`, `editSets`, `showOriginal` and `exportCss` are for a site that isn't the user's (the bar menu's items, also in
+    // Object ▸ Browser View and Ctrl+K). `deployButton` is the bar's pill (it opens Details after a failure and the site after a deploy); `deploy` and
     // `save` always start one. The rest are the bar menu's, for the frame's project; `buildButton` is the bar's Build It pill (it starts a
     // build, stops one, or opens the review of a finished one).
-    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, deployButton, deploy, save, reviewChanges, history, stopLive, buildButton, buildIt, buildItWithNote, stopBuild };
+    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, keepEdits, editSets, showOriginal, exportCss, deployButton, deploy, save, reviewChanges, history, stopLive, buildButton, buildIt, buildItWithNote, stopBuild };
     virtual Bar bar(const QUuid &frame) const;
     virtual void act(const QUuid &frame, Action action);
 

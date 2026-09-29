@@ -112,6 +112,9 @@ QString AgentBridge::handOff(const HandOff &given, QString *requestIdOut)
                 painter.end();
                 if (!picture.save(brief.png))
                     throw FileError(QStringLiteral("Couldn't write %1.").arg(brief.png));
+                // The page alone, in the package with the rest so nothing of it is left in a shared folder.
+                if (brief.screenshot.isEmpty() && given.backdrop.save(package.filePath(QStringLiteral("page.png"))))
+                    brief.screenshot = package.filePath(QStringLiteral("page.png"));
             }
             SvgExporter::write(*given.art, brief.svg);
         } catch (const FileError &failure) {

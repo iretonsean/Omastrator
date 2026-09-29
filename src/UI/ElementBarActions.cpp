@@ -4,28 +4,52 @@
 #include "Canvas/ElementBar.h"
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
+#include "UI/ColorPickerSheet.h"
+#include "UI/FloatingPanel.h"
 #include "UI/LiveFrames.h"
 #include "UI/NumberField.h"
-#include <QColorDialog>
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QInputDialog>
+#include <QKeyEvent>
 #include <QMenu>
 #include <QPainter>
 #include <QPixmap>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QToolButton>
+#include <QWidgetAction>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <array>
+#include <tuple>
 #include <memory>
 
 namespace {
 constexpr int controlHeight = NumberField::fieldHeight;
+
+std::function<QString(const QUuid &)> &projectResolver()
+{
+    static std::function<QString(const QUuid &)> resolver;
+    return resolver;
+}
 
 // Everything the bar's controls share: the frame's canvas, and how to bring their values up to date.
 struct Shared_ {
     EditorCanvas *canvas = nullptr;
     AgentBridge *agent = nullptr;
     std::vector<std::function<void()>> syncers;
+    // The app's own colour picker, made on first use.
+    std::unique_ptr<FloatingPanel> picker;
+    // Padding shown for each side instead of as a pair; kept across the bar's refills.
+    bool boxed = false;
 
+    FloatingPanel &pickerPanel()
+    {
+        if (!picker)
+            picker = std::make_unique<FloatingPanel>(QStringLiteral("colorPickerPanel"), *canvas);
+        return *picker;
+    }
     BrowserViewHost *host() const { return canvas->browserViewHost(); }
     QJsonArray selection() const
     {
@@ -36,6 +60,15 @@ struct Shared_ {
     {
         const std::optional<QUuid> frame = canvas->editPageFrame();
         return frame && host() ? host()->elementState(*frame).tokens : QJsonObject();
+    }
+    // The frame's own project, empty on a site that isn't the user's.
+    QString project() const
+    {
+        const std::optional<QUuid> frame = canvas->editPageFrame();
+        if (frame && projectResolver())
+            return projectResolver()(*frame);
+        LiveFrames *live = frame ? canvas->session().findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
+        return live ? live->snapshot(*frame).project : QString();
     }
     void apply(const QStringList &properties, const QString &value, bool preview) const
     {
@@ -75,6 +108,31 @@ QString colorText(const QColor &color)
     return QStringLiteral("rgba(%1, %2, %3, %4)").arg(color.red()).arg(color.green()).arg(color.blue()).arg(QString::number(color.alphaF(), 'g', 3));
 }
 
+// Enter and Esc finish with a field: the canvas takes the keyboard back, so Ctrl+Z and the next Esc reach Edit Page.
+class HandsFocusBack : public QObject {
+public:
+    HandsFocusBack(EditorCanvas *canvas, QObject *parent) : QObject(parent), m_canvas(canvas) {}
+
+protected:
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        if (event->type() != QEvent::KeyPress)
+            return false;
+        const int key = static_cast<QKeyEvent *>(event)->key();
+        if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Escape) {
+            // The field's own filter runs after this one and needs the key first.
+            QMetaObject::invokeMethod(m_canvas.data(), [canvas = m_canvas] {
+                if (canvas)
+                    canvas->setFocus(Qt::OtherFocusReason);
+            }, Qt::QueuedConnection);
+        }
+        return false;
+    }
+
+private:
+    QPointer<EditorCanvas> m_canvas;
+};
+
 class Filler {
 public:
     Filler(const std::shared_ptr<Shared_> &shared, QHBoxLayout &row, QWidget *parent) : m_shared(shared), m_row(row), m_parent(parent) {}
@@ -86,10 +144,19 @@ public:
             text();
         color(QStringLiteral("color"), QStringLiteral("Text colour"), QStringLiteral("A"));
         color(QStringLiteral("background-color"), QStringLiteral("Fill colour"), QString());
-        number(QStringLiteral("elementPaddingX"), QStringLiteral("↔"), QStringLiteral("Horizontal padding"),
-               {QStringLiteral("padding-left"), QStringLiteral("padding-right")}, true, 0, 1000, 1);
-        number(QStringLiteral("elementPaddingY"), QStringLiteral("↕"), QStringLiteral("Vertical padding"),
-               {QStringLiteral("padding-top"), QStringLiteral("padding-bottom")}, true, 0, 1000, 1);
+        if (signature.contains(QLatin1Char('p'))) {
+            for (const auto &side : {std::tuple{"Top", "T", "top"}, std::tuple{"Right", "R", "right"}, std::tuple{"Bottom", "B", "bottom"},
+                                     std::tuple{"Left", "L", "left"}})
+                number(QStringLiteral("elementPadding") + QLatin1String(std::get<0>(side)), QLatin1String(std::get<1>(side)),
+                       QStringLiteral("%1 padding").arg(QLatin1String(std::get<0>(side))), {QStringLiteral("padding-") + QLatin1String(std::get<2>(side))},
+                       true, 0, 1000, 1);
+        } else {
+            number(QStringLiteral("elementPaddingX"), QStringLiteral("↔"), QStringLiteral("Horizontal padding"),
+                   {QStringLiteral("padding-left"), QStringLiteral("padding-right")}, true, 0, 1000, 1);
+            number(QStringLiteral("elementPaddingY"), QStringLiteral("↕"), QStringLiteral("Vertical padding"),
+                   {QStringLiteral("padding-top"), QStringLiteral("padding-bottom")}, true, 0, 1000, 1);
+        }
+        paddingBox(signature.contains(QLatin1Char('p')));
         number(QStringLiteral("elementWidth"), QStringLiteral("W"), QStringLiteral("Width"), {QStringLiteral("width")}, true, 0, 10000, 1);
         number(QStringLiteral("elementHeight"), QStringLiteral("H"), QStringLiteral("Height"), {QStringLiteral("height")}, true, 0, 10000, 1);
         if (signature.contains(QLatin1Char('f'))) {
@@ -97,8 +164,11 @@ public:
             number(QStringLiteral("elementFontWeight"), QString(), QStringLiteral("Font weight"), {QStringLiteral("font-weight")}, false, 100, 900, 100);
         }
         number(QStringLiteral("elementRadius"), QStringLiteral("R"), QStringLiteral("Corner radius"), {QStringLiteral("border-radius")}, true, 0, 1000, 1);
-        ask();
-        more();
+        // A site that isn't the user's has no code to change: Build It offers Hand to Agent there.
+        const bool yours = signature.contains(QLatin1Char('k'));
+        if (yours)
+            ask();
+        more(yours);
     }
 
 private:
@@ -146,12 +216,15 @@ private:
                 menu->addSeparator();
             QAction *custom = menu->addAction(QStringLiteral("Custom…"));
             custom->setObjectName(QStringLiteral("elementCustomColor"));
-            QObject::connect(custom, &QAction::triggered, menu, [shared, property, label, menu] {
+            QObject::connect(custom, &QAction::triggered, menu, [shared, property, label] {
                 const ElementBarActions::Common current = ElementBarActions::common(shared->selection(), property);
-                const QColor picked = QColorDialog::getColor(ElementBarActions::colorOf(current.value), menu->parentWidget(), label,
-                                                             QColorDialog::ShowAlphaChannel);
-                if (picked.isValid())
-                    shared->apply({property}, colorText(picked), false);
+                const QColor start = ElementBarActions::colorOf(current.value);
+                ColorPickerSheet::showIn(shared->pickerPanel(), label, start.isValid() ? start : QColor(Qt::white),
+                                         [weak = std::weak_ptr<Shared_>(shared), property](const QColor &picked) {
+                                             // The panel is owned by `shared`, so it can't own it back.
+                                             if (auto kept = weak.lock())
+                                                 kept->apply({property}, colorText(picked), false);
+                                         });
             });
         });
         m_shared->syncers.push_back([shared, well, property] {
@@ -164,8 +237,8 @@ private:
         m_row.addWidget(well);
     }
 
-    void number(const QString &name, const QString &label, const QString &described, const QStringList &properties, bool pixels, double minimum,
-                double maximum, double step)
+    NumberField *number(const QString &name, const QString &label, const QString &described, const QStringList &properties, bool pixels,
+                        double minimum, double maximum, double step, bool place = true)
     {
         auto shared = m_shared;
         struct Scrub {
@@ -198,6 +271,9 @@ private:
         field->field->setObjectName(name + QStringLiteral("Field"));
         field->field->setAccessibleName(described);
         field->field->setToolTip(described);
+        // Tab from the canvas never lands in a field; a click does.
+        field->field->setFocusPolicy(Qt::ClickFocus);
+        field->field->installEventFilter(new HandsFocusBack(shared->canvas, field));
         field->field->setFixedWidth(label.isEmpty() ? 44 : 48);
         field->setFixedHeight(controlHeight);
         field->step = step;
@@ -223,7 +299,45 @@ private:
             else
                 field->syncUnset(0, QStringLiteral("auto"));
         });
-        m_row.addWidget(field);
+        if (place)
+            m_row.addWidget(field);
+        return field;
+    }
+
+    // The box: padding for each side, or back to the pair.
+    void paddingBox(bool boxed)
+    {
+        auto shared = m_shared;
+        QToolButton *box = tool(QStringLiteral("elementPaddingBox"), QStringLiteral("▣"));
+        box->setCheckable(true);
+        box->setChecked(boxed);
+        box->setAccessibleName(QStringLiteral("Padding on each side"));
+        box->setToolTip(QStringLiteral("Padding on each side"));
+        QObject::connect(box, &QToolButton::toggled, box, [shared](bool on) {
+            shared->boxed = on;
+            // The bar's signature carries it (the letter p), so the bar refills with the other fields.
+            shared->canvas->noteEditPageHostChanged();
+        });
+        m_row.addWidget(box);
+    }
+
+    // A titled row of fields in the ⋯ menu.
+    void fieldsRow(QMenu *menu, const QString &title, const std::vector<std::array<QString, 4>> &fields)
+    {
+        auto *holder = new QWidget(menu);
+        auto *layout = new QHBoxLayout(holder);
+        layout->setContentsMargins(10, 2, 10, 2);
+        auto *heading = new QLabel(title, holder);
+        heading->setMinimumWidth(96);
+        layout->addWidget(heading);
+        for (const auto &[name, label, described, property] : fields) {
+            NumberField *field = number(name, label, described, property.split(QLatin1Char(',')), true, property.startsWith(QLatin1String("margin")) ? -1000 : 0, 1000, 1, false);
+            field->setParent(holder);
+            layout->addWidget(field);
+        }
+        auto *action = new QWidgetAction(menu);
+        action->setDefaultWidget(holder);
+        menu->addAction(action);
     }
 
     void ask()
@@ -239,10 +353,10 @@ private:
                                                          QString(), &accepted);
             if (!accepted || prompt.trimmed().isEmpty())
                 return;
-            QString project;
-            if (const std::optional<QUuid> frame = shared->canvas->editPageFrame()) {
-                if (LiveFrames *live = shared->canvas->session().findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly))
-                    project = live->snapshot(*frame).project;
+            const QString project = shared->project();
+            if (project.isEmpty()) {
+                emit shared->canvas->notice(QStringLiteral("This page isn't one of your sites, so there's no code to change."));
+                return;
             }
             const QString failure = shared->agent->liveAsk(prompt.trimmed(), shared->selection(), nullptr, project);
             if (!failure.isEmpty())
@@ -251,7 +365,7 @@ private:
         m_row.addWidget(button);
     }
 
-    void more()
+    void more(bool yours)
     {
         auto shared = m_shared;
         QToolButton *button = tool(QStringLiteral("elementMore"), QStringLiteral("⋯"));
@@ -267,6 +381,24 @@ private:
             if (!picked.isEmpty())
                 QGuiApplication::clipboard()->setText(picked.first().toObject().value(QStringLiteral("selector")).toString());
         });
+        fieldsRow(menu, QStringLiteral("Margin"),
+                  {{QStringLiteral("elementMarginX"), QStringLiteral("↔"), QStringLiteral("Horizontal margin"), QStringLiteral("margin-left,margin-right")},
+                   {QStringLiteral("elementMarginY"), QStringLiteral("↕"), QStringLiteral("Vertical margin"), QStringLiteral("margin-top,margin-bottom")}});
+        fieldsRow(menu, QStringLiteral("Corner radius"),
+                  {{QStringLiteral("elementRadiusTopLeft"), QStringLiteral("↖"), QStringLiteral("Top left radius"), QStringLiteral("border-top-left-radius")},
+                   {QStringLiteral("elementRadiusTopRight"), QStringLiteral("↗"), QStringLiteral("Top right radius"), QStringLiteral("border-top-right-radius")},
+                   {QStringLiteral("elementRadiusBottomRight"), QStringLiteral("↘"), QStringLiteral("Bottom right radius"), QStringLiteral("border-bottom-right-radius")},
+                   {QStringLiteral("elementRadiusBottomLeft"), QStringLiteral("↙"), QStringLiteral("Bottom left radius"), QStringLiteral("border-bottom-left-radius")}});
+        // A site that isn't the user's keeps its edits on this machine, per site.
+        if (!yours) {
+            QAction *keep = menu->addAction(QStringLiteral("Keep Edits…"));
+            keep->setObjectName(QStringLiteral("elementKeepEdits"));
+            QObject::connect(keep, &QAction::triggered, menu, [shared] {
+                const std::optional<QUuid> frame = shared->canvas->editPageFrame();
+                if (frame && shared->host())
+                    shared->host()->act(*frame, BrowserViewHost::Action::keepEdits);
+            });
+        }
         button->setMenu(menu);
         m_row.addWidget(button);
     }
@@ -333,13 +465,25 @@ QString ElementBarActions::signature(const QJsonArray &selection)
     return result;
 }
 
+void ElementBarActions::setProjectResolver(std::function<QString(const QUuid &frame)> resolver)
+{
+    projectResolver() = std::move(resolver);
+}
+
 ElementBar *ElementBarActions::attach(AgentBridge *agent, EditorCanvas &canvas)
 {
     auto shared = std::make_shared<Shared_>();
     shared->canvas = &canvas;
     shared->agent = agent;
     auto *bar = new ElementBar(canvas);
-    bar->setFiller([shared] { return ElementBarActions::signature(shared->selection()); },
+    bar->setFiller([shared] {
+                       QString signature = ElementBarActions::signature(shared->selection());
+                       if (!signature.isEmpty() && !shared->project().isEmpty())
+                           signature += QLatin1Char('k');
+                       if (!signature.isEmpty() && shared->boxed)
+                           signature += QLatin1Char('p');
+                       return signature;
+                   },
                    [shared, bar](QHBoxLayout &row) { Filler(shared, row, bar).fill(bar->shownSignature()); },
                    [shared] {
                        for (const auto &sync : shared->syncers)

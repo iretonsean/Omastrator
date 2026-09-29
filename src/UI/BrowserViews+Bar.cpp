@@ -118,6 +118,10 @@ void BrowserViews::act(const QUuid &frame, Action action)
         chooseMySite(frame);
         return;
     }
+    if (action >= Action::keepEdits && action <= Action::exportCss) {
+        runSiteAction(frame, action);
+        return;
+    }
     if (action >= Action::buildButton) {
         runBuildAction(frame, action);
         return;

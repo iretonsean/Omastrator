@@ -142,7 +142,7 @@ void BrowserViews::runProjectAction(const QUuid &frame, Action action)
         return;
     }
     // Review Changes and History follow the selected frame's project.
-    if (!m_session.isSelected(frame))
+    if (!m_session.isSelected(frame) && !(m_canvas && m_canvas->editPageFrame() == frame))
         m_session.select({frame});
     QWidget *window = m_canvas ? m_canvas->window() : nullptr;
     const AgentBridge::DeployState &state = m_agent->deployState();

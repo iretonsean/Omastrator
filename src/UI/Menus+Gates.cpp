@@ -1,5 +1,6 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
+#include "UI/LiveFrames.h"
 #include "UI/Menus.h"
 #include "UI/PageWorkspaces.h"
 #include "UI/ShareController.h"
@@ -143,6 +144,22 @@ void Menus::synchronize()
     action(QStringLiteral("browserViewEditPage"))->setEnabled(browserSelected || pageEditing);
     for (const char *name : {"browserViewCopyUrl", "browserViewOpen", "browserViewReload", "browserViewReloadHard", "browserViewSignIn"})
         action(QString::fromLatin1(name))->setEnabled(browserSelected);
+    // The project items need a frame to act on: the selected one, or the one in Edit Page.
+    const bool onFrame = browserSelected || pageEditing;
+    std::optional<QUuid> frame = browserSelected ? s.selectedBrowserView() : std::nullopt;
+    if (!frame && pageEditing)
+        frame = m_canvas->editPageFrame();
+    LiveFrames *live = frame ? s.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
+    const bool liveHere = live && frame && live->active(*frame);
+    const bool notYours = onFrame && (!liveHere || live->snapshot(*frame).project.isEmpty());
+    for (const char *name : {"browserViewDeploy", "browserViewSave", "browserViewReviewChanges", "browserViewHistory", "browserViewBuildIt",
+                             "browserViewBuildItWithNote"})
+        action(QString::fromLatin1(name))->setEnabled(onFrame);
+    action(QStringLiteral("browserViewStopBuild"))->setEnabled(onFrame && m_agent && frame && m_agent->buildingFrame() == *frame);
+    action(QStringLiteral("browserViewStopLive"))->setEnabled(liveHere);
+    for (const char *name : {"browserViewKeepEdits", "browserViewEditSets", "browserViewShowOriginal", "browserViewExportCss"})
+        action(QString::fromLatin1(name))->setEnabled(liveHere && notYours);
+    action(QStringLiteral("browserViewThisIsMySite"))->setEnabled(notYours);
     // Only while a breakpoint button is holding a width.
     action(QStringLiteral("browserViewDesignWidth"))->setEnabled(browserSelected && s.isPreviewOnly());
     const bool agent = m_agent != nullptr;

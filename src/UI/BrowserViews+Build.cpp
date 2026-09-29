@@ -5,13 +5,11 @@
 #include "UI/AgentSheets.h"
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
-#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QJsonObject>
 #include <QMenu>
-#include <QPointer>
 #include <cmath>
 
 // Build It from a Browser View (docs/LIVE-IN-FRAME.md, section 5): the frame's design children, the page under them
@@ -99,6 +97,9 @@ void BrowserViews::runBuildAction(const QUuid &frame, Action action)
         emit notice(QStringLiteral("Open the project's window to build."));
         return;
     }
+    // A held breakpoint preview has the frame resized in the document: Build It is for the design, not the preview.
+    if (m_session.isPreviewOnly())
+        m_session.cancelInteraction();
     if (action == Action::buildButton) {
         if (m_agent->buildingFrame() == frame)
             action = Action::stopBuild;
@@ -121,7 +122,7 @@ void BrowserViews::runBuildAction(const QUuid &frame, Action action)
         emit notice(QStringLiteral("Draw or place something on the page first, then Build It."));
         return;
     }
-    if (!m_session.isSelected(frame))
+    if (!m_session.isSelected(frame) && !(m_canvas && m_canvas->editPageFrame() == frame))
         m_session.select({frame});
     QString note;
     if (action == Action::buildItWithNote) {
@@ -167,8 +168,6 @@ QString BrowserViews::startBuild(const QUuid &frame, const QString &folder, cons
         return QStringLiteral("Draw or place something on the page first, then Build It.");
     if (folder.isEmpty() || !QFileInfo(folder).isDir())
         return QStringLiteral("Choose the folder with the app's source.");
-    if (m_agent->waiting())
-        return QStringLiteral("The agent is still working on something else.");
 
     // Only the frame's own children, as the page's CSS px: the frame's corner is the origin.
     const QRectF box = document.bounds(frame);
@@ -207,47 +206,16 @@ QString BrowserViews::startBuild(const QUuid &frame, const QString &folder, cons
     handOff.pending = LiveFrames::pendingEdits(folder);
     handOff.art = std::move(art);
 
+    // The frame's last picture is the page under the design; the tab can't be captured while it is a frame's.
     const auto found = m_entries.constFind(frame);
-    const bool live = found != m_entries.constEnd() && found->state == State::live && found->applied.css.width() == width;
-    const QImage stored = found != m_entries.constEnd() && !found->image.isNull() ? found->image : object->browser->picture;
-    const QUuid key = live ? found->key : QUuid();
-    const QPointer<BrowserViews> guard(this);
-    const QString project = folder;
-    // The page as it is now, or the last picture when the tab isn't live at the design width.
-    const auto send = [guard, frame, given = handOff, project, stored](QImage backdrop) {
-        if (!guard)
-            return;
-        AgentBridge::HandOff handOff = given;
-        if (backdrop.isNull())
-            backdrop = stored;
-        if (!backdrop.isNull()) {
-            const QString shot = QDir::temp().filePath(QStringLiteral("omastrator-build-%1.png").arg(frame.toString(QUuid::WithoutBraces)));
-            if (backdrop.save(shot))
-                handOff.screenshot = shot;
-            handOff.backdrop = backdrop;
-        }
-        if (!guard->m_agent)
-            return;
-        const QString failure = guard->m_agent->handOff(handOff);
-        if (!failure.isEmpty()) {
-            emit guard->notice(failure);
-            return;
-        }
-        LiveFrames::clearPending(project);
-        guard->scheduleRepaint(frame);
-        emit guard->frameChanged(frame);
-    };
-    if (key.isNull()) {
-        send(QImage());
-        return {};
-    }
-    BrowserViews::pool()->call(key, QStringLiteral("Page.captureScreenshot"), {{"format", "png"}},
-                               [send](const QJsonObject &result, const QString &error) {
-                                   QImage shot;
-                                   if (error.isEmpty())
-                                       shot.loadFromData(QByteArray::fromBase64(result["data"].toString().toLatin1()));
-                                   QMetaObject::invokeMethod(qApp, [send, shot] { send(shot); }, Qt::QueuedConnection);
-                               });
+    handOff.backdrop = found != m_entries.constEnd() && !found->image.isNull() ? found->image : object->browser->picture;
+    const QString failure = m_agent->handOff(handOff);
+    if (!failure.isEmpty())
+        return failure;
+    // Everything pending went in the package just now, so all of it is done.
+    LiveFrames::clearPending(folder);
+    scheduleRepaint(frame);
+    emit frameChanged(frame);
     return {};
 }
 

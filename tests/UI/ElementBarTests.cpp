@@ -2,9 +2,13 @@
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/ElementBar.h"
 #include "Document/EditorSession.h"
+#include "UI/ColorPickerSheet.h"
 #include "UI/ElementBarActions.h"
 #include "UI/NumberField.h"
+#include <QApplication>
 #include <QJsonArray>
+#include <QMenu>
+#include <QPushButton>
 #include <QTest>
 #include <QToolButton>
 
@@ -35,6 +39,7 @@ public:
     }
     bool canUndoPageEdit(const QUuid &) const override { return undoable; }
     bool canRedoPageEdit(const QUuid &) const override { return redoable; }
+    void act(const QUuid &, Action action) override { acts.push_back(action); }
     void undoPageEdit(const QUuid &) override { ++undone; }
     void redoPageEdit(const QUuid &) override { ++redone; }
 
@@ -42,6 +47,7 @@ public:
     ElementState state;
     QList<Edit> edits;
     QList<QPair<QString, QString>> texts;
+    QList<Action> acts;
     bool undoable = false;
     bool redoable = false;
     int undone = 0;
@@ -63,7 +69,9 @@ QJsonObject styles(const QString &paddingLeft, const QString &paddingRight = {})
     return QJsonObject{{"padding-left", paddingLeft}, {"padding-right", paddingRight.isEmpty() ? paddingLeft : paddingRight},
                        {"padding-top", "8px"}, {"padding-bottom", "8px"}, {"width", "200px"}, {"height", "100px"},
                        {"color", "rgb(0, 0, 0)"}, {"background-color", "rgb(255, 255, 255)"}, {"border-radius", "4px"},
-                       {"font-size", "16px"}, {"font-weight", "400"}};
+                       {"font-size", "16px"}, {"font-weight", "400"}, {"margin-left", "4px"}, {"margin-right", "4px"},
+                       {"margin-top", "0px"}, {"margin-bottom", "0px"}, {"border-top-left-radius", "4px"},
+                       {"border-top-right-radius", "4px"}, {"border-bottom-right-radius", "4px"}, {"border-bottom-left-radius", "12px"}};
 }
 
 struct Rig {
@@ -297,6 +305,136 @@ private slots:
         rig.host.undoable = false;
         rig.canvas.undoPageEdit();
         QCOMPARE(rig.host.undone, 1);
+    }
+
+    void enterAndEscapeHandTheKeyboardBackToTheCanvas()
+    {
+        Rig rig;
+        QVERIFY(rig.canvas.enterEditPage(rig.frame));
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("8px"))});
+        QVERIFY(QTest::qWaitForWindowActive(&rig.canvas));
+        NumberField *padding = rig.field("elementPaddingX");
+        QCOMPARE(padding->field->focusPolicy(), Qt::ClickFocus);
+        for (const Qt::Key key : {Qt::Key_Return, Qt::Key_Escape}) {
+            padding->field->setFocus(Qt::MouseFocusReason);
+            QTRY_VERIFY(padding->field->hasFocus());
+            QTest::keyClick(padding->field, key);
+            QTRY_VERIFY(rig.canvas.hasFocus());
+            QVERIFY(!padding->field->hasFocus());
+        }
+    }
+
+    void askIsOnlyOnASiteThatIsTheUsers()
+    {
+        struct Reset {
+            ~Reset() { ElementBarActions::setProjectResolver({}); }
+        } reset;
+        Rig rig;
+        QVERIFY(rig.canvas.enterEditPage(rig.frame));
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("8px"))});
+        // Build It offers Hand to Agent for a site that has no folder, so the bar doesn't ask about the wrong project.
+        QVERIFY(!rig.bar->findChild<QToolButton *>("elementAsk"));
+        QVERIFY(rig.bar->findChild<QToolButton *>("elementMore"));
+        ElementBarActions::setProjectResolver([](const QUuid &) { return QStringLiteral("/tmp/mine"); });
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("12px"))});
+        QVERIFY(rig.bar->findChild<QToolButton *>("elementAsk"));
+    }
+
+    void customColourIsTheAppsOwnPickerAndAppliesOnOKOnly()
+    {
+        Rig rig;
+        QVERIFY(rig.canvas.enterEditPage(rig.frame));
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("8px"))});
+        auto *well = rig.bar->findChild<QToolButton *>("element:color");
+        QVERIFY(well && well->menu());
+        emit well->menu()->aboutToShow();
+        QAction *custom = nullptr;
+        for (QAction *action : well->menu()->actions())
+            if (action->objectName() == QLatin1String("elementCustomColor"))
+                custom = action;
+        QVERIFY(custom);
+        auto sheet = [] {
+            for (QWidget *widget : QApplication::topLevelWidgets())
+                if (widget->objectName() == QLatin1String("colorPickerPanel") && widget->isVisible())
+                    return widget->findChild<ColorPickerSheet *>();
+            return static_cast<ColorPickerSheet *>(nullptr);
+        };
+        custom->trigger();
+        QTRY_VERIFY(sheet());
+        // It starts on the element's own colour, and Cancel changes nothing.
+        QCOMPARE(sheet()->color(), QColor(0, 0, 0));
+        sheet()->findChild<QPushButton *>("pickerCancel")->click();
+        QVERIFY(rig.host.edits.isEmpty());
+        custom->trigger();
+        QTRY_VERIFY(sheet());
+        sheet()->setHSB(PickerHSB::from(QColor(255, 0, 0)));
+        sheet()->findChild<QPushButton *>("pickerOK")->click();
+        QCOMPARE(rig.host.edits.size(), 1);
+        QCOMPARE(rig.host.edits[0].properties, QStringList{"color"});
+        QCOMPARE(rig.host.edits[0].value, QStringLiteral("#ff0000"));
+    }
+
+    void theBoxShowsPaddingForEachSideAndBack()
+    {
+        Rig rig;
+        QVERIFY(rig.canvas.enterEditPage(rig.frame));
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("8px"))});
+        QVERIFY(rig.field("elementPaddingX"));
+        auto *box = rig.bar->findChild<QToolButton *>("elementPaddingBox");
+        QVERIFY(box);
+        box->click();
+        QTRY_VERIFY(rig.field("elementPaddingTop") && !rig.field("elementPaddingX"));
+        for (const char *name : {"elementPaddingRight", "elementPaddingBottom", "elementPaddingLeft"})
+            QVERIFY(rig.field(name));
+        NumberField *left = rig.field("elementPaddingLeft");
+        QCOMPARE(left->value(), 8.0);
+        left->field->setText(QStringLiteral("20"));
+        left->commit();
+        QCOMPARE(rig.host.edits.last().properties, QStringList{"padding-left"});
+        QCOMPARE(rig.host.edits.last().value, QStringLiteral("20px"));
+        // Picking again keeps the box open; the box button closes it.
+        rig.pick({element("#b", {60, 40, 200, 80}, styles("8px"))});
+        QVERIFY(rig.field("elementPaddingTop"));
+        rig.bar->findChild<QToolButton *>("elementPaddingBox")->click();
+        QTRY_VERIFY(rig.field("elementPaddingX") && !rig.field("elementPaddingTop"));
+    }
+
+    void theMoreMenuHasMarginAndEachCornerAndKeepEditsOnASiteThatIsNotTheUsers()
+    {
+        struct Reset {
+            ~Reset() { ElementBarActions::setProjectResolver({}); }
+        } reset;
+        Rig rig;
+        QVERIFY(rig.canvas.enterEditPage(rig.frame));
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("8px"))});
+        auto *more = rig.bar->findChild<QToolButton *>("elementMore");
+        QVERIFY(more && more->menu());
+        NumberField *marginX = rig.bar->findChild<NumberField *>("elementMarginX");
+        NumberField *marginY = rig.bar->findChild<NumberField *>("elementMarginY");
+        NumberField *corner = rig.bar->findChild<NumberField *>("elementRadiusBottomLeft");
+        QVERIFY(marginX && marginY && corner);
+        QCOMPARE(marginX->value(), 4.0);
+        QCOMPARE(corner->value(), 12.0);
+        corner->field->setText(QStringLiteral("2"));
+        corner->commit();
+        QCOMPARE(rig.host.edits.last().properties, QStringList{"border-bottom-left-radius"});
+        marginY->field->setText(QStringLiteral("10"));
+        marginY->commit();
+        QCOMPARE(rig.host.edits.last().properties, (QStringList{"margin-top", "margin-bottom"}));
+        QCOMPARE(rig.host.edits.last().value, QStringLiteral("10px"));
+
+        // Not the user's site: Keep Edits… is here, and goes to the host.
+        QAction *keep = more->menu()->findChild<QAction *>("elementKeepEdits");
+        QVERIFY(keep);
+        keep->trigger();
+        QCOMPARE(rig.host.acts, QList<BrowserViewHost::Action>{BrowserViewHost::Action::keepEdits});
+
+        // The user's own site has the code instead.
+        ElementBarActions::setProjectResolver([](const QUuid &) { return QStringLiteral("/tmp/mine"); });
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("12px"))});
+        // The old buttons go with the refill, on the next turn of the loop.
+        QTRY_VERIFY(rig.bar->findChild<QToolButton *>("elementAsk"));
+        QTRY_VERIFY(!rig.bar->findChild<QToolButton *>("elementMore")->menu()->findChild<QAction *>("elementKeepEdits"));
     }
 
     void parsesComputedValues()

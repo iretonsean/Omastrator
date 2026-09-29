@@ -315,10 +315,13 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
         } else if (layout.reload.contains(view)) {
             browserHost->act(layout.frame, browserHost->bar(layout.frame).loading ? BrowserViewHost::Action::stop : BrowserViewHost::Action::reload);
         } else if (layout.deploy.contains(view)) {
-            session.select({layout.frame});
+            // In Edit Page the frame stays unselected: its handles would sit over the page.
+            if (editPage != layout.frame)
+                session.select({layout.frame});
             browserHost->act(layout.frame, BrowserViewHost::Action::deployButton);
         } else if (layout.build.contains(view)) {
-            session.select({layout.frame});
+            if (editPage != layout.frame)
+                session.select({layout.frame});
             browserHost->act(layout.frame, BrowserViewHost::Action::buildButton);
         } else if (layout.tag.contains(view)) {
             browserHost->act(layout.frame, BrowserViewHost::Action::thisIsMySite);
@@ -498,7 +501,8 @@ bool EditorCanvas::State::browserBarMenu(QPointF view, QPoint global)
     const VectorObject *object = session.document()->find(*frame);
     if (!object || !object->browser)
         return false;
-    session.select({*frame});
+    if (editPage != *frame)
+        session.select({*frame});
     auto *menu = new QMenu(&canvas);
     menu->setAttribute(Qt::WA_DeleteOnClose);
     const QUrl url = object->browser->url;
@@ -508,6 +512,15 @@ bool EditorCanvas::State::browserBarMenu(QPointF view, QPoint global)
     QAction *open = menu->addAction(QStringLiteral("Open in My Chromium"));
     open->setEnabled(!url.isEmpty());
     QObject::connect(open, &QAction::triggered, menu, [url] { QDesktopServices::openUrl(url); });
+    QAction *page = menu->addAction(QStringLiteral("Edit Page"));
+    page->setCheckable(true);
+    page->setChecked(editPage == *frame);
+    QObject::connect(page, &QAction::triggered, menu, [this, id = *frame] {
+        if (editPage == id)
+            leaveEditPage();
+        else
+            enterEditPage(id);
+    });
     menu->addSeparator();
     // On a button it sets that width; elsewhere, the width a preview is showing.
     const auto button = [&] {

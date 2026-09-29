@@ -1,8 +1,10 @@
 #include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
+#include "Canvas/ElementBar.h"
 #include "Document/PathOperations.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
+#include "UI/NumberField.h"
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "TemporaryConfig.h"
@@ -25,14 +27,20 @@ void clearShortcuts()
 
 class PageHost : public BrowserViewHost {
 public:
+    ElementState elementState(const QUuid &) const override { return state; }
+    EditBoxes editBoxes(const QUuid &) const override { return boxes; }
+    ElementState state;
+    EditBoxes boxes;
     QImage picture(const QUuid &) const override { return {}; }
     QString message(const QUuid &) const override { return {}; }
     QString beginEditPage(const QUuid &) override { return {}; }
     bool canUndoPageEdit(const QUuid &) const override { return undoable; }
     bool canRedoPageEdit(const QUuid &) const override { return false; }
     void undoPageEdit(const QUuid &) override { ++undone; }
+    void act(const QUuid &frame, Action action) override { acted.push_back({frame, action}); }
     bool undoable = true;
     int undone = 0;
+    QList<QPair<QUuid, Action>> acted;
 };
 
 QUuid box(EditorSession &session, double x)
@@ -50,6 +58,8 @@ private slots:
     void entriesNeedADocument();
     void undoAndRedoNameTheirSteps();
     void undoInEditPageIsThePagesOwn();
+    void enterInAnElementFieldLeavesUndoToThePage();
+    void browserViewItemsFollowTheFrameEvenInEditPage();
     void pageEntriesFollowTheDocument();
     void groupingFollowsTheSession();
     void viewTogglesAreChecked();
@@ -294,13 +304,14 @@ void MenusTests::remappedKeysReachTheEntries()
 
 void MenusTests::undoInEditPageIsThePagesOwn()
 {
+    // The host outlives the window, which asks it about undo while it goes.
+    PageHost host;
     ProjectWorkspace workspace;
     ProjectWorkspaceView window(workspace);
     Menus &menus = *window.menus();
     workspace.createDocument(QSizeF(400, 400));
     EditorSession &session = workspace.current().session;
     box(session, 10);
-    PageHost host;
     EditorCanvas &canvas = window.content()->canvas();
     canvas.setBrowserViewHost(&host);
     const QUuid frame = session.addBrowserView({100, 100, 200, 200}, QUrl(QStringLiteral("https://example.com/")));
@@ -315,6 +326,88 @@ void MenusTests::undoInEditPageIsThePagesOwn()
     host.undoable = false;
     canvas.noteEditPageHostChanged();
     QTRY_VERIFY(!menus.action("undo")->isEnabled());
+    // Outside Edit Page, Ctrl+Z is the document's again.
+    canvas.leaveEditPage();
+    QTRY_COMPARE(menus.action("undo")->text(), QString("Undo ") + before);
+    menus.action("undo")->trigger();
+    QVERIFY(session.undoName() != before);
+    QCOMPARE(host.undone, 1);
+    canvas.setBrowserViewHost(nullptr);
+}
+
+void MenusTests::enterInAnElementFieldLeavesUndoToThePage()
+{
+    PageHost host;
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    workspace.createDocument(QSizeF(400, 400));
+    EditorSession &session = workspace.current().session;
+    EditorCanvas &canvas = window.content()->canvas();
+    canvas.setBrowserViewHost(&host);
+    const QUuid frame = session.addBrowserView({100, 100, 200, 200}, QUrl(QStringLiteral("https://example.com/")));
+    window.show();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(canvas.enterEditPage(frame));
+    const QJsonObject picked{{"selector", "#a"}, {"tag", "div"}, {"text", ""}, {"textOnly", false},
+                             {"rect", QJsonObject{{"x", 10}, {"y", 10}, {"width", 80}, {"height", 40}}},
+                             {"styles", QJsonObject{{"padding-left", "8px"}, {"padding-right", "8px"}, {"padding-top", "8px"}, {"padding-bottom", "8px"}}}};
+    host.state.selection = QJsonArray{picked};
+    host.boxes.selection.push_back({QRectF(10, 10, 80, 40), "div"});
+    canvas.noteEditPageHostChanged();
+    auto *bar = canvas.findChild<ElementBar *>();
+    QVERIFY(bar);
+    QTRY_VERIFY(bar->findChild<NumberField *>("elementPaddingX"));
+    NumberField *padding = bar->findChild<NumberField *>("elementPaddingX");
+    padding->field->setFocus(Qt::MouseFocusReason);
+    QTRY_VERIFY(padding->field->hasFocus());
+    // While the field has the keyboard, Undo is its own.
+    QCOMPARE(menus.action("undo")->text(), QString("Undo"));
+    QTest::keyClick(padding->field, Qt::Key_Return);
+    QTRY_VERIFY(canvas.hasFocus());
+    QTRY_COMPARE(menus.action("undo")->text(), QString("Undo Page Edit"));
+    menus.action("undo")->trigger();
+    QCOMPARE(host.undone, 1);
+    canvas.setBrowserViewHost(nullptr);
+}
+
+void MenusTests::browserViewItemsFollowTheFrameEvenInEditPage()
+{
+    PageHost host;
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    workspace.createDocument(QSizeF(400, 400));
+    EditorSession &session = workspace.current().session;
+    EditorCanvas &canvas = window.content()->canvas();
+    canvas.setBrowserViewHost(&host);
+    const QStringList project = {"browserViewDeploy", "browserViewSave", "browserViewReviewChanges", "browserViewHistory", "browserViewBuildIt",
+                                 "browserViewBuildItWithNote", "browserViewStopBuild", "browserViewStopLive", "browserViewKeepEdits",
+                                 "browserViewShowOriginal", "browserViewExportCss", "browserViewThisIsMySite"};
+    // No Browser View: nothing of them is on offer, so Ctrl+K doesn't list them as usable.
+    session.deselectAll();
+    QTRY_VERIFY(!menus.action("browserViewDeploy")->isEnabled());
+    for (const QString &name : project)
+        QVERIFY2(!menus.action(name)->isEnabled(), qPrintable(name));
+    const QUuid frame = session.addBrowserView({100, 100, 200, 200}, QUrl(QStringLiteral("https://example.com/")));
+    session.select({frame});
+    QTRY_VERIFY(menus.action("browserViewDeploy")->isEnabled());
+    QVERIFY(menus.action("browserViewBuildIt")->isEnabled());
+    QVERIFY(menus.action("browserViewThisIsMySite")->isEnabled());
+    // Nothing is building and Live isn't running on the frame: there is nothing to stop.
+    QVERIFY(!menus.action("browserViewStopBuild")->isEnabled());
+    QVERIFY(!menus.action("browserViewStopLive")->isEnabled());
+    QVERIFY(!menus.action("browserViewKeepEdits")->isEnabled());
+    // Edit Page deselects the document; the items act on its frame all the same.
+    QVERIFY(canvas.enterEditPage(frame));
+    QVERIFY(!session.selectedBrowserView().has_value());
+    QTRY_VERIFY(menus.action("browserViewDeploy")->isEnabled());
+    menus.action("browserViewDeploy")->trigger();
+    menus.action("browserViewBuildIt")->trigger();
+    QCOMPARE(host.acted.size(), 2);
+    QCOMPARE(host.acted[0].first, frame);
+    QCOMPARE(host.acted[0].second, BrowserViewHost::Action::deploy);
+    QCOMPARE(host.acted[1].second, BrowserViewHost::Action::buildIt);
     canvas.setBrowserViewHost(nullptr);
 }
 
