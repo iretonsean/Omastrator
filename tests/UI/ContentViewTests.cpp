@@ -291,6 +291,11 @@ void ContentViewTests::theStatusBarFollowsTheSession()
     QCOMPARE(editor.status("hintStatus"), ContentView::hint(Tool::pen));
     QCOMPARE(ContentView::percent(0.8351), QString("83.5%"));
     QCOMPARE(ContentView::percent(12), QString("1,200%"));
+    // A huge artboard's Fit and the minimum zoom read in hundredths, never "0%".
+    QCOMPARE(ContentView::percent(0.0001), QString("0.01%"));
+    QCOMPARE(ContentView::percent(0.00126), QString("0.13%"));
+    QCOMPARE(ContentView::percent(0.0999), QString("10%"));
+    QCOMPARE(ContentView::percent(0.009996), QString("1%"));
 }
 
 void ContentViewTests::canvasKeysPickToolsAndSwapColours()

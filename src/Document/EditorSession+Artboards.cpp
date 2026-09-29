@@ -3,7 +3,7 @@
 #include <cmath>
 
 namespace {
-// An artboard can't pass VectorDocument::maximumArtboardSide, or the file wouldn't reopen.
+// Edits keep an artboard within the tested VectorDocument::maximumArtboardSide (imports may exceed it, and the codec still reopens those).
 QSizeF limited(QSizeF size)
 {
     return {std::min(size.width(), VectorDocument::maximumArtboardSide), std::min(size.height(), VectorDocument::maximumArtboardSide)};
@@ -213,7 +213,7 @@ void EditorSession::fitArtboardToArtwork(int index)
         return;
     edit(QStringLiteral("Fit Artboard to Artwork"), [&](VectorDocument &document) {
         std::vector<Artboard> boards = document.allArtboards();
-        boards[size_t(index)].rect = bounds;
+        boards[size_t(index)].rect = QRectF(bounds.topLeft(), limited(bounds.size()));
         document.setArtboards(boards);
     });
 }

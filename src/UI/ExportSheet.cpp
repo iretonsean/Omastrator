@@ -39,8 +39,9 @@ QString fileSize(qint64 bytes)
     return QLocale(QLocale::English, QLocale::UnitedStates).formattedDataSize(bytes, 1, QLocale::DataSizeSIFormat);
 }
 
-// The preview and its size estimate are only drawn up to this many pixels.
-constexpr double maximumPreviewPixels = 16'000'000;
+// The preview and its size estimate are only drawn up to this many pixels (about 256 MB), which
+// still covers 1920×1080 at 4×; a 50 m artboard is far past it.
+constexpr double maximumPreviewPixels = 64'000'000;
 
 // 1× to 4× while they fit; a page too big for 1× (a 50 m artboard) gets smaller steps instead,
 // so PNG and JPEG stay possible. PDF and SVG have no size limit.

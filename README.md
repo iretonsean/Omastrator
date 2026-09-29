@@ -77,6 +77,8 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   artboard exports at a smaller resolution (the Export sheet offers only the
   ones that fit; Export for Screens says which files it skipped). SVG and PDF
   have no such limit, though PDF viewers such as Acrobat stop at 14,400 pt.
+  Edits (sizes, Fit Artboard to Artwork) stop at the limit; an import can bring
+  in a bigger page, which is untested but saves and reopens like any other.
 - New-document presets are yours to edit. On the welcome sheet, the ⋯ beside
   Preset saves the current size and units under a name (Save Preset…), renames
   or deletes a saved one, and hides a built-in (Letter, A4, A3, 1920 × 1080,

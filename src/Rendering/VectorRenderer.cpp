@@ -149,9 +149,16 @@ double maskRasterScale(const QPainter &painter)
     return std::clamp(scale, 0.25, 8.0);
 }
 
-// A mask group's raster stays under this many pixels, so a group as big as a 50 m artboard
-// can't ask for gigabytes.
-constexpr double maximumIsolatedPixels = 16'000'000;
+// A mask group's raster stays under a pixel budget, so a group as big as a 50 m artboard can't ask
+// for gigabytes. An image device never gets less than its own size, so an export is never softer
+// than its output; a print PDF gets a larger fixed budget so a poster's mask keeps its 216 ppi.
+double isolatedPixelBudget(const QPainter &painter)
+{
+    constexpr double screen = 16'000'000, print = 64'000'000;
+    if (painter.device() && painter.device()->devType() == QInternal::Image)
+        return std::max(screen, double(painter.device()->width()) * painter.device()->height());
+    return print;
+}
 
 // What the painter can show, in its own coordinates. clipBoundingRect alone is empty when no clip is set.
 QRectF visibleRect(const QPainter &painter)
@@ -248,7 +255,7 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
             // Only what the painter can show is rasterized: the view on the canvas, the page in an export.
             const QRectF shown = bounds.intersected(visibleRect(painter).adjusted(-1, -1, 1, 1));
             if (shown.width() > 0 && shown.height() > 0) {
-                const double scale = std::min(maskRasterScale(painter), std::sqrt(maximumIsolatedPixels / (shown.width() * shown.height())));
+                const double scale = std::min(maskRasterScale(painter), std::sqrt(isolatedPixelBudget(painter) / (shown.width() * shown.height())));
                 const std::vector<QUuid> content(children.begin(), children.end() - 1);
                 QImage rendered = renderIsolated(document, content, shown, scale, painter, options);
                 const QImage maskImage = renderIsolated(document, {children.back()}, shown, scale, painter, options);
