@@ -83,6 +83,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   size as your own preset (a Saved group); right-click a row to rename or delete
   a saved one or hide a built-in, and Show Hidden Presets brings those back. They
   share `presets.json` with the document presets, in a `frames` section.
+- Settings travel. Edit ▸ Export Settings… writes your preferences, remapped
+  keys, workspace, swatches and size presets to one JSON file, on this computer
+  or on cloud storage, and Import Settings… on another computer reads it back.
+  Import shows what it will replace and asks once; what you had is saved first
+  in `~/.config/omastrator/backups/`. The Figma token, cloud sign-ins, recent
+  files and folders on this computer are never in the file.
 - The rail's tools sit in slots that share a button when more than one lives
   together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
   Paint, Navigate): a corner triangle marks a group, right-click or a long

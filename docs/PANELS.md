@@ -75,3 +75,48 @@ its size in 24 px rows. The last group looked at is remembered
   sheet's document presets (`PresetStore`). The file is read when the section
   first shows and again on each later show.
 - The built-in list is in code (`FramePresets::builtIn`), in points.
+
+## Settings that travel
+
+Edit ▸ Export Settings… and Import Settings…, beside Preferences…, move a
+setup between computers as one JSON file (`SettingsBundle`; the dialog is
+`SettingsConfirmDialog`). Both offer the cloud browser first when rclone has a
+remote ("Keep on cloud storage"), and This Computer for the usual file dialog.
+Decisions:
+
+- **What travels** is an allowlist in `SettingsBundle.cpp`: the preferences
+  (nudge increment, history states, layer naming, JPEG quality, agent terminal
+  and timeout, roast heat, Export for Screens scales and formats, the device
+  format), the remapped keys, the workspace (panels shown and their layout,
+  tool rail and its slots, reference point, task bar, Properties toggles and
+  folded sections), the swatch library, and the two `presets.json` sections
+  (document and frame presets). A key that isn't on the list is never written
+  and never read, so an old or hostile file can't set anything else.
+- **Never in the file:** the Figma token (`figma.json`), rclone's config and
+  every cloud sign-in, the `cloud/` remembered remotes and folders, recent
+  files, recent commands and colours, folders on this computer (design system
+  project, Export for Screens), the device Send to a device last used,
+  `anywhere.json`, `projects.json`, `setup.json` and `vocabulary.txt`. What
+  isn't a preference of the designer's, or would name this machine, stays home.
+- **Import replaces; it doesn't merge.** Figma and Illustrator both restore a
+  settings file wholesale, and "the same keys, workspace and presets" is only
+  true if what the file lacks goes back to its default. Things you have that
+  the file doesn't are reset, and the confirm lists that too.
+- **One confirm, with the backup kept.** The sheet lists each setting that
+  differs (Now, After import, grouped as Preferences, Shortcuts, Workspace,
+  Swatches, Presets); Cancel is the default, and Replace Settings is a click,
+  not Enter. Settings that already match aren't listed; if none differ there is
+  only a status-line notice. Before anything changes, the current settings are
+  written as `settings-<time>.json` (a file Import Settings reads, so a bad
+  import is undone by importing it) and `presets.json` is copied to
+  `presets-<time>.json`, both in `backups/` beside `presets.json`. If the
+  backup can't be written nothing changes. Old backups aren't pruned.
+- **Presets keep their safety rule.** A `presets.json` that can't be read is
+  never replaced: Export leaves the presets out and says so, Import applies
+  everything else and says the presets stayed.
+- **Remapped keys must hold together** (`ShortcutSettings::problem`), or the
+  file's keys are dropped with a note and yours stay.
+- **Panel layout and swatches** are read when Omastrator starts, so they appear
+  after a restart; keys and the history depth apply at once.
+- The Preferences dialog itself has no buttons for this; the two items sit in
+  the Edit menu (and Ctrl+K) next to Preferences….
