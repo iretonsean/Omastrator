@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Configure, build and run every test with warnings as errors; prints one summary line.
-# Usage: scripts/check.sh [build-dir] [jobs]   (jobs defaults to 2: 15 GB machines OOM above 3)
+# Usage: scripts/check.sh [build-dir] [jobs]   (jobs defaults to 3: 15 GB machines OOM above 3)
 set -uo pipefail
 cd "$(dirname "$0")/.."
-dir=${1:-build}; jobs=${2:-2}
+dir=${1:-build}; jobs=${2:-3}
 scripts/clean-tmp.sh
 cmake -S . -B "$dir" -DCMAKE_BUILD_TYPE=Debug -DOMASTRATOR_WERROR=ON >/dev/null || { echo "CHECK FAIL: configure"; exit 1; }
 if ! cmake --build "$dir" -j"$jobs" >"$dir/build.log" 2>&1; then
