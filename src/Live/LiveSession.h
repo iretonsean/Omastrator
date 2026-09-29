@@ -1,7 +1,8 @@
 #pragma once
 #include "Live/Browser.h"
 #include "Live/BrowserLink.h"
-#include "Live/DevServer.h"
+#include "Live/BrowserPool.h"
+#include "Live/DevServers.h"
 #include "Live/EditSets.h"
 #include "Live/Tokens.h"
 #include <QJsonArray>
@@ -9,6 +10,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QUrl>
+#include <QUuid>
 #include <optional>
 #include <vector>
 
@@ -53,6 +55,10 @@ public:
         // The user's own Chromium, through Omastrator's extension: this tab, or 0 for the
         // active tab of its last focused window. The page is used as it is: nothing is opened or reloaded.
         int tab = -1;
+        // A Browser View's tab in the pool (docs/LIVE-IN-FRAME.md): the session lives on the pool's thread, opens nothing
+        // and waits for the tab, and again after the tab is replaced. `url` is ignored; the tab's page is the page.
+        QUuid frame;
+        BrowserPool *pool = nullptr;
     };
 
     explicit LiveSession(QObject *parent = nullptr);
@@ -70,7 +76,16 @@ public:
     const std::vector<LiveEdit> &edits() const { return m_edits; }
     const QJsonArray &selection() const { return m_selection; }
     const TokenSet &tokens() const { return m_tokens; }
-    const DevServer &devServer() const { return m_devServer; }
+    // The project's dev server, while this session holds it.
+    const DevCommand &serverCommand() const { return m_serverCommand; }
+    QUrl serverUrl() const { return m_serverUrl; }
+    bool inFrame() const { return m_pool != nullptr; }
+    QUuid frame() const { return m_frame; }
+    // The last hover and selection boxes the overlay reported (frame host): {hover, selection, scroll, viewport}.
+    const QJsonObject &geometry() const { return m_geometry; }
+    // Edit Page: the page takes the pointer and reports what is under it. Off, the page is plain.
+    void setPageEditing(bool on);
+    bool pageEditing() const { return m_pageEditing; }
     Browser &browser() { return m_browser; }
     // The user's Chromium; Live in a tab needs it connected.
     void setBrowserLink(BrowserLink *link);
@@ -88,6 +103,11 @@ public:
     QJsonValue evaluate(const QString &expression, QString *error = nullptr);
     // The bar's path for one edit: snap, apply, record. Returns why it failed, or empty.
     QString edit(const QString &selector, const QString &property, const QString &value);
+    // Live's own undo: each edit put back as it was, per session. Both return why they couldn't, or empty.
+    bool canUndoEdit() const { return !m_undo.empty(); }
+    bool canRedoEdit() const { return !m_redo.empty(); }
+    QString undoEdit();
+    QString redoEdit();
     // Forgets the recorded edits, or keeps only `edits` (the ones write-back left for the agent).
     void clearEdits();
     void setEdits(std::vector<LiveEdit> edits);
@@ -115,6 +135,7 @@ public:
 
 signals:
     void changed();
+    void geometryChanged();
     void editApplied(const LiveEdit &edit);
     // "Ask AI…" in the bar: the prompt and the selected elements.
     void askRequested(const QString &prompt, const QJsonArray &elements);
@@ -123,6 +144,17 @@ signals:
 
 private:
     void run(Target target);
+    void runFrame(const Target &target);
+    // Joins the frame's tab if it has one (else waits for `opened`), and brings the overlay in.
+    void attachFrame();
+    void tabGone();
+    void leaveFrame();
+    // Which folder the frame's page is the code of: the one given, else the registry's for its address.
+    void frameProject();
+    // The dev server for `folder`, joined or started, waited for here without blocking the thread. Returns why not.
+    QString startServer(const QString &folder, int generation);
+    void releaseServer(bool wait);
+    static QString frameOverlayScript();
     // The binding and the overlay script, before the page loads.
     QString prepare();
     void fail(const QString &message);
@@ -137,7 +169,12 @@ private:
     void record(const QJsonObject &element, const TokenSet::Resolution &resolution, const QJsonObject &applied, const QString &textBefore);
 
     // Live in the user's tab: its DevTools messages go through the extension.
-    CdpConnection &cdp() { return m_inTab && m_link ? m_link->cdp() : m_browser.cdp(); }
+    CdpConnection &cdp()
+    {
+        if (m_pool && m_pool->cdp())
+            return *m_pool->cdp();
+        return m_inTab && m_link ? m_link->cdp() : m_browser.cdp();
+    }
     void runInTab(const Target &target);
     // Takes the overlay out of the user's tab and lets the tab go.
     void leaveTab();
@@ -146,7 +183,27 @@ private:
     QPointer<BrowserLink> m_link;
     bool m_inTab = false;
     QString m_title;
-    DevServer m_devServer;
+    quint64 m_lease = 0;
+    QString m_serverFolder;
+    DevCommand m_serverCommand;
+    QUrl m_serverUrl;
+    QPointer<BrowserPool> m_pool;
+    QUuid m_frame;
+    QString m_targetFolder;
+    QString m_scriptId;
+    QJsonObject m_geometry;
+    bool m_pageEditing = false;
+    struct UndoStep {
+        QString selector;
+        QString property;
+        // {style, cls, text}: null where the attribute or text isn't part of the edit.
+        QJsonObject was;
+        QJsonObject now;
+        std::optional<LiveEdit> replaced;
+        LiveEdit made;
+    };
+    std::vector<UndoStep> m_undo;
+    std::vector<UndoStep> m_redo;
     std::optional<Browser::Page> m_page;
     State m_state = State::off;
     QString m_message;

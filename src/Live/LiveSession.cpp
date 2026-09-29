@@ -4,6 +4,7 @@
 #include "Live/Registry.h"
 #include <QDir>
 #include <QFile>
+#include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QProcess>
@@ -45,12 +46,12 @@ LiveSession::LiveSession(QObject *parent) : QObject(parent)
     connect(&m_browser, &Browser::exited, this, [this] {
         // The user closed the browser: Live ends, the edits stay for review.
         m_page.reset();
-        m_devServer.stop();
+        releaseServer(true);
         if (m_state == State::running || m_state == State::starting)
             setState(State::off, QStringLiteral("The browser closed."));
     });
-    connect(&m_devServer, &DevServer::step, this, [this](const QString &message) {
-        if (m_state == State::starting)
+    connect(&DevServers::shared(), &DevServers::step, this, [this](const QString &folder, const QString &message) {
+        if (m_state == State::starting && folder == m_serverFolder)
             setState(State::starting, message);
     });
 }
@@ -84,6 +85,7 @@ qint64 LiveSession::browserProcessId() const
 
 LiveSession::~LiveSession()
 {
+    DevServers::shared().disconnect(this);
     m_browser.disconnect(this);
     m_browser.cdp().disconnect(this);
     if (m_link)
@@ -96,10 +98,37 @@ QString LiveSession::overlayScript()
     return QString::fromUtf8(OmastratorLive::overlay);
 }
 
+QString LiveSession::frameOverlayScript()
+{
+    return QStringLiteral("window.__omaHost = 'frame';\n") + overlayScript();
+}
+
 QString LiveSession::start(const Target &target)
 {
     if (m_state == State::starting)
         return QStringLiteral("Live is already starting.");
+    if (target.pool) {
+        if (target.frame.isNull())
+            return QStringLiteral("Live in a Browser View needs the frame's id.");
+        if (!target.folder.isEmpty() && !QFileInfo(target.folder).isDir())
+            return QStringLiteral("%1 isn't a folder.").arg(target.folder);
+        stop();
+        m_edits.clear();
+        m_undo.clear();
+        m_redo.clear();
+        m_selection = {};
+        m_geometry = {};
+        m_pool = target.pool;
+        m_frame = target.frame;
+        m_targetFolder = target.folder;
+        setState(State::starting, QStringLiteral("Waiting for the page…"));
+        const int generation = m_generation;
+        QTimer::singleShot(0, this, [this, target, generation] {
+            if (generation == m_generation)
+                runFrame(target);
+        });
+        return {};
+    }
     if (target.tab >= 0) {
         if (!m_link || !m_link->isConnected())
             return QStringLiteral("Omastrator's Chromium extension isn't connected. Run `omastrator setup`, then restart Chromium.");
@@ -107,6 +136,8 @@ QString LiveSession::start(const Target &target)
             return QStringLiteral("%1 isn't a folder.").arg(target.folder);
         stop();
         m_edits.clear();
+        m_undo.clear();
+        m_redo.clear();
         m_selection = {};
         setState(State::starting, QStringLiteral("Joining your tab…"));
         const int generation = m_generation;
@@ -131,6 +162,8 @@ QString LiveSession::start(const Target &target)
         return QStringLiteral("Chromium isn't installed. Install it with: sudo pacman -S chromium");
     stop();
     m_edits.clear();
+    m_undo.clear();
+    m_redo.clear();
     m_selection = {};
     setState(State::starting, QStringLiteral("Starting…"));
     const int generation = m_generation;
@@ -188,11 +221,11 @@ void LiveSession::run(Target target)
     // A registered site runs from its own dev server, at the same path; a page already on localhost is used as it is.
     if (!folder.isEmpty() && (url.isEmpty() || !isLocal(url))) {
         setState(State::starting, QStringLiteral("Starting the project…"));
-        if (const QString failure = m_devServer.start(folder); !failure.isEmpty())
+        if (const QString failure = startServer(folder, generation); !failure.isEmpty())
             return cancelled() ? void() : fail(failure);
         if (cancelled())
             return;
-        QUrl served = m_devServer.url();
+        QUrl served = m_serverUrl;
         if (!url.isEmpty()) {
             served.setPath(url.path());
             served.setQuery(url.query());
@@ -284,16 +317,21 @@ QString LiveSession::prepare()
     QString error;
     CdpConnection &cdp = this->cdp();
     cdp.callAndWait(QStringLiteral("Runtime.addBinding"), {{"name", "omastratorSend"}}, m_page->sessionId, &error);
-    if (error.isEmpty())
-        cdp.callAndWait(QStringLiteral("Page.addScriptToEvaluateOnNewDocument"), {{"source", overlayScript()}}, m_page->sessionId, &error);
+    if (error.isEmpty()) {
+        const QJsonObject added = cdp.callAndWait(QStringLiteral("Page.addScriptToEvaluateOnNewDocument"),
+                                                  {{"source", m_pool ? frameOverlayScript() : overlayScript()}}, m_page->sessionId, &error);
+        m_scriptId = added["identifier"].toString();
+    }
     return error.isEmpty() ? QString() : QStringLiteral("Couldn't prepare the page: %1").arg(error);
 }
 
 void LiveSession::fail(const QString &message)
 {
     leaveTab();
-    m_browser.stop();
-    m_devServer.stop();
+    leaveFrame();
+    if (!m_pool)
+        m_browser.stop();
+    releaseServer(!m_pool);
     m_page.reset();
     setState(State::failed, message);
 }
@@ -302,11 +340,56 @@ void LiveSession::stop()
 {
     ++m_generation;
     leaveTab();
+    leaveFrame();
     m_page.reset();
-    m_browser.stop();
-    m_devServer.stop();
+    // The pool's browser isn't ours, and this may be its thread.
+    const bool framed = !m_frame.isNull();
+    if (!framed)
+        m_browser.stop();
+    releaseServer(!framed);
+    m_frame = {};
+    m_pageEditing = false;
     if (m_state != State::off)
         setState(State::off);
+}
+
+QString LiveSession::startServer(const QString &folder, int generation)
+{
+    QEventLoop loop;
+    DevServers::Result got;
+    bool finished = false;
+    // Released by stop() while it starts: nobody answers, so the wait looks for the new generation.
+    QTimer poll;
+    poll.setInterval(100);
+    connect(&poll, &QTimer::timeout, &loop, [&] {
+        if (generation != m_generation)
+            loop.quit();
+    });
+    poll.start();
+    m_serverFolder = DevServers::keyFor(folder);
+    m_lease = DevServers::shared().acquire(folder, &loop, [&](const DevServers::Result &result) {
+        got = result;
+        finished = true;
+        loop.quit();
+    });
+    loop.exec();
+    if (!finished)
+        return QStringLiteral("Live was stopped.");
+    if (!got.error.isEmpty()) {
+        m_lease = 0;
+        return got.error;
+    }
+    m_serverUrl = got.url;
+    m_serverCommand = got.command;
+    return {};
+}
+
+void LiveSession::releaseServer(bool wait)
+{
+    if (m_lease)
+        DevServers::shared().release(m_lease, wait);
+    m_lease = 0;
+    m_serverUrl.clear();
 }
 
 void LiveSession::setState(State state, const QString &message)
@@ -334,7 +417,7 @@ QJsonObject LiveSession::status() const
             {"edits", int(m_edits.size())},
             {"selection", int(m_selection.size())},
             {"message", m_message},
-            {"server", m_devServer.url().isEmpty() ? QString() : m_devServer.command().description},
+            {"server", m_serverUrl.isEmpty() ? QString() : m_serverCommand.description},
             {"tab", m_inTab},
             {"extension", m_link && m_link->isConnected()}};
 }
@@ -360,6 +443,8 @@ QJsonValue LiveSession::evaluate(const QString &expression, QString *error)
 void LiveSession::rescanTokens()
 {
     QString error;
+    if (m_pool)
+        evaluate(QStringLiteral("window.__oma && window.__oma.setHost('frame')"));
     const QJsonObject scan = evaluate(QStringLiteral("window.__oma ? window.__oma.scan() : null"), &error).toObject();
     const auto theme = omarchyColors();
     m_tokens = TokenSet::fromScan(scan, theme);
@@ -400,6 +485,9 @@ void LiveSession::handle(const QJsonObject &message)
     if (type == QLatin1String("select")) {
         m_selection = message["elements"].toArray();
         emit changed();
+    } else if (type == QLatin1String("geometry")) {
+        m_geometry = message;
+        emit geometryChanged();
     } else if (type == QLatin1String("edit")) {
         const QJsonObject element = message["element"].toObject();
         const QString property = message["property"].toString();
@@ -462,6 +550,21 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
     edit.classesAfter = after["classes"].toString();
     edit.element = element;
     edit.path = element["path"].toString(EditSets::pathOf(m_url));
+    const bool isText = resolution.property == QLatin1String("text");
+    UndoStep step;
+    step.selector = selector;
+    step.property = edit.property;
+    step.was = {{"style", element["inlineStyle"].toString()}, {"cls", element["classes"].toString()},
+                {"text", isText ? QJsonValue(textBefore) : QJsonValue()}};
+    step.now = {{"style", after["inlineStyle"].toString()}, {"cls", after["classes"].toString()},
+                {"text", isText ? QJsonValue(resolution.value) : QJsonValue()}};
+    m_redo.clear();
+    auto remember = [&](const LiveEdit &made) {
+        step.made = made;
+        m_undo.push_back(step);
+        if (m_undo.size() > 200)
+            m_undo.erase(m_undo.begin());
+    };
     // A second change to the same thing keeps the first one's "before".
     for (LiveEdit &existing : m_edits) {
         if (existing.selector == selector && existing.property == edit.property) {
@@ -470,13 +573,16 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
             edit.element = existing.element;
             if (!existing.removeClass.isEmpty() && edit.removeClass == existing.addClass)
                 edit.removeClass = existing.removeClass;
+            step.replaced = existing;
             existing = edit;
+            remember(existing);
             emit editApplied(existing);
             emit changed();
             return;
         }
     }
     m_edits.push_back(edit);
+    remember(edit);
     emit editApplied(edit);
     emit changed();
     // Later: a record can arrive inside another DevTools call, which mustn't be nested.
@@ -487,12 +593,16 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
 void LiveSession::clearEdits()
 {
     m_edits.clear();
+    m_undo.clear();
+    m_redo.clear();
     emit changed();
 }
 
 void LiveSession::setEdits(std::vector<LiveEdit> edits)
 {
     m_edits = std::move(edits);
+    m_undo.clear();
+    m_redo.clear();
     emit changed();
 }
 
@@ -500,8 +610,73 @@ void LiveSession::removeEdit(int index)
 {
     if (index >= 0 && index < int(m_edits.size())) {
         m_edits.erase(m_edits.begin() + index);
+        m_undo.clear();
+        m_redo.clear();
         emit changed();
     }
+}
+
+QString LiveSession::undoEdit()
+{
+    if (m_undo.empty())
+        return QStringLiteral("There's no page edit to undo.");
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    const UndoStep step = m_undo.back();
+    QString error;
+    const bool put = evaluate(QStringLiteral("window.__oma.restore(%1, %2)").arg(json(step.selector), json(step.was)), &error).toBool();
+    if (!error.isEmpty())
+        return error;
+    if (!put)
+        return QStringLiteral("That element is gone from the page.");
+    m_undo.pop_back();
+    const auto found = std::find_if(m_edits.begin(), m_edits.end(),
+                                    [&](const LiveEdit &each) { return each.selector == step.selector && each.property == step.property; });
+    if (found != m_edits.end()) {
+        if (step.replaced)
+            *found = *step.replaced;
+        else
+            m_edits.erase(found);
+    }
+    m_redo.push_back(step);
+    emit changed();
+    if (isMockup())
+        QTimer::singleShot(0, this, &LiveSession::describeSite);
+    return {};
+}
+
+QString LiveSession::redoEdit()
+{
+    if (m_redo.empty())
+        return QStringLiteral("There's no page edit to redo.");
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    const UndoStep step = m_redo.back();
+    QString error;
+    const bool put = evaluate(QStringLiteral("window.__oma.restore(%1, %2)").arg(json(step.selector), json(step.now)), &error).toBool();
+    if (!error.isEmpty())
+        return error;
+    if (!put)
+        return QStringLiteral("That element is gone from the page.");
+    m_redo.pop_back();
+    const auto found = std::find_if(m_edits.begin(), m_edits.end(),
+                                    [&](const LiveEdit &each) { return each.selector == step.selector && each.property == step.property; });
+    if (found != m_edits.end())
+        *found = step.made;
+    else
+        m_edits.push_back(step.made);
+    m_undo.push_back(step);
+    emit changed();
+    if (isMockup())
+        QTimer::singleShot(0, this, &LiveSession::describeSite);
+    return {};
+}
+
+void LiveSession::setPageEditing(bool on)
+{
+    m_pageEditing = on;
+    if (m_page)
+        evaluate(QStringLiteral("window.__oma && window.__oma.enable(%1)").arg(on ? "true" : "false"));
 }
 
 void LiveSession::notice(const QString &text)
@@ -550,9 +725,14 @@ void LiveSession::pageLoaded()
         m_url = now;
         emit changed();
     }
+    if (m_pool)
+        frameProject();
     rescanTokens();
-    if (isMockup())
+    // A frame's page is reloaded and replaced under its session, so its edits go back on every load.
+    if (isMockup() || m_pool)
         evaluate(QStringLiteral("window.__oma && window.__oma.applyEdits(%1)").arg(json(EditSets::toJson(editsShown()))));
+    if (m_pool)
+        evaluate(QStringLiteral("window.__oma && window.__oma.enable(%1)").arg(m_pageEditing ? "true" : "false"));
     describeSite();
 }
 
@@ -590,7 +770,8 @@ std::vector<EditSets::Edit> LiveSession::editsShown(const QString &name) const
         return {};
     }
     const QString path = EditSets::pathOf(m_url);
-    std::vector<EditSets::Edit> edits = EditSets::active(origin(), path);
+    // The sets belong to a site that isn't the user's.
+    std::vector<EditSets::Edit> edits = isMockup() ? EditSets::active(origin(), path) : std::vector<EditSets::Edit>{};
     for (const LiveEdit &edit : m_edits)
         if (edit.path.isEmpty() || edit.path == path)
             edits.push_back(EditSets::Edit::fromLive(edit));
@@ -613,6 +794,8 @@ QString LiveSession::keepEdits(const QString &name, QString *kept)
         *kept = chosen;
     // They're in the set now, and stay on the page.
     m_edits.clear();
+    m_undo.clear();
+    m_redo.clear();
     emit changed();
     describeSite();
     notice(QStringLiteral("Kept as “%1”. It comes back every time you open this site in Omastrator.").arg(chosen));

@@ -96,7 +96,7 @@ private slots:
         QCOMPARE(live.state(), LiveSession::State::starting);
         QVERIFY2(waitRunning(live), qPrintable(live.message()));
         QVERIFY(!live.isMockup());
-        QCOMPARE(live.devServer().command().kind, DevCommand::Kind::staticSite);
+        QCOMPARE(live.serverCommand().kind, DevCommand::Kind::staticSite);
         QVERIFY(live.url().toString().startsWith(QLatin1String("http://127.0.0.1:")));
         // The page's own custom properties are its tokens.
         QVERIFY(std::any_of(live.tokens().tokens().begin(), live.tokens().tokens().end(), [](const Token &token) { return token.name == QLatin1String("--brand"); }));
@@ -168,7 +168,7 @@ private slots:
         LiveSession live;
         QVERIFY(live.start(target(project)).isEmpty());
         QVERIFY2(waitRunning(live), qPrintable(live.message()));
-        QCOMPARE(live.devServer().command().description, QStringLiteral("npm run dev"));
+        QCOMPARE(live.serverCommand().description, QStringLiteral("npm run dev"));
         QCOMPARE(live.url().host(), QStringLiteral("localhost"));
         QVERIFY(live.tokens().hasTailwind());
         QCOMPARE(live.tokens().spacingPx(), 4.0);

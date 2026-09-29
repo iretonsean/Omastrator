@@ -403,3 +403,27 @@ Deploy, Changes and History on the island already go through
 - **Live starts on the first Edit Page**, not when the frame opens.
 - **The document keeps a site's production URL** while its frame shows the dev
   server.
+
+## Decided while building
+
+- **Commit 1 (the frame host).**
+  - The session lives on the pool's thread (`moveToThread(pool->poolThread())`),
+    so its synchronous `callAndWait` calls work against the pool's CDP socket.
+    Callers run `start`, `stop`, `edit` and the rest there (queued or blocking).
+  - The session outlives its tab: `closed` drops the page and sets the state to
+    "Waiting for the page…", `opened` attaches again. The edits and the undo
+    stack stay, and `pageLoaded()` puts the edits back on every load in a frame.
+  - The overlay in a frame is announced by `window.__omaHost = 'frame'` before
+    the script. It draws nothing, keeps `enabled` off until `setPageEditing`,
+    and reports `{hover, selection, scroll, viewport}` as a `geometry` message,
+    once per animation frame while it changes.
+  - Undo is per session: 200 steps of `{selector, was, now}` (inline style,
+    class, and text for text edits), applied by `__oma.restore`. A new edit
+    clears redo; anything that replaces the edit list clears both.
+  - `DevServers` is a process-wide manager with leases. `LiveSession::stop`
+    releases with `wait = true` in the window (so a stopped Live still means a
+    stopped server) and without it in a frame. Frame sessions don't start
+    servers until commit 5.
+  - A frame's tab can't take `Page.captureScreenshot` ("Not attached to an
+    active page"); the frame is seen through a screencast. The no-chrome test
+    checks the page's DOM instead, which is what the screencast would carry.

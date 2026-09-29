@@ -12,9 +12,13 @@
   const styleProperties = ["color", "background-color", "padding", "margin", "padding-top", "padding-right", "padding-bottom", "padding-left",
     "margin-top", "margin-right", "margin-bottom", "margin-left", "width", "height", "font-size", "font-weight", "border-radius"];
 
+  // Live inside a Browser View draws nothing: the app draws the boxes and the bar from what is reported here.
+  let frameHost = window.__omaHost === "frame";
+
   const state = {
-    enabled: true,
+    enabled: !frameHost,
     selection: [],
+    hover: null,
     tokens: { colors: [], spacing: [], fontSizes: [], fontWeights: [], radii: [] },
     ui: { background: "#1a1a1c", foreground: "#e5e5e7", accent: "#0a84ff" },
     panel: "",
@@ -297,7 +301,32 @@
   }
 
   function attach() {
-    if (!left && !host.isConnected) document.documentElement.appendChild(host);
+    if (!left && !frameHost && !host.isConnected) document.documentElement.appendChild(host);
+  }
+
+  // Frame host: the hover and selection boxes in page px, once per animation frame while anything moves.
+  let reportQueued = false;
+  let lastReport = "";
+  function report() {
+    if (!frameHost || reportQueued) return;
+    reportQueued = true;
+    const run = () => {
+      if (!reportQueued) return;
+      reportQueued = false;
+      const box = (element) => {
+        const rect = element.getBoundingClientRect();
+        return { selector: selectorFor(element), tag: element.tagName.toLowerCase(), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+      };
+      const hover = state.enabled && state.hover && state.hover.isConnected ? box(state.hover) : null;
+      const payload = { type: "geometry", hover, selection: state.selection.filter((e) => e.isConnected).map(box),
+        scroll: { x: scrollX, y: scrollY }, viewport: { width: innerWidth, height: innerHeight } };
+      const text = JSON.stringify(payload);
+      if (text === lastReport) return;
+      lastReport = text;
+      send(payload);
+    };
+    requestAnimationFrame(run);
+    setTimeout(run, 100);
   }
 
   function paintTheme() {
@@ -319,6 +348,7 @@
   }
 
   function redraw() {
+    if (frameHost) { report(); return; }
     selections.innerHTML = "";
     for (const element of state.selection) {
       const box = document.createElement("div");
@@ -372,6 +402,12 @@
   }
 
   addEventListener("mousemove", (event) => {
+    if (frameHost) {
+      if (!state.enabled) return;
+      state.hover = event.target instanceof Element ? event.target : null;
+      report();
+      return;
+    }
     if (!state.enabled || inOverlay(event) || state.dragging) { hoverBox.style.display = "none"; return; }
     const target = event.target;
     if (!(target instanceof Element) || target === state.editing) return;
@@ -614,7 +650,27 @@
     },
     enable(on) {
       state.enabled = !!on;
-      if (!on) { clear(); hoverBox.style.display = "none"; }
+      if (!on) { state.hover = null; clear(); hoverBox.style.display = "none"; }
+      report();
+    },
+    // "frame": inside a Browser View. Nothing is drawn and the page is plain until Edit Page enables it.
+    setHost(name) {
+      frameHost = name === "frame";
+      if (frameHost) { host.remove(); state.enabled = false; state.hover = null; }
+      else attach();
+      report();
+    },
+    // Puts one element back as it was: {style, cls, text} with null for "no attribute" or "leave the text".
+    restore(selector, was) {
+      let element = null;
+      try { element = document.querySelector(selector); } catch (e) { return false; }
+      if (!element) return false;
+      remember(element);
+      if (was.style === null || was.style === "") element.removeAttribute("style"); else element.setAttribute("style", was.style);
+      if (was.cls === null || was.cls === "") element.removeAttribute("class"); else element.setAttribute("class", was.cls);
+      if (was.text !== null && was.text !== undefined && element.children.length === 0) element.textContent = was.text;
+      redraw();
+      return true;
     },
     select(selector, add) {
       const element = document.querySelector(selector);
