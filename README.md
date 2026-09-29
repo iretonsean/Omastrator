@@ -133,8 +133,9 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   weight, caps, corners and dashes, opacity and blend modes. **+** stacks
   several fills or strokes on one object, Figma-style, each with its own eye,
   opacity and blend, and a grip to reorder. Strokes align inside, centre or
-  outside, take arrowheads (arrow, triangle, circle, square, bar) and can
-  stretch their dashes to sit on the corners. The Gradient tool (G) drags a
+  outside (on live, editable type too, in exports as well), take arrowheads
+  (arrow, triangle, circle, square, bar) and can stretch their dashes to sit
+  on the corners. The Gradient tool (G) drags a
   gradient's ends and stops right on the object. The Width tool (Shift+W)
   drags on a stroke to add or move a width point, and the Stroke section's
   Profile menu sets a taper, bulge or custom shape along the whole path.

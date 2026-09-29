@@ -489,6 +489,8 @@ QPainterPath area(const QPainterPath &path, const StrokeStyle &stroke)
     if (aligned) {
         QPainterPath shape = path;
         covered = stroke.alignment == StrokeAlignment::inside ? covered.intersected(shape) : covered.subtracted(shape);
+        // The clipper's rings and holes wind the same way, so only its own odd-even rule keeps the holes open.
+        return covered;
     }
     const QPainterPath ends = heads(path, stroke);
     if (!ends.isEmpty())
