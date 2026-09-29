@@ -418,11 +418,11 @@ The tests:
    - AGENTS.md: `BrowserPool` under src/Live, `BrowserViews` under src/UI.
    - The user guide.
 
-## Open question for the author
+## Decided by the lead (2026-09-29; the author can reverse it)
 
-- **The sign-in window.** BROWSER-FRAMES.md says the first Browser View
-  *opens* the profile in a normal window. This design **offers** it inside
-  the frame (Sign In… / Not Now) instead. A window opening by itself takes the
-  keyboard and a workspace slot, and the escape-hatch rule is that nothing
-  grabs either. Keep the offer, or open the window on the first frame as
-  written?
+- **The sign-in window is offered, not opened.** BROWSER-FRAMES.md says the
+  first Browser View *opens* the profile in a normal window. It's offered
+  inside the frame instead (Sign In… / Not Now), because a window that opens
+  by itself takes the keyboard and a workspace slot. The author's
+  escape-hatch rule is that nothing grabs either. Opening it on the first
+  frame is a one-line change if the author prefers it.
