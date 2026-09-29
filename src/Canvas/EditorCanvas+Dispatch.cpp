@@ -52,6 +52,10 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     // A Browser View's bar and sign-in strip take their presses before any tool does.
     if (browserBarPress(view))
         return;
+    if (session.tool() == Tool::browse) {
+        browsePress(view, modifiers, false);
+        return;
+    }
     // A guide under the Selection tools moves; a live corner's widget sets its radius;
     // a selected path text's bracket slides its start.
     if (session.tool() == Tool::select || session.tool() == Tool::directSelect) {
@@ -127,6 +131,7 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
         beginDrag(DragKind::zoomRect, view);
         break;
     case Tool::hand:
+    case Tool::browse:
         break;
     case Tool::artboard:
         artboardPress(view, modifiers);
@@ -138,6 +143,15 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
 {
     if (!session.hasDocument())
         return;
+    if (session.tool() == Tool::browse && (!drag || drag->kind == DragKind::browse)) {
+        // Without a button the release was lost: the page gets it.
+        if (drag && !held) {
+            release(view, modifiers);
+            return;
+        }
+        browseMove(view, modifiers, held);
+        return;
+    }
     if (!drag) {
         updateHover(view);
         return;
@@ -211,6 +225,8 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
         break;
     case DragKind::artboard:
         dragArtboard(view, modifiers);
+        break;
+    case DragKind::browse:
         break;
     case DragKind::textSelect:
         if (text) {
@@ -295,6 +311,9 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::artboard:
         finishArtboard();
         break;
+    case DragKind::browse:
+        browseRelease(view, modifiers);
+        break;
     case DragKind::pan:
     case DragKind::textSelect:
         break;
@@ -310,6 +329,9 @@ void EditorCanvas::State::cancelDrag()
         return;
     const bool interacting = drag->interacting;
     const DragKind kind = drag->kind;
+    // The page's button comes up where the pointer was.
+    if (kind == DragKind::browse)
+        browseRelease(drag->lastView, modifiers);
     drag.reset();
     // The pen's path stays: only its last drag goes back.
     if (interacting && kind != DragKind::pen && session.isInteracting())
@@ -320,6 +342,12 @@ void EditorCanvas::State::cancelDrag()
 
 void EditorCanvas::State::doubleClick(QPointF view, Qt::KeyboardModifiers modifiers)
 {
+    if (session.tool() == Tool::browse) {
+        if (drag)
+            release(view, modifiers);
+        browsePress(view, modifiers, true);
+        return;
+    }
     const QPointF document = toDocument(view);
     // A second click in the type being edited selects its word.
     if (text && textBox().adjusted(-reach(4), -reach(4), reach(4), reach(4)).contains(document)) {
@@ -373,6 +401,8 @@ void EditorCanvas::State::toolChanged()
         return;
     const Tool was = shownTool;
     shownTool = session.tool();
+    if (was == Tool::browse)
+        browseLeave();
     if (drag && drag->kind != DragKind::pan)
         cancelDrag();
     if (pen && shownTool != Tool::pen)
@@ -396,6 +426,10 @@ void EditorCanvas::State::documentChanged()
     builderRegion.reset();
     builderEdge.reset();
     const std::optional<VectorDocument> &document = session.document();
+    if (browseFocus && (!document || !document->find(*browseFocus)))
+        setBrowseFocus(std::nullopt);
+    if (browseHover && (!document || !document->find(*browseHover)))
+        browseHover.reset();
     if (!document) {
         drag.reset();
         pen.reset();

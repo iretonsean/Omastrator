@@ -45,6 +45,7 @@ public:
     bool signInOffered() const override;
     void signIn() override;
     void dismissSignIn() override;
+    bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params) override;
     // Whether the strip has been answered on this machine; tests clear it.
     static bool signInAnswered();
     static void setSignInAnswered(bool answered);
@@ -64,6 +65,8 @@ public:
 signals:
     // A frame's state, address or loading changed.
     void frameChanged(const QUuid &frame);
+    // Something the page tried that Browser View refuses, said once to the user.
+    void notice(const QString &text);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -73,12 +76,10 @@ private:
         QSize css;
         int scale = 0;
         QSize cast;
-        int everyNth = 0;
     };
     // A wanted value that keeps changing (a zoom, a pinch) waits until it has held still.
     struct Settling {
         QSize cast;
-        int everyNth = 0;
         int scale = 0;
         qint64 castSince = 0;
         qint64 scaleSince = 0;
@@ -111,6 +112,10 @@ private:
         QString failure;
         // One decode at a time; the newest frame waits, the older ones are acknowledged unseen.
         bool decoding = false;
+        // Chromium sends every frame (its every-Nth counts frames, so it can skip the one change a page made); the gap is ours.
+        int frameGap = 0;
+        qint64 decodedAt = -100'000;
+        bool holding = false;
         QByteArray pendingData;
         int pendingAck = -1;
     };
@@ -120,7 +125,8 @@ private:
         QSize css;
         int scale = 1;
         QSize cast;
-        int everyNth = 1;
+        // The least time between pictures: none for the selected or browsed frame, more for the rest.
+        int frameGap = 0;
     };
 
     // The pool's side.
@@ -131,6 +137,11 @@ private:
     void onTabEvent(const QUuid &key, const QString &method, const QJsonObject &params);
     void onScreencastFrame(Entry &entry, const QUuid &frame, const QJsonObject &params);
     void refreshHistory(const QUuid &frame);
+    // Page limits (BrowserViews+Limits.cpp).
+    void limitPage(const Entry &entry);
+    void onPageLimit(Entry &entry, const QString &method, const QJsonObject &params);
+    void onPopup(const QUuid &key, const QUrl &url);
+    void takeFrame(const QUuid &frame);
     void decodeNext(const QUuid &frame);
     void decoded(const QUuid &frame, const QImage &image, int ack);
 
@@ -163,5 +174,7 @@ private:
     QTimer m_flush;
     QRectF m_dirty;
     std::vector<QUuid> m_lastSelection;
+    // Frames the Browse tool has sent input to; they stream every frame.
+    QSet<QUuid> m_browsed;
     QElapsedTimer m_clock;
 };

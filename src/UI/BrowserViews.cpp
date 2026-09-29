@@ -230,6 +230,7 @@ void BrowserViews::connectPool()
     connect(pool, &BrowserPool::openFailed, this, &BrowserViews::onOpenFailed);
     connect(pool, &BrowserPool::closed, this, &BrowserViews::onClosed);
     connect(pool, &BrowserPool::tabEvent, this, &BrowserViews::onTabEvent);
+    connect(pool, &BrowserPool::popup, this, &BrowserViews::onPopup);
 }
 
 void BrowserViews::call(const Entry &entry, const QString &method, const QJsonObject &params)
@@ -333,7 +334,7 @@ BrowserViews::Want BrowserViews::wanted(const QUuid &frame, const VectorObject &
     want.scale = density > 1.5 ? 2 : 1;
     const auto rounded = [](double pixels) { return int(std::min<double>(castLimit, std::ceil(std::max(64.0, pixels) / 64) * 64)); };
     want.cast = QSize(rounded(want.view.width() * backing), rounded(want.view.height() * backing));
-    want.everyNth = m_session.isSelected(object.id) ? 1 : (streaming > 4 ? 4 : 2);
+    want.frameGap = m_session.isSelected(object.id) || m_browsed.contains(object.id) ? 0 : (streaming > 4 ? 66 : 33);
     return want;
 }
 
@@ -353,6 +354,8 @@ void BrowserViews::reconcile()
             resume(id);
     }
     m_lastSelection = m_session.selection();
+    if (m_session.tool() != Tool::browse)
+        m_browsed.clear();
 
     QSet<QUuid> present;
     int streaming = 0;
@@ -444,9 +447,9 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
     BrowserViews::pool()->setShown(entry.key, true);
     const qint64 now = m_clock.elapsed();
     Settling &wait = entry.settling;
-    if (wait.cast != want.cast || wait.everyNth != want.everyNth) {
+    entry.frameGap = want.frameGap;
+    if (wait.cast != want.cast) {
         wait.cast = want.cast;
-        wait.everyNth = want.everyNth;
         wait.castSince = now;
     }
     if (wait.scale != want.scale) {
@@ -480,14 +483,13 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
         call(entry, QStringLiteral("Page.navigate"), {{"url", url.toString()}});
         emit frameChanged(frame);
     }
-    if (!entry.casting || done.cast != want.cast || done.everyNth != want.everyNth) {
+    if (!entry.casting || done.cast != want.cast) {
         if (!entry.casting || now - wait.castSince >= castSettleMs) {
             call(entry, QStringLiteral("Page.startScreencast"),
                  {{"format", "jpeg"}, {"quality", 80}, {"maxWidth", want.cast.width()}, {"maxHeight", want.cast.height()},
-                  {"everyNthFrame", want.everyNth}});
+                  {"everyNthFrame", 1}});
             entry.casting = true;
             done.cast = want.cast;
-            done.everyNth = want.everyNth;
         } else {
             waiting = true;
         }

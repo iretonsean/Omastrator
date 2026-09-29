@@ -18,6 +18,7 @@ void BrowserViews::onOpened(const QUuid &key)
     found->frozen = false;
     found->applied = {};
     found->navigated = QUrl();
+    limitPage(*found);
     note(frame, State::paused);
     scheduleReconcile();
 }
@@ -73,7 +74,9 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
     if (found == m_entries.end())
         return;
     Entry &entry = *found;
-    if (method == QLatin1String("Page.screencastFrame")) {
+    if (method == QLatin1String("Page.javascriptDialogOpening") || method == QLatin1String("Page.fileChooserOpened")) {
+        onPageLimit(entry, method, params);
+    } else if (method == QLatin1String("Page.screencastFrame")) {
         onScreencastFrame(entry, frame, params);
     } else if (method == QLatin1String("Page.frameNavigated")) {
         const QJsonObject page = params["frame"].toObject();
@@ -123,19 +126,36 @@ void BrowserViews::onScreencastFrame(Entry &entry, const QUuid &frame, const QJs
     if (!entry.restoreScroll)
         entry.scroll = QPointF(metadata["scrollOffsetX"].toDouble(), metadata["scrollOffsetY"].toDouble());
     const int ack = params["sessionId"].toInt();
-    const QByteArray data = params["data"].toString().toLatin1();
-    if (entry.decoding) {
-        // The older waiting frame is acknowledged unseen, so Chromium goes on sending.
-        if (entry.pendingAck >= 0)
-            call(entry, QStringLiteral("Page.screencastFrameAck"), {{"sessionId", entry.pendingAck}});
-        entry.pendingData = data;
-        entry.pendingAck = ack;
-        return;
-    }
-    entry.decoding = true;
-    entry.pendingData = data;
+    // The older waiting frame is acknowledged unseen, so Chromium goes on sending.
+    if (entry.pendingAck >= 0)
+        call(entry, QStringLiteral("Page.screencastFrameAck"), {{"sessionId", entry.pendingAck}});
+    entry.pendingData = params["data"].toString().toLatin1();
     entry.pendingAck = ack;
-    decodeNext(frame);
+    if (!entry.decoding)
+        takeFrame(frame);
+}
+
+// The newest waiting frame is decoded now, or when the frame gap since the last one has passed: the last frame of a
+// burst is never dropped.
+void BrowserViews::takeFrame(const QUuid &frame)
+{
+    const auto found = m_entries.find(frame);
+    if (found == m_entries.end() || found->pendingAck < 0)
+        return;
+    const qint64 wait = found->decodedAt + found->frameGap - m_clock.elapsed();
+    if (wait <= 0) {
+        decodeNext(frame);
+    } else if (!found->holding) {
+        found->holding = true;
+        QTimer::singleShot(int(wait), this, [this, frame] {
+            const auto again = m_entries.find(frame);
+            if (again == m_entries.end())
+                return;
+            again->holding = false;
+            if (!again->decoding)
+                takeFrame(frame);
+        });
+    }
 }
 
 void BrowserViews::decodeNext(const QUuid &frame)
@@ -146,6 +166,7 @@ void BrowserViews::decodeNext(const QUuid &frame)
     const QByteArray data = std::exchange(found->pendingData, {});
     const int ack = std::exchange(found->pendingAck, -1);
     found->decoding = true;
+    found->decodedAt = m_clock.elapsed();
     m_decoder.start([this, frame, data, ack] {
         const QImage image = QImage::fromData(QByteArray::fromBase64(data), "JPEG");
         QMetaObject::invokeMethod(this, [this, frame, image, ack] { decoded(frame, image, ack); }, Qt::QueuedConnection);
@@ -169,7 +190,7 @@ void BrowserViews::decoded(const QUuid &frame, const QImage &image, int ack)
     if (entry.state == State::live || entry.state == State::paused)
         call(entry, QStringLiteral("Page.screencastFrameAck"), {{"sessionId", ack}});
     if (entry.pendingAck >= 0)
-        decodeNext(frame);
+        takeFrame(frame);
 }
 
 void BrowserViews::scheduleRepaint(const QUuid &frame)

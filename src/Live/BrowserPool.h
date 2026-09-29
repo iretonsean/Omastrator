@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <QUuid>
 #include <atomic>
 #include <functional>
@@ -69,6 +70,9 @@ signals:
     void closed(const QUuid &frame, BrowserPool::CloseReason reason);
     // A protocol event from a frame's tab.
     void tabEvent(const QUuid &frame, const QString &method, const QJsonObject &params);
+    // A page opened a window (target=_blank, window.open): its tab is closed and this is where it was going. The
+    // frame that opened it should go there instead.
+    void popup(const QUuid &frame, const QUrl &url);
     void started();
     void stopped();
 
@@ -96,6 +100,9 @@ private:
     void noteTabs();
     QUuid frameOfSession(const QString &sessionId) const;
     void onEvent(const QString &method, const QJsonObject &params, const QString &sessionId);
+    void onTargetInfo(const QJsonObject &info);
+    // Popup targets seen and not yet closed, with the frame that opened each.
+    QHash<QString, QUuid> m_popups;
 
     Options m_options;
     QThread *m_thread = nullptr;

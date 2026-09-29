@@ -165,6 +165,8 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
         }
         // A tab that needs a download stops there: files are never saved without being asked.
         m_browser->cdp().call(QStringLiteral("Browser.setDownloadBehavior"), {{"behavior", "deny"}}, QString());
+        // Popups are announced as targets; a tab of ours that opens one is told where it went.
+        m_browser->cdp().call(QStringLiteral("Target.setDiscoverTargets"), {{"discover", true}}, QString());
         connect(&m_browser->cdp(), &CdpConnection::event, this,
                 [this](const QString &method, const QJsonObject &params, const QString &session) { onEvent(method, params, session); });
         connect(m_browser, &Browser::exited, this, [this] { lostBrowser(); });
@@ -309,8 +311,46 @@ void BrowserPool::onEvent(const QString &method, const QJsonObject &params, cons
             doClose(gone, CloseReason::lost);
         return;
     }
+    if (method == QLatin1String("Target.targetCreated") || method == QLatin1String("Target.targetInfoChanged")) {
+        onTargetInfo(params["targetInfo"].toObject());
+        return;
+    }
     const QUuid frame = frameOfSession(sessionId);
     if (sessionId.isEmpty() || frame.isNull())
         return;
     emit tabEvent(frame, method, params);
+}
+
+void BrowserPool::onTargetInfo(const QJsonObject &info)
+{
+    if (info["type"].toString() != QLatin1String("page"))
+        return;
+    const QString target = info["targetId"].toString();
+    QUuid opener;
+    if (m_popups.contains(target)) {
+        opener = m_popups.value(target);
+    } else {
+        const QString from = info["openerId"].toString();
+        if (from.isEmpty())
+            return;
+        for (auto it = m_tabs.constBegin(); it != m_tabs.constEnd(); ++it) {
+            if (it->targetId == from)
+                opener = it.key();
+        }
+        if (opener.isNull())
+            return;
+        m_popups.insert(target, opener);
+        // A popup that never says where it goes is closed all the same.
+        QTimer::singleShot(3000, this, [this, target] {
+            if (m_popups.remove(target) && m_browser && m_browser->isRunning())
+                m_browser->cdp().call(QStringLiteral("Target.closeTarget"), {{"targetId", target}}, QString());
+        });
+    }
+    const QUrl url(info["url"].toString());
+    if (!url.isValid() || url.scheme().isEmpty() || info["url"].toString() == QLatin1String("about:blank"))
+        return;
+    m_popups.remove(target);
+    if (m_browser && m_browser->isRunning())
+        m_browser->cdp().call(QStringLiteral("Target.closeTarget"), {{"targetId", target}}, QString());
+    emit popup(opener, url);
 }

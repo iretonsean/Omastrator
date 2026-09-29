@@ -42,11 +42,12 @@ enum class Tool {
     artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
     frame,           // F: Figma's frame, after the artboard for the same reason
     browserView,     // no key: a frame that shows a web page (docs/BROWSER-VIEW.md)
+    browse,          // no key: clicks, keys and the wheel go to a Browser View's page
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::typeOnPath, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
-                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame, Tool::browserView};
+                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame, Tool::browserView, Tool::browse};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);

@@ -411,6 +411,9 @@ void EditorCanvas::State::updateCursor()
         case Tool::eyedropper:
             kind = CursorKind::eyedropper;
             break;
+        case Tool::browse:
+            kind = hover && browseFrameAt(*hover) ? CursorKind::arrow : CursorKind::openHand;
+            break;
         case Tool::zoom:
             kind = alt ? CursorKind::zoomOut : CursorKind::zoomIn;
             break;

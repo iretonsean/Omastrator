@@ -61,6 +61,8 @@ ToolHeaderBar *ToolHeaders::make(EditorSession &session, Tool tool, QWidget *par
     case Tool::zoom: return new NavigationToolHeader(session, parent);
     case Tool::frame:
         return plainBar(tool, QStringLiteral("Drag to draw a frame · Inside a frame it nests · Shift squares · Alt draws from the centre"), parent);
+    case Tool::browse:
+        return plainBar(tool, QStringLiteral("Click, type and scroll inside a Browser View · Esc returns to Selection · Drag empty canvas to pan"), parent);
     case Tool::browserView:
         return plainBar(tool, QStringLiteral("Drag to draw a Browser View, or click for 1280 × 800 · Then type a URL"), parent);
     case Tool::artboard: {

@@ -1,6 +1,7 @@
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/EditorCanvasState.h"
 #include "Canvas/Rulers.h"
+#include "Document/BrowserInput.h"
 #include <QApplication>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -70,6 +71,11 @@ void EditorCanvas::State::syncRulers()
 }
 
 EditorCanvas::~EditorCanvas() = default;
+
+bool EditorCanvas::isBrowsing() const
+{
+    return m_state->browseFocused();
+}
 
 bool EditorCanvas::isEditingText() const
 {
@@ -196,6 +202,23 @@ bool EditorCanvas::event(QEvent *event)
         const bool typed = !key->text().isEmpty() && key->text().at(0).isPrint() && !(key->modifiers() & (Qt::ControlModifier | Qt::MetaModifier));
         if (typed || InlineTextEditor::claims(*key)) {
             event->accept();
+            return true;
+        }
+    }
+    // Browse: a page with the keys takes them ahead of the menus' shortcuts, except the palette's, and Tab is its own.
+    if (m_state->session.tool() == Tool::browse && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress
+                                                    || event->type() == QEvent::KeyRelease)) {
+        auto *key = static_cast<QKeyEvent *>(event);
+        const bool palette = BrowserInput::reserved(key->key(), key->modifiers()) && key->key() != Qt::Key_Escape;
+        if (event->type() == QEvent::ShortcutOverride && (m_state->browseFocused() || key->key() == Qt::Key_Escape) && !palette) {
+            event->accept();
+            return true;
+        }
+        if (event->type() != QEvent::ShortcutOverride && m_state->browseFocused() && (key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab)) {
+            if (event->type() == QEvent::KeyPress)
+                keyPressEvent(key);
+            else
+                keyReleaseEvent(key);
             return true;
         }
     }
@@ -349,6 +372,8 @@ void EditorCanvas::focusOutEvent(QFocusEvent *event)
     if (event->reason() != Qt::PopupFocusReason) {
         m_state->cancelDrag();
         m_state->spaceHeld = false;
+        // Keys go to a page only while the canvas holds them.
+        m_state->setBrowseFocus(std::nullopt);
     }
     m_state->caretShown = false;
     m_state->updateCursor();
@@ -359,6 +384,8 @@ void EditorCanvas::focusOutEvent(QFocusEvent *event)
 
 void EditorCanvas::leaveEvent(QEvent *event)
 {
+    if (m_state->session.tool() == Tool::browse && !m_state->drag)
+        m_state->browseMove(QPointF(-1e6, -1e6), {}, false);
     m_state->hover.reset();
     m_state->rulers->setMarker(std::nullopt);
     m_state->updateHoverGuides(std::nullopt);
@@ -373,6 +400,10 @@ void EditorCanvas::leaveEvent(QEvent *event)
 
 void EditorCanvas::inputMethodEvent(QInputMethodEvent *event)
 {
+    if (m_state->browseInput(event)) {
+        event->accept();
+        return;
+    }
     if (!m_state->text) {
         QWidget::inputMethodEvent(event);
         return;

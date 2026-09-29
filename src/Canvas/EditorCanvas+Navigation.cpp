@@ -7,6 +7,10 @@ void EditorCanvas::wheelEvent(QWheelEvent *event)
 {
     if (!m_session.hasDocument() || (m_state->drag && m_state->drag->kind != State::DragKind::pan))
         return;
+    if (m_state->browseWheel(event)) {
+        event->accept();
+        return;
+    }
     // Trackpads report pixels; a wheel reports notches, lines each.
     const bool precise = !event->pixelDelta().isNull();
     QPointF delta = precise ? QPointF(event->pixelDelta()) : QPointF(event->angleDelta()) / 120.0 * QApplication::wheelScrollLines();

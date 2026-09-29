@@ -162,9 +162,10 @@ Only some of the document state is undoable:
   - Exports, the stand-ins, the agent's `render` and the overlays pass no
     callback, so they draw the last picture.
 - **Budget.**
-  - Frame rate: the frame being browsed, selected or hovered gets every frame
-    (up to 60 fps). Others get `everyNthFrame: 2`, or `4` once more than four
-    are streaming.
+  - Frame rate: the frame being browsed or selected gets every frame (up to
+    60 fps). Others get a picture at most every 33 ms, or 66 ms once more than
+    four are streaming. Chromium always sends every frame, and the gap is kept
+    on our side with the newest frame waiting (see "Decided while building").
   - Memory: one decoded image and one picture per frame, about 4 MB each at
     1280 × 800 and 26 MB at the 2560 cap. Plus about 100 to 200 MB of
     Chromium renderer per open tab.
@@ -470,8 +471,9 @@ The tests:
   - "Click to resume" after a reset is a selection: selecting a paused frame
     resumes it. Nothing else brings it back.
   - An `OMASTRATOR_CHROMIUM` that isn't executable counts as no Chromium.
-  - Frames stream every 2nd frame (every 4th when more than 4 stream), and
-    every frame for the selected one. Hover doesn't count.
+  - Frames get a picture at most every 33 ms (66 ms when more than 4
+    stream), and every frame for the selected one. Hover doesn't count.
+    (Commit 5 replaced `everyNthFrame`: see below.)
   - While Live has its own window, the pool is stopped first
     (`closeAll(true)` blocks until it is), since both use one profile. The
     frames show "Omastrator's browser is open for Live" and resume after.
@@ -506,3 +508,46 @@ The tests:
   - The bar's right-click menu is mirrored in Object ▸ Browser View, so
     Ctrl+K finds it as "Browser View: …". Set as Design Width waits for
     the breakpoints commit.
+- **The Browse tool (commit 5).**
+  - Browse sits in the Selection slot of the rail with Select and Direct
+    Select, and has no default key (it is under the tool's flyout and Ctrl+K).
+    Esc always returns to Select. Ctrl+K stays the command palette, whatever
+    the page is doing.
+  - Keys go to a page only after a click has put the focus there. Before
+    that, and after a click on empty canvas, the canvas's own keys work
+    (tool letters, Space to pan). Focus is dropped when the canvas loses
+    focus (a click in a panel ends page typing), when Browse is left and when
+    the frame is deleted. Dragging on empty canvas pans, as Figma's hand does.
+  - Locked frames can still be browsed; hidden ones can't be reached.
+  - A click is `mouseMoved`, `mousePressed`, `mouseReleased`; the click count
+    runs across native double-click events (a triple click takes the
+    paragraph). A drag holds the left button and ends with the release, also
+    when the tool changes or the drag is cancelled. One wheel unit is one
+    CSS pixel; Ctrl and Alt with the wheel still zoom the canvas.
+  - Enter sends the text `"\r"`; Ctrl shortcuts send Chromium's editing
+    `commands` (select all, copy, cut, paste, undo, redo) as well as the key.
+    Text from an input method is sent with `Input.insertText`.
+  - `BrowserViewHost::dispatch` returns false for a page that can't take the
+    input. A frame that reset paused starts again on the click and holds
+    nothing until the next one.
+  - Popups (`target=_blank`, `window.open`) are found through target
+    discovery, closed and loaded in the opener's tab, http and https only. A
+    popup that stays blank for 3 seconds is closed. It may begin loading
+    before it is closed; that request is accepted.
+  - JavaScript dialogs are dismissed (a leave-page prompt is accepted) and
+    their text shows once on the status line as "<host> says: …". File
+    choosers are refused with "Uploads aren't supported in Browser View yet."
+    Fullscreen and pointer lock are refused by a script added to every new
+    document. Permissions (location, notifications, camera, microphone and
+    the like) are denied for the browser each time a tab opens; a name this
+    Chromium lacks is ignored.
+  - **Screencast frames.** Chromium's `everyNthFrame` counts frames, not
+    changes, so with 2 or 4 it skipped the single frame a click or a load
+    made, and the picture stayed on the old state (this was the flaky "no red
+    picture" failure of earlier commits). Chromium now sends every frame, and
+    the canvas keeps the gap itself: it holds the newest frame until the gap
+    since the last decode has passed, so the last frame of a burst is always
+    shown. Changing the gap never restarts the cast.
+  - Focus emulation (`Emulation.setFocusEmulationEnabled`) was tried so pages
+    draw a caret. It starves the screencast, and headless pages already count
+    as focused (`document.hasFocus()` is true), so it isn't used.

@@ -64,6 +64,8 @@ struct EditorCanvas::State {
         // The Artboard tool, or the Select tool on a selected artboard: drawing a new one, moving
         // or resizing one, or moving the fresh copy an Alt-drag made.
         artboard,
+        // The Browse tool: the button is down in a Browser View's page (`object`).
+        browse,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -225,6 +227,31 @@ struct EditorCanvas::State {
     QPointer<QLineEdit> addressEdit;
     QUuid addressFrame;
     std::optional<QUuid> frameLabelAt(QPointF view) const;
+
+    // Browse (EditorCanvas+Browse.cpp) -------------------------------------------------
+    // The topmost Browser View under the point, and the box its page fills, in document units.
+    std::optional<QUuid> browseFrameAt(QPointF view) const;
+    QRectF browseBox(const QUuid &frame) const;
+    void browsePress(QPointF view, Qt::KeyboardModifiers modifiers, bool doubleClick);
+    void browseMove(QPointF view, Qt::KeyboardModifiers modifiers, bool held);
+    void browseRelease(QPointF view, Qt::KeyboardModifiers modifiers);
+    bool browseWheel(QWheelEvent *event);
+    // True when the page took the key (or Browse claims it), so it goes no further.
+    bool browseKey(QKeyEvent *event, bool down);
+    bool browseInput(QInputMethodEvent *event);
+    // Whether keys go to a page: a click has put focus in one.
+    bool browseFocused() const { return session.tool() == Tool::browse && browseFocus.has_value(); }
+    // Browse ended or lost its page: the pressed button comes up and the page forgets the pointer.
+    void browseLeave();
+    void browseSend(const QUuid &frame, const QString &type, QPointF view, Qt::MouseButton button, Qt::MouseButtons buttons, int clicks,
+                    Qt::KeyboardModifiers modifiers);
+    void setBrowseFocus(const std::optional<QUuid> &frame);
+    std::optional<QUuid> browseFocus;
+    std::optional<QUuid> browseHover;
+    QElapsedTimer browseClickClock;
+    QElapsedTimer browseMoveClock;
+    QPointF browseClickView;
+    int browseClicks = 0;
 
     // Scissors (C) ------------------------------------------------------------------
     void scissorsPress(QPointF view);

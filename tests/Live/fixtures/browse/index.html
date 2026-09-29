@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>start</title>
+<body style="margin:0;height:3000px;font:20px sans-serif">
+<button id="b" style="position:absolute;left:20px;top:20px;width:200px;height:60px">idle</button>
+<input id="i" style="position:absolute;left:20px;top:100px;width:200px;height:40px">
+<a id="l" href="popup.html" target="_blank" style="position:absolute;left:20px;top:160px;width:200px;height:40px;display:block">open</a>
+<div id="w" style="position:absolute;left:20px;top:220px;width:200px;height:40px;background:#ccc">window</div>
+<div id="d" style="position:absolute;left:20px;top:280px;width:200px;height:40px;background:#ddd">dialog</div>
+<script>
+  const title = () => { document.title = document.getElementById('b').textContent + '|' + document.getElementById('i').value + '|' + Math.round(scrollY) + '|' + (document.hasFocus() ? 1 : 0); };
+  document.getElementById('b').onclick = () => { document.getElementById('b').textContent = 'clicked'; title(); };
+  document.getElementById('i').oninput = title;
+  document.getElementById('w').onclick = () => { window.open('popup.html'); };
+  document.getElementById('d').onclick = () => { alert('hello there'); document.title = 'after-alert'; };
+  addEventListener('scroll', title);
+</script>

@@ -19,6 +19,8 @@ public:
     EditorSession &session() const { return m_session; }
     // True while type is edited in place; menus leave the keys to it.
     bool isEditingText() const;
+    // A Browser View's page has the keys (the Browse tool, after a click in it).
+    bool isBrowsing() const;
     // Ends in-place type editing, keeping what was typed.
     void finishTextEditing();
     // Alt+Left and Alt+Right at a caret with nothing selected: kerns the pair around it.
