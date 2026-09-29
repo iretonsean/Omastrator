@@ -19,7 +19,7 @@ file with the work. Don't delete finished items.
 - [x] 3. Editable document presets (bcd5b25, 2026-09-28)
 - [x] 4. Frame presets (86f0681, 2026-09-28)
 - [x] 5. Per-side padding fields in auto layout (b63e6d1, 2026-09-28)
-- [ ] 6. Lock Document (read-only mode)
+- [x] 6. Lock Document (read-only mode) (77db2d2, 2026-09-28)
 - [ ] 7. Settings that travel
 - [ ] 8. Canvas size limit (check and document)
 - [ ] 9. Browser View and canvas workspaces (high effort, high priority;
