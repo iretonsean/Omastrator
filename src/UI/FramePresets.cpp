@@ -271,7 +271,7 @@ void FramePresetsSection::saveSelectedFrame()
     const QRectF box = m_session.document()->bounds(frames.front());
     const QSizeF size(std::round(box.width()), std::round(box.height()));
     if (size.width() < 1 || size.height() < 1 || size.width() > PresetStore::maximumPoints || size.height() > PresetStore::maximumPoints) {
-        m_note->setText(QStringLiteral("Frames from 1 to 16,384 points can be saved."));
+        m_note->setText(QStringLiteral("Frames from 1 to %1 can be saved.").arg(PresetStore::limitDescription()));
         m_note->show();
         return;
     }

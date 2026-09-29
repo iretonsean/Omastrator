@@ -794,7 +794,7 @@ VectorDocument decode(const QJsonObject &json)
         throw CodecError("made by a newer Omastrator");
     VectorDocument document;
     document.size = {json["width"].toDouble(), json["height"].toDouble()};
-    if (!(document.size.width() > 0 && document.size.height() > 0) || document.size.width() > 1e6 || document.size.height() > 1e6)
+    if (!(document.size.width() > 0 && document.size.height() > 0) || document.size.width() > VectorDocument::maximumArtboardSide || document.size.height() > VectorDocument::maximumArtboardSide)
         throw CodecError("the artboard size is out of range");
     document.background = readColor(json["background"], Qt::white);
     document.objects = decodeObjects(json["objects"].toArray());

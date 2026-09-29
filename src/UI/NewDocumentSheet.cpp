@@ -390,7 +390,7 @@ void NewDocumentSheet::validate()
     const std::optional<double> width = dimension(m_width->text(), unit()), height = dimension(m_height->text(), unit());
     const bool valid = width && height;
     m_note->setText(valid ? QStringLiteral("%1 × %2 pt · White artboard · sRGB").arg(shown(*width, LengthUnit::pt), shown(*height, LengthUnit::pt))
-                          : QStringLiteral("Enter sizes from 1 to 16,384 points."));
+                          : QStringLiteral("Enter sizes from 1 to %1.").arg(PresetStore::limitDescription()));
     m_note->setForegroundRole(valid ? QPalette::PlaceholderText : QPalette::BrightText);
     m_create->setEnabled(valid);
     updatePresetMenu();

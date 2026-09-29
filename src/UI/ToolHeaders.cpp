@@ -238,7 +238,7 @@ NavigationToolHeader::NavigationToolHeader(EditorSession &session, QWidget *pare
 {
     setObjectName(QStringLiteral("navigationHeader"));
     m_zoom->step = 10;
-    m_zoom->setToolTip(QStringLiteral("Zoom percentage (0.1–3200%). Press Return to apply."));
+    m_zoom->setToolTip(QStringLiteral("Zoom percentage (0.01–3200%). Press Return to apply."));
     row->insertWidget(1, m_zoom);
     connect(&m_session, &EditorSession::changed, this, &NavigationToolHeader::synchronize);
     synchronize();
@@ -248,7 +248,9 @@ void NavigationToolHeader::synchronize()
 {
     title->setText(::title(m_session.tool()));
     m_zoom->setEnabled(m_session.document().has_value());
-    m_zoom->sync(std::round(m_session.viewport.zoom() * 1000) / 10);
+    // Whole tenths, but hundredths below 1%, where a huge artboard's fit lands.
+    const double percent = m_session.viewport.zoom() * 100;
+    m_zoom->sync(percent < 1 ? std::round(percent * 100) / 100 : std::round(percent * 10) / 10);
 }
 
 TransformToolHeader::TransformToolHeader(EditorSession &session, Tool tool, QWidget *parent)

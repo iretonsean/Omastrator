@@ -1,4 +1,5 @@
 #pragma once
+#include "Document/VectorDocument.h"
 #include <QSizeF>
 #include <QString>
 #include <QStringList>
@@ -16,7 +17,9 @@ enum class LengthUnit { pt, px, in, mm };
 namespace PresetStore {
 inline constexpr const char *documents = "documents";
 inline constexpr const char *frames = "frames";
-inline constexpr double maximumPoints = 16384;
+inline constexpr double maximumPoints = VectorDocument::maximumArtboardSide;
+// "1,000,000 points (about 350 m)", for the notes that state the limit.
+QString limitDescription();
 
 struct Entry {
     QString name;
