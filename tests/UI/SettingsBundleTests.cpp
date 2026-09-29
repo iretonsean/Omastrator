@@ -98,6 +98,9 @@ private slots:
     void aBackupIsKeptAndCanBeImportedBack();
     void unreadablePresetsAreNeverOverwritten();
     void remappedKeysThatClashAreKept();
+    void anUnwritableSettingsFileStopsTheImportBeforeAnythingChanges();
+    void hugeOrNonFiniteIntegersAreUnreadable();
+    void onlyTheNewestTenBackupsOfEachKindAreKept();
     void newerAndForeignFilesAreRefused();
     void identicalSettingsOnlyShowANotice();
     void cloudExportAndImportGoThroughRclone();
@@ -142,6 +145,10 @@ void SettingsBundleTests::init()
 
 void SettingsBundleTests::cleanup()
 {
+    // Only the test-mode file: a test that made it read-only must not leave it so.
+    const QString settingsFile = QSettings().fileName();
+    if (settingsFile.contains(QLatin1String("/.qttest/")) && QFileInfo::exists(settingsFile))
+        QFile::setPermissions(settingsFile, QFile::ReadOwner | QFile::WriteOwner);
     SettingsConfirmDialog::setResponder({});
     for (QWidget *widget : QApplication::topLevelWidgets()) {
         if (qobject_cast<QDialog *>(widget))
@@ -456,6 +463,118 @@ void SettingsBundleTests::remappedKeysThatClashAreKept()
     QVERIFY(SettingsBundle::apply(plan).isEmpty());
     QCOMPARE(QSettings().value("keyboardShortcuts.v1").toByteArray(), mine);
     QCOMPARE(QSettings().value("historyLimit").toInt(), 30);
+}
+
+void SettingsBundleTests::anUnwritableSettingsFileStopsTheImportBeforeAnythingChanges()
+{
+    fillSettings();
+    fillPresets();
+    const QString file = m_files.filePath(QStringLiteral("unwritable.json"));
+    QVERIFY(SettingsBundle::exportTo(file).isEmpty());
+
+    forgetEverything();
+    QSettings().setValue("keyboardIncrement", 1.0);
+    QSettings().sync();
+    PresetStore::Section mine;
+    mine.saved.push_back({QStringLiteral("Mine"), QSizeF(100, 100), LengthUnit::px});
+    QVERIFY(PresetStore::write(PresetStore::documents, mine).isEmpty());
+    const QByteArray presetsBefore = readFile(PresetStore::path());
+    QVERIFY(!presetsBefore.isEmpty());
+
+    QString error;
+    const SettingsBundle::Plan plan = SettingsBundle::planImport(file, &error);
+    QVERIFY(error.isEmpty());
+
+    // Only the test-mode file, which the guard above has already shown lives in ~/.qttest.
+    const QString settingsFile = QSettings().fileName();
+    QVERIFY(settingsFile.contains(QLatin1String("/.qttest/")));
+    const QByteArray settingsBefore = readFile(settingsFile);
+    QVERIFY(QFile::setPermissions(settingsFile, QFile::ReadOwner));
+    if (QFileInfo(settingsFile).isWritable())
+        QSKIP("Files stay writable here (running as root), so nothing can be made unwritable.");
+
+    QString backup;
+    const QString failure = SettingsBundle::apply(plan, &backup);
+    QVERIFY(!failure.isEmpty());
+    QVERIFY(failure.contains(QLatin1String("nothing was changed")));
+    QVERIFY(backup.isEmpty());
+    QCOMPARE(readFile(PresetStore::path()), presetsBefore);
+    QCOMPARE(readFile(settingsFile), settingsBefore);
+    QVERIFY(!QDir(SettingsBundle::backupFolder()).exists());
+
+    // Writable again, the same plan goes through.
+    QVERIFY(QFile::setPermissions(settingsFile, QFile::ReadOwner | QFile::WriteOwner));
+    QVERIFY(SettingsBundle::apply(plan).isEmpty());
+    QCOMPARE(QSettings().value("keyboardIncrement").toDouble(), 2.5);
+}
+
+void SettingsBundleTests::hugeOrNonFiniteIntegersAreUnreadable()
+{
+    const auto fileWith = [](const QString &literal) {
+        return QByteArray("{\"format\":\"omastrator-settings\",\"version\":1,\"settings\":{\"historyLimit\":{\"t\":\"int\",\"v\":") + literal.toUtf8()
+            + "}}}";
+    };
+    for (const QString &literal : {QStringLiteral("1e300"), QStringLiteral("-1e300"), QStringLiteral("9.1e15")}) {
+        QString error;
+        const SettingsBundle::Bundle bundle = SettingsBundle::parse(fileWith(literal), &error);
+        QVERIFY2(!bundle.settings.contains("historyLimit"), qPrintable(literal));
+    }
+    const SettingsBundle::Bundle fine = SettingsBundle::parse(fileWith(QStringLiteral("9007199254740992")), nullptr);
+    QCOMPARE(fine.settings.value("historyLimit").toLongLong(), 9007199254740992LL);
+    QCOMPARE(SettingsBundle::parse(fileWith(QStringLiteral("-250")), nullptr).settings.value("historyLimit").toLongLong(), -250LL);
+}
+
+void SettingsBundleTests::onlyTheNewestTenBackupsOfEachKindAreKept()
+{
+    fillSettings();
+    fillPresets();
+    const QString file = m_files.filePath(QStringLiteral("many.json"));
+    QVERIFY(SettingsBundle::exportTo(file).isEmpty());
+
+    // Eight old settings backups and fifteen presets ones, files that aren't ours, and a same-second pair
+    // that is the oldest of all: "-2" is later than the plain name, although it sorts before it as text.
+    const QString folder = SettingsBundle::backupFolder();
+    for (int day = 1; day <= 15; ++day) {
+        const QString stamp = QStringLiteral("202001%1-120000").arg(day, 2, 10, QLatin1Char('0'));
+        writeFile(QStringLiteral("%1/presets-%2.json").arg(folder, stamp), "{}");
+        if (day <= 8)
+            writeFile(QStringLiteral("%1/settings-%2.json").arg(folder, stamp), "{}");
+    }
+    writeFile(folder + QStringLiteral("/notes.txt"), "mine");
+    writeFile(folder + QStringLiteral("/settings-hand-made.json"), "{}");
+    writeFile(folder + QStringLiteral("/settings-20190101-120000.json"), "{}");
+    writeFile(folder + QStringLiteral("/settings-20190101-120000-2.json"), "{}");
+
+    QString backup;
+    QVERIFY(SettingsBundle::apply(SettingsBundle::planImport(file, nullptr), &backup).isEmpty());
+
+    const QStringList settings = QDir(folder).entryList({QStringLiteral("settings-2*.json")}, QDir::Files, QDir::Name);
+    const QStringList presets = QDir(folder).entryList({QStringLiteral("presets-2*.json")}, QDir::Files, QDir::Name);
+    // Eleven settings backups before the cap: only the oldest one goes.
+    QCOMPARE(settings.size(), 10);
+    QVERIFY(settings.contains(QStringLiteral("settings-20190101-120000-2.json")));
+    QVERIFY(!settings.contains(QStringLiteral("settings-20190101-120000.json")));
+    QVERIFY(settings.contains(QStringLiteral("settings-20200101-120000.json")));
+    QVERIFY(QFileInfo::exists(backup));
+    QVERIFY(settings.contains(QFileInfo(backup).fileName()));
+    // Sixteen presets backups, if there was one to copy: the new one and the nine newest old ones stay.
+    QVERIFY(QFileInfo::exists(folder + QStringLiteral("/presets-") + QFileInfo(backup).fileName().mid(int(qstrlen("settings-")))));
+    QCOMPARE(presets.size(), 10);
+    QVERIFY(!presets.contains(QStringLiteral("presets-20200106-120000.json")));
+    QVERIFY(presets.contains(QStringLiteral("presets-20200107-120000.json")));
+    QVERIFY(presets.contains(QStringLiteral("presets-20200115-120000.json")));
+    // Files that aren't backups this app wrote are never touched.
+    QVERIFY(QFileInfo::exists(folder + QStringLiteral("/notes.txt")));
+    QVERIFY(QFileInfo::exists(folder + QStringLiteral("/settings-hand-made.json")));
+
+    // A clock that has gone backwards makes the new backup the oldest; it still stays.
+    forgetEverything();
+    QVERIFY(SettingsBundle::exportTo(file).isEmpty());
+    for (int number = 1; number <= 12; ++number)
+        writeFile(QStringLiteral("%1/settings-2999%2-120000.json").arg(folder).arg(1000 + number), "{}");
+    QVERIFY(SettingsBundle::apply(SettingsBundle::planImport(file, nullptr), &backup).isEmpty());
+    QVERIFY(QFileInfo::exists(backup));
+    QCOMPARE(QDir(folder).entryList({QStringLiteral("settings-*.json")}, QDir::Files).size(), 11);
 }
 
 void SettingsBundleTests::newerAndForeignFilesAreRefused()

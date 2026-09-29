@@ -110,7 +110,11 @@ Decisions:
   written as `settings-<time>.json` (a file Import Settings reads, so a bad
   import is undone by importing it) and `presets.json` is copied to
   `presets-<time>.json`, both in `backups/` beside `presets.json`. If the
-  backup can't be written nothing changes. Old backups aren't pruned.
+  backup can't be written, or the settings file itself can't be, nothing
+  changes. After a backup is written the newest 10 of each kind are kept and
+  older ones removed (never the one just written); other files in `backups/`
+  are left alone. The import checks the settings file on disk afterwards, and
+  a number in a file that is huge or not finite counts as unreadable.
 - **Presets keep their safety rule.** A `presets.json` that can't be read is
   never replaced: Export leaves the presets out and says so, Import applies
   everything else and says the presets stayed.

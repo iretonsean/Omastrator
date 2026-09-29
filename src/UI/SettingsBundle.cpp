@@ -10,11 +10,14 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPoint>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <algorithm>
+#include <cmath>
 
 namespace {
 constexpr qint64 maximumFileBytes = 4 * 1024 * 1024;
@@ -126,8 +129,14 @@ std::optional<QVariant> decode(const QJsonValue &entry)
     const QJsonValue value = object["v"];
     if (type == QLatin1String("bool") && value.isBool())
         return value.toBool();
-    if (type == QLatin1String("int") && value.isDouble())
-        return QVariant::fromValue<qlonglong>(qlonglong(value.toDouble()));
+    if (type == QLatin1String("int") && value.isDouble()) {
+        // Casting a huge or non-finite double to an integer is undefined, and doubles stop being exact past 2^53.
+        constexpr double exactLimit = 9007199254740992.0;
+        const double number = value.toDouble();
+        if (!std::isfinite(number) || number < -exactLimit || number > exactLimit)
+            return std::nullopt;
+        return QVariant::fromValue<qlonglong>(qlonglong(number));
+    }
     if (type == QLatin1String("double") && value.isDouble())
         return value.toDouble();
     if (type == QLatin1String("string") && value.isString())
@@ -396,10 +405,74 @@ QString backupFolder()
     return QFileInfo(PresetStore::path()).absolutePath() + QStringLiteral("/backups");
 }
 
+namespace {
+constexpr int backupsKept = 10;
+
+// Qt writes the settings file by replacing it in its folder, so both must be writable.
+bool settingsFileWritable(const QString &fileName)
+{
+    const QFileInfo file(fileName);
+    if (file.exists() && !file.isWritable())
+        return false;
+    QDir folder = file.absoluteDir();
+    while (!folder.exists() && folder.cdUp()) {
+    }
+    return QFileInfo(folder.absolutePath()).isWritable();
+}
+
+// Keeps the newest few backups of one kind ("settings" or "presets"), and never removes `keep`.
+void pruneBackups(const QString &folder, const QString &kind, const QString &keep)
+{
+    static const QRegularExpression pattern(QStringLiteral("^(settings|presets)-(\\d{8}-\\d{6})(?:-(\\d+))?\\.json$"));
+    struct Entry {
+        QString stamp;
+        int number;
+        QString name;
+    };
+    std::vector<Entry> entries;
+    for (const QString &name : QDir(folder).entryList(QDir::Files)) {
+        const QRegularExpressionMatch match = pattern.match(name);
+        if (match.hasMatch() && match.captured(1) == kind)
+            entries.push_back({match.captured(2), match.captured(3).isEmpty() ? 1 : match.captured(3).toInt(), name});
+    }
+    // Names sort wrongly as text ("-2.json" before ".json"), so order by the stamp and then the number.
+    std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
+        return a.stamp != b.stamp ? a.stamp > b.stamp : a.number > b.number;
+    });
+    for (size_t index = backupsKept; index < entries.size(); ++index) {
+        if (entries[index].name != QFileInfo(keep).fileName())
+            QFile::remove(QDir(folder).filePath(entries[index].name));
+    }
+}
+
+// Reads the file as it is on disk: QSettings shares one cache per path, so a failed write still reads back as saved.
+QString verifyOnDisk(const QString &fileName, const Bundle &before, const Plan &plan)
+{
+    const QString failure = QStringLiteral("Could not write %1.").arg(fileName);
+    QTemporaryDir copyDir;
+    const QString copy = copyDir.filePath(QStringLiteral("settings.conf"));
+    if (!copyDir.isValid() || !QFile::copy(fileName, copy))
+        return failure;
+    const QSettings onDisk(copy, QSettings::IniFormat);
+    for (auto key = plan.incoming.settings.constBegin(); key != plan.incoming.settings.constEnd(); ++key) {
+        if (travels(key.key()) && canonical(onDisk.value(key.key())) != canonical(key.value()))
+            return failure;
+    }
+    for (auto key = before.settings.constBegin(); key != before.settings.constEnd(); ++key) {
+        if (!plan.incoming.settings.contains(key.key()) && !plan.incoming.kept.contains(key.key()) && onDisk.contains(key.key()))
+            return failure;
+    }
+    return {};
+}
+}
+
 QString apply(const Plan &plan, QString *backupPath)
 {
     guardTestConfig();
     const Bundle now = current();
+
+    if (!settingsFileWritable(QSettings().fileName()))
+        return QStringLiteral("Could not write %1, so nothing was changed.").arg(QSettings().fileName());
 
     // Nothing changes until the backup is safe.
     const QString folder = backupFolder();
@@ -416,7 +489,9 @@ QString apply(const Plan &plan, QString *backupPath)
         const QString presetsCopy = QDir(folder).filePath(QStringLiteral("presets-%1.json").arg(name.mid(int(qstrlen("settings-")))));
         if (!QFile::copy(PresetStore::path(), presetsCopy))
             return QStringLiteral("Could not back up %1, so nothing was changed.").arg(PresetStore::path());
+        pruneBackups(folder, QStringLiteral("presets"), presetsCopy);
     }
+    pruneBackups(folder, QStringLiteral("settings"), backup);
     if (backupPath)
         *backupPath = backup;
 
@@ -438,12 +513,9 @@ QString apply(const Plan &plan, QString *backupPath)
         }
         settings.sync();
     }
-    // sync()'s status can report an error for a file that was written, so read it back instead.
-    const QSettings written;
-    for (auto key = plan.incoming.settings.constBegin(); key != plan.incoming.settings.constEnd(); ++key) {
-        if (travels(key.key()) && canonical(written.value(key.key())) != canonical(key.value()))
-            return QStringLiteral("Could not write %1.").arg(written.fileName());
-    }
+    // sync()'s status can report an error for a file that was written, so check the file itself.
+    if (const QString failure = verifyOnDisk(QSettings().fileName(), now, plan); !failure.isEmpty())
+        return failure;
 
     ShortcutSettings::shared().reload();
     EditorSession::reloadHistoryLimit();
