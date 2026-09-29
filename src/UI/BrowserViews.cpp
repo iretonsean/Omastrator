@@ -616,6 +616,9 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
     // A tab, shown: awake, at the frame's size, on its address, streaming.
     if (entry.frozen) {
         call(entry, QStringLiteral("Page.setWebLifecycleState"), {{"state", "active"}});
+        // Freezing hid the page and "active" doesn't show it again, so it would paint no more frames; focus emulation
+        // shows it.
+        call(entry, QStringLiteral("Emulation.setFocusEmulationEnabled"), {{"enabled", true}});
         entry.frozen = false;
     }
     BrowserViews::pool()->setShown(entry.key, true);
@@ -695,6 +698,8 @@ void BrowserViews::pause(const QUuid &frame, Entry &entry)
         entry.applied.cast = {};
     }
     if (!entry.frozen) {
+        // A page emulating focus stays visible, and a visible page doesn't freeze.
+        call(entry, QStringLiteral("Emulation.setFocusEmulationEnabled"), {{"enabled", false}});
         call(entry, QStringLiteral("Page.setWebLifecycleState"), {{"state", "frozen"}});
         entry.frozen = true;
     }
