@@ -208,7 +208,7 @@ void EditorCanvas::State::drawBrowserBars(QPainter &painter) const
 std::optional<QUuid> EditorCanvas::State::browserBarAt(QPointF view) const
 {
     for (const BrowserBarLayout &layout : browserBars()) {
-        if (!layout.collapsed && layout.bar.contains(view) && !session.document()->isEffectivelyLocked(layout.frame))
+        if (!layout.collapsed && layout.bar.contains(view))
             return layout.frame;
     }
     return std::nullopt;
@@ -242,7 +242,7 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
     if (signInPress(view))
         return true;
     for (const BrowserBarLayout &layout : browserBars()) {
-        if (layout.collapsed || !layout.bar.contains(view) || session.document()->isEffectivelyLocked(layout.frame))
+        if (layout.collapsed || !layout.bar.contains(view))
             continue;
         if (layout.back.contains(view)) {
             browserHost->act(layout.frame, BrowserViewHost::Action::back);
@@ -259,8 +259,11 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
             else
                 holdPreview(layout.frame, width);
         } else if (layout.address.contains(view)) {
-            session.select({layout.frame});
-            openAddressEditor(layout.frame);
+            // The address is a design edit, so a locked frame keeps it; the other controls are view state, like Browse.
+            if (!session.document()->isEffectivelyLocked(layout.frame)) {
+                session.select({layout.frame});
+                openAddressEditor(layout.frame);
+            }
         } else if (layout.name.contains(view)) {
             // The name is the frame's handle, as any frame's label is.
             return false;

@@ -281,6 +281,24 @@ private slots:
         QCOMPARE(rig.object(rig.frame)->path.bounds().topLeft(), QPointF(100, 200));
     }
 
+    void aLockedViewsBarStillWorksExceptItsAddress()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.setLocked(rig.frame, true);
+        rig.host.state.canGoBack = true;
+        const QPointF corner = rig.view({100, 200});
+        rig.click(QPoint(int(corner.x() + 14), int(corner.y() - 18)));
+        QCOMPARE(rig.host.acts.size(), size_t(1));
+        rig.click(rig.button(390, rig.host.widths));
+        QVERIFY(rig.session.isPreviewOnly());
+        rig.click(rig.button(1280, rig.host.widths));
+        rig.click(rig.button(1280, rig.host.widths));
+        QVERIFY(!rig.session.isPreviewOnly());
+        rig.click(QPoint(int(corner.x() + 250), int(corner.y() - 18)));
+        QVERIFY(!rig.editor());
+    }
+
     void clickingTheAddressOpensTheEditor()
     {
         Rig rig;
