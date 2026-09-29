@@ -74,6 +74,7 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("show_variations"), &AgentTools::showVariations},
         {QStringLiteral("show_roast"), &AgentTools::showRoast},
         {QStringLiteral("select_tool"), &AgentTools::selectTool},
+        {QStringLiteral("page"), &AgentTools::page},
         {QStringLiteral("apply_color"), &AgentTools::applyColor},
         {QStringLiteral("swatches_get"), &AgentTools::swatchesGet},
         {QStringLiteral("swatches_add"), &AgentTools::swatchesAdd},
@@ -244,7 +245,28 @@ QJsonObject AgentTools::documentGet(const QJsonObject &params)
 {
     const bool images = boolean(params, QStringLiteral("includeImages"), false);
     EditorSession &current = session();
-    QJsonObject json = DocumentCodec::encode(*current.document());
+    VectorDocument shown = *current.document();
+    const QString pageText = string(params, QStringLiteral("page")).value_or(QString());
+    if (pageText != QLatin1String("all") && shown.pageCount() > 1) {
+        // One page's objects, artboards and guides; `pages` still lists them all.
+        const QUuid keep = pageParam(params, shown).value_or(shown.currentPageId());
+        std::vector<QUuid> others;
+        for (const Page &page : shown.allPages()) {
+            if (page.id != keep) {
+                const std::vector<QUuid> layers = shown.layersOn(page.id);
+                others.insert(others.end(), layers.begin(), layers.end());
+            }
+        }
+        shown.remove(others);
+        std::erase_if(shown.artboards, [&](const Artboard &board) { return shown.resolvePage(board.page) != keep; });
+        std::erase_if(shown.guides, [&](const Guide &guide) { return shown.resolvePage(guide.page) != keep; });
+        shown.currentPage = keep;
+    }
+    QJsonObject json = DocumentCodec::encode(shown);
+    QJsonArray pages;
+    for (const Page &page : current.document()->allPages())
+        pages.append(QJsonObject{{"id", idString(page.id)}, {"name", page.name}, {"current", page.id == current.document()->currentPageId()}});
+    json["pages"] = pages;
     if (!images) {
         QJsonArray objects = json["objects"].toArray();
         for (qsizetype index = 0; index < objects.size(); ++index) {
@@ -288,6 +310,17 @@ QJsonObject AgentTools::render(const QJsonObject &params)
     const QString path = string(params, QStringLiteral("path")).value_or(QString());
     EditorSession &current = session();
     VectorDocument copy = *current.document();
+    const QUuid page = pageParam(params, copy).value_or(copy.currentPageId());
+    if (selectionOnly && page != copy.currentPageId())
+        fail(QStringLiteral("The selection is on the current page. Leave out “page”, or leave out “selectionOnly”."));
+    if (copy.pageCount() > 1) {
+        // A page renders as its active artboard (its first, off the current page), from the origin.
+        copy.currentPage = page;
+        if (!selectionOnly && !copy.artboards.empty()) {
+            const int boards = copy.artboardCount();
+            copy = copy.artboardDocument(page == current.document()->currentPageId() ? std::clamp(current.activeArtboard(), 0, boards - 1) : 0);
+        }
+    }
     QRectF area(QPointF(0, 0), copy.size);
     if (selectionOnly) {
         if (!current.hasSelection())

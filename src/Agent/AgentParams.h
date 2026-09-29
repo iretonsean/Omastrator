@@ -1,5 +1,6 @@
 #pragma once
 #include "Agent/AgentProtocol.h"
+#include "Document/VectorDocument.h"
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointF>
@@ -121,6 +122,30 @@ inline std::optional<int> choice(const QJsonObject &params, const QString &key, 
     if (index < 0)
         fail(QStringLiteral("“%1” must be one of: %2.").arg(key, names.join(QStringLiteral(", "))));
     return index;
+}
+
+// A page named by its id or its name (`key`), or none when the key is absent.
+inline std::optional<QUuid> pageParam(const QJsonObject &params, const VectorDocument &document, const QString &key = QStringLiteral("page"))
+{
+    const auto given = string(params, key);
+    if (!given)
+        return std::nullopt;
+    const std::vector<Page> pages = document.allPages();
+    const QUuid id = QUuid::fromString(*given);
+    if (!id.isNull() && document.pageIndex(id) >= 0)
+        return id;
+    for (const Page &page : pages) {
+        if (page.name == *given)
+            return page.id;
+    }
+    for (const Page &page : pages) {
+        if (page.name.compare(*given, Qt::CaseInsensitive) == 0)
+            return page.id;
+    }
+    QStringList names;
+    for (const Page &page : pages)
+        names << QStringLiteral("“%1”").arg(page.name);
+    fail(QStringLiteral("There is no page “%1”. The pages are %2. document_get lists them with their ids.").arg(*given, names.join(QStringLiteral(", "))));
 }
 
 // Results: rectangles as [x, y, width, height], ids without braces.

@@ -28,7 +28,8 @@ QUuid group(VectorDocument &document, const std::vector<QUuid> &ids, const QStri
 // The released children, and anything in `ids` that wasn't a group.
 std::vector<QUuid> ungroup(VectorDocument &document, const std::vector<QUuid> &ids);
 void arrange(VectorDocument &document, const std::vector<QUuid> &ids, ArrangeOrder order);
-void align(VectorDocument &document, const std::vector<QUuid> &ids, AlignEdge edge, AlignTarget target);
+// `artboard` is the rectangle "artboard" aligns to: the active artboard of the page being edited.
+void align(VectorDocument &document, const std::vector<QUuid> &ids, AlignEdge edge, AlignTarget target, const QRectF &artboard);
 void distribute(VectorDocument &document, const std::vector<QUuid> &ids, DistributeAxis axis);
 // The combined path's id, or none when the operation leaves nothing.
 std::optional<QUuid> combine(VectorDocument &document, const std::vector<QUuid> &ids, BooleanOperation operation);

@@ -216,7 +216,11 @@ QJsonObject AgentTools::align(const QJsonObject &params)
     const std::vector<QUuid> requested = targets(params);
     VectorDocument edited = draft();
     const std::vector<QUuid> ids = unlocked(edited, requested);
-    AgentEdits::align(edited, ids, AlignEdge(edge), AlignTarget(target));
+    // The artboard is the active one of the page (the current page unless `page` names another).
+    const QUuid page = pageParam(params, edited).value_or(edited.currentPageId());
+    const std::vector<Artboard> boards = edited.artboardsOn(page);
+    const int active = page == edited.currentPageId() ? std::clamp(session().activeArtboard(), 0, int(boards.size()) - 1) : 0;
+    AgentEdits::align(edited, ids, AlignEdge(edge), AlignTarget(target), boards[size_t(active)].rect);
     propose(QStringLiteral("Align"), edited, ids);
     return {{"ids", idArray(ids)}, {"bounds", rect(edited.bounds(ids))}};
 }

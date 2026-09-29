@@ -114,10 +114,12 @@ The same names serve the CLI and MCP. Parameters and results are JSON. Ids are
 UUID strings.
 
 **Read**
-- `document_get {}`: the whole document as `DocumentCodec` JSON, plus
-  `selection` and `activeLayer`.
+- `document_get {page?}`: the current page (or the `page` given: an id, a name
+  or `"all"`) as `DocumentCodec` JSON, plus `pages` (`[{id, name, current}]`),
+  `selection` and `activeLayer`. A one-page document has one page.
 - `selection_get {}`: the selected objects' JSON and their bounds.
-- `render {scale?=1, selectionOnly?=false, path?}`: renders a PNG. It is written
+- `render {scale?=1, selectionOnly?=false, path?, page?}`: renders a PNG of the
+  current page (or `page`'s first artboard). It is written
   to `path`, or to a temporary file whose path is returned. This lets an agent
   see the artboard.
 
@@ -129,7 +131,7 @@ UUID strings.
   `DocumentCodec` JSON form.
 - `transform {ids?, matrix?: [a, b, c, d, e, f], translate?, rotate?, scale?,
   origin?}`
-- `arrange {ids?, order}`, `align {ids?, edge, target?}`,
+- `arrange {ids?, order}`, `align {ids?, edge, target?, page?}` (the artboard is the page's active one),
   `distribute {ids?, axis}`
 - `group {ids}`, `ungroup {ids}`
 - `pathfinder {ids, operation}`
@@ -158,6 +160,11 @@ UUID strings.
 - `select_tool {tool}`: chooses the canvas tool, with or without a document.
   Takes the toolbar's names (`select`, `directSelect`, `pen`, …) and a few
   aliases (`move`, `direct`, `type`).
+- `page {action, page?, name?, index?, ids?}`: `add`, `rename`, `duplicate`,
+  `reorder`, `move_objects` or `show`, the designer's own page operations. Each
+  is a normal named undo step, not part of the proposal (so it waits while a
+  proposal is open, like `apply_color`). There is no delete. Returns the page
+  and the list of pages.
 - `status_get {}`: the tool, whether a document is open, the proposal title
   and summary, the agent task waited on (`waiting`, `task`, `agent`), the
   newest variations (`variations`, `variationsId`), `roastId`, `ready`
