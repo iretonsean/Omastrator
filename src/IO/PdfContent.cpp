@@ -1,6 +1,7 @@
 #include "IO/PdfContent.h"
 #include "IO/PdfDocument.h"
 #include "IO/PdfLexer.h"
+#include <algorithm>
 #include <cmath>
 
 namespace Pdf {
@@ -87,7 +88,10 @@ void Interpreter::warnOnce(const QString &key, const QString &message)
 void Interpreter::runPage(const QByteArray &content, const Dict &resources, const QTransform &pageTransform, const QRectF &pageBounds,
                            const QUuid &pageLayer)
 {
+    if (m_tooComplex)
+        return;
     m_stack.clear();
+    m_ignoredSaves = 0;
     m_state = GraphicsState();
     m_state.ctm = pageTransform;
     m_state.insertionParent = pageLayer;
@@ -99,6 +103,7 @@ void Interpreter::runPage(const QByteArray &content, const Dict &resources, cons
     m_textMatrix = QTransform();
     m_lineMatrix = QTransform();
     m_ocgRestore.clear();
+    m_ignoredMarks = 0;
     runContent(content, resources);
 }
 
@@ -107,7 +112,11 @@ void Interpreter::runContent(const QByteArray &content, const Dict &resources)
     Lexer lexer(content, 0);
     QList<Object> operands;
 
-    while (true) {
+    constexpr qint64 maximumOperators = 20'000'000;
+    constexpr size_t maximumObjects = 50'000;
+    constexpr int maximumOperands = 1024;
+    constexpr qsizetype maximumSavedStates = 1000;
+    while (!m_tooComplex) {
         const Token peeked = lexer.peek();
         if (peeked.kind == TokenKind::end)
             break;
@@ -130,10 +139,11 @@ void Interpreter::runContent(const QByteArray &content, const Dict &resources)
                 const int width = dict.value(QStringLiteral("Width")).toInt(0);
                 const int height = dict.value(QStringLiteral("Height")).toInt(0);
                 const bool isMask = dict.value(QStringLiteral("ImageMask")).toBool(false);
-                int bitsPerComponent = isMask ? 1 : dict.value(QStringLiteral("BitsPerComponent")).toInt(8);
+                const int bitsPerComponent = isMask ? 1 : std::clamp<int>(int(dict.value(QStringLiteral("BitsPerComponent")).toInt(8)), 1, 32);
                 const QByteArray csName = dict.value(QStringLiteral("ColorSpace")).toNameValue();
                 const int components = isMask ? 1 : (csName == "RGB" || csName == "DeviceRGB") ? 3 : (csName == "CMYK" || csName == "DeviceCMYK") ? 4 : 1;
-                expectedLength = (qint64(width) * components * bitsPerComponent + 7) / 8 * height;
+                if (width > 0 && height > 0 && width <= (1 << 24) && height <= (1 << 24)) // a larger claim would overflow
+                    expectedLength = (qint64(width) * components * bitsPerComponent + 7) / 8 * height;
             }
             const QByteArray raw = lexer.captureInlineImageData(expectedLength);
             runInlineImage(dict, raw, resources);
@@ -143,15 +153,30 @@ void Interpreter::runContent(const QByteArray &content, const Dict &resources)
 
         if (peeked.kind != TokenKind::keyword) {
             operands.append(parseObject(lexer));
+            if (operands.size() > maximumOperands)
+                operands.removeFirst(); // no operator takes this many; keeps operand junk from eating memory
             continue;
         }
         lexer.next();
         const QByteArray &op = peeked.bytes;
+        // VectorDocument::insert is linear, so the object count bounds import time as much as memory.
+        if (++m_operatorCount > maximumOperators || m_target.objects.size() > maximumObjects) {
+            m_tooComplex = true;
+            warnOnce(QStringLiteral("too-complex"), QStringLiteral("The file was too complex; some artwork was left out."));
+            break;
+        }
 
         if (op == "q") {
-            m_stack.push(m_state);
+            if (m_stack.size() >= maximumSavedStates) {
+                ++m_ignoredSaves;
+                warnOnce(QStringLiteral("q-depth"), QStringLiteral("Deeply nested graphics states were flattened."));
+            } else {
+                m_stack.push(m_state);
+            }
         } else if (op == "Q") {
-            if (!m_stack.isEmpty())
+            if (m_ignoredSaves > 0)
+                --m_ignoredSaves;
+            else if (!m_stack.isEmpty())
                 m_state = m_stack.pop();
         } else if (op == "cm" && operands.size() == 6) {
             const QTransform m(operands[0].toReal(1), operands[1].toReal(0), operands[2].toReal(0), operands[3].toReal(1),
@@ -405,6 +430,13 @@ void Interpreter::runForm(const Object &formObject, const Dict &callerResources)
         warnOnce(QStringLiteral("form-depth"), QStringLiteral("Deeply nested artwork was left out."));
         return;
     }
+    if (m_tooComplex)
+        return;
+    if (++m_formRuns > 1'000 || m_target.objects.size() > 50'000) {
+        m_tooComplex = true;
+        warnOnce(QStringLiteral("too-complex"), QStringLiteral("The file was too complex; some artwork was left out."));
+        return;
+    }
     ++m_formDepth;
     const Dict &dict = formObject.toDict();
     const GraphicsState savedState = m_state;
@@ -473,6 +505,10 @@ void Interpreter::runInlineImage(const Dict &dict, const QByteArray &rawData, co
 
 void Interpreter::beginMarkedContent(const QList<Object> &operands, const Dict &resources)
 {
+    if (m_ocgRestore.size() >= 1000) {
+        ++m_ignoredMarks;
+        return;
+    }
     m_ocgRestore.push(m_state.insertionParent);
     if (operands.size() < 2 || operands[operands.size() - 2].toNameValue() != "OC")
         return;
@@ -511,6 +547,10 @@ void Interpreter::beginMarkedContent(const QList<Object> &operands, const Dict &
 
 void Interpreter::endMarkedContent()
 {
+    if (m_ignoredMarks > 0) {
+        --m_ignoredMarks;
+        return;
+    }
     if (m_ocgRestore.isEmpty())
         return;
     m_state.insertionParent = m_ocgRestore.pop();
