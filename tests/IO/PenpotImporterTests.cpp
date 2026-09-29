@@ -1,3 +1,4 @@
+#include "Document/Components.h"
 #include "IO/PenpotImporter.h"
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -407,6 +408,127 @@ private slots:
         QVERIFY(card && copy);
         QVERIFY(copy->instance.has_value());
         QCOMPARE(copy->instance->master, card->id);
+    }
+
+    // A real export's copy carries the component's id (not the main shape's) and a
+    // shapeRef; syncing on open must keep the copy where it is and its own text.
+    void copyOfARealComponentKeepsItsPositionAndTextAfterSync()
+    {
+        const QString componentID = newID(), mainID = newID(), mainLabelID = newID();
+        const QString copyID = newID(), copyLabelID = newID();
+        auto label = [&](const QString &id, const QString &parent, double x, const QString &text) {
+            QJsonObject shape = baseShape(id, "text", x, 5, 60, 20);
+            shape["name"] = "Label";
+            shape["parentId"] = parent;
+            shape["content"] = QJsonObject{{"type", "root"}, {"children", QJsonArray{QJsonObject{{"type", "paragraph-set"},
+                {"children", QJsonArray{QJsonObject{{"type", "paragraph"}, {"children", QJsonArray{QJsonObject{{"text", text}}}}}}}}}}};
+            return shape;
+        };
+        QJsonObject main = baseShape(mainID, "frame", 0, 0, 80, 40);
+        main["name"] = "Card";
+        main["componentRoot"] = true;
+        main["mainInstance"] = true;
+        main["componentId"] = componentID;
+        main["shapes"] = QJsonArray{mainLabelID};
+        QJsonObject copy = baseShape(copyID, "frame", 200, 100, 80, 40);
+        copy["name"] = "Card Copy";
+        copy["componentRoot"] = true;
+        copy["componentId"] = componentID;
+        copy["shapeRef"] = mainID;
+        copy["shapes"] = QJsonArray{copyLabelID};
+
+        VectorDocument document = PenpotImporter::parse(penpotFile(
+            {main, label(mainLabelID, mainID, 10, "Title"), copy, label(copyLabelID, copyID, 210, "Changed")}, {mainID, copyID}));
+        Components::sync(document);
+        const VectorObject *card = named(document, QStringLiteral("Card"));
+        const VectorObject *copied = named(document, QStringLiteral("Card Copy"));
+        QVERIFY(card && copied && copied->instance);
+        QCOMPARE(copied->instance->master, card->id);
+        QCOMPARE(copied->path.bounds(), QRectF(200, 100, 80, 40));
+        const auto kids = children(document, copied->id);
+        QCOMPARE(kids.size(), size_t(1));
+        QCOMPARE(kids.front()->text.text, QStringLiteral("Changed"));
+        // The main's label sits at x=10; the copy's, moved by the copy's offset.
+        QCOMPARE(kids.front()->transform.map(QPointF(0, 0)).x() - children(document, card->id).front()->transform.map(QPointF(0, 0)).x(), 200.0);
+    }
+
+    // Copies are rebuilt from the main at its size and angle, so a resized or rotated one stays a plain group.
+    void resizedOrRotatedCopyStaysAPlainGroupWithAWarning()
+    {
+        for (const bool rotate : {false, true}) {
+            const QString componentID = newID(), mainID = newID(), copyID = newID(), copyKidID = newID();
+            QJsonObject main = baseShape(mainID, "frame", 0, 0, 80, 40);
+            main["name"] = "Card";
+            main["componentRoot"] = true;
+            main["mainInstance"] = true;
+            main["componentId"] = componentID;
+            main["shapes"] = QJsonArray();
+            QJsonObject copy = baseShape(copyID, "frame", 200, 100, rotate ? 80 : 160, 40);
+            copy["name"] = "Card Copy";
+            copy["componentRoot"] = true;
+            copy["componentId"] = componentID;
+            copy["shapeRef"] = mainID;
+            copy["shapes"] = QJsonArray{copyKidID};
+            if (rotate)
+                copy["rotation"] = 30;
+            QJsonObject kid = baseShape(copyKidID, "rect", 210, 105, 20, 10);
+            kid["name"] = "Kid";
+            kid["parentId"] = copyID;
+            QStringList warnings;
+            const VectorDocument document = PenpotImporter::parse(penpotFile({main, copy, kid}, {mainID, copyID}), &warnings);
+            const VectorObject *copied = named(document, QStringLiteral("Card Copy"));
+            QVERIFY(copied);
+            QVERIFY(!copied->instance.has_value());
+            QVERIFY(named(document, QStringLiteral("Kid")));
+            QVERIFY(!warnings.filter(QStringLiteral("resized or rotated")).isEmpty());
+        }
+    }
+
+    void aTopLevelFrameListedTwiceIsOneArtboard()
+    {
+        const QString a = newID();
+        QJsonObject frame = baseShape(a, "frame", 0, 0, 50, 50);
+        frame["shapes"] = QJsonArray();
+        const VectorDocument document = PenpotImporter::parse(penpotFile({frame}, {a, a}));
+        QCOMPARE(document.artboards.size(), size_t(1));
+    }
+
+    void shapesNestedPastTheDepthCapWarn()
+    {
+        QList<QJsonObject> shapes;
+        QStringList ids;
+        for (int i = 0; i < 300; ++i)
+            ids << newID();
+        for (int i = 0; i < 300; ++i) {
+            QJsonObject group = baseShape(ids[i], "group", 0, 0, 10, 10);
+            group["shapes"] = i + 1 < 300 ? QJsonArray{ids[i + 1]} : QJsonArray();
+            shapes << group;
+        }
+        QStringList warnings;
+        PenpotImporter::parse(penpotFile(shapes, {ids.first()}), &warnings);
+        QVERIFY(!warnings.filter(QStringLiteral("nested too deeply")).isEmpty());
+    }
+
+    void aFrameThatListsItselfDoesNotRecurseForever()
+    {
+        const QString a = newID(), b = newID();
+        QJsonObject first = baseShape(a, "frame", 0, 0, 50, 50);
+        first["shapes"] = QJsonArray{a, b};
+        QJsonObject second = baseShape(b, "group", 0, 0, 10, 10);
+        second["shapes"] = QJsonArray{a, b};
+        QStringList warnings;
+        const VectorDocument document = PenpotImporter::parse(penpotFile({first, second}, {a, b}), &warnings);
+        QCOMPARE(document.objects.size(), size_t(3)); // the page layer, the frame, the group
+        QVERIFY(!warnings.isEmpty());
+    }
+
+    void theRootIdListedAsAChildIsSkipped()
+    {
+        const QString a = newID();
+        QJsonObject frame = baseShape(a, "frame", 0, 0, 50, 50);
+        frame["shapes"] = QJsonArray{QStringLiteral("00000000-0000-0000-0000-000000000000")};
+        const VectorDocument document = PenpotImporter::parse(penpotFile({frame}, {a}));
+        QVERIFY(named(document, QStringLiteral("frame")));
     }
 
     void missingManifestIsAFileError() { QVERIFY_THROWS_EXCEPTION(FileError, PenpotImporter::parse(QByteArrayLiteral("not a zip"))); }

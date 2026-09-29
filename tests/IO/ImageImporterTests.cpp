@@ -196,6 +196,29 @@ private slots:
         QVERIFY_THROWS_EXCEPTION(FileError, ImageImporter::read(path));
     }
 
+    // A header that claims 3000 x 3000 and then ends must fail, not read past the buffer.
+    void truncatedRawPsdIsAFileError()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("cut.psd"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(buildPsd(3000, 3000, {QByteArray(10, 'x')}));
+        file.close();
+        QVERIFY_THROWS_EXCEPTION(FileError, ImageImporter::read(path));
+    }
+
+    void hugePsdIsRefusedBeforeAllocating()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("huge.psd"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(buildPsd(30000, 30000, {QByteArray(1, 'x'), QByteArray(1, 'x'), QByteArray(1, 'x'), QByteArray(1, 'x')}));
+        file.close();
+        QVERIFY_THROWS_EXCEPTION(FileError, ImageImporter::read(path));
+    }
+
     void heicMagicBytesAreDetected()
     {
         // A minimal ISO-BMFF ftyp box announcing the "heic" brand; no real

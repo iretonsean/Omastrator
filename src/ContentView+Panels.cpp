@@ -1,5 +1,6 @@
 #include "ContentView.h"
 #include "IO/ProjectStore.h"
+#include "IO/VectorFileImporter.h"
 #include "Logging.h"
 #include "UI/AgentBridge.h"
 #include "UI/KeyboardShortcuts.h"
@@ -189,7 +190,7 @@ void ContentView::dragLeaveEvent(QDragLeaveEvent *)
     m_dropRing->hide();
 }
 
-// Documents open in tabs; pictures and SVGs join this artboard.
+// Documents and multi-page design files open in tabs; pictures and SVGs join this artboard.
 void ContentView::dropEvent(QDropEvent *event)
 {
     m_dropRing->hide();
@@ -204,7 +205,7 @@ void ContentView::dropEvent(QDropEvent *event)
     for (const QString &path : droppedFiles(*event->mimeData())) {
         if (!workspace)
             return;
-        if (!drawn || QFileInfo(path).suffix().compare(native, Qt::CaseInsensitive) == 0)
+        if (!drawn || QFileInfo(path).suffix().compare(native, Qt::CaseInsensitive) == 0 || VectorFileImporter::isDesignFile(path))
             workspace->openFile(path);
         else
             workspace->placeFile(path);

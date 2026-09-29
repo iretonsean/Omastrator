@@ -1,5 +1,6 @@
 #pragma once
 #include <QByteArray>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 #include <vector>
@@ -10,7 +11,9 @@
 class ZipReader {
 public:
     // Entries that claim to inflate past this are refused rather than allocated.
-    static constexpr quint32 maximumEntrySize = 512u * 1024 * 1024;
+    static constexpr quint32 maximumEntrySize = 256u * 1024 * 1024;
+    // Everything one reader hands out, across all its read() calls.
+    static constexpr qint64 maximumTotalSize = 1024ll * 1024 * 1024;
 
     explicit ZipReader(const QByteArray &archive);
     bool isValid() const;
@@ -30,6 +33,8 @@ private:
     };
     QByteArray data;
     std::vector<Entry> items;
+    QHash<QString, int> index;
+    mutable qint64 totalRead = 0;
     bool valid = false;
 
     bool readCentralDirectory();

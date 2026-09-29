@@ -26,6 +26,14 @@ bool canRead(const QString &path)
     return ImageImporter::isVector(path) || isLayeredSuffix(QFileInfo(path).suffix().toLower()) || FigmaImporter::canRead(path);
 }
 
+bool isDesignFile(const QString &path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    if (suffix == QLatin1String("sketch") || suffix == QLatin1String("penpot"))
+        return true;
+    return suffix == QLatin1String("fig") && FigmaImporter::canRead(path);
+}
+
 VectorDocument read(const QString &path, QStringList *warnings)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();

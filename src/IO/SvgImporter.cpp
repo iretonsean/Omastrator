@@ -47,6 +47,9 @@ bool isGzip(const QByteArray &data)
 }
 
 #ifdef OMASTRATOR_HAVE_ZLIB
+// A gzip bomb inflates a megabyte into gigabytes; stop well short of that.
+constexpr qsizetype maximumSvgzSize = 64 * 1024 * 1024;
+
 // .svgz is a plain gzip stream; decode it whatever the file's given extension.
 QByteArray gunzip(const QByteArray &data)
 {
@@ -68,6 +71,10 @@ QByteArray gunzip(const QByteArray &data)
             return {};
         }
         output.append(chunk.constData(), chunk.size() - int(stream.avail_out));
+        if (output.size() > maximumSvgzSize) {
+            inflateEnd(&stream);
+            throw FileError(QStringLiteral("This .svgz is too large to import."));
+        }
         if (result != Z_STREAM_END && stream.avail_in == 0)
             break;
     }

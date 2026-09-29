@@ -233,6 +233,32 @@ private slots:
         QCOMPARE(document.size, QSizeF(10, 10));
         QCOMPARE(paths(document).size(), size_t(1));
     }
+
+    // A few kilobytes of gzip that inflate past the cap must stop, not fill memory.
+    void svgzBombIsAFileError()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("bomb.svgz"));
+        const QByteArray svg = QByteArray("<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'>")
+                                + QByteArray(80 * 1024 * 1024, ' ');
+        QByteArray gzip(svg.size() / 100 + 1024, Qt::Uninitialized);
+        z_stream stream{};
+        deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY);
+        stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(svg.constData()));
+        stream.avail_in = static_cast<uInt>(svg.size());
+        stream.next_out = reinterpret_cast<Bytef *>(gzip.data());
+        stream.avail_out = static_cast<uInt>(gzip.size());
+        QCOMPARE(deflate(&stream, Z_FINISH), Z_STREAM_END);
+        gzip.resize(static_cast<int>(stream.total_out));
+        deflateEnd(&stream);
+        QVERIFY(gzip.size() < 1024 * 1024);
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(gzip);
+        file.close();
+        QVERIFY_THROWS_EXCEPTION(FileError, SvgImporter::read(path));
+    }
 #endif
 
     void topLevelGroupsBecomeLayers()
