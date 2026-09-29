@@ -84,6 +84,8 @@ Each folder builds as its own static library:
   `SharePanels`; its tests use the fake rclone and a fake `gh`. Send to a device
   (AirDrop) is `DeviceSend` and `ShareController+Device.cpp`, tested against a
   fake omdrop and omadrop.
+  Pages as Workspaces (docs/WORKSPACES.md) is `PageWorkspaces` (+Place, +Sync)
+  and `PageStandIn`; its tests run a fake Hyprland, `tests/UI/FakeHyprlandWorld.h`.
 - `src/OmastratorApp.cpp` holds `main`. `omastrator --daemon` runs the app in the
   background with no window until one is asked for (`show_window`); a second
   `omastrator` hands its files to the running one.

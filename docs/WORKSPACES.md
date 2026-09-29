@@ -1,8 +1,9 @@
-# Canvas workspaces (design, 2026-09-28)
+# Canvas workspaces (design 2026-09-28, built 2026-09-29)
 
 Phase 2 of BROWSER-FRAMES.md: **a document's pages claim Hyprland named
 workspaces, and closing the document gives them back.** Phase 1 (PAGES.md)
-made page ids permanent and names unique for this. Nothing here is built.
+made page ids permanent and names unique for this. **Built** on `feat/workspaces`;
+section 7 records what was decided while building it.
 
 ## 1. Opt-in, off by default
 
@@ -259,3 +260,66 @@ touches the real Hyprland.
    - BROWSER-FRAMES.md: phase 2 built; the Super+Tab check's result.
    - ANYWHERE.md, escape hatches: reset gives workspaces back.
    - The user guide's View entry.
+
+## 7. As built (2026-09-29)
+
+Code: `Hyprland` (`moveWindow`, `focusWorkspace`, `focusWindow`),
+`HyprlandEvents`, `WorkspaceClaims` (all `oma_agent`), and in `oma_ui`
+`PageWorkspaces` (claims and naming; `+Place.cpp` places windows;
+`+Sync.cpp` handles the user landing on a workspace) and `PageStandIn`.
+The fake Hyprland behind the tests is `tests/UI/FakeHyprlandWorld.h`, on
+top of `tests/Agent/FakeHyprctl.h`. Decisions made while building:
+
+- **Placement is one idempotent step, `place()`.** It reads `clients`, then
+  dispatches only what is not already where it belongs, so our own move
+  events cause no loop. Moves are ordered so a named workspace is never
+  emptied before its next window arrives (Hyprland deletes an empty,
+  unfocused named workspace). The one thing this can't avoid: a brand-new
+  page's workspace may flicker (deleted and recreated) while the swap runs.
+  Accepted.
+- **Windows are recognised** by the address we last saw, then for a
+  stand-in by its first title (`omastrator-standin-N`), and for the editor
+  by its exact title, else as the only other window of our pid. A window
+  Wayland hasn't mapped yet has no address, so placement retries every
+  100 ms, up to 20 times.
+- **The stand-in's picture** is the editor's grab (at most 1280 px wide)
+  taken as the page is left; a page never left is rendered through
+  `VectorRenderer` (at most 1024 px).
+- **The cap of 24 always keeps a slot for the front page**, so the editor
+  never loses its workspace to other documents' pages. The one-time notice
+  reads "Only 24 pages get workspaces; the rest are in the Pages list."
+- **The focus rule.** A move that follows the user, and `focuswindow`, only
+  happen when an Omastrator window is active (`QApplication::activeWindow()`;
+  tests replace the probe). The agent's `page` tool goes through the same
+  session calls as the UI, so it is silent exactly when the app isn't the
+  active window, which is when an agent is at work from a terminal.
+- **Hyprland to app.** Events within 50 ms act once, on the last. A page the
+  user walked to is already on screen, so the editor is moved silently and
+  then focused, and only if the active workspace is still that page's.
+- **Closing a stand-in** declines that page's claim until the page is made
+  current again (Pages list, Next or Previous Page, undo). The front page is
+  never declined.
+- **`design reset`** says "Reset. Pages as Workspaces is off. Turn it on
+  again from View." when the setting was on, and the usual message
+  otherwise. Its test is in `DesignModeUiTests`, since it needs a
+  `DesignController`; `WorkspaceClaimsTests` covers what `runReset` does.
+- **Dispatch strings** (Lua and hyprlang) are tested in `HyprlandEventsTests`
+  and `PageWorkspacesTests`. **Unverified:** the Lua `hl.dsp.window.move` key
+  names `workspace`, `follow` and `window` are known only from strings in
+  Hyprland 0.56.2's binary, not from a running Lua config. The hyprlang
+  forms are the documented ones.
+- **Design mode.** `PageWorkspaces::allStandInAddresses()` is what
+  `DesignController::homeOnFocus` skips; with a stand-in focused, the home
+  is the editor.
+
+### Left for the author
+
+Nothing here has run against a live Hyprland. By hand, on a real desktop:
+
+1. Turn on View ▸ Pages as Workspaces with a two-page document and check
+   that **Super+Tab** (Omarchy's `e+1` and the swipe) reaches the named
+   workspaces, and that the editor swaps in. If `e+1` skips named
+   workspaces (they get negative ids), correct BROWSER-FRAMES.md: pages are
+   reached from the Pages list and Next/Previous Page.
+2. Check the Lua move and focus dispatches (above) on a Lua config.
+3. Watch for the flicker on New Page.

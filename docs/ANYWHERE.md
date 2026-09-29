@@ -299,6 +299,10 @@ with the program". This is what it did, and what it does now.
   monitor its target is on, and never above the topmost clear space, so it is
   never over the Omarchy bar or the island (`OverlayLogic.barPosition`,
   `clampBar` and `barShownOn`, tested in a JavaScript engine).
+- **Reset gives the pages' workspaces back** and turns View ▸ Pages as
+  Workspaces off (WORKSPACES.md): `omastrator reset` returns them from the
+  claims file even with no app running. A page's stand-in is never the bar's
+  home; with one focused, the home is the editor.
 - Desktop changes are noticed while the pointer rests, because the home
   window can move or leave without the pointer doing anything
   (`DesignMode::watchDesktop`, every 500 ms at most).

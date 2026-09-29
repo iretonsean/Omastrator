@@ -168,7 +168,9 @@ The test ruled out the first choice, and the author approved this instead:
 1. **Pages** in the document model and file format (`.omai`), with the
    Pages list in Layers and Ctrl+K. It's useful even without workspaces.
 2. **Canvas workspaces:** pages claim named workspaces, and closing a
-   document gives them back.
+   document gives them back. **Built** (View ▸ Pages as Workspaces, off by
+   default; WORKSPACES.md section 7). Whether Super+Tab reaches the named
+   workspaces on a live desktop is still to be checked by hand.
 3. **The Browser View frame:** the tool, the frame controls, streaming, the
    Browse tool, breakpoint buttons and resize-as-preview.
 4. **Live inside the frame:** the element bar, tokens, Review changes,
