@@ -78,6 +78,8 @@ void EditorCanvas::State::finishTextArea()
 
 void EditorCanvas::State::beginTextEditing(const VectorObject &object, bool inDocument, std::optional<QPointF> caretAt)
 {
+    if (session.refuseWhenLocked())
+        return;
     if (text)
         finishText();
     text = std::make_unique<InlineTextEditor>(object);

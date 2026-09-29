@@ -78,6 +78,19 @@ public:
     void setArtboardSize(QSizeF size);
     void setArtboardBackground(const QColor &color);
 
+    // Lock Document (EditorSession+Lock.cpp) ----------------------------------
+    // A locked document refuses every edit, undo and redo, whichever door it comes in by:
+    // selecting, inspecting, measuring, exporting and sharing go on. The flag is saved in the
+    // file, changes no undo step, and marks the document unsaved.
+    bool isDocumentLocked() const { return m_document && m_document->locked; }
+    void setDocumentLocked(bool locked);
+    // What the status line says when an edit is refused.
+    static QString lockedNotice();
+    // The one gate for edits: true (and `editRefused()`) when the document is locked. Every
+    // edit entry point asks it; so does anything that starts editing outside the session, as
+    // the canvas's inline type does.
+    bool refuseWhenLocked();
+
     // Artboards (EditorSession+Artboards.cpp) ---------------------------------
     // The Artboard tool, the list, next/previous and select() all set this.
     int activeArtboard() const;
@@ -601,6 +614,8 @@ signals:
     void documentChanged();
     // A paste from another app left some things out.
     void pasteLeftOut(const QStringList &warnings);
+    // An edit met a locked document and did nothing.
+    void editRefused();
 
 private:
     void notify(bool documentToo = true);
@@ -648,6 +663,9 @@ private:
         bool duplicated = false;
     };
     std::optional<Interaction> m_interaction;
+    // Nesting of beginEdit calls, and which of those levels a lock turned away: their endEdit does nothing.
+    int m_editDepth = 0;
+    std::vector<int> m_refusedEditDepths;
     mutable int m_pasteCount = 0;
     // When the last coalescing text step ran.
     qint64 m_lastTextStep = 0;

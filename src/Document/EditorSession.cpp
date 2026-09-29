@@ -108,6 +108,8 @@ void EditorSession::createDocument(QSizeF size)
 void EditorSession::loadDocument(VectorDocument document)
 {
     m_interaction.reset();
+    m_editDepth = 0;
+    m_refusedEditDepths.clear();
     m_document = std::move(document);
     Components::sync(*m_document);
     m_history.reset();
@@ -127,6 +129,8 @@ void EditorSession::loadDocument(VectorDocument document)
 void EditorSession::closeDocument()
 {
     m_interaction.reset();
+    m_editDepth = 0;
+    m_refusedEditDepths.clear();
     m_document.reset();
     m_history.reset();
     m_selection.clear();
@@ -420,6 +424,11 @@ void EditorSession::pruneSelection()
 
 void EditorSession::beginEdit(const QString &name)
 {
+    ++m_editDepth;
+    if (refuseWhenLocked()) {
+        m_refusedEditDepths.push_back(m_editDepth);
+        return;
+    }
     // The preference may have changed since this document opened.
     m_history.setEntryLimit(historyLimit());
     m_history.begin(name, m_document, m_selection);
@@ -427,6 +436,12 @@ void EditorSession::beginEdit(const QString &name)
 
 void EditorSession::endEdit()
 {
+    const int depth = m_editDepth;
+    m_editDepth = std::max(0, m_editDepth - 1);
+    if (!m_refusedEditDepths.empty() && m_refusedEditDepths.back() == depth) {
+        m_refusedEditDepths.pop_back();
+        return;
+    }
     settle();
     m_history.end(m_document, m_selection);
     notify();
@@ -434,7 +449,7 @@ void EditorSession::endEdit()
 
 void EditorSession::edit(const QString &name, const std::function<void(VectorDocument &)> &change)
 {
-    if (!m_document)
+    if (!m_document || refuseWhenLocked())
         return;
     if (m_interaction)
         commitInteraction();
@@ -446,7 +461,10 @@ void EditorSession::edit(const QString &name, const std::function<void(VectorDoc
 
 void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
 {
+    const bool locked = isDocumentLocked();
     m_document = snapshot.document;
+    if (m_document)
+        m_document->locked = locked;
     m_selection = snapshot.selection;
     if (!m_selection.empty())
         m_artboardSelected = false;
@@ -458,6 +476,8 @@ void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
 // Inside an open beginEdit, DocumentHistory refuses both: the edit's own step would otherwise replay the undone one.
 void EditorSession::undo()
 {
+    if (refuseWhenLocked())
+        return;
     if (m_interaction)
         cancelInteraction();
     if (const auto snapshot = m_history.undo())
@@ -466,6 +486,8 @@ void EditorSession::undo()
 
 void EditorSession::redo()
 {
+    if (refuseWhenLocked())
+        return;
     if (m_interaction)
         cancelInteraction();
     if (const auto snapshot = m_history.redo())
@@ -486,7 +508,7 @@ void EditorSession::markUnsaved()
 
 void EditorSession::beginInteraction(const QString &name)
 {
-    if (!m_document)
+    if (!m_document || refuseWhenLocked())
         return;
     if (m_interaction)
         commitInteraction();

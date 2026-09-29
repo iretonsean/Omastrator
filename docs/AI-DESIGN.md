@@ -249,3 +249,6 @@ it only reads.
   methods that write files, and they write only where the agent asks.
 - The Esc and Enter bar stays until the user acts. An agent can't accept its own
   proposal.
+- A locked document (File ▸ Lock Document) can't be changed by an agent: every
+  edit fails with error `-32004` and says to ask the user to unlock it. Reading,
+  selecting, `save` and `export` still work, and only the user can unlock.

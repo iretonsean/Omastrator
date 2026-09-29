@@ -1,4 +1,5 @@
 #include "UI/ProjectTabs.h"
+#include "UI/PanelIcons.h"
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QPainter>
@@ -51,7 +52,14 @@ void ProjectTabButton::synchronize()
     const bool modified = tab->session.hasDocument() && tab->session.isModified();
     m_select->setText((modified ? QStringLiteral("● ") : QString()) + tab->title());
     m_select->setFont(tabFont(active));
-    m_select->setToolTip(tab->cloudStatus.isEmpty() ? tab->place() : tab->place() + QLatin1Char('\n') + tab->cloudStatus);
+    const bool locked = tab->session.isDocumentLocked();
+    m_select->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_select->setIconSize(QSize(12, 12));
+    m_select->setIcon(locked ? QIcon(PanelIcons::pixmap(PanelIcon::lock, 12, palette().color(QPalette::WindowText), devicePixelRatioF())) : QIcon());
+    QString tip = tab->cloudStatus.isEmpty() ? tab->place() : tab->place() + QLatin1Char('\n') + tab->cloudStatus;
+    if (locked)
+        tip += QStringLiteral("\nLocked: read-only until unlocked (File ▸ Unlock Document)");
+    m_select->setToolTip(tip);
     m_select->setEnabled(!m_workspace.isManaging() || active);
     m_close->setToolTip(QStringLiteral("Close %1").arg(tab->title()));
     m_close->setAccessibleName(QStringLiteral("Close %1").arg(tab->title()));

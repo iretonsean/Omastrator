@@ -774,6 +774,9 @@ QJsonObject encode(const VectorDocument &document)
         }
         json["artboards"] = boards;
     }
+    // Additive: only a locked document writes the key.
+    if (document.locked)
+        json["locked"] = true;
     if (!document.exportAssets.empty()) {
         QJsonArray assets;
         for (const QUuid &assetId : document.exportAssets)
@@ -816,6 +819,7 @@ VectorDocument decode(const QJsonObject &json)
             continue;
         document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white), board["exported"].toBool(true)});
     }
+    document.locked = json["locked"].toBool(false);
     for (const QJsonValue &value : json["exportAssets"].toArray()) {
         const QUuid assetId = QUuid::fromString(value.toString());
         if (!assetId.isNull())
