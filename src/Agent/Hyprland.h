@@ -59,6 +59,17 @@ QJsonValue query(const QString &what, QString *error = nullptr);
 // Runs a dispatcher: `lua` on Omarchy 4's Lua config (through `hyprctl eval`), else `legacy` (`hyprctl dispatch …`).
 // Returns why it failed, or empty.
 QString dispatch(const QString &lua, const QString &legacy);
+// Asks Hyprland to reload its config only (`reload config-only`: monitors and runtime state stay). Returns why it failed, or empty.
+QString reload();
+// Hyprland's own check of a config file (`Hyprland --verify-config -c PATH`, which starts no compositor; $OMASTRATOR_HYPRLAND in tests).
+struct ConfigCheck {
+    // False when there is no Hyprland program to ask: nothing is known.
+    bool available = false;
+    bool ok = false;
+    // What Hyprland said was wrong, empty when ok.
+    QString errors;
+};
+ConfigCheck verifyConfig(const QString &path);
 // True when ~/.config/hypr/hyprland.lua exists, as setup decides.
 bool usesLua();
 

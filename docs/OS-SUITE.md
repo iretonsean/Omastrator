@@ -274,6 +274,15 @@ reloading it or opening a second browser.
 - Offers the bar widget, the Hyprland `source` line and voxtype.
 - Every change to a user file is shown first and needs confirmation; `--yes`
   confirms all. `omastrator setup --remove` undoes exactly what setup added.
+- Before it writes anything, setup copies every file it will change to
+  `~/.local/state/omastrator/setup-backups/<yyyymmdd-hhmmss>/` (with a
+  manifest of the original paths), keeps the newest 5, and changes nothing if
+  the copy can't be made. `omastrator setup --restore [BACKUP]` shows what
+  it would put back, asks (or `--yes`), copies what it is about to replace as
+  a new backup, and restores; `--list-backups` lists them.
+- Never takes a key you already use: it reads Hyprland's live binds and your
+  config, skips that key and says so ("Super+Alt+C is already yours:
+  skipped"). `--no-keys` installs with no global keys at all.
 - Checks for the needed tools (hyprpicker, grim, slurp, wl-clipboard,
   chromium, voxtype) and names each missing one with the Omarchy or pacman
   command to add it.
@@ -443,6 +452,102 @@ Choices the spec left open, made while building it, in build order.
   folder only once it is empty. The tests check a temporary HOME is
   byte-for-byte the same after setup and remove, and that each command run
   twice changes nothing the second time.
+- **Backups and restore.** The backup is written before the first file is
+  touched, and its manifest last, so a folder without one is a copy that never
+  finished and setup hadn't started. `--restore` puts every file back to its
+  copied bytes and deletes what setup created (and the folders it made, once
+  empty), so it also works after an interrupted setup that never wrote
+  `setup.json`. Files setup didn't change aren't in the backup and aren't
+  touched. A restore copies the state it replaces first, as its own backup
+  (action "restore"), so a second `--restore` undoes it; if that copy can't be
+  made, nothing changes. The backup being restored from is never pruned by it.
+- **Key clashes.** Only the global keys can clash: Super+Alt+D, C, A, L, V
+  (dictation), the design and Desk keys and Super+Alt+Escape. The keys inside
+  Omastrator's own submaps only exist while one is active. A key counts as
+  taken when a live bind (`hyprctl binds -j`) or a bind in `~/.config/hypr`
+  or Omarchy's defaults uses it outside a submap. **One rule says which binds
+  are ours, and every check uses it** (`LiveBind` in `Setup+Keys.cpp`): a bind
+  is ours when its own text says so (a description starting "Omastrator", or
+  an argument naming omastrator), or when it is in the default submap on the
+  same combo as one that does. Lua Hyprland reports every bind as `__lua` with
+  a numeric arg, so a release bind or a hatch's second half has no text of
+  its own, and key files from before this rule wrote some with none (the
+  dictation release, `SUPER + ALT + V`). Binds inside our own submaps
+  (`Escape`, `T`) never vouch for a default-submap bind, and a mouse bind is
+  never ours by combo. That keeps a second run, and an upgrade from the
+  previous key file, quiet. Without a live Hyprland, the config files are read: Lua
+  `hl.bind`, Omarchy's `o.bind` and `o.bind_toggle` (never `unbind`), and
+  hyprlang `bind*` lines, whose `$variables` are collected from every file
+  first, since Hyprland shares them across `source`d files. Skipped keys are written to the
+  key file's header and to `setup.json`. Binds by keycode (`code:24`) can't
+  be compared with a key name and aren't detected.
+- **A key file can't hurt the binds around it** (the tester's report, 2026-09-28:
+  after setup the workspace keys, Super+number, and Super+Enter stopped
+  working). The cause is not proven, because the failure hasn't been
+  reproduced on a live desktop. Checked on Hyprland 0.56.2 with
+  `Hyprland --verify-config` (read-only, no compositor started):
+  - An error inside a `hl.define_submap` body doesn't leak. Hyprland catches
+    it, reports "error in submap …", and the next bind lands in the default
+    submap. So the theory that `pcall(dofile, …)` swallows an error and leaves
+    a submap open is wrong for this version. The source line is at the end of
+    the user's config, so nothing of the user's or Omarchy's loads inside our
+    context; the hyprlang file starts with `submap = reset`, so an unclosed
+    submap of the user's can't hold ours either.
+  - `Alt_L`, `ALT + Alt_L` and `Escape` (and `escape` in hyprlang) are valid
+    in both formats. Only an unknown key name (`Not_A_Real_Key`) fails, and
+    only that one bind.
+  - The likeliest cause is at run time: with an `omastrator-*` submap
+    latched (Super+Alt+D, C, A, L, O, the island's own mode switch, dictation's
+    heard prompt), every global bind is dead, Super+number and Super+Enter
+    included. Nothing put the keyboard back if the island or the app stopped
+    while a mode was on, and the Super+Alt+Escape hatch was itself a global
+    bind, dead in exactly that state.
+  What the key file does now: the reset key is `submap_universal` (hyprlang
+  `binddu`, both of its binds described "Omastrator: reset"), so it works
+  inside any submap, and it closes the submap itself before asking
+  `omastrator reset`. Every bind, submap body and dispatch runs protected; a
+  failure is a line in `~/.local/state/omastrator/setup.log` (trimmed once it
+  passes 64 KB) and, once the file has finished loading, one Hyprland
+  notification listing how many keys failed. The line that loads the file
+  reports its own failure the same way, and setup recognises the older forms
+  of that line and of the key file, so an upgrade rewrites them rather than
+  adding a second copy. Leaving a mode closes the submap before it runs the
+  island command, so a failing command can't leave a mode's keys held.
+- **Reload check** (`Setup+Reload.cpp`). Nothing here ever says a key is back
+  or working without looking. It runs when the keys or the source step are
+  accepted, Hyprland loads our file (or will, once the source line is added)
+  and Hyprland answers `hyprctl binds -j`:
+  1. Before anything is written (the backup included), setup asks Hyprland's
+     own program to check the user's config: `Hyprland --verify-config -c
+     <their hyprland.lua or .conf>`, which starts no compositor. A reload loads
+     the whole config again, so an edit of theirs that Hyprland hadn't loaded
+     yet, and that is broken, would send Lua Hyprland to its emergency config
+     (three keys) before setup wrote a thing. If the check reports errors,
+     setup prints them, changes and reloads nothing, names `hyprctl
+     configerrors` and exits 1 (`--no-keys` still installs without keys). When
+     there is no `Hyprland` program to ask, setup says so and skips the whole
+     reload check rather than guess; the keys load at the next reload or login.
+     Then setup reloads (`reload config-only`, so monitors and runtime state
+     stay) and reads the user's default-submap binds. This is the baseline:
+     binds an autostart script added at run time (`hyprctl keyword bind`) are
+     gone after any reload, so they are not ours to lose, and a valid pending
+     edit of theirs is already in it, so it isn't blamed on us. If that reload
+     fails, or Hyprland doesn't answer after it, there is no baseline: setup
+     stops before writing anything, exits 1 and names `hyprctl configerrors`.
+  2. After the writes it reloads again and asks again, for up to two seconds.
+     If the reload fails, or Hyprland doesn't answer afterwards, that is
+     reported and setup exits 1 with the files and the backup kept (never
+     "Set up."). If keys of the user's are gone, setup restores every file
+     from the backup, reloads, and **checks again**: it says "Your keys are
+     back" only if they are; otherwise it says which are still missing with
+     every file as it was, that Omastrator's files therefore aren't the cause,
+     keeps the backup and exits 1. If all of the user's keys are there but some
+     of Omastrator's own aren't bound, the files are kept and setup exits 1
+     naming them.
+  3. Setup doesn't reload when it isn't running under Hyprland, when
+     `--no-keys` was given, or when nothing about the keys changed (a re-run
+     with `--apply` that finds everything in place changes and reloads
+     nothing).
 - **Asking.** Each step is shown (plugin files by name, everything else as a
   unified diff) and asked about; `--yes` accepts all, `--dry-run` changes
   nothing, and a closed input answers no. Setup never installs packages: it
