@@ -1,6 +1,7 @@
 #include "Document/PathOperations.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "TemporaryConfig.h"
 #include <QtTest>
 #include <QApplication>
 #include <QLabel>
@@ -68,6 +69,7 @@ private slots:
 void KeyboardShortcutsSheetTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    useTemporaryConfig();
     QSettings().remove(QLatin1String(ShortcutSettings::storageKey));
     ShortcutSettings::shared().reload();
 }

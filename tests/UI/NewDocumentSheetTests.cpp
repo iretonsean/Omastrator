@@ -59,7 +59,8 @@ private slots:
     void createAndOpenReachTheirCallbacks();
     void recentFilesAreListed();
     void storeKeepsWhatItDoesNotOwn();
-    void storeSkipsBadEntriesAndBacksUpBrokenFiles();
+    void storeSkipsBadEntries();
+    void aFileThatCannotBeReadIsNeverOverwritten();
     void savedPresetsShowAtTheTopNextTime();
     void savingNeedsAGoodSizeAndNameAndReplacesSameName();
     void renameAndDeleteApplyToSavedOnly();
@@ -86,7 +87,6 @@ void NewDocumentSheetTests::cleanup()
 {
     ProjectWorkspace::clearRecent();
     QFile::remove(PresetStore::path());
-    QFile::remove(PresetStore::path() + ".bak");
     answer.reset();
     QSettings().remove(QLatin1String(ShortcutSettings::storageKey));
     ShortcutSettings::shared().reload();
@@ -215,7 +215,7 @@ void NewDocumentSheetTests::storeKeepsWhatItDoesNotOwn()
     QCOMPARE(QJsonDocument::fromJson(file.readAll()).object()["extra"].toInt(), 7);
 }
 
-void NewDocumentSheetTests::storeSkipsBadEntriesAndBacksUpBrokenFiles()
+void NewDocumentSheetTests::storeSkipsBadEntries()
 {
     QDir().mkpath(QFileInfo(PresetStore::path()).absolutePath());
     QFile file(PresetStore::path());
@@ -234,16 +234,63 @@ void NewDocumentSheetTests::storeSkipsBadEntriesAndBacksUpBrokenFiles()
     QCOMPARE(section.saved[1].name, QString("Odd unit"));
     QVERIFY(section.saved[1].unit == LengthUnit::px);
     QCOMPARE(section.hidden, QStringList{"A4"});
-    // A file that isn't JSON reads as empty and is kept as .bak when the next write replaces it.
-    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    file.write("not json at all");
+}
+
+// What the user has in the file is theirs: if it can't be read, it is not replaced.
+void NewDocumentSheetTests::aFileThatCannotBeReadIsNeverOverwritten()
+{
+    QDir().mkpath(QFileInfo(PresetStore::path()).absolutePath());
+    const PresetStore::Section one{{{"Kept", QSizeF(10, 10), LengthUnit::pt}}, {}};
+    const auto plant = [](const QByteArray &bytes) {
+        QFile file(PresetStore::path());
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(bytes);
+    };
+    // Not JSON, or JSON that isn't an object: not valid, not written, byte for byte still there.
+    for (const QByteArray &bytes : {QByteArray("not json at all"), QByteArray("[1, 2]"), QByteArray(R"({"documents": )")}) {
+        plant(bytes);
+        bool valid = true;
+        QVERIFY(PresetStore::read(PresetStore::documents, &valid).saved.empty());
+        QVERIFY(!valid);
+        QVERIFY(!PresetStore::write(PresetStore::documents, one).isEmpty());
+        QFile file(PresetStore::path());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), bytes);
+    }
+    // A sheet acts the same way: it says so and leaves the file.
+    plant("not json at all");
+    {
+        Sheet sheet;
+        sheet.choose(sheet.preset(), 3);
+        answer = "Zine cover";
+        sheet.action("savePreset").trigger();
+        QVERIFY(!find<QLabel>(sheet.sheet, "documentNote").text().isEmpty());
+    }
+    QFile file(PresetStore::path());
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("not json at all"));
     file.close();
-    QVERIFY(PresetStore::read(PresetStore::documents).saved.empty());
-    QVERIFY(PresetStore::write(PresetStore::documents, {{{"Kept", QSizeF(10, 10), LengthUnit::pt}}, {}}).isEmpty());
-    QFile backup(PresetStore::path() + ".bak");
-    QVERIFY(backup.open(QIODevice::ReadOnly));
-    QCOMPARE(backup.readAll(), QByteArray("not json at all"));
-    QCOMPARE(PresetStore::read(PresetStore::documents).saved.size(), size_t(1));
+    // Present but unreadable (root can read anything, so this part is skipped there).
+    plant(R"({"documents": {"saved": [{"name": "Mine", "width": 5, "height": 5}]}})");
+    QVERIFY(file.setPermissions(QFileDevice::WriteOwner));
+    bool valid = true;
+    if (QFile(PresetStore::path()).open(QIODevice::ReadOnly))
+        QSKIP("This user can read a file with no read permission.");
+    QVERIFY(PresetStore::read(PresetStore::documents, &valid).saved.empty());
+    QVERIFY(!valid);
+    QVERIFY(!PresetStore::write(PresetStore::documents, one).isEmpty());
+    QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    QCOMPARE(PresetStore::read(PresetStore::documents, &valid).saved.at(0).name, QString("Mine"));
+    QVERIFY(valid);
+    // Missing and empty files are just empty, and can be written.
+    QVERIFY(file.remove());
+    QVERIFY(PresetStore::read(PresetStore::documents, &valid).saved.empty());
+    QVERIFY(valid);
+    plant("  \n");
+    QVERIFY(PresetStore::write(PresetStore::documents, one).isEmpty());
+    QCOMPARE(PresetStore::read(PresetStore::documents, &valid).saved.size(), size_t(1));
+    QVERIFY(valid);
 }
 
 void NewDocumentSheetTests::savedPresetsShowAtTheTopNextTime()

@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QStandardPaths>
 #include <cmath>
 
 namespace {
@@ -17,16 +18,25 @@ bool inRange(double value)
     return std::isfinite(value) && value >= 1 && value <= PresetStore::maximumPoints;
 }
 
+// A file that isn't there, or is empty, is valid and empty; one that is there but can't be
+// opened or parsed as an object is not, and the caller must leave it alone.
 QJsonObject readFile(const QString &file, bool *valid = nullptr)
 {
+    if (valid)
+        *valid = true;
+    if (!QFileInfo::exists(file))
+        return {};
     QFile handle(file);
     if (!handle.open(QIODevice::ReadOnly)) {
         if (valid)
-            *valid = true;
+            *valid = false;
         return {};
     }
+    const QByteArray bytes = handle.readAll();
+    if (bytes.trimmed().isEmpty())
+        return {};
     QJsonParseError error;
-    const QJsonDocument parsed = QJsonDocument::fromJson(handle.readAll(), &error);
+    const QJsonDocument parsed = QJsonDocument::fromJson(bytes, &error);
     if (valid)
         *valid = error.error == QJsonParseError::NoError && parsed.isObject();
     return parsed.object();
@@ -37,14 +47,19 @@ namespace PresetStore {
 QString path()
 {
     const QString given = qEnvironmentVariable("XDG_CONFIG_HOME");
-    const QString config = given.isEmpty() ? QDir::home().filePath(QStringLiteral(".config")) : given;
+    const QString home = QDir::home().filePath(QStringLiteral(".config"));
+    const QString config = given.isEmpty() ? home : given;
+    // A test that reaches the user's own config would read or overwrite their presets, so in
+    // test mode the folder must be a temporary one.
+    if (QStandardPaths::isTestModeEnabled() && !QDir::cleanPath(config).startsWith(QDir::cleanPath(QDir::tempPath()) + QLatin1Char('/')))
+        qFatal("A test is using a config folder that isn't temporary for presets.json (the real config folder); point XDG_CONFIG_HOME at a temporary folder.");
     return QDir(config).filePath(QStringLiteral("omastrator/presets.json"));
 }
 
-Section read(const QString &section)
+Section read(const QString &section, bool *valid)
 {
     Section result;
-    const QJsonObject object = readFile(path())[section].toObject();
+    const QJsonObject object = readFile(path(), valid)[section].toObject();
     for (const QJsonValue &value : object["saved"].toArray()) {
         const QJsonObject entry = value.toObject();
         const QString name = entry["name"].toString().trimmed();
@@ -73,12 +88,8 @@ QString write(const QString &section, const Section &value)
         return QStringLiteral("Could not create %1.").arg(QFileInfo(target).absolutePath());
     bool valid = true;
     QJsonObject root = readFile(target, &valid);
-    if (!valid) {
-        const QString backup = target + QStringLiteral(".bak");
-        QFile::remove(backup);
-        QFile::rename(target, backup);
-        root = {};
-    }
+    if (!valid)
+        return QStringLiteral("Could not save: %1 exists but can't be read as presets. Fix or move it, then try again.").arg(target);
     QJsonArray saved;
     for (const Entry &entry : value.saved) {
         QString unit = QStringLiteral("px");

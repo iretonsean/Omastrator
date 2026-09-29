@@ -29,9 +29,10 @@ struct Section {
 };
 
 QString path();
-// A missing, unreadable or malformed file reads as empty; a bad entry is skipped.
-Section read(const QString &section);
-// Returns why it failed, or empty. Other sections stay as they are; a file that isn't
-// valid JSON is moved to presets.json.bak first so nothing the user wrote is lost.
+// A missing or empty file reads as empty; so does one that can't be opened or parsed, but
+// then `valid` (when given) is false. A bad entry is skipped.
+Section read(const QString &section, bool *valid = nullptr);
+// Returns why it failed, or empty. Other sections stay as they are. A file that exists but
+// can't be read is never replaced: this refuses, so nothing the user wrote is lost.
 QString write(const QString &section, const Section &value);
 }
