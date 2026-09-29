@@ -69,7 +69,7 @@ file with the work. Don't delete finished items.
   `--model claude-opus-5-5 --effort medium`.
 - **Every item** gets an Opus review before it merges. The lead merges,
   ticks the item here, and asks the author before pushing.
-- **Build rules:** `flock ~/.cache/omastrator-build.lock` with `-j3` (raised from -j2 by the author, 2026-09-28; one build at a time). Never
+- **Build rules:** `omastrator-build-slot` (in ~/.local/bin: two slots, the first being `~/.cache/omastrator-build.lock`) with `-j3`, so at most two builds run at once (the author, 2026-09-28). Never
   touch the running daemon.
 
 ## 1. Text stroke inside/outside (verify first)
