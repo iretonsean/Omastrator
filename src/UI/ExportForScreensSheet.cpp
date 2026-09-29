@@ -58,8 +58,10 @@ ExportForScreensSheet::ExportForScreensSheet(EditorSession &session, QWidget *pa
     layout->setSpacing(10);
 
     const std::vector<Artboard> boards = m_session.document() ? m_session.document()->allArtboards() : std::vector<Artboard>();
-    for (int index = 0; index < int(boards.size()); ++index)
-        checkableItem(m_artboards, boards[size_t(index)].name, index, true);
+    for (int index = 0; index < int(boards.size()); ++index) {
+        if (boards[size_t(index)].exported)
+            checkableItem(m_artboards, boards[size_t(index)].name, index, true);
+    }
     layout->addWidget(new QLabel(QStringLiteral("Artboards"), this));
     layout->addWidget(m_artboards);
 

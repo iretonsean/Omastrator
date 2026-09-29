@@ -225,6 +225,10 @@ PanelSection *PropertiesPanel::documentSection()
         connect(box, &QCheckBox::toggled, this, set);
         return box;
     };
+    m_artboardExported = check(QStringLiteral("artboardExported"), QStringLiteral("Export this artboard"),
+                               [this](bool on) { m_session.setArtboardExported(m_session.activeArtboard(), on); });
+    m_artboardExported->setToolTip(QStringLiteral("Off keeps it on the canvas but out of every export and share"));
+    body->addWidget(m_artboardExported);
     m_grid = check(QStringLiteral("documentShowGrid"), QStringLiteral("Show grid"), [this](bool on) { m_session.setShowsGrid(on); });
     m_snap = check(QStringLiteral("documentSnapToGrid"), QStringLiteral("Snap to grid"), [this](bool on) { m_session.setSnapsToGrid(on); });
     m_outline = check(QStringLiteral("documentOutline"), QStringLiteral("Outline view"), [this](bool on) { m_session.setShowsOutline(on); });
@@ -279,6 +283,12 @@ void PropertiesPanel::synchronizeArtboards()
                 m_artboards->item(row)->setText(boards[size_t(row)].name);
         }
     }
+    for (int row = 0; row < int(boards.size()); ++row) {
+        // A board that doesn't export reads dimmed in the list.
+        QListWidgetItem *item = m_artboards->item(row);
+        item->setForeground(boards[size_t(row)].exported ? QBrush() : palette().brush(QPalette::Disabled, QPalette::Text));
+        item->setToolTip(boards[size_t(row)].exported ? QString() : QStringLiteral("Not exported"));
+    }
     const QSignalBlocker quiet(m_artboards);
     m_artboards->setCurrentRow(m_session.activeArtboard());
 }
@@ -290,6 +300,11 @@ void PropertiesPanel::artboardsMenu(int index, QPoint at)
     menu.addAction(QStringLiteral("Duplicate"), this, [this, index] { m_session.duplicateArtboard(index); });
     QAction *deleteOne = menu.addAction(QStringLiteral("Delete"), this, [this, index] { m_session.deleteArtboard(index); });
     deleteOne->setEnabled(m_session.document() && m_session.document()->artboardCount() > 1);
+    menu.addSeparator();
+    const bool exported = m_session.document() && m_session.document()->artboard(index).exported;
+    QAction *toggle = menu.addAction(QStringLiteral("Export Artboard"), this, [this, index, exported] { m_session.setArtboardExported(index, !exported); });
+    toggle->setCheckable(true);
+    toggle->setChecked(exported);
     menu.addSeparator();
     menu.addAction(QStringLiteral("Fit to Artwork Bounds"), this, [this, index] { m_session.fitArtboardToArtwork(index); });
     menu.addAction(QStringLiteral("Switch Orientation"), this, [this, index] { m_session.switchArtboardOrientation(index); });
@@ -353,6 +368,11 @@ void PropertiesPanel::synchronize()
     m_background->update();
     if (!m_document->isHidden())
         synchronizeArtboards();
+    {
+        const QSignalBlocker quiet(m_artboardExported);
+        m_artboardExported->setChecked(!drawn || m_session.document()->artboard(m_session.activeArtboard()).exported);
+        m_artboardExported->setEnabled(drawn);
+    }
     for (const auto &[box, on] : {std::pair{m_grid, m_session.showsGrid}, std::pair{m_snap, m_session.snapsToGrid},
                                   std::pair{m_outline, m_session.showsOutline}}) {
         const QSignalBlocker quiet(box);

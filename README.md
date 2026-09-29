@@ -65,6 +65,11 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Artwork Bounds, Switch Orientation and Next/Previous (Shift+PgDn/PgUp); an
   Artboards list sits in Properties ▸ Document. Export, Share and the active
   artboard's own size and background follow whichever one is active.
+  Turn off "Export this artboard" (Properties ▸ Document, or Object ▸
+  Artboards ▸ Export Artboard) for a scratch board: it stays visible and
+  editable, its label reads "not exported", and Export, Export for Screens
+  and Share leave it out. Export assets you collect on such a board still
+  export from Export for Screens, since you picked them one by one.
 - The rail's tools sit in slots that share a button when more than one lives
   together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
   Paint, Navigate): a corner triangle marks a group, right-click or a long

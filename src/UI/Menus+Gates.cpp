@@ -84,6 +84,8 @@ void Menus::synchronize()
     action(QStringLiteral("showAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("artboardSize"))->setEnabled(editing && drawn);
     action(QStringLiteral("artboardsMenu"))->setEnabled(drawn);
+    action(QStringLiteral("artboardExported"))->setEnabled(editing && drawn);
+    action(QStringLiteral("artboardExported"))->setChecked(!drawn || s.document()->artboard(s.activeArtboard()).exported);
     for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "fitArtboardToArtwork", "switchArtboardOrientation",
                              "fitAllArtboards"})
         action(QString::fromLatin1(name))->setEnabled(editing && drawn);

@@ -60,6 +60,16 @@ int VectorDocument::artboardIndex(const QUuid &id) const
     return -1;
 }
 
+int VectorDocument::firstExportedArtboard() const
+{
+    const std::vector<Artboard> boards = allArtboards();
+    for (int index = 0; index < int(boards.size()); ++index) {
+        if (boards[size_t(index)].exported)
+            return index;
+    }
+    return -1;
+}
+
 QRectF VectorDocument::artboardBounds() const
 {
     QRectF result;

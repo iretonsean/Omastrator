@@ -763,10 +763,14 @@ QJsonObject encode(const VectorDocument &document)
     if (!document.artboards.empty()) {
         QJsonArray boards;
         for (const Artboard &board : document.artboards) {
-            boards.append(QJsonObject{{"id", board.id.toString(QUuid::WithoutBraces)}, {"name", board.name},
-                                       {"x", board.rect.x()}, {"y", board.rect.y()},
-                                       {"width", board.rect.width()}, {"height", board.rect.height()},
-                                       {"background", color(board.background)}});
+            QJsonObject entry{{"id", board.id.toString(QUuid::WithoutBraces)}, {"name", board.name},
+                              {"x", board.rect.x()}, {"y", board.rect.y()},
+                              {"width", board.rect.width()}, {"height", board.rect.height()},
+                              {"background", color(board.background)}};
+            // Additive: only a board switched off writes the key, so older builds read the rest.
+            if (!board.exported)
+                entry["exported"] = false;
+            boards.append(entry);
         }
         json["artboards"] = boards;
     }
@@ -810,7 +814,7 @@ VectorDocument decode(const QJsonObject &json)
         const QRectF rect(board["x"].toDouble(), board["y"].toDouble(), board["width"].toDouble(), board["height"].toDouble());
         if (!(rect.width() > 0 && rect.height() > 0))
             continue;
-        document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white)});
+        document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white), board["exported"].toBool(true)});
     }
     for (const QJsonValue &value : json["exportAssets"].toArray()) {
         const QUuid assetId = QUuid::fromString(value.toString());
