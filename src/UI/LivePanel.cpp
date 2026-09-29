@@ -145,7 +145,7 @@ void LivePanel::rebuild()
     column->setSpacing(10);
     QWidget *const self = m_body;
     const AgentBridge::DeployState &state = m_bridge.deployState();
-    const QString project = m_bridge.deployProject();
+    const QString project = m_bridge.panelProject();
     LiveSession &live = m_bridge.liveSession();
     // A site that isn't yours: its edits stay on this machine, and there's nothing to deploy.
     const bool mockup = live.state() == LiveSession::State::running && live.isMockup();
@@ -173,7 +173,7 @@ void LivePanel::rebuild()
 
     // Deploy first: it writes, commits, pushes and deploys in one go.
     auto *actions = new QHBoxLayout;
-    const int edits = live.project().isEmpty() ? 0 : int(live.edits().size());
+    const int edits = project.isEmpty() ? 0 : int(m_bridge.pendingEdits(project).size());
     QPushButton *deploy = button(edits > 0 ? QStringLiteral("Deploy (%1)").arg(edits) : QStringLiteral("Deploy"), QStringLiteral("liveDeploy"), self);
     deploy->setDefault(true);
     deploy->setEnabled(!project.isEmpty() && !state.running);
@@ -205,11 +205,14 @@ void LivePanel::rebuild()
     column->addLayout(actions);
     connect(deploy, &QPushButton::clicked, this, [this] {
         bool needsAnswer = false;
-        report(m_bridge.liveDeploy({}, &needsAnswer));
+        AgentBridge::DeployRequest request;
+        request.folder = m_bridge.panelProject();
+        request.fromFrame = request.folder != m_bridge.deployProject();
+        report(m_bridge.liveDeploy(request, &needsAnswer));
         if (needsAnswer)
-            AgentSheets::deploy(m_bridge, window());
+            AgentSheets::deploy(m_bridge, window(), request.folder, true, request.fromFrame);
     });
-    connect(save, &QPushButton::clicked, this, [this] { report(m_bridge.liveSave()); });
+    connect(save, &QPushButton::clicked, this, [this] { report(m_bridge.liveSave(m_bridge.panelProject(), m_bridge.panelProject() != m_bridge.deployProject())); });
 
     if (!state.suggested.isEmpty()) {
         QPushButton *remember = button(QStringLiteral("Remember This Command"), QStringLiteral("liveRemember"), self);

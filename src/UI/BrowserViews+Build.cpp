@@ -104,11 +104,8 @@ void BrowserViews::runBuildAction(const QUuid &frame, Action action)
         if (m_agent->buildingFrame() == frame)
             action = Action::stopBuild;
         else if (m_agent->builtAt(frame) > 0) {
-            const QString project = projectOf(frame);
             m_agent->clearBuilt(frame);
-            if (!project.isEmpty())
-                m_agent->useProject(project);
-            m_agent->showLivePanel(true);
+            m_agent->showLivePanel(true, projectOf(frame));
             return;
         } else
             action = Action::buildIt;

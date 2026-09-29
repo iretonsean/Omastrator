@@ -83,20 +83,31 @@ void AgentBridge::wireDeploy()
     });
 }
 
-QString AgentBridge::deployProject()
+QString AgentBridge::deployProject() const
 {
-    // The Live window's project wins while it runs, as it did before frames had Live; then the selected Browser View.
-    if (m_live.state() == LiveSession::State::running && !m_live.project().isEmpty())
-        return canonical(m_live.project());
-    if (const QString framed = LiveFrames::selectedProject(session()); !framed.isEmpty())
-        return framed;
     return m_live.project().isEmpty() ? m_lastProject : canonical(m_live.project());
 }
 
-void AgentBridge::useProject(const QString &folder)
+void AgentBridge::rememberProject(const QString &folder)
 {
     if (!folder.isEmpty() && QFileInfo(folder).isDir())
         m_lastProject = canonical(folder);
+}
+
+QString AgentBridge::panelProject()
+{
+    if (!m_panelProject.isEmpty())
+        return m_panelProject;
+    const QString framed = LiveFrames::selectedProject(session());
+    return framed.isEmpty() ? deployProject() : framed;
+}
+
+void AgentBridge::followFrame(const QString &folder)
+{
+    if (!folder.isEmpty())
+        m_panelProject = canonical(folder);
+    else if (!m_reviewPanel.isVisible() && !m_historyPanel.isVisible())
+        m_panelProject.clear();
 }
 
 std::vector<LiveEdit> AgentBridge::pendingEdits(const QString &folder) const
@@ -178,12 +189,16 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     if (settings.confirmed != before.confirmed || settings.githubDeclined != before.githubDeclined)
         Deploy::saveSettings(folder, settings);
 
-    m_lastProject = folder;
+    // Only the island's and the window's deploys move it; a Browser View's leaves it alone.
+    const bool fromIsland = request.folder.isEmpty();
+    if (!request.fromFrame)
+        rememberProject(folder);
     m_pipeline = Pipeline{true, folder, request.deploy, question.command,
                           question.github.isEmpty() ? QString() : request.github.value_or(QString()).trimmed(), {}, {}, {}};
     m_deployState = DeployState{};
     m_deployState.running = true;
     m_deployState.folder = folder;
+    m_deployState.fromFrame = request.fromFrame;
     setStage(QStringLiteral("writing"), QStringLiteral("Writing…"));
     // The agent's write-backs already running for this project; one the write-back starts joins by itself.
     for (const auto &[id, work] : m_liveJobs)
@@ -191,7 +206,6 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
             m_pipeline.waitingFor << id;
     // The island (no folder) writes back only what the window edited, as before; a frame's action names its folder
     // and writes everything pending for it, the held edits included.
-    const bool fromIsland = request.folder.isEmpty();
     const bool writeBack = fromIsland ? m_live.state() == LiveSession::State::running && canonical(m_live.project()) == folder && !m_live.edits().empty()
                                       : !pendingEdits(folder).empty();
     if (writeBack) {
@@ -212,15 +226,16 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     return {};
 }
 
-QString AgentBridge::liveSave(const QString &folder)
+QString AgentBridge::liveSave(const QString &folder, bool fromFrame)
 {
     DeployRequest request;
     request.deploy = false;
     request.folder = folder;
+    request.fromFrame = fromFrame;
     bool needsAnswer = false;
     const QString failure = liveDeploy(request, &needsAnswer);
     if (needsAnswer)
-        QMetaObject::invokeMethod(this, [this, folder] { AgentSheets::deploy(*this, &m_window, folder, false); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this, folder, fromFrame] { AgentSheets::deploy(*this, &m_window, folder, false, fromFrame); }, Qt::QueuedConnection);
     return failure;
 }
 
@@ -336,7 +351,7 @@ QString AgentBridge::liveDeployed(const QString &requestId, const QString &url, 
 
 QString AgentBridge::rememberSuggested()
 {
-    const QString folder = deployProject();
+    const QString folder = m_deployState.folder.isEmpty() ? deployProject() : m_deployState.folder;
     if (m_deployState.suggested.isEmpty() || folder.isEmpty())
         return QStringLiteral("There's no deploy command to remember.");
     if (const QString failure = Deploy::remember(folder, m_deployState.suggested); !failure.isEmpty())
@@ -364,15 +379,15 @@ void AgentBridge::cancelDeploy()
     pipelineFailed(QStringLiteral("Cancelled."));
 }
 
-std::vector<History::Entry> AgentBridge::history()
+std::vector<History::Entry> AgentBridge::history(const QString &given)
 {
-    const QString folder = deployProject();
+    const QString folder = given.isEmpty() ? deployProject() : canonical(given);
     return folder.isEmpty() ? std::vector<History::Entry>{} : History::list(folder);
 }
 
-QString AgentBridge::restoreVersion(const QString &sha)
+QString AgentBridge::restoreVersion(const QString &sha, const QString &given)
 {
-    const QString folder = deployProject();
+    const QString folder = given.isEmpty() ? deployProject() : canonical(given);
     if (folder.isEmpty())
         return QStringLiteral("Open a project in Live first.");
     if (sha.trimmed().isEmpty())
@@ -395,8 +410,9 @@ QString AgentBridge::restoreVersion(const QString &sha)
     return startSave(folder, QStringLiteral("Restored %1. Deploy to put it live.").arg(shortSha));
 }
 
-void AgentBridge::showHistoryPanel()
+void AgentBridge::showHistoryPanel(const QString &folder)
 {
+    followFrame(folder);
     if (!m_historyContent || !m_historyPanel.isVisible()) {
         m_historyContent = new LiveHistoryPanel(*this);
         m_historyPanel.show(QStringLiteral("History"), m_historyContent);
@@ -407,7 +423,7 @@ QString AgentBridge::showDeployLog()
 {
     QString log = m_deployState.log;
     if (log.isEmpty()) {
-        const std::vector<Deploy::Record> records = Deploy::records(deployProject());
+        const std::vector<Deploy::Record> records = Deploy::records(m_deployState.folder.isEmpty() ? deployProject() : m_deployState.folder);
         if (!records.empty())
             log = records.back().log;
     }

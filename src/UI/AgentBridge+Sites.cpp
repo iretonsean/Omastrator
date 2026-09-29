@@ -143,7 +143,8 @@ QString AgentBridge::handOff(const HandOff &given, QString *requestIdOut)
     if (!error.isEmpty())
         return failed(error);
     m_liveJobs[work.requestId] = work;
-    m_lastProject = project;
+    if (given.frame.isNull())
+        rememberProject(project);
     if (!given.frame.isNull()) {
         m_builds[work.requestId] = {given.frame, given.title};
         m_built.remove(given.frame);

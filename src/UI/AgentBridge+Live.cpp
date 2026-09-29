@@ -53,10 +53,12 @@ void AgentBridge::record(const QString &title, const QString &summary, const std
 
 QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
 {
-    const QString project = folder.isEmpty() ? m_live.project() : canonical(folder);
+    // No folder is the window's and the island's: only what the window edited. A Browser View names its folder.
+    const bool framed = !folder.isEmpty();
+    const QString project = framed ? canonical(folder) : m_live.project();
     if (project.isEmpty())
         return QStringLiteral("This page is a mock-up, so its changes stay in the browser. Start Live with the page's project folder to write them back.");
-    const std::vector<LiveEdit> edits = pendingEdits(project);
+    const std::vector<LiveEdit> edits = framed ? pendingEdits(project) : m_live.edits();
     if (edits.empty())
         return QStringLiteral("There are no live edits to write back.");
     // The plan reads the files as they are, so the user's uncommitted edits stay in them.
@@ -67,9 +69,10 @@ QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
     }
     if (!plan.changes.empty())
         record(QStringLiteral("Live edits"), plan.done.join(QLatin1Char('\n')), plan.changes, project);
-    // Written edits are gone from every host; the ones left for the agent stay with the window if it is on the project.
-    LiveFrames::clearPending(project);
-    if (!m_live.project().isEmpty() && canonical(m_live.project()) == canonical(project))
+    // A Browser View's write-back takes every host's edits; the ones left for the agent stay with the window if it is on the project.
+    if (framed)
+        LiveFrames::clearPending(project);
+    if (!framed || (!m_live.project().isEmpty() && canonical(m_live.project()) == canonical(project)))
         m_live.setEdits(plan.unresolved);
     else
         LiveFrames::hold(project, plan.unresolved);
@@ -83,7 +86,7 @@ QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
     for (const LiveEdit &edit : plan.unresolved)
         if (!elements.contains(edit.element))
             elements.append(edit.element);
-    const QString agentFailure = liveAsk(QString(), elements, agentRequest, project);
+    const QString agentFailure = liveAsk(QString(), elements, agentRequest, folder.isEmpty() ? QString() : project);
     if (!agentFailure.isEmpty())
         m_liveMessage = QStringLiteral("%1 edits weren't certain enough to write directly, and the agent couldn't take them: %2")
                             .arg(plan.unresolved.size())
@@ -94,7 +97,8 @@ QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
 
 QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest, const QString &folder)
 {
-    const QString project = folder.isEmpty() ? m_live.project() : canonical(folder);
+    const bool framed = !folder.isEmpty();
+    const QString project = framed ? canonical(folder) : m_live.project();
     if (project.isEmpty())
         return QStringLiteral("This page is a mock-up: there's no project folder for the agent to change.");
     const bool inWindow = !m_live.project().isEmpty() && canonical(m_live.project()) == canonical(project);
@@ -115,7 +119,7 @@ QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &eleme
             screenshot.clear();
     }
     const QUrl url = inWindow ? m_live.url() : LiveFrames::urlOf(project);
-    AgentWork::Brief brief{instruction, instruction.isEmpty() ? pendingEdits(project) : std::vector<LiveEdit>{}, elements, screenshot,
+    AgentWork::Brief brief{instruction, instruction.isEmpty() ? (framed ? pendingEdits(project) : m_live.edits()) : std::vector<LiveEdit>{}, elements, screenshot,
                            url.toString(), Setup::shellQuote(QCoreApplication::applicationFilePath())};
     error = launchProject(work.requestId, work.worktree, QStringLiteral("live"), work.prompt(brief));
     if (!error.isEmpty()) {
@@ -128,7 +132,8 @@ QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &eleme
         && !m_pipeline.waitingFor.contains(work.requestId))
         m_pipeline.waitingFor << work.requestId;
     if (instruction.isEmpty()) {
-        LiveFrames::clearPending(project);
+        if (framed)
+            LiveFrames::clearPending(project);
         if (inWindow)
             m_live.setEdits({});
     }
@@ -245,8 +250,9 @@ int AgentBridge::unsavedFiles() const
     return int(files.size());
 }
 
-void AgentBridge::showLivePanel(bool changes)
+void AgentBridge::showLivePanel(bool changes, const QString &folder)
 {
+    followFrame(folder);
     if (!m_reviewContent || !m_reviewPanel.isVisible()) {
         m_reviewContent = new LivePanel(*this);
         m_reviewPanel.show(QStringLiteral("Live"), m_reviewContent);

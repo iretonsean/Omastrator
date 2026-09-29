@@ -66,6 +66,25 @@ private:
         return bridge.liveSession().state() == LiveSession::State::running;
     }
 
+    // The plain fixture as a repository of its own with a local bare upstream.
+    QString repositoryOf(const QString &name)
+    {
+        const QString site = m_directory.filePath(name);
+        QDirIterator files(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/plain"), QDir::Files);
+        while (files.hasNext()) {
+            const QString path = files.next();
+            write(QDir(site).filePath(QFileInfo(path).fileName()), read(path));
+        }
+        const QString bare = m_directory.filePath(name + QStringLiteral(".git"));
+        QProcess::execute(QStringLiteral("git"), {"init", "-q", "--bare", bare});
+        git(site, {"init", "-q", "-b", "main"});
+        git(site, {"add", "-A"});
+        git(site, {"commit", "-q", "-m", "Plain site"});
+        git(site, {"remote", "add", "origin", bare});
+        git(site, {"push", "-q", "-u", "origin", "main"});
+        return site;
+    }
+
     // Omastrator's own worktrees for the project, besides the checkout.
     int worktrees() { return int(git(m_repo, {"worktree", "list", "--porcelain"}).count(QLatin1String("worktree "))) - 1; }
 
@@ -216,19 +235,7 @@ private slots:
     void theWindowsEditsAndAFramesHeldEditsReachOneCommit()
     {
         // A repository of its own: the shared one has been through every earlier case.
-        const QString site = m_directory.filePath(QStringLiteral("both"));
-        QDirIterator files(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/plain"), QDir::Files);
-        while (files.hasNext()) {
-            const QString path = files.next();
-            write(QDir(site).filePath(QFileInfo(path).fileName()), read(path));
-        }
-        const QString bare = m_directory.filePath(QStringLiteral("both.git"));
-        QCOMPARE(QProcess::execute(QStringLiteral("git"), {"init", "-q", "--bare", bare}), 0);
-        git(site, {"init", "-q", "-b", "main"});
-        git(site, {"add", "-A"});
-        git(site, {"commit", "-q", "-m", "Plain site"});
-        git(site, {"remote", "add", "origin", bare});
-        git(site, {"push", "-q", "-u", "origin", "main"});
+        const QString site = repositoryOf(QStringLiteral("both"));
 
         ProjectWorkspace workspace;
         ProjectWorkspaceView window(workspace);
@@ -258,6 +265,40 @@ private slots:
         QVERIFY(page.contains(QLatin1String("Window edit.")) && page.contains(QLatin1String("Frame edit")));
         QVERIFY(LiveFrames::held(site).empty());
         QVERIFY(live.edits().empty());
+        live.stop();
+    }
+
+    void theIslandsDeployWritesBackOnlyTheWindowsEditsAndKeepsAFramesHeldOnes()
+    {
+        const QString site = repositoryOf(QStringLiteral("island"));
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        QVERIFY(bridge.startLive({}, site).isEmpty());
+        QVERIFY2(running(bridge), qPrintable(bridge.liveSession().message()));
+        LiveSession &live = bridge.liveSession();
+        QVERIFY(live.evaluate(QStringLiteral("window.__oma.editText('.lead', 'Window edit.')")).toBool());
+        QTRY_COMPARE(live.edits().size(), size_t(1));
+        LiveEdit held;
+        held.selector = QStringLiteral("#title");
+        held.property = QStringLiteral("text");
+        held.before = QStringLiteral("Hello from a plain site");
+        held.after = QStringLiteral("Frame edit");
+        LiveFrames::hold(site, {held});
+
+        // The island names no folder: it is the window's Live it has always deployed.
+        AgentBridge::DeployRequest request;
+        request.deploy = false;
+        QVERIFY(bridge.liveDeploy(request).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.deployState().running, 30'000);
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("done"));
+        const QString page = git(site, {"show", "HEAD:index.html"});
+        QVERIFY(page.contains(QLatin1String("Window edit.")));
+        QVERIFY(!page.contains(QLatin1String("Frame edit")));
+        QVERIFY(live.edits().empty());
+        QCOMPARE(LiveFrames::held(site).size(), size_t(1));
         live.stop();
     }
 

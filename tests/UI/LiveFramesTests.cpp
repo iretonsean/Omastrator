@@ -1,5 +1,6 @@
 #include "Canvas/EditorCanvas.h"
 #include "Document/EditorSession.h"
+#include "Live/Registry.h"
 #include "Live/StaticServer.h"
 #include "Live/WriteBack.h"
 #include "UI/BrowserViews.h"
@@ -70,12 +71,14 @@ class LiveFramesTests : public QObject {
 private:
     QTemporaryDir m_directory;
     int m_sites = 0;
+    QStringList m_folders;
 
     // A copy of the fixture in git, served from where it is written.
     std::unique_ptr<Site> site()
     {
         auto made = std::make_unique<Site>();
         made->folder = QFileInfo(m_directory.path()).canonicalFilePath() + QStringLiteral("/site%1").arg(++m_sites);
+        m_folders.append(made->folder);
         for (const char *name : {"index.html", "second.html"}) {
             QFile source(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/liveframe/") + QLatin1String(name));
             if (!source.open(QIODevice::ReadOnly))
@@ -166,11 +169,15 @@ private slots:
         options.cache = Browser::Cache::minimal;
         BrowserViews::setPoolOptions(options);
         BrowserViews::setSignInAnswered(false);
+        // Ports are reused between tests, so an earlier test's site must not still own this one's address.
+        QFile::remove(ProjectRegistry::path());
     }
 
     void cleanup()
     {
-        LiveFrames::clearPending(QString());
+        for (const QString &folder : std::as_const(m_folders))
+            LiveFrames::clearPending(folder);
+        m_folders.clear();
         BrowserViews::setLiveOpen(false);
         BrowserViews::setPausedCloseMs(5 * 60 * 1000);
         BrowserViews::shutdownPool();
@@ -272,7 +279,7 @@ private slots:
 
         // Off screen the frame pauses, and a while later its tab closes: Live waits, keeping what was edited.
         session.zoomToRect(QRectF(5000, 5000, 400, 300));
-        QTRY_COMPARE_WITH_TIMEOUT(views->state(hosted.frame), BrowserViews::State::paused, patience);
+        // It is paused for only 200 ms here, so wait for the close, which is the state that lasts.
         QTRY_COMPARE_WITH_TIMEOUT(views->state(hosted.frame), BrowserViews::State::closed, patience);
         QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::starting, patience);
         QVERIFY(frames->active(hosted.frame));
@@ -427,10 +434,12 @@ private slots:
         Hosted hosted(session, page(*served));
         startLive(session, hosted.frame, served->folder);
 
+        // The island's project stays main's rule (the window's, else the last one it used); frames only steer the panels.
         session.select({});
         QVERIFY(bridge.deployProject().isEmpty());
         session.select({hosted.frame});
-        QCOMPARE(bridge.deployProject(), served->folder);
+        QVERIFY(bridge.deployProject().isEmpty());
+        QCOMPARE(bridge.panelProject(), served->folder);
 
         editOpacity(session, hosted.frame, QStringLiteral("0.5"));
         QString request;

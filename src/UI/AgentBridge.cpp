@@ -184,10 +184,13 @@ QJsonObject AgentBridge::statusExtras()
                             live["liveMessage"] = m_liveMessage;
                             // Deploy, Review changes and History act on this project, with Live stopped too.
                             live["deployProject"] = deployProject();
-                            live["deploy"] = QJsonObject{{"stage", m_deployState.stage}, {"message", m_deployState.message},
-                                                         {"url", m_deployState.url}, {"running", m_deployState.running},
-                                                         {"failed", m_deployState.stage == QLatin1String("failed")},
-                                                         {"suggested", m_deployState.suggested}};
+                            // A Browser View's deploy is its bar's to show, not the island's.
+                            const DeployState idle;
+                            const DeployState &deploy = m_deployState.fromFrame ? idle : m_deployState;
+                            live["deploy"] = QJsonObject{{"stage", deploy.stage}, {"message", deploy.message},
+                                                         {"url", deploy.url}, {"running", deploy.running},
+                                                         {"failed", deploy.stage == QLatin1String("failed")},
+                                                         {"suggested", deploy.suggested}};
                             return live;
                         }()}};
     extras["design"] = m_design->status();

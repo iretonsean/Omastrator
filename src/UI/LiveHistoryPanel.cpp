@@ -32,7 +32,7 @@ void LiveHistoryPanel::rebuild()
     auto *column = new QVBoxLayout(m_body);
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(8);
-    const QString project = m_bridge.deployProject();
+    const QString project = m_bridge.panelProject();
     auto *where = new QLabel(project.isEmpty() ? QStringLiteral("Open a project in Live to see its history.") : project, m_body);
     where->setWordWrap(true);
     column->addWidget(where);
@@ -48,9 +48,12 @@ void LiveHistoryPanel::rebuild()
         column->addWidget(deploy, 0, Qt::AlignLeft);
         connect(deploy, &QPushButton::clicked, this, [this] {
             bool needsAnswer = false;
-            m_message = m_bridge.liveDeploy({}, &needsAnswer);
+            AgentBridge::DeployRequest request;
+            request.folder = m_bridge.panelProject();
+            request.fromFrame = request.folder != m_bridge.deployProject();
+            m_message = m_bridge.liveDeploy(request, &needsAnswer);
             if (needsAnswer)
-                AgentSheets::deploy(m_bridge, window());
+                AgentSheets::deploy(m_bridge, window(), request.folder, true, request.fromFrame);
             rebuild();
         });
     }
@@ -59,7 +62,7 @@ void LiveHistoryPanel::rebuild()
     auto *rows = new QVBoxLayout(list);
     rows->setContentsMargins(0, 0, 0, 0);
     rows->setSpacing(10);
-    const std::vector<History::Entry> entries = m_bridge.history();
+    const std::vector<History::Entry> entries = m_bridge.history(m_bridge.panelProject());
     const QLocale locale;
     for (const History::Entry &entry : entries) {
         auto *row = new QWidget(list);
@@ -94,7 +97,7 @@ void LiveHistoryPanel::rebuild()
         rows->addWidget(row);
         connect(open, &QPushButton::clicked, this, [link = entry.link] { QDesktopServices::openUrl(QUrl(link)); });
         connect(restore, &QPushButton::clicked, this, [this, sha = entry.sha] {
-            const QString failure = m_bridge.restoreVersion(sha);
+            const QString failure = m_bridge.restoreVersion(sha, m_bridge.panelProject());
             m_message = failure.isEmpty() ? QStringLiteral("Restored %1 as a new commit. Deploy to put it live.").arg(sha.left(7)) : failure;
             rebuild();
         });

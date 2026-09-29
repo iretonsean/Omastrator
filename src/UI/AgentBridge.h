@@ -216,12 +216,14 @@ public:
         std::optional<QString> github;
         // Default: Live's project, else the last one.
         QString folder;
+        // A Browser View asked: the island and the status stream leave it to the frame's bar.
+        bool fromFrame = false;
     };
     // Starts it in the background; returns why it couldn't, or empty. With nothing answered yet on a first deploy
     // (or a GitHub repository to offer), `needsAnswer` is set and nothing starts: the Deploy sheet asks.
     QString liveDeploy(const DeployRequest &request, bool *needsAnswer = nullptr);
     // `folder` is the project to save; empty is deployProject().
-    QString liveSave(const QString &folder = QString());
+    QString liveSave(const QString &folder = QString(), bool fromFrame = false);
     // What the Deploy sheet asks for the project.
     struct DeployQuestion {
         QString folder;
@@ -237,10 +239,13 @@ public:
     void cancelDeploy();
     // `live_deployed` from the agent deploying.
     QString liveDeployed(const QString &requestId, const QString &url, const QString &command, const QString &error);
-    // The project Deploy, Save and History act on.
-    QString deployProject();
-    // A Browser View's project becomes the one Review Changes and History show when no Live is running on it.
-    void useProject(const QString &folder);
+    // The project the island and the status stream act on: the window's, else the last one it deployed or handed over.
+    QString deployProject() const;
+    // The island's project once Live is stopped: set by the window's Live, a deploy from the island and a hand-over. Never by a Browser View.
+    void rememberProject(const QString &folder);
+    // The project the Review Changes and History panels show: the one a Browser View opened them for, else the selected
+    // Browser View's own site, else deployProject().
+    QString panelProject();
     struct DeployState {
         // idle, writing, committing, github, pushing, deploying, done, failed.
         QString stage = QStringLiteral("idle");
@@ -255,19 +260,22 @@ public:
         qint64 finishedAt = 0;
         // The run deployed (a save doesn't), and it went through.
         bool deployed = false;
+        // A Browser View started it: the island and the status stream don't show it.
+        bool fromFrame = false;
     };
     const DeployState &deployState() const { return m_deployState; }
     QString rememberSuggested();
     // `gh auth status`, remembered for a minute unless `refresh`.
     GitHub::Auth githubAuth(bool refresh = false);
     QString connectGitHub();
-    std::vector<History::Entry> history();
+    std::vector<History::Entry> history(const QString &folder = QString());
     // Brings back that commit's files as a new commit, pushed; Deploy is offered next.
-    QString restoreVersion(const QString &sha);
+    QString restoreVersion(const QString &sha, const QString &folder = QString());
 
     // The Live panel: Deploy first; Review changes shows the diffs only when asked.
-    void showLivePanel(bool changes = false);
-    void showHistoryPanel();
+    // A Browser View names its `folder`; the panels keep to it until both are closed.
+    void showLivePanel(bool changes = false, const QString &folder = QString());
+    void showHistoryPanel(const QString &folder = QString());
     // Details: the last deploy's log.
     QString showDeployLog();
     FloatingPanel &reviewPanel() { return m_reviewPanel; }
@@ -341,6 +349,9 @@ private:
     std::vector<WriteBack::Review> m_reviews;
     // The project last opened in Live, which Deploy, Save and History keep acting on after Live stops.
     QString m_lastProject;
+    // The project a Browser View opened the Live and History panels for; kept apart from m_lastProject, which is the island's.
+    QString m_panelProject;
+    void followFrame(const QString &folder);
     std::map<QString, AgentWork> m_liveJobs;
     // Build Its by request id, and when each frame's last one finished.
     struct Build {

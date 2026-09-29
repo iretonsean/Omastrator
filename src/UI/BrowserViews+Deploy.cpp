@@ -149,12 +149,10 @@ void BrowserViews::runProjectAction(const QUuid &frame, Action action)
     const bool mine = !state.folder.isEmpty() && canonical(state.folder) == project;
     switch (action) {
     case Action::reviewChanges:
-        m_agent->useProject(project);
-        m_agent->showLivePanel(true);
+        m_agent->showLivePanel(true, project);
         return;
     case Action::history:
-        m_agent->useProject(project);
-        m_agent->showHistoryPanel();
+        m_agent->showHistoryPanel(project);
         return;
     case Action::deployButton:
         if (mine && state.running)
@@ -171,14 +169,15 @@ void BrowserViews::runProjectAction(const QUuid &frame, Action action)
     case Action::deploy: {
         AgentBridge::DeployRequest request;
         request.folder = project;
+        request.fromFrame = true;
         bool needsAnswer = false;
         fail(m_agent->liveDeploy(request, &needsAnswer));
         if (needsAnswer)
-            AgentSheets::deploy(*m_agent, window, project, true);
+            AgentSheets::deploy(*m_agent, window, project, true, true);
         return;
     }
     case Action::save:
-        fail(m_agent->liveSave(project));
+        fail(m_agent->liveSave(project, true));
         return;
     default:
         return;

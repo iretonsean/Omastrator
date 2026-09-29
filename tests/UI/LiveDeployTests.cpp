@@ -291,7 +291,7 @@ private slots:
         ProjectWorkspaceView window(workspace);
         AgentBridge &bridge = *window.agent();
         QVERIFY(bridge.startServer().isEmpty());
-        bridge.useProject(site);
+        bridge.rememberProject(site);
         LiveFrames::hold(site, {headline(QStringLiteral("Goodbye"))});
 
         // No folder is the island's call: the Live window has no edits here, so nothing is written, as before frames had Live.
@@ -307,6 +307,48 @@ private slots:
         QVERIFY(finished(bridge));
         QVERIFY(read(site + "/index.html").contains("Goodbye"));
         QVERIFY(LiveFrames::held(site).empty());
+    }
+
+    void aFramesDeployIsNotTheIslandsAndLeavesItsProjectAlone()
+    {
+        const QString remembered = repository(true, QStringLiteral("true"));
+        const QString other = repository(true, QStringLiteral("echo nope; exit 4"));
+        Deploy::saveSettings(other, {true, false});
+        const QUrl url(QStringLiteral("http://127.0.0.2:18/index.html"));
+        QVERIFY(ProjectRegistry::remember(url, other).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {url});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+        bridge.rememberProject(remembered);
+        const QString island = bridge.deployProject();
+        QCOMPARE(island, QFileInfo(remembered).canonicalFilePath());
+
+        // The frame is selected and idle Live has no project: the island's is still the one it remembered.
+        views->act(frames[0], BrowserViewHost::Action::deploy);
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("failed"));
+        QVERIFY(session.isSelected(frames[0]));
+        QCOMPARE(bridge.deployProject(), island);
+
+        // The frame's bar shows the failure; the status stream and the island don't.
+        QVERIFY(views->bar(frames[0]).deployFailed);
+        const QJsonObject live = bridge.tools().status()["live"].toObject();
+        QCOMPARE(live["deployProject"].toString(), island);
+        QCOMPARE(live["deploy"].toObject()["stage"].toString(), QStringLiteral("idle"));
+        QVERIFY(!live["deploy"].toObject()["failed"].toBool());
+
+        // The island's own deploy of its project does show.
+        AgentBridge::DeployRequest request;
+        request.deploy = false;
+        QVERIFY(bridge.liveDeploy(request).isEmpty());
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.tools().status()["live"].toObject()["deploy"].toObject()["stage"].toString(), QStringLiteral("done"));
     }
 
     void saveFromAFrameCommitsAndPushesWithoutDeploying()
@@ -364,11 +406,12 @@ private slots:
 
         // Review Changes and History are about the frame that was asked.
         views->act(frames[1], BrowserViewHost::Action::reviewChanges);
-        QCOMPARE(bridge.deployProject(), second);
+        QCOMPARE(bridge.panelProject(), second);
         QVERIFY(session.isSelected(frames[1]));
         QVERIFY(bridge.reviewPanel().isVisible());
         views->act(frames[0], BrowserViewHost::Action::history);
-        QCOMPARE(bridge.deployProject(), first);
+        QCOMPARE(bridge.panelProject(), first);
+        QVERIFY(bridge.deployProject().isEmpty());
         QVERIFY(bridge.historyPanel().isVisible());
     }
 

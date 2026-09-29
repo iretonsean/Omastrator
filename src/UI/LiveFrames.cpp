@@ -1,6 +1,7 @@
 #include "UI/LiveFrames.h"
 #include "Document/EditorSession.h"
 #include "UI/BrowserViews.h"
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <map>
 
@@ -79,14 +80,16 @@ QString LiveFrames::start(const QUuid &frame, const QString &folder)
     connect(session, &LiveSession::changed, session, report);
     connect(session, &LiveSession::geometryChanged, session, report);
     // Edits left behind by a frame that browsed to another project are the owner's to hold, in the order they happened.
-    connect(session, &LiveSession::editsLeft, session, [owner = QPointer<LiveFrames>(this)](const QString &project, const std::vector<LiveEdit> &edits) {
-        if (owner)
-            QMetaObject::invokeMethod(owner.data(), [project, edits] { hold(project, edits); }, Qt::QueuedConnection);
+    connect(session, &LiveSession::editsLeft, session, [](const QString &project, const std::vector<LiveEdit> &edits) {
+        // qApp, not this: hold is static, and a document that closed meanwhile must not drop them.
+        QMetaObject::invokeMethod(qApp, [project, edits] { hold(project, edits); }, Qt::QueuedConnection);
     });
 
     LiveSession::Target target;
     target.frame = key;
     target.pool = pool;
+    // The site the folder is for: the address the frame was opened on.
+    target.url = object->browser->url;
     target.folder = folder.isEmpty() ? QString() : canonical(folder);
     pool->run([session = QPointer<LiveSession>(session), target] {
         if (session)
