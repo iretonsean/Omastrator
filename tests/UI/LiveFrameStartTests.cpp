@@ -120,6 +120,19 @@ private:
         return answer->load() ? *text : QString();
     }
 
+    // Runs `expression` in the frame's tab from the pool, whether or not Live is on it.
+    void inTab(EditorSession &session, const QUuid &frame, const QString &expression)
+    {
+        const QUuid key = BrowserViews::of(session)->poolKey(frame);
+        QVERIFY(!key.isNull());
+        auto answered = std::make_shared<std::atomic<int>>(0);
+        BrowserViews::pool()->call(key, QStringLiteral("Runtime.evaluate"), {{"expression", expression}},
+                                   [answered](const QJsonObject &, const QString &) { answered->store(1); });
+        for (int i = 0; i < 200 && !answered->load(); ++i)
+            QTest::qWait(25);
+        QVERIFY(answered->load());
+    }
+
 private slots:
     void initTestCase()
     {
@@ -182,6 +195,44 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("production"), patience);
         QVERIFY(!host->bar(hosted.frame).dev);
         QCOMPARE(session.document()->find(hosted.frame)->browser->url, production.url());
+    }
+
+    void navigationsOnTheDevServerAreWrittenBackAsProductionAddresses()
+    {
+        NEEDS_CHROMIUM;
+        Production production;
+        QVERIFY(production.listen());
+        const QString folder = project();
+        write(folder + QStringLiteral("/second.html"), pageSaying("second"));
+        QVERIFY(ProjectRegistry::remember(production.url(), folder).isEmpty());
+
+        EditorSession session;
+        Hosted hosted(session, production.url());
+        BrowserViewHost *host = BrowserViews::of(session);
+        LiveFrames *frames = LiveFrames::of(session);
+        QTRY_VERIFY_WITH_TIMEOUT(!BrowserViews::of(session)->poolKey(hosted.frame).isNull(), patience);
+        QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("production"), patience);
+        QVERIFY2(host->beginEditPage(hosted.frame).isEmpty(), "Edit Page must start");
+        QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("dev"), patience);
+        const QUrl dev = frames->snapshot(hosted.frame).serverUrl;
+        QVERIFY(!dev.isEmpty());
+
+        // A navigation on the dev server (a link, a route change) is the production page as far as the document goes.
+        inTab(session, hosted.frame, QStringLiteral("location.href = '/second.html'"));
+        QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("second"), patience);
+        const QUrl saved = session.document()->find(hosted.frame)->browser->url;
+        QCOMPARE(saved.host(), production.url().host());
+        QCOMPARE(saved.port(), production.url().port());
+        QCOMPARE(saved.path(), QStringLiteral("/second.html"));
+
+        // Stopping while the tab is still on the server's page never lets the server's address into the document.
+        frames->stop(hosted.frame);
+        QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("production"), patience);
+        const QUrl after = session.document()->find(hosted.frame)->browser->url;
+        QCOMPARE(after.host(), production.url().host());
+        QCOMPARE(after.port(), production.url().port());
+        QCOMPARE(after.path(), QStringLiteral("/second.html"));
+        QVERIFY(after.port() != dev.port());
     }
 
     void everyWayALiveEndsLetsItsDevServerGo()

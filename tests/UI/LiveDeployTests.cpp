@@ -171,6 +171,16 @@ private:
     QString prompt() { return QString::fromUtf8(read(m_directory.filePath(QStringLiteral("prompt")))); }
 
 private slots:
+    void init()
+    {
+        BrowserPool::Options options;
+        options.profile = m_directory.filePath(QStringLiteral("profile"));
+        options.cache = Browser::Cache::minimal;
+        BrowserViews::setPoolOptions(options);
+    }
+
+    void cleanup() { BrowserViews::shutdownPool(); }
+
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);

@@ -118,12 +118,14 @@ private:
         QVERIFY(loaded);
     }
 
-    void editOpacity(EditorSession &session, const QUuid &frame, const QString &value)
+    void editOpacity(EditorSession &session, const QUuid &frame, const QString &value) { editTitle(session, frame, QStringLiteral("opacity"), value); }
+
+    void editTitle(EditorSession &session, const QUuid &frame, const QString &property, const QString &value)
     {
         LiveFrames *frames = LiveFrames::of(session);
         const size_t before = frames->snapshot(frame).edits.size();
         QString failure = QStringLiteral("pending");
-        frames->edit(frame, QStringLiteral("#title"), QStringLiteral("opacity"), value, [&](const QString &error) { failure = error; });
+        frames->edit(frame, QStringLiteral("#title"), property, value, [&](const QString &error) { failure = error; });
         QTRY_VERIFY_WITH_TIMEOUT(failure != QLatin1String("pending"), patience);
         QVERIFY2(failure.isEmpty(), qPrintable(failure));
         QTRY_VERIFY_WITH_TIMEOUT(frames->snapshot(frame).edits.size() > before, 10'000);
@@ -169,6 +171,8 @@ private slots:
     void cleanup()
     {
         LiveFrames::clearPending(QString());
+        BrowserViews::setLiveOpen(false);
+        BrowserViews::setPausedCloseMs(5 * 60 * 1000);
         BrowserViews::shutdownPool();
     }
 
@@ -251,6 +255,61 @@ private slots:
         QCOMPARE(LiveFrames::held(served->folder).size(), size_t(1));
         QCOMPARE(LiveFrames::pendingEdits(served->folder).size(), size_t(1));
         QVERIFY(!LiveFrames::projectInUse(served->folder));
+    }
+
+    void aPausedFramesLiveWaitsForItsTabAndAttachesAgainWithTheEditsBack()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        BrowserViews::setPausedCloseMs(200);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        startLive(session, hosted.frame, served->folder);
+        editOpacity(session, hosted.frame, QStringLiteral("0.3"));
+        BrowserViews *views = BrowserViews::of(session);
+        LiveFrames *frames = LiveFrames::of(session);
+
+        // Off screen the frame pauses, and a while later its tab closes: Live waits, keeping what was edited.
+        session.zoomToRect(QRectF(5000, 5000, 400, 300));
+        QTRY_COMPARE_WITH_TIMEOUT(views->state(hosted.frame), BrowserViews::State::paused, patience);
+        QTRY_COMPARE_WITH_TIMEOUT(views->state(hosted.frame), BrowserViews::State::closed, patience);
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::starting, patience);
+        QVERIFY(frames->active(hosted.frame));
+        QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(1));
+
+        session.zoomToRect(QRectF(0, 0, 1000, 800));
+        QTRY_COMPARE_WITH_TIMEOUT(views->state(hosted.frame), BrowserViews::State::live, patience);
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::running, patience);
+        QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(1));
+        // The overlay is back on the reopened page, so a new edit works.
+        editTitle(session, hosted.frame, QStringLiteral("color"), QStringLiteral("#e11d48"));
+        QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(2));
+    }
+
+    void theLiveWindowTakingTheProfileMakesFramesWaitAndTheyAttachWhenItCloses()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        startLive(session, hosted.frame, served->folder);
+        editOpacity(session, hosted.frame, QStringLiteral("0.3"));
+        BrowserViews *views = BrowserViews::of(session);
+        LiveFrames *frames = LiveFrames::of(session);
+
+        BrowserViews::setLiveOpen(true);
+        QTRY_COMPARE_WITH_TIMEOUT(views->state(hosted.frame), BrowserViews::State::liveOpen, patience);
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::starting, patience);
+        QVERIFY(frames->active(hosted.frame));
+        QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(1));
+
+        BrowserViews::setLiveOpen(false);
+        QTRY_COMPARE_WITH_TIMEOUT(views->state(hosted.frame), BrowserViews::State::live, patience);
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::running, patience);
+        QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(1));
+        editTitle(session, hosted.frame, QStringLiteral("color"), QStringLiteral("#e11d48"));
     }
 
     void resetAndDeletingTheFrameStopEverySession()
