@@ -40,6 +40,13 @@ public:
             QFile::remove(m_path + QStringLiteral(".faildispatch"));
     }
     void clearLog() const { QFile::remove(m_path + QStringLiteral(".log")); }
+    // Records something that isn't a call (a window unmapping) in order with the calls; lines start with `#`.
+    void note(const QString &line) const
+    {
+        QFile file(m_path + QStringLiteral(".log"));
+        if (file.open(QIODevice::Append))
+            file.write(QStringLiteral("# %1\n").arg(line).toUtf8());
+    }
     QStringList log() const
     {
         QFile file(m_path + QStringLiteral(".log"));
@@ -52,7 +59,7 @@ public:
     {
         QStringList result;
         for (const QString &line : log()) {
-            if (!line.startsWith(QLatin1String("-j ")))
+            if (!line.startsWith(QLatin1String("-j ")) && !line.startsWith(QLatin1Char('#')))
                 result << line;
         }
         return result;

@@ -145,8 +145,9 @@ void PageWorkspaces::place()
     }
     ours.insert(m_editorAddress);
     const Hyprland::Window *editor = find(m_editorAddress);
-    // Where the editor stands before it is first moved is where it goes back to; not a workspace of ours.
-    if (editor && m_editorReturnName.isEmpty() && !m_claims.empty() && !editor->workspaceName.startsWith(QLatin1String("design:"))) {
+    // Where the editor stands before it is first moved is where it goes back to; not a workspace of ours, nor a hidden one (the Desk).
+    if (editor && m_editorReturnName.isEmpty() && !m_claims.empty() && !editor->workspaceName.startsWith(QLatin1String("design:"))
+        && !editor->workspaceName.startsWith(QLatin1String("special:"))) {
         m_editorReturnName = editor->workspaceName;
         m_editorReturnId = editor->workspace;
     }
@@ -226,10 +227,6 @@ void PageWorkspaces::place()
             m_wantsStandIns = true;
         }
     }
-    for (int i = 0; i < int(pool.size()); ++i) {
-        if (!taken[size_t(i)])
-            dropStandIn(pool[size_t(i)]);
-    }
     for (StandIn &standIn : m_standIns) {
         if (standIn.workspace.isEmpty() || !standIn.widget)
             continue;
@@ -297,6 +294,11 @@ void PageWorkspaces::place()
     }
     // Following is for the switch that asked for it, never for a later one.
     m_followNext = false;
+    // Stand-ins nobody needs go only after the moves: one may be the last window on the workspace the editor is joining.
+    for (int i = 0; i < int(pool.size()); ++i) {
+        if (!taken[size_t(i)])
+            dropStandIn(pool[size_t(i)]);
+    }
     if (refused) {
         stopAfterRefusedMove();
         return;

@@ -49,6 +49,14 @@ public:
         prune();
         publish();
     }
+    // A window put on a special workspace (the Desk puts the editor on `special:omastrator-desk`).
+    void stash(const QString &address, const QString &special)
+    {
+        if (Window *w = window(address))
+            w->workspace = resolve(QStringLiteral("special:") + special);
+        prune();
+        publish();
+    }
     // The editor: mapped on the focused workspace like any window.
     QString addEditor(QWidget &editor) { return add(QCoreApplication::applicationPid(), titleOf(&editor), &editor); }
     // Someone else's window, mapped straight onto `workspace` (the user put it there).
@@ -125,7 +133,17 @@ public:
         static const QRegularExpression move(QStringLiteral("^dispatch movetoworkspace(silent)? (.*),address:(0x\\w+)$"));
         static const QRegularExpression focus(QStringLiteral("^dispatch workspace (.*)$"));
         static const QRegularExpression focusWindow(QStringLiteral("^dispatch focuswindow address:(0x\\w+)$"));
-        for (const QString &line : m_hyprctl.dispatches()) {
+        static const QRegularExpression unmap(QStringLiteral("^# unmap (0x\\w+)$"));
+        for (const QString &line : m_hyprctl.log()) {
+            if (line.startsWith(QLatin1String("-j ")))
+                continue;
+            // A widget deleted between two dispatches unmaps there, and an emptied workspace goes at once.
+            if (const auto u = unmap.match(line); u.hasMatch()) {
+                m_windows.erase(std::remove_if(m_windows.begin(), m_windows.end(), [&](const Window &w) { return w.address == u.captured(1); }),
+                                m_windows.end());
+                prune();
+                continue;
+            }
             m_history << line;
             if (const auto m = move.match(line); m.hasMatch()) {
                 Window *w = window(m.captured(3));
@@ -255,11 +273,15 @@ private:
     {
         const QString address = QStringLiteral("0x%1").arg(0xa00 + m_next++, 0, 16);
         m_windows.append({address, pid, title, m_active, owner, title});
+        if (owner)
+            QObject::connect(owner, &QObject::destroyed, &m_alive, [hyprctl = &m_hyprctl, address] { hyprctl->note(QStringLiteral("unmap ") + address); });
         m_focused = address;
         publish();
         return address;
     }
     FakeHyprctl &m_hyprctl;
+    // Unmap notes stop when the world goes, whatever outlives it.
+    QObject m_alive;
     QString m_active;
     QString m_focused;
     QList<Window> m_windows;

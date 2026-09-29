@@ -80,6 +80,7 @@ private slots:
     void theUsersWindowsGoBackToTheReturnWorkspace();
     void aNumberedReturnWorkspaceComesBackByNumberEvenAfterItWasDeleted();
     void theEditorGoesBackToItsOwnWorkspaceAndTheUsersWindowsToTheFocusedOne();
+    void theEditorNeverGoesBackToAHiddenWorkspace();
     void saveAsRenamesAndSameNamesGetSuffixes();
     void aPercentSignInANameIsNotAPlaceholder();
     void longNamesThatClashGetSuffixesAndForeignOnesToo();
@@ -358,6 +359,21 @@ void PageWorkspacesTests::theEditorGoesBackToItsOwnWorkspaceAndTheUsersWindowsTo
     QCOMPARE(rig.world.workspaceOf(dragged), QStringLiteral("2"));
 }
 
+void PageWorkspacesTests::theEditorNeverGoesBackToAHiddenWorkspace()
+{
+    Rig rig;
+    // The Desk had the editor on its special workspace when the claims started; hidden is no place to come back to.
+    rig.world.go(QStringLiteral("2"));
+    rig.world.stash(rig.editor(), QStringLiteral("omastrator-desk"));
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    QVERIFY(rig.editorWorkspace().startsWith(QLatin1String("design:")));
+    rig.toggle();
+    rig.world.settle();
+    QCOMPARE(rig.editorWorkspace(), QStringLiteral("2"));
+}
+
 void PageWorkspacesTests::saveAsRenamesAndSameNamesGetSuffixes()
 {
     Rig rig;
@@ -433,10 +449,19 @@ void PageWorkspacesTests::closingTheDocumentGivesItsWorkspacesBack()
     QCOMPARE(rig.pages().claimedNames().size(), 2);
     QCOMPARE(rig.pages().standInCount(), 3);
     QCOMPARE(rig.editorWorkspace(), QStringLiteral("1"));
+    QHash<QString, int> ids;
+    for (const QString &name : rig.pages().claimedNames())
+        ids[name] = rig.world.idOf(name);
+    rig.world.clearDeleted();
     rig.workspace.select(rig.workspace.tabs().front()->id);
     rig.world.settle();
     QCOMPARE(rig.pages().claimedNames().size(), 2);
     QCOMPARE(rig.pages().standInCount(), 2);
+    // The page's own stand-in goes only once the editor is there, so its workspace keeps its id.
+    for (const QString &name : rig.pages().claimedNames())
+        QCOMPARE(rig.world.idOf(name), ids.value(name));
+    for (const QString &name : rig.world.deleted())
+        QVERIFY2(!name.startsWith(QLatin1String("design:")), qPrintable(name));
     rig.workspace.close(rig.workspace.tabs().front()->id);
     QTRY_COMPARE(rig.workspace.tabs().size(), size_t(1));
     rig.world.settle();

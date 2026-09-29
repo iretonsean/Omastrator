@@ -281,7 +281,15 @@ top of `tests/Agent/FakeHyprctl.h`. Decisions made while building:
   events cause no loop. Moves are ordered so a named workspace is never
   emptied (Hyprland deletes an empty, unfocused workspace): a swap goes
   through the spare, so every workspace keeps its id. A brand-new page's
-  workspace is the only one made from nothing.
+  workspace is the only one made from nothing. Stand-ins nobody needs are
+  deleted only after the moves, since one may be the last window on the
+  workspace the editor is joining (another document's page, or the page
+  after a deleted one). A switch made in the ~100 ms before a new spare has
+  mapped still takes the old path and can renew one id.
+- **The spare is a real window.** Window lists that show every client
+  (switchers, design mode's surface list) show it as "Spare — Omastrator".
+  Stand-ins still map tiled beside the editor, holding the keyboard for
+  roughly 50–100 ms, until they're placed; turning the feature on makes two.
 - **Stand-ins are made only while an Omastrator window is active.** A new
   window maps on the focused workspace and takes focus, so one made while
   the user is in another app would land on their workspace. Without focus
@@ -289,7 +297,8 @@ top of `tests/Agent/FakeHyprctl.h`. Decisions made while building:
   becomes active.
 - **The return workspace is kept as id and name.** A numbered one is
   selected by number (`name:1` makes a new workspace named "1" when 1 is
-  gone). The editor goes back to the workspace it was on, the user's
+  gone). The editor goes back to the workspace it was on (never a special
+  one, such as the Desk's; then it goes to the focused one), the user's
   dragged-in windows to the one that was focused. Old `workspaces.json`
   files, with no id, still load.
 - **Windows are recognised** by the address we last saw, then for a
