@@ -303,6 +303,10 @@ with the program". This is what it did, and what it does now.
   Workspaces off (WORKSPACES.md): `omastrator reset` returns them from the
   claims file even with no app running. A page's stand-in is never the bar's
   home; with one focused, the home is the editor.
+- **Reset closes the Browser Views' tabs.** `design reset` (the app's side of
+  `omastrator reset`) pauses every Browser View frame with "Paused by reset.
+  Click to resume." and stops the browser behind them; a click on a frame
+  starts it again. One left by a crash is ended by the CLI (BROWSER-VIEW.md).
 - Desktop changes are noticed while the pointer rests, because the home
   window can move or leave without the pointer doing anything
   (`DesignMode::watchDesktop`, every 500 ms at most).
