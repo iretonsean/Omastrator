@@ -52,8 +52,10 @@ PageWorkspaces::PageWorkspaces(ProjectWorkspace &workspace, QWidget &editor) : Q
     connect(&m_events, &HyprlandEvents::closed, this, &PageWorkspaces::hyprlandLeft);
     connect(&m_events, &HyprlandEvents::event, this, [this](const HyprlandEvents::Event &event) {
         using Kind = HyprlandEvents::Event::Kind;
-        if (event.kind == Kind::openWindow || event.kind == Kind::closeWindow || event.kind == Kind::moveWindow)
-            placeSoon();
+        if (event.kind == Kind::openWindow || event.kind == Kind::closeWindow || event.kind == Kind::moveWindow) {
+            if (concernsUs(event))
+                placeSoon();
+        }
         else if (event.kind == Kind::workspace)
             workspaceEntered(event.workspaceName);
     });

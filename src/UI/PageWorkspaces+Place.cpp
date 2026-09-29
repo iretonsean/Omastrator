@@ -24,6 +24,21 @@ void PageWorkspaces::placeSoon()
         m_placeTimer.start();
 }
 
+// Someone else's windows opening, closing and moving change nothing for us; ours, and a stand-in still to be found, do.
+bool PageWorkspaces::concernsUs(const HyprlandEvents::Event &event) const
+{
+    if (event.address == m_editorAddress)
+        return true;
+    for (const StandIn &standIn : m_standIns) {
+        if (standIn.address == event.address)
+            return true;
+    }
+    if (event.kind == HyprlandEvents::Event::Kind::openWindow)
+        return event.title.startsWith(standInPrefix) || m_editorAddress.isEmpty();
+    // A window moved onto a workspace we claim may be someone's, to be left alone or given back later.
+    return event.kind == HyprlandEvents::Event::Kind::moveWindow && std::any_of(m_claims.begin(), m_claims.end(), [&](const Claim &c) { return c.name == event.workspaceName; });
+}
+
 void PageWorkspaces::createStandIn(const QString &workspace)
 {
     auto *widget = new PageStandIn(m_nextStandIn++);

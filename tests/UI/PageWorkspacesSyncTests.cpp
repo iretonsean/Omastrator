@@ -65,6 +65,7 @@ private slots:
     void aClosedStandInStaysClosedUntilTheUserNavigatesThere();
     void theEditorIsFocusedOnlyWithFocusAndOnlyWhereTheyStillAre();
     void aBackgroundTabIsSelectedFromItsWorkspace();
+    void otherWindowsEventsDoNotTriggerPlacement();
 
 private:
     // The stream's end that Hyprland writes to; waits for the app to connect.
@@ -78,6 +79,12 @@ private:
             m_stream = m_server.nextPendingConnection();
         }
         return m_stream;
+    }
+    void heardLine(const QString &line)
+    {
+        QVERIFY(stream());
+        m_stream->write((line + QLatin1Char('\n')).toUtf8());
+        m_stream->flush();
     }
     void heard(Rig &rig, const QString &workspace)
     {
@@ -178,6 +185,28 @@ void PageWorkspacesSyncTests::aNumberedWorkspaceDoesNothing()
     QCOMPARE(rig.session().currentPage(), rig.page(1));
     QVERIFY(rig.world.history().isEmpty());
     QCOMPARE(rig.world.active(), QStringLiteral("3"));
+}
+
+void PageWorkspacesSyncTests::otherWindowsEventsDoNotTriggerPlacement()
+{
+    Rig rig;
+    rig.session().addPage();
+    rig.world.settle();
+    const QString stand = rig.world.stand(rig.name(0)).mid(2);
+    auto lookedAtClients = [&](const QString &line) {
+        rig.ctl.clearLog();
+        heardLine(line);
+        QTest::qWait(300);
+        return rig.ctl.log().contains(QStringLiteral("-j clients"));
+    };
+    // A browser opening, moving and closing, on a workspace we claim and off it.
+    QVERIFY(!lookedAtClients(QStringLiteral("openwindow>>beef1,3,firefox,Firefox")));
+    QVERIFY(!lookedAtClients(QStringLiteral("movewindowv2>>beef1,4,4")));
+    QVERIFY(!lookedAtClients(QStringLiteral("closewindow>>beef1")));
+    // Ours, and a window claiming to be a stand-in, are looked at; so is something moved onto one of our workspaces.
+    QVERIFY(lookedAtClients(QStringLiteral("closewindow>>") + stand));
+    QVERIFY(lookedAtClients(QStringLiteral("openwindow>>beef2,3,io.github.iretonsean.Omastrator,omastrator-standin-9")));
+    QVERIFY(lookedAtClients(QStringLiteral("movewindowv2>>beef3,-1337,") + rig.name(0)));
 }
 
 void PageWorkspacesSyncTests::ourOwnEchoDispatchesNothing()
