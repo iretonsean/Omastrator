@@ -1,9 +1,9 @@
 #include "Document/EditorSession.h"
 #include "IO/DocumentExporter.h"
+#include "IO/PdfImporter.h"
 #include "IO/SvgExporter.h"
 #include "IO/SvgImporter.h"
 #include "Rendering/VectorRenderer.h"
-#include <QFile>
 #include <QImage>
 #include <QTemporaryDir>
 #include <QTest>
@@ -48,13 +48,14 @@ struct Tally {
     int wrongSide = 0;
 };
 
-// Fully covered pixels of `image`, counted against which side of the glyphs they sit on.
+// Fully covered black pixels of `image` (a PDF page has a white background), counted against which side of the glyphs they sit on.
 Tally tally(const QImage &image, const QPainterPath &glyphs, double scale, bool expectInside)
 {
     Tally out;
     for (int y = 0; y < image.height(); ++y)
         for (int x = 0; x < image.width(); ++x) {
-            if (qAlpha(image.pixel(x, y)) < 255)
+            const QRgb pixel = image.pixel(x, y);
+            if (qAlpha(pixel) < 255 || qGray(pixel) > 4)
                 continue;
             ++out.painted;
             const bool inside = glyphs.contains(QPointF((x + 0.5) / scale, (y + 0.5) / scale));
@@ -88,7 +89,6 @@ private:
     static QImage viaSvg(const VectorDocument &document)
     {
         const QByteArray svg = SvgExporter::serialize(document);
-        qWarning("TAIL %s", svg.right(700).constData());
         const VectorDocument back = SvgImporter::parse(svg);
         return VectorRenderer::render(back, 1, true).convertToFormat(QImage::Format_ARGB32);
     }
@@ -161,18 +161,30 @@ private slots:
         QCOMPARE(qAlpha(clear.pixel(int(x - strokeWidth * 0.5), int(middle.y()))), 0);
     }
 
-    void pdfDrawsBothAlignmentsAndTheyDiffer()
+    void pdfReadBackStaysOnItsSideOfPointAndAreaType_data()
     {
+        QTest::addColumn<bool>("area");
+        QTest::addColumn<bool>("inside");
+        QTest::newRow("point inside") << false << true;
+        QTest::newRow("point outside") << false << false;
+        QTest::newRow("area inside") << true << true;
+        QTest::newRow("area outside") << true << false;
+    }
+
+    void pdfReadBackStaysOnItsSideOfPointAndAreaType()
+    {
+        QFETCH(bool, area);
+        QFETCH(bool, inside);
+        const StrokeAlignment alignment = inside ? StrokeAlignment::inside : StrokeAlignment::outside;
+        const QString words = QStringLiteral("HOe");
         QTemporaryDir dir;
-        const QString insidePath = dir.filePath(QStringLiteral("inside.pdf"));
-        const QString outsidePath = dir.filePath(QStringLiteral("outside.pdf"));
-        DocumentExporter::writePdf(typeDocument(QStringLiteral("HOe"), StrokeAlignment::inside, false), insidePath);
-        DocumentExporter::writePdf(typeDocument(QStringLiteral("HOe"), StrokeAlignment::outside, false), outsidePath);
-        QFile a(insidePath), b(outsidePath);
-        QVERIFY(a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly));
-        const QByteArray inside = a.readAll(), outside = b.readAll();
-        QVERIFY(inside.startsWith("%PDF") && outside.startsWith("%PDF"));
-        QVERIFY(inside != outside);
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("out.pdf"));
+        DocumentExporter::writePdf(typeDocument(words, alignment, area), path);
+        // The artboard keeps its size in points, so scale 1 lines up with the glyphs.
+        const VectorDocument back = PdfImporter::read(path);
+        const QImage image = VectorRenderer::render(back, 1, true).convertToFormat(QImage::Format_ARGB32);
+        checkSides(image, glyphsOf(words, area), 1, alignment, "pdf");
     }
 };
 
