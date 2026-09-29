@@ -56,6 +56,9 @@ private:
     // Outside the HOME that tests snapshot: the state folder (backups) and the fake hyprctl's answer.
     QTemporaryDir m_state;
     QTemporaryDir m_fake;
+    // Every XDG folder the child processes could inherit from the builder's shell.
+    QTemporaryDir m_data;
+    QTemporaryDir m_cache;
 
     QString backupsFolder() const { return m_state.filePath(QStringLiteral("omastrator/setup-backups")); }
     QStringList backupNames() const { return QDir(backupsFolder()).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name); }
@@ -64,6 +67,38 @@ private:
     static QJsonObject bind(int modmask, const QString &key, const QString &submap = QString(), const QString &description = QString())
     {
         return {{"modmask", modmask}, {"key", key}, {"submap", submap}, {"description", description}, {"dispatcher", "exec"}, {"arg", "true"}, {"mouse", false}};
+    }
+
+    // The binds Lua Hyprland reports for a generated key file: all "__lua" with a numeric arg, so only a description says who wrote one.
+    static QJsonArray luaBinds(const QByteArray &lua, bool releaseWithoutDescription = false)
+    {
+        static const QMap<QString, int> mods = {{QStringLiteral("SUPER"), 64}, {QStringLiteral("CTRL"), 4}, {QStringLiteral("ALT"), 8}, {QStringLiteral("SHIFT"), 1}};
+        QJsonArray binds;
+        QString statement;
+        int number = 80;
+        for (const QString &line : QString::fromUtf8(lua).split(QLatin1Char('\n'))) {
+            if (statement.isEmpty() && !line.startsWith(QLatin1String("bind(\"")))
+                continue;
+            statement += line + QLatin1Char('\n');
+            if (!line.trimmed().endsWith(QLatin1String("})")))
+                continue;
+            const QStringList combo = statement.mid(6, statement.indexOf(QLatin1Char('"'), 6) - 6).split(QStringLiteral(" + "));
+            const auto description = QRegularExpression(QStringLiteral("description = \"([^\"]*)\"")).match(statement);
+            const bool release = statement.contains(QLatin1String("release = true"));
+            int modmask = 0;
+            for (qsizetype at = 0; at + 1 < combo.size(); ++at)
+                modmask |= mods.value(combo[at]);
+            binds.append(QJsonObject{{"modmask", modmask},
+                                     {"key", combo.last()},
+                                     {"submap", ""},
+                                     {"description", release && releaseWithoutDescription ? QString() : description.captured(1)},
+                                     {"dispatcher", "__lua"},
+                                     {"arg", QString::number(number++)},
+                                     {"release", release},
+                                     {"mouse", false}});
+            statement.clear();
+        }
+        return binds;
     }
 
     QString config(const QString &relative) const { return m_home.filePath(QStringLiteral(".config/") + relative); }
@@ -83,14 +118,25 @@ private:
 private slots:
     void initTestCase()
     {
-        QVERIFY(m_home.isValid() && m_state.isValid() && m_fake.isValid());
+        QVERIFY(m_home.isValid() && m_state.isValid() && m_fake.isValid() && m_data.isValid() && m_cache.isValid());
+        // First, before anything can run: a child (jq, Hyprland --verify-config) reads only these.
         qputenv("HOME", m_home.path().toUtf8());
+        qputenv("XDG_CONFIG_HOME", config(QString()).toUtf8());
         qputenv("XDG_STATE_HOME", m_state.path().toUtf8());
+        qputenv("XDG_DATA_HOME", m_data.path().toUtf8());
+        qputenv("XDG_CACHE_HOME", m_cache.path().toUtf8());
         qunsetenv("HYPRLAND_INSTANCE_SIGNATURE");
-        write(m_fake.filePath(QStringLiteral("hyprctl")), "#!/bin/sh\ncat \"$(dirname \"$0\")/binds.json\"\n");
+        // `hyprctl -j binds` answers binds.json; `hyprctl reload` is logged and swaps in after-reload.json when there is one (a config that broke the binds).
+        write(m_fake.filePath(QStringLiteral("hyprctl")),
+              "#!/bin/sh\nd=\"$(dirname \"$0\")\"\n"
+              "if [ \"$1\" = reload ]; then\n"
+              "  echo reload >> \"$d/calls.log\"\n"
+              "  [ -f \"$d/after-reload.json\" ] && cp \"$d/after-reload.json\" \"$d/binds.json\"\n"
+              "  exit 0\n"
+              "fi\n"
+              "cat \"$d/binds.json\"\n");
         QFile::setPermissions(m_fake.filePath(QStringLiteral("hyprctl")), QFile::permissions(m_fake.filePath(QStringLiteral("hyprctl"))) | QFile::ExeOwner);
         qputenv("OMASTRATOR_HYPRCTL", m_fake.filePath(QStringLiteral("hyprctl")).toUtf8());
-        qputenv("XDG_CONFIG_HOME", config(QString()).toUtf8());
         qputenv("OMASTRATOR_SHELL_DIR", OMASTRATOR_SOURCE_DIR "/shell");
         qputenv("OMARCHY_PATH", m_home.filePath(QStringLiteral("omarchy")).toUtf8());
         // Nothing here may touch the running shell.
@@ -102,9 +148,12 @@ private slots:
     void init()
     {
         QDir(config(QString())).removeRecursively();
+        QDir(m_home.filePath(QStringLiteral("omarchy"))).removeRecursively();
         QDir(m_state.path()).removeRecursively();
         QDir().mkpath(m_state.path());
         liveBinds({});
+        QFile::remove(m_fake.filePath(QStringLiteral("after-reload.json")));
+        QFile::remove(m_fake.filePath(QStringLiteral("calls.log")));
         write(config(QStringLiteral("omarchy/shell.json")), userShellJson);
         write(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc")), userMenu);
         write(config(QStringLiteral("hypr/hyprland.lua")), userHypr);
@@ -186,9 +235,11 @@ private slots:
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island/Island.qml"))));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.ai/TrayLight.qml"))));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator-ui/Status.qml"))));
-        QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("hl.define_submap(\"omastrator-draw\""));
-        // The escape hatch is bound outside every submap.
-        QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("hl.bind(\"SUPER + ALT + Escape\", hl.dsp.exec_cmd(omastrator .. \" reset\")"));
+        QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("\nsubmap(\"omastrator-draw\""));
+        // The escape hatch is bound outside every submap and works inside them.
+        const QByteArray keyFile = read(config(QStringLiteral("omastrator/hyprland.lua")));
+        QVERIFY(keyFile.contains("bind(\"SUPER + ALT + Escape\", function()"));
+        QVERIFY(keyFile.contains("submap_universal = true"));
         // Labels are UTF-8 once, not read as Latin-1 and encoded again.
         QVERIFY(QString::fromUtf8(read(config(QStringLiteral("omastrator/hyprland.lua")))).contains(QStringLiteral("\"Open a page\u2026\"")));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/vocabulary.txt"))));
@@ -275,10 +326,10 @@ private slots:
     void designKeysAreFreeAndRemappable()
     {
         const QByteArray lua = Setup::hyprlandLua(QStringLiteral("omastrator"));
-        QVERIFY(lua.contains("hl.bind(\"SUPER + ALT + O\", function()"));
-        QVERIFY(lua.contains("hl.dispatch(hl.dsp.submap(\"omastrator-design\"))"));
-        QVERIFY(lua.contains("hl.bind(\"SUPER + ALT + W\", hl.dsp.exec_cmd(omastrator .. \" desk toggle\")"));
-        QVERIFY(lua.contains("hl.bind(\"Alt_L\", design(\"alt on\")"));
+        QVERIFY(lua.contains("bind(\"SUPER + ALT + O\", function()"));
+        QVERIFY(lua.contains("run(hl.dsp.submap(\"omastrator-design\"))"));
+        QVERIFY(lua.contains("bind(\"SUPER + ALT + W\", hl.dsp.exec_cmd(omastrator .. \" desk toggle\")"));
+        QVERIFY(lua.contains("bind(\"Alt_L\", design(\"alt on\")"));
         QVERIFY(lua.contains("omastrator .. \" --daemon\""));
         const QByteArray conf = Setup::hyprlandConf(QStringLiteral("omastrator"));
         QVERIFY(conf.contains("bindd = SUPER ALT, O, Omastrator: design mode, exec, omastrator design on\n"));
@@ -402,12 +453,12 @@ private slots:
         for (int day = 1; day <= 7; ++day)
             QVERIFY(Setup::writeBackup(environment, QStringLiteral("2026010%1-000000").arg(day), QStringLiteral("setup"), {file}, nullptr).isEmpty());
         QDir().mkpath(QDir(backupsFolder()).filePath(QStringLiteral("mine")));
-        Setup::pruneBackups(environment, QStringLiteral("20260101-000000"));
+        Setup::pruneBackups(environment, {QStringLiteral("20260101-000000")});
         // The newest five and the one just made; a folder that isn't a backup is left alone.
         QCOMPARE(backupNames(), (QStringList{QStringLiteral("20260101-000000"), QStringLiteral("20260103-000000"), QStringLiteral("20260104-000000"),
                                              QStringLiteral("20260105-000000"), QStringLiteral("20260106-000000"), QStringLiteral("20260107-000000"),
                                              QStringLiteral("mine")}));
-        Setup::pruneBackups(environment, QStringLiteral("20260107-000000"));
+        Setup::pruneBackups(environment, {QStringLiteral("20260107-000000")});
         QCOMPARE(backupNames().size(), 6);
         QVERIFY(!backupNames().contains(QStringLiteral("20260101-000000")));
     }
@@ -448,9 +499,54 @@ private slots:
         QCOMPARE(snapshot(m_home.path()), before);
 
         // Nothing left to do the second time.
-        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QCOMPARE(setup({QStringLiteral("--restore"), name, QStringLiteral("--yes")}, QString(), &out), 0);
         QVERIFY(out.contains(QLatin1String("nothing to restore")));
         QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    void restoreBacksUpWhatItReplaces()
+    {
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        const QString setupBackup = backupNames().first();
+        // A fix made by hand after setup: exactly what a restore used to lose.
+        const QString keysFile = config(QStringLiteral("omastrator/hyprland.lua"));
+        write(keysFile, read(keysFile) + "-- my own fix\n");
+        write(config(QStringLiteral("hypr/hyprland.lua")), userHypr + "-- and this\n");
+        const QStringList fixed = snapshot(m_home.path());
+
+        QCOMPARE(setup({QStringLiteral("--restore"), setupBackup, QStringLiteral("--yes")}, QString(), &out), 0);
+        QCOMPARE(backupNames().size(), 2);
+        const QString restoreBackup = backupNames().last();
+        QVERIFY2(out.contains(QLatin1String("Backed up the current files to ") + QDir(backupsFolder()).filePath(restoreBackup)), qPrintable(out));
+        const QJsonObject manifest = QJsonDocument::fromJson(read(QDir(backupsFolder()).filePath(restoreBackup + QStringLiteral("/manifest.json")))).object();
+        QCOMPARE(manifest["action"].toString(), QStringLiteral("restore"));
+        QCOMPARE(read(QDir(backupsFolder()).filePath(restoreBackup + QStringLiteral("/files") + config(QStringLiteral("hypr/hyprland.lua")))), userHypr + "-- and this\n");
+        QVERIFY(!QFileInfo::exists(keysFile));
+
+        // The newest backup is now the restore, so restoring again undoes it.
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QCOMPARE(snapshot(m_home.path()), fixed);
+        QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), userHypr + "-- and this\n");
+    }
+
+    void restoreChangesNothingWithoutItsBackup()
+    {
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        const QString folder = QDir(backupsFolder()).filePath(backupNames().first());
+        const QStringList installed = snapshot(m_home.path());
+        // The named backup is read by path; the state folder its new copy would go to can't be made.
+        write(m_home.filePath(QStringLiteral("blocker")), "x");
+        qputenv("XDG_STATE_HOME", m_home.filePath(QStringLiteral("blocker")).toUtf8());
+        const QStringList withBlocker = snapshot(m_home.path());
+        const int code = setup({QStringLiteral("--restore"), folder, QStringLiteral("--yes")}, QString(), &out);
+        QFile::remove(m_home.filePath(QStringLiteral("blocker")));
+        qputenv("XDG_STATE_HOME", m_state.path().toUtf8());
+        QCOMPARE(code, 1);
+        QVERIFY2(out.contains(QLatin1String("Nothing was changed")), qPrintable(out));
+        QCOMPARE(snapshot(m_home.path()), installed);
+        QCOMPARE(withBlocker.size(), installed.size() + 1);
     }
 
     void restoreWorksAfterAnInterruptedSetup()
@@ -493,10 +589,10 @@ private slots:
         QVERIFY2(out.contains(QLatin1String("Super+Alt+C is already yours: skipped")), qPrintable(out));
         QVERIFY(!out.contains(QLatin1String("Super+Alt+L is already yours")));
         const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
-        QVERIFY(!keys.contains("hl.bind(\"SUPER + ALT + C\""));
-        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + L\""));
-        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + D\""));
-        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + Escape\""));
+        QVERIFY(!keys.contains("bind(\"SUPER + ALT + C\""));
+        QVERIFY(keys.contains("bind(\"SUPER + ALT + L\""));
+        QVERIFY(keys.contains("bind(\"SUPER + ALT + D\""));
+        QVERIFY(keys.contains("bind(\"SUPER + ALT + Escape\""));
         // Recorded, so setup stays exact.
         const QJsonObject record = QJsonDocument::fromJson(read(config(QStringLiteral("omastrator/setup.json")))).object();
         QCOMPARE(record["skippedKeys"].toArray().first().toString(), QStringLiteral("Super+Alt+C"));
@@ -543,8 +639,89 @@ private slots:
         QCOMPARE(setup({QStringLiteral("--yes")}, QString(), &out), 0);
         QVERIFY2(out.contains(QLatin1String("Super+Alt+V is already yours: skipped")) && out.contains(QLatin1String("Super+Alt+C is already yours: skipped")), qPrintable(out));
         const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
-        QVERIFY(!keys.contains("hl.bind(\"SUPER + ALT + V\""));
-        QVERIFY(keys.contains("hl.bind(\"SUPER + ALT + A\""));
+        QVERIFY(!keys.contains("bind(\"SUPER + ALT + V\""));
+        QVERIFY(keys.contains("bind(\"SUPER + ALT + A\""));
+    }
+
+    void aRerunKeepsOurOwnKeysOnLuaHyprland()
+    {
+        // A release bind alone, with nothing of ours beside it, is someone else's.
+        liveBinds({QJsonObject{{"modmask", 72}, {"key", "V"}, {"submap", ""}, {"description", ""}, {"dispatcher", "__lua"}, {"arg", "81"}, {"release", true}, {"mouse", false}}});
+        QVERIFY(Setup::takenKeys(Setup::Environment::current()).contains(QStringLiteral("SUPER+ALT+V")));
+        liveBinds({});
+
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
+        QVERIFY(keys.contains("dictate (release)"));
+        const QStringList installed = snapshot(m_home.path());
+
+        // Hyprland now reports those keys back, in Lua's own style; setup must not mistake them for the user's.
+        for (const bool oldKeyFile : {false, true}) {
+            liveBinds(luaBinds(keys, oldKeyFile));
+            const QSet<QString> taken = Setup::takenKeys(Setup::Environment::current());
+            for (const QString &combo : Setup::omastratorKeys(Setup::DesignKeys::from(Setup::Environment::current())))
+                QVERIFY2(!taken.contains(combo), qPrintable(combo + (oldKeyFile ? QStringLiteral(" (release without a description)") : QString())));
+            QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+            QVERIFY2(out.contains(QLatin1String("Everything is already set up.")) && !out.contains(QLatin1String("already yours")), qPrintable(out));
+            QCOMPARE(snapshot(m_home.path()), installed);
+        }
+        QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("SUPER + ALT + V\", island(\"dictate start\")"));
+    }
+
+    void omarchyLuaBindsAreReadFromTheConfig()
+    {
+        write(config(QStringLiteral("hypr/bindings.lua")),
+              "o.bind(\"SUPER + ALT + C\", \"Mine\", \"true\")\n"
+              "  o.bind_toggle('SUPER + ALT + A', \"Toggle\", \"true\")\n"
+              "-- o.bind(\"SUPER + ALT + D\", \"Commented out\", \"true\")\n"
+              "hl.unbind(\"SUPER + ALT + L\")\n"
+              "o.unbind(\"SUPER + ALT + Escape\")\n"
+              "o.bind(\"SUPER + ALT + \" .. key, \"Computed\", \"true\")\n"
+              "function o.bind(keys, description, dispatcher, options)\n");
+        write(m_home.filePath(QStringLiteral("omarchy/default/hypr/bindings/utilities.lua")),
+              "o.bind(\"SUPER + CTRL + V\", \"Clipboard manager\", \"omarchy-shell shell toggle omarchy.clipboard\")\n"
+              "o.bind(\"SUPER + ALT + V\", \"An Omarchy default\", hl.dsp.window.close(), { locked = true })\n"
+              "hl.bind(\"SUPER + ALT + \" .. key, hl.dsp.focus({ workspace = 1 }))\n");
+        const QSet<QString> taken = Setup::takenKeys(Setup::Environment::current());
+        for (const char *combo : {"SUPER+ALT+C", "SUPER+ALT+A", "SUPER+ALT+V", "SUPER+CTRL+V"})
+            QVERIFY2(taken.contains(QLatin1String(combo)), combo);
+        for (const char *combo : {"SUPER+ALT+D", "SUPER+ALT+L", "SUPER+ALT+ESCAPE"})
+            QVERIFY2(!taken.contains(QLatin1String(combo)), combo);
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes")}, QString(), &out), 0);
+        for (const char *key : {"Super+Alt+C", "Super+Alt+A", "Super+Alt+V"})
+            QVERIFY2(out.contains(QLatin1String(key) + QLatin1String(" is already yours: skipped")), qPrintable(out));
+    }
+
+    void hyprlangVariablesAreSharedAcrossFiles()
+    {
+        // bindings.conf is read before hyprland.conf, the file that defines what it uses.
+        write(config(QStringLiteral("hypr/hyprland.conf")), "$mainMod = SUPER\n$modAlt = ALT\n$mod = CTRL\nsource = ~/.config/hypr/bindings.conf\n");
+        write(config(QStringLiteral("hypr/bindings.conf")), "bindd = $mainMod ALT, C, Mine, exec, mine\nbind = $mainMod $modAlt, A, exec, mine\nbind = $mod, L, exec, mine\n$mainMod = SUPER\n");
+        const QSet<QString> taken = Setup::takenKeys(Setup::Environment::current());
+        QVERIFY(taken.contains(QStringLiteral("SUPER+ALT+C")));
+        // $mod is CTRL, but must not be found inside $modAlt.
+        QVERIFY(taken.contains(QStringLiteral("SUPER+ALT+A")));
+        QVERIFY(!taken.contains(QStringLiteral("SUPER+CTRL+ALT+A")));
+        QVERIFY(taken.contains(QStringLiteral("CTRL+L")));
+        QVERIFY(!taken.contains(QStringLiteral("ALT+C")));
+    }
+
+    void theTestsNeverSeeTheRealXdgFolders()
+    {
+        const QHash<QByteArray, QString> expected = {{"HOME", m_home.path()},          {"XDG_CONFIG_HOME", config(QString())}, {"XDG_STATE_HOME", m_state.path()},
+                                                     {"XDG_DATA_HOME", m_data.path()}, {"XDG_CACHE_HOME", m_cache.path()}};
+        for (auto it = expected.begin(); it != expected.end(); ++it) {
+            QCOMPARE(qEnvironmentVariable(it.key().constData()), it.value());
+            QVERIFY2(it.value().startsWith(QDir::tempPath()), it.key().constData());
+            // A child process gets the same, which is how jq and Hyprland's checker would see them.
+            QProcess child;
+            child.start(QStringLiteral("sh"), {QStringLiteral("-c"), QStringLiteral("printf %s \"$") + QString::fromLatin1(it.key()) + QLatin1Char('"')});
+            QVERIFY(child.waitForFinished(10'000));
+            QCOMPARE(QString::fromUtf8(child.readAllStandardOutput()), it.value());
+        }
+        QVERIFY(qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE"));
     }
 
     void combosCompareTheWayHyprlandDoes()
@@ -578,6 +755,173 @@ private slots:
         QCOMPARE(setup({QStringLiteral("--help")}, QString(), &out), 0);
         for (const char *text : {"setup-backups", "--restore", "--no-keys", "--list-backups", "never takes a"})
             QVERIFY2(out.contains(QLatin1String(text)), text);
+    }
+
+    // Runs Hyprland's own config checker on `path`; the probe file it may write is PROBE_OUT.
+    QString verifyConfig(const QString &path, const QString &probe = QString())
+    {
+        QProcess check;
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("PROBE_OUT"), probe);
+        check.setProcessEnvironment(environment);
+        check.start(QStandardPaths::findExecutable(QStringLiteral("Hyprland")), {QStringLiteral("--verify-config"), QStringLiteral("-c"), path});
+        if (!check.waitForFinished(30'000))
+            return QStringLiteral("Hyprland's checker didn't finish.");
+        return QString::fromUtf8(check.readAll());
+    }
+
+    // The tester's breakage: every bind after Omastrator's stopped working. A key file that fails half way, in any part, must leave
+    // the submap closed so the user's and Omarchy's binds after it land in the default submap.
+    void aFailingBindInTheKeyFileLeavesNoSubmapOpen_data()
+    {
+        QTest::addColumn<QString>("failing");
+        QTest::newRow("Alt_L and Escape") << "keys == 'Alt_L' or keys == 'Escape'";
+        QTest::newRow("every key of ours") << "keys ~= 'SUPER + 1'";
+    }
+
+    void aFailingBindInTheKeyFileLeavesNoSubmapOpen()
+    {
+        QFETCH(QString, failing);
+        if (QStandardPaths::findExecutable(QStringLiteral("Hyprland")).isEmpty())
+            QSKIP("Hyprland isn't installed, so its config checker can't run.");
+        QDir().mkpath(m_state.filePath(QStringLiteral("omastrator")));
+        QFile::remove(m_state.filePath(QStringLiteral("omastrator/setup.log")));
+        write(config(QStringLiteral("omastrator/hyprland.lua")), Setup::hyprlandLua(QStringLiteral("omastrator")));
+        const QString probe = m_home.filePath(QStringLiteral("probe.out")), path = m_home.filePath(QStringLiteral("hyprland-probe.lua"));
+        QFile::remove(probe);
+        // hl.bind fails for the keys chosen, as an unknown key name or a changed API would; then the user's config carries on.
+        write(path, "local out = io.open(os.getenv('PROBE_OUT'), 'w')\n"
+                    "local real = hl.bind\n"
+                    "hl.bind = function(keys, action, options)\n"
+                    "  if " + failing.toUtf8() + " then error('probe: no such key ' .. keys) end\n"
+                    "  local bound = real(keys, action, options)\n"
+                    "  out:write('bind ', keys, ' submap=[', tostring(bound.submap), ']\\n')\n"
+                    "  return bound\n"
+                    "end\n"
+                    + Setup::sourceBlock(Setup::HyprFormat::lua) +
+                    "local users = real('SUPER + 1', hl.dsp.focus({ workspace = 1 }))\n"
+                    "out:write('users ', 'SUPER + 1', ' submap=[', tostring(users.submap), '] current=[', hl.get_current_submap(), ']\\n')\n"
+                    "out:close()\n");
+        const QString output = verifyConfig(path, probe);
+        const QString seen = QString::fromUtf8(read(probe));
+        // Hyprland itself finds nothing wrong with the file, and the user's bind is in the default submap, outside ours.
+        QVERIFY2(seen.contains(QLatin1String("users SUPER + 1 submap=[] current=[]")), qPrintable(seen + output));
+        QVERIFY2(!output.contains(QLatin1String("Lua error")), qPrintable(output));
+        // The failure is reported, not swallowed.
+        const QString log = QString::fromUtf8(read(m_state.filePath(QStringLiteral("omastrator/setup.log"))));
+        QVERIFY2(log.contains(QLatin1String("probe: no such key")) && log.contains(QLatin1String("Omastrator: couldn't bind")), qPrintable(log));
+        if (failing.contains(QLatin1String("Alt_L"))) {
+            // The rest of the submap still loads.
+            QVERIFY2(seen.contains(QLatin1String("bind ALT + Alt_L submap=[omastrator-design]")), qPrintable(seen));
+            QVERIFY(seen.contains(QLatin1String("bind SUPER + ALT + Escape submap=[]")));
+        }
+    }
+
+    // Both formats, with the user's bind after our source line, are accepted by Hyprland; the key names Alt_L, ALT + Alt_L and Escape are valid in both.
+    void hyprlandLoadsTheUsersBindsAfterOurFile()
+    {
+        if (QStandardPaths::findExecutable(QStringLiteral("Hyprland")).isEmpty())
+            QSKIP("Hyprland isn't installed, so its config checker can't run.");
+        write(config(QStringLiteral("omastrator/hyprland.lua")), Setup::hyprlandLua(QStringLiteral("omastrator")));
+        write(config(QStringLiteral("omastrator/hyprland.conf")), Setup::hyprlandConf(QStringLiteral("omastrator")));
+        const QByteArray lua = read(config(QStringLiteral("omastrator/hyprland.lua"))), conf = read(config(QStringLiteral("omastrator/hyprland.conf")));
+        QVERIFY(lua.contains("\"Alt_L\"") && lua.contains("\"ALT + Alt_L\"") && lua.contains("\"Escape\""));
+        QVERIFY(conf.contains("bind = , Alt_L,") && conf.contains("bindr = ALT, Alt_L,") && conf.contains(", escape,"));
+        const QString luaPath = m_home.filePath(QStringLiteral("user.lua")), confPath = m_home.filePath(QStringLiteral("user.conf"));
+        write(luaPath, Setup::sourceBlock(Setup::HyprFormat::lua) + "hl.bind('SUPER + 1', hl.dsp.focus({ workspace = 1 }))\n");
+        // The user's own file ended inside a submap of theirs: ours still starts from the default one.
+        write(confPath, "submap = mine\n" + Setup::sourceBlock(Setup::HyprFormat::conf) + "submap = reset\nbind = SUPER, 1, workspace, 1\n");
+        for (const QString &path : {luaPath, confPath}) {
+            const QString output = verifyConfig(path);
+            QVERIFY2(output.contains(QLatin1String("config ok")), qPrintable(path + "\n" + output));
+        }
+    }
+
+    // The generated Lua run against a stand-in for Hyprland's API: a failing dispatch can't stop a mode from handing the keyboard back.
+    void leavingAModeClosesItsSubmapFirst()
+    {
+        const QString lua = QStandardPaths::findExecutable(QStringLiteral("lua"));
+        if (lua.isEmpty())
+            QSKIP("lua isn't installed.");
+        QDir().mkpath(m_state.filePath(QStringLiteral("omastrator")));
+        QFile::remove(m_state.filePath(QStringLiteral("omastrator/setup.log")));
+        write(config(QStringLiteral("omastrator/hyprland.lua")), Setup::hyprlandLua(QStringLiteral("omastrator")));
+        const QString script = m_home.filePath(QStringLiteral("stub.lua"));
+        write(script, "local binds, calls, current = {}, {}, ''\n"
+                      "hl = {\n"
+                      "  dsp = { exec_cmd = function(c) return { 'exec', c } end, submap = function(n) return { 'submap', n } end },\n"
+                      "  dispatch = function(d)\n"
+                      "    if d[1] == 'exec' then error('the command failed') end\n"
+                      "    current = d[2] == 'reset' and '' or d[2]\n"
+                      "    calls[#calls + 1] = 'submap ' .. d[2]\n"
+                      "  end,\n"
+                      "  bind = function(keys, action, options) binds[current .. '|' .. keys] = { action = action, options = options } end,\n"
+                      "  define_submap = function(name, body) current = name body() current = '' end,\n"
+                      "  on = function() end, exec_cmd = function() end,\n"
+                      "  notification = { create = function() end },\n"
+                      "}\n"
+                      "dofile(os.getenv('XDG_CONFIG_HOME') .. '/omastrator/hyprland.lua')\n"
+                      "local function press(id) calls = {} binds[id].action() return table.concat(calls, ',') end\n"
+                      "print('enter ' .. press('|SUPER + ALT + D'))\n"
+                      "print('leave ' .. press('omastrator-draw|Escape'))\n"
+                      "print('design ' .. press('omastrator-design|Escape'))\n"
+                      "hl.dispatch(hl.dsp.submap('omastrator-live'))\n"
+                      "print('hatch ' .. press('|SUPER + ALT + Escape') .. ' universal=' .. tostring(binds['|SUPER + ALT + Escape'].options.submap_universal))\n");
+        QProcess run;
+        run.start(lua, {script});
+        QVERIFY(run.waitForFinished(30'000));
+        const QString output = QString::fromUtf8(run.readAll());
+        QVERIFY2(run.exitCode() == 0, qPrintable(output));
+        // Entering still takes the submap when the island command fails; every way out hands the keyboard back even though the command fails.
+        QVERIFY2(output.contains(QLatin1String("enter submap omastrator-draw\n")), qPrintable(output));
+        QVERIFY2(output.contains(QLatin1String("leave submap reset\n")), qPrintable(output));
+        QVERIFY2(output.contains(QLatin1String("design submap reset\n")), qPrintable(output));
+        QVERIFY2(output.contains(QLatin1String("hatch submap reset universal=true")), qPrintable(output));
+        QVERIFY(QString::fromUtf8(read(m_state.filePath(QStringLiteral("omastrator/setup.log")))).contains(QLatin1String("the command failed")));
+    }
+
+    void theConfKeysStartAndEndInTheDefaultSubmap()
+    {
+        const QByteArray conf = Setup::hyprlandConf(QStringLiteral("omastrator"));
+        QVERIFY(conf.contains("\nsubmap = reset\n") && conf.indexOf("submap = reset") < conf.indexOf("bindd = SUPER ALT"));
+        QVERIFY(conf.trimmed().endsWith("--daemon"));
+        // Each submap is closed before the next line, and the reset key works inside them.
+        QCOMPARE(conf.count("\nsubmap = omastrator-"), conf.count("\nsubmap = reset\n") - 1);
+        QVERIFY(conf.contains("binddu = SUPER ALT, escape, Omastrator: reset, exec,"));
+        QVERIFY(conf.contains("bindu = SUPER ALT, escape, submap, reset\n"));
+    }
+
+    void setupPutsFilesBackWhenTheUsersBindsDisappear()
+    {
+        liveBinds({bind(64, QStringLiteral("1")), bind(64, QStringLiteral("Return")), bind(64, QStringLiteral("Q"))});
+        // What Hyprland reports after it loads the new key file: the workspace and terminal keys are gone.
+        write(m_fake.filePath(QStringLiteral("after-reload.json")), QJsonDocument(QJsonArray{bind(64, QStringLiteral("Q"))}).toJson());
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 1);
+        QVERIFY2(out.contains(QLatin1String("no longer has these keys: Super+1, Super+Return")), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("Your keys are back")), qPrintable(out));
+        QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), userHypr);
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island"))));
+        QVERIFY(read(m_fake.filePath(QStringLiteral("calls.log"))).count("reload") >= 2);
+    }
+
+    void setupKeepsItsFilesWhenTheUsersBindsStay()
+    {
+        const QJsonArray binds{bind(64, QStringLiteral("1")), bind(64, QStringLiteral("Return"))};
+        liveBinds(binds);
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(!out.contains(QLatin1String("no longer has")), qPrintable(out));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
+        QVERIFY(read(m_fake.filePath(QStringLiteral("calls.log"))).contains("reload"));
+    }
+
+    void noKeysNeverReloadsHyprland()
+    {
+        liveBinds({bind(64, QStringLiteral("1"))});
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply"), QStringLiteral("--no-keys")}), 0);
+        QVERIFY(!QFileInfo::exists(m_fake.filePath(QStringLiteral("calls.log"))));
     }
 
     void hyprlandAcceptsTheKeys()

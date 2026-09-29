@@ -140,32 +140,36 @@ static QString designLua(const DesignKeys &keys, const QStringList &skip)
                "end\n"
                "\n"
                "local function leaveDesign()\n"
-               "  hl.dispatch(design(\"off\"))\n"
-               "  hl.dispatch(hl.dsp.submap(\"reset\"))\n"
+               "  run(hl.dsp.submap(\"reset\"))\n"
+               "  run(design(\"off\"))\n"
                "end\n"
                "\n").arg(keys.design, keys.desk);
     if (!skipping(skip, keys.design))
         text += QStringLiteral(
-                    "hl.bind(\"%1\", function()\n"
-                    "  hl.dispatch(design(\"on\"))\n"
-                    "  hl.dispatch(hl.dsp.submap(\"omastrator-design\"))\n"
+                    "bind(\"%1\", function()\n"
+                    "  run(design(\"on\"))\n"
+                    "  run(hl.dsp.submap(\"omastrator-design\"))\n"
                     "end, { description = \"Omastrator: design mode\" })\n").arg(keys.design);
     if (!skipping(skip, keys.desk))
-        text += QStringLiteral("hl.bind(\"%1\", hl.dsp.exec_cmd(omastrator .. \" desk toggle\"), { description = \"Omastrator: the Desk\" })\n").arg(keys.desk);
+        text += QStringLiteral("bind(\"%1\", hl.dsp.exec_cmd(omastrator .. \" desk toggle\"), { description = \"Omastrator: the Desk\" })\n").arg(keys.desk);
     if (!skipping(skip, QStringLiteral("SUPER + ALT + Escape")))
         text += QStringLiteral(
-            "-- The escape hatch: ends design mode, drops previews and gives the keyboard back, from anywhere.\n"
-            "hl.bind(\"SUPER + ALT + Escape\", hl.dsp.exec_cmd(omastrator .. \" reset\"), { description = \"Omastrator: reset\" })\n");
+            "-- The escape hatch: gives the keyboard back, ends design mode and drops previews. It works inside any\n"
+            "-- submap (submap_universal) and closes the submap itself, so it needs neither the app nor the island.\n"
+            "bind(\"SUPER + ALT + Escape\", function()\n"
+            "  run(hl.dsp.submap(\"reset\"))\n"
+            "  run(hl.dsp.exec_cmd(omastrator .. \" reset\"))\n"
+            "end, { description = \"Omastrator: reset\", submap_universal = true })\n");
     text += QStringLiteral(
-               "hl.define_submap(\"omastrator-design\", function()\n"
-               "  hl.bind(\"Escape\", leaveDesign, { description = \"Leave design mode\" })\n"
-               "  hl.bind(\"%1\", leaveDesign, { description = \"Leave design mode\" })\n"
-               "  hl.bind(\"Alt_L\", design(\"alt on\"), { description = \"Measure (hold)\" })\n"
-               "  hl.bind(\"ALT + Alt_L\", design(\"alt off\"), { release = true })\n"
+               "submap(\"omastrator-design\", function()\n"
+               "  bind(\"Escape\", leaveDesign, { description = \"Leave design mode\" })\n"
+               "  bind(\"%1\", leaveDesign, { description = \"Leave design mode\" })\n"
+               "  bind(\"Alt_L\", design(\"alt on\"), { description = \"Measure (hold)\" })\n"
+               "  bind(\"ALT + Alt_L\", design(\"alt off\"), { release = true, description = \"Measure (release)\" })\n"
                "end)\n"
                "\n"
                "-- Omastrator in the background: the overlays, the Desk and the agent socket, no window until asked.\n"
-               "hl.on(\"hyprland.start\", function()\n"
+               "attempt(\"hyprland.start\", hl.on, \"hyprland.start\", function()\n"
                "  hl.exec_cmd(omastrator .. \" --daemon\")\n"
                "end)\n").arg(keys.design);
     return text;
@@ -183,70 +187,106 @@ QByteArray hyprlandLua(const QString &command, const DesignKeys &keys, const QSt
         "\n"
         "local omastrator = %1\n"
         "\n"
+        "-- A failure in this file is written to ~/.local/state/omastrator/setup.log and shown as a\n"
+        "-- notification. It never stops the lines after it or the user's own config.\n"
+        "local function report(what, err)\n"
+        "  local message = \"Omastrator: \" .. what .. \": \" .. tostring(err)\n"
+        "  pcall(function()\n"
+        "    local state = os.getenv(\"XDG_STATE_HOME\") or ((os.getenv(\"HOME\") or \"\") .. \"/.local/state\")\n"
+        "    local log = io.open(state .. \"/omastrator/setup.log\", \"a\")\n"
+        "    if log then\n"
+        "      log:write(os.date(\"%Y-%m-%d %H:%M:%S \"), message, \"\\n\")\n"
+        "      log:close()\n"
+        "    end\n"
+        "  end)\n"
+        "  pcall(hl.notification.create, { text = message, timeout = 10000 })\n"
+        "end\n"
+        "\n"
+        "local function attempt(what, fn, ...)\n"
+        "  local ok, err = pcall(fn, ...)\n"
+        "  if not ok then report(what, err) end\n"
+        "  return ok\n"
+        "end\n"
+        "\n"
+        "local function bind(keys, action, options)\n"
+        "  attempt(\"couldn't bind \" .. keys, hl.bind, keys, action, options)\n"
+        "end\n"
+        "\n"
+        "-- Hyprland closes a submap when its body ends or fails; the body is guarded too so the failure is reported.\n"
+        "local function submap(name, body)\n"
+        "  attempt(\"submap \" .. name, hl.define_submap, name, function()\n"
+        "    attempt(\"submap \" .. name, body)\n"
+        "  end)\n"
+        "end\n"
+        "\n"
+        "local function run(action)\n"
+        "  attempt(\"a key failed\", hl.dispatch, action)\n"
+        "end\n"
+        "\n"
         "local function island(args)\n"
         "  return hl.dsp.exec_cmd(omastrator .. \" island \" .. args)\n"
         "end\n"
         "\n"
         "local function enter(mode)\n"
         "  return function()\n"
-        "    hl.dispatch(island(\"mode \" .. mode))\n"
-        "    hl.dispatch(hl.dsp.submap(\"omastrator-\" .. mode))\n"
+        "    run(island(\"mode \" .. mode))\n"
+        "    run(hl.dsp.submap(\"omastrator-\" .. mode))\n"
         "  end\n"
         "end\n"
         "\n"
-        "-- Runs one island command, then hands the keyboard back.\n"
+        "-- Hands the keyboard back first, so a failing command can't leave the mode's keys held; then runs one island command.\n"
         "local function leave(args)\n"
         "  return function()\n"
-        "    hl.dispatch(island(args))\n"
-        "    hl.dispatch(hl.dsp.submap(\"reset\"))\n"
+        "    run(hl.dsp.submap(\"reset\"))\n"
+        "    run(island(args))\n"
         "  end\n"
         "end\n"
         "\n").arg(luaString(command), skippedNote(skip, QStringLiteral("--")));
     for (const Mode &mode : modeKeys) {
         if (skipping(skip, QStringLiteral("SUPER + ALT + ") + QLatin1String(mode.key)))
             continue;
-        text += QStringLiteral("hl.bind(\"SUPER + ALT + %1\", enter(\"%2\"), { description = \"Omastrator: %3 mode\" })\n")
+        text += QStringLiteral("bind(\"SUPER + ALT + %1\", enter(\"%2\"), { description = \"Omastrator: %3 mode\" })\n")
                     .arg(QLatin1String(mode.key), QLatin1String(mode.mode), QString::fromUtf8(mode.label));
     }
     text += QStringLiteral("\n-- Dictation: hold Super+Alt+V and speak; release to hear it back. Esc cancels while it waits.\n");
     if (!skipping(skip, QStringLiteral("SUPER + ALT + V")))
         text += QStringLiteral(
-            "hl.bind(\"SUPER + ALT + V\", island(\"dictate start\"), { description = \"Omastrator: dictate (hold)\" })\n"
-            "hl.bind(\"SUPER + ALT + V\", island(\"dictate stop\"), { release = true })\n");
+            "bind(\"SUPER + ALT + V\", island(\"dictate start\"), { description = \"Omastrator: dictate (hold)\" })\n"
+            "bind(\"SUPER + ALT + V\", island(\"dictate stop\"), { release = true, description = \"Omastrator: dictate (release)\" })\n");
     text += QStringLiteral(
-        "hl.define_submap(\"omastrator-heard\", function()\n"
-        "  hl.bind(\"Escape\", leave(\"dictate cancel\"), { description = \"Cancel what was heard\" })\n"
+        "submap(\"omastrator-heard\", function()\n"
+        "  bind(\"Escape\", leave(\"dictate cancel\"), { description = \"Cancel what was heard\" })\n"
         "end)\n");
-    text += QStringLiteral("\nhl.define_submap(\"omastrator-draw\", function()\n");
+    text += QStringLiteral("\nsubmap(\"omastrator-draw\", function()\n");
     for (const Key &key : drawKeys)
-        text += QStringLiteral("  hl.bind(\"%1\", island(\"tool %2\"), { description = \"%3\" })\n")
+        text += QStringLiteral("  bind(\"%1\", island(\"tool %2\"), { description = \"%3\" })\n")
                     .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
     text += QStringLiteral(
         "  -- Type takes letters, so choosing it hands the keyboard back.\n"
-        "  hl.bind(\"T\", leave(\"tool text\"), { description = \"Type\" })\n"
-        "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
+        "  bind(\"T\", leave(\"tool text\"), { description = \"Type\" })\n"
+        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
         "end)\n"
         "\n"
-        "hl.define_submap(\"omastrator-capture\", function()\n");
+        "submap(\"omastrator-capture\", function()\n");
     for (const Key &key : captureKeys)
-        text += QStringLiteral("  hl.bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
+        text += QStringLiteral("  bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
                     .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
     text += QStringLiteral(
-        "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
+        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
         "end)\n");
-    text += QStringLiteral("\nhl.define_submap(\"omastrator-ai\", function()\n");
+    text += QStringLiteral("\nsubmap(\"omastrator-ai\", function()\n");
     for (const Key &key : aiKeys)
-        text += QStringLiteral("  hl.bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
+        text += QStringLiteral("  bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
                     .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
     text += QStringLiteral(
-        "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
+        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
         "end)\n");
-    text += QStringLiteral("\nhl.define_submap(\"omastrator-live\", function()\n");
+    text += QStringLiteral("\nsubmap(\"omastrator-live\", function()\n");
     for (const Key &key : liveKeys)
-        text += QStringLiteral("  hl.bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
+        text += QStringLiteral("  bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
                     .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
     text += QStringLiteral(
-        "  hl.bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
+        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
         "end)\n");
     text += designLua(keys, skip);
     return text.toUtf8();
@@ -257,7 +297,10 @@ QByteArray hyprlandConf(const QString &command, const DesignKeys &keys, const QS
     const QString island = shellQuote(command) + QStringLiteral(" island ");
     QString text = QStringLiteral(
         "# Omastrator's island keys, written by `omastrator setup` (docs/OS-SUITE.md).\n"
-        "# Super+Alt+D, C, A or L switches the island's mode and takes its keys; Escape goes back.\n");
+        "# Super+Alt+D, C, A or L switches the island's mode and takes its keys; Escape goes back.\n"
+        "# Every mode's keys sit in a submap that ends with `submap = reset`. This first line makes sure nothing\n"
+        "# above this file (an unclosed submap in the user's own config) holds the binds below.\n"
+        "submap = reset\n");
     text += skippedNote(skip, QStringLiteral("#")) + QLatin1Char('\n');
     for (const Mode &mode : modeKeys) {
         if (skipping(skip, QStringLiteral("SUPER + ALT + ") + QLatin1String(mode.key)))
@@ -300,7 +343,9 @@ QByteArray hyprlandConf(const QString &command, const DesignKeys &keys, const QS
     if (!skipping(skip, keys.desk))
         text += QStringLiteral("bindd = %1, Omastrator: the Desk, exec, %2 desk toggle\n").arg(confKey(keys.desk), shellQuote(command));
     if (!skipping(skip, QStringLiteral("SUPER + ALT + Escape")))
-        text += QStringLiteral("bindd = SUPER ALT, escape, Omastrator: reset, exec, %1 reset\n").arg(shellQuote(command));
+        // The u flag (submap universal) keeps the hatch working inside a submap; it closes the submap itself.
+        text += QStringLiteral("binddu = SUPER ALT, escape, Omastrator: reset, exec, %1 reset\n"
+                               "bindu = SUPER ALT, escape, submap, reset\n").arg(shellQuote(command));
     text += QStringLiteral("\nsubmap = omastrator-design\n"
                            "bind = , escape, exec, %2off\n"
                            "bind = , escape, submap, reset\n"

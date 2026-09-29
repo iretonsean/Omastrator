@@ -41,6 +41,8 @@ struct Environment {
     QString record() const;
     // Where every setup or remove keeps a copy of the files it changes: <stateHome>/omastrator/setup-backups.
     QString backups() const;
+    // Where Omastrator's key file writes what went wrong while Hyprland loaded it: <stateHome>/omastrator/setup.log.
+    QString setupLog() const;
     // Chromium's per-user native messaging host manifest, and the flags file its launcher reads.
     QString browserHostManifest() const;
     QString chromiumFlags() const;
@@ -162,14 +164,18 @@ struct Backup {
 QString newBackupName(const Environment &environment);
 // Copies each existing file of `paths` and writes the manifest last. Returns why it couldn't, having removed what it made; nothing else changes.
 QString writeBackup(const Environment &environment, const QString &name, const QString &action, const QStringList &paths, Backup *made);
-// Deletes the oldest backups beyond `keep`, never `except` (the one just made). Only folders named like a backup are touched.
-void pruneBackups(const Environment &environment, const QString &except, int keep = 5);
+// Deletes the oldest backups beyond `keep`, never those in `except` (the one just made). Only folders named like a backup are touched.
+void pruneBackups(const Environment &environment, const QStringList &except, int keep = 5);
 // Every backup with a readable manifest, newest first.
 std::vector<Backup> listBackups(const Environment &environment);
 // `name` is a folder name, a unique start of one, or a path; empty is the newest.
 std::optional<Backup> findBackup(const Environment &environment, const QString &name);
 // What --restore would change: each file that differs from the backup's copy.
 std::vector<Change> restorePlan(const Environment &environment, const Backup &backup, QString *error);
+// The keys Hyprland has bound in its default submap that aren't Omastrator's ("Super+1", "Super+Return"); nullopt when it can't be asked.
+std::optional<QSet<QString>> liveUserBinds();
+// Reloads Hyprland's config and returns those of `before` that are gone from the default submap (for `waitMs` it looks again before saying so).
+QStringList lostBinds(const QSet<QString> &before, int waitMs = 2000);
 // Tells the shell to rescan its plugins and reload; adds a note when it isn't running.
 void reloadOmarchyShell(QStringList *notes);
 int runListBackups(const Environment &environment, QTextStream &out);

@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QThread>
 #include <map>
 
 namespace {
@@ -58,6 +59,17 @@ bool isOurs(const QString &description, const QString &arg)
 void addLive(QSet<QString> *taken)
 {
     const QJsonValue binds = Hyprland::query(QStringLiteral("binds"));
+    const auto comboOfBind = [](const QJsonObject &bind) {
+        return comboOf(bind["modmask"].toInt() & (shiftBit | ctrlBit | altBit | superBit), bind["key"].toString());
+    };
+    // Lua Hyprland reports every bind as "__lua", so a release bind has no text to say it is ours.
+    // The press bind on the same combo does, and that is enough (this also covers key files written before it had a description).
+    QSet<QString> ours;
+    for (const QJsonValue &value : binds.toArray()) {
+        const QJsonObject bind = value.toObject();
+        if (isOurs(bind["description"].toString(), bind["arg"].toString()))
+            ours.insert(comboOfBind(bind));
+    }
     for (const QJsonValue &value : binds.toArray()) {
         const QJsonObject bind = value.toObject();
         // Keys inside the user's own submaps and mouse binds can't be the ones setup takes.
@@ -65,9 +77,10 @@ void addLive(QSet<QString> *taken)
             continue;
         if (isOurs(bind["description"].toString(), bind["arg"].toString()))
             continue;
-        const QString combo = comboOf(bind["modmask"].toInt() & (shiftBit | ctrlBit | altBit | superBit), bind["key"].toString());
-        if (!combo.isEmpty())
-            taken->insert(combo);
+        const QString combo = comboOfBind(bind);
+        if (combo.isEmpty() || (bind["release"].toBool() && ours.contains(combo)))
+            continue;
+        taken->insert(combo);
     }
 }
 
@@ -89,7 +102,7 @@ QStringList configFiles(const QString &folder)
 
 void addLuaFile(const QByteArray &text, QSet<QString> *taken)
 {
-    static const QRegularExpression bind(QStringLiteral("hl\\.bind\\(\\s*[\"']([^\"']*)[\"']"));
+    static const QRegularExpression bind(QStringLiteral("(?<!\\w)(?:\\w+\\.)?bind\\w*\\(\\s*[\"']([^\"']*)[\"']"));
     static const QRegularExpression submap(QStringLiteral("^(\\s*).*define_submap\\("));
     // The user's own submaps run to the `end)` at the indentation they began at.
     QString closing;
@@ -121,20 +134,58 @@ void addLuaFile(const QByteArray &text, QSet<QString> *taken)
     }
 }
 
-void addConfFile(const QByteArray &text, QSet<QString> *taken)
+// hyprlang variables are global: one file defines $mainMod, another binds with it.
+using Variables = std::map<QString, QString>;
+
+void addConfVariables(const QByteArray &text, Variables *variables)
 {
     static const QRegularExpression variable(QStringLiteral("^\\s*\\$(\\w+)\\s*=\\s*(.*?)\\s*$"));
+    for (const QString &line : QString::fromUtf8(text).split(QLatin1Char('\n'))) {
+        if (line.trimmed().startsWith(QLatin1Char('#')))
+            continue;
+        if (const auto declared = variable.match(line); declared.hasMatch())
+            (*variables)[declared.captured(1)] = declared.captured(2);
+    }
+}
+
+// A whole name at a time, so $mod never eats the start of $modAlt; values may use other variables.
+QString withVariables(QString text, const Variables &variables)
+{
+    static const QRegularExpression name(QStringLiteral("\\$(\\w+)"));
+    for (int pass = 0; pass < 4; ++pass) {
+        QString replaced;
+        qsizetype from = 0;
+        bool changed = false;
+        for (auto match = name.globalMatch(text); match.hasNext();) {
+            const auto found = match.next();
+            const auto value = variables.find(found.captured(1));
+            replaced += text.mid(from, found.capturedStart() - from);
+            if (value == variables.end()) {
+                replaced += found.captured();
+            } else {
+                replaced += value->second;
+                changed = true;
+            }
+            from = found.capturedEnd();
+        }
+        replaced += text.mid(from);
+        text = replaced;
+        if (!changed)
+            break;
+    }
+    return text;
+}
+
+void addConfFile(const QByteArray &text, const Variables &variables, QSet<QString> *taken)
+{
     static const QRegularExpression bind(QStringLiteral("^\\s*bind([a-z]*)\\s*=\\s*(.*)$"));
-    std::map<QString, QString> variables;
     bool inSubmap = false;
     for (const QString &line : QString::fromUtf8(text).split(QLatin1Char('\n'))) {
         const QString trimmed = line.trimmed();
         if (trimmed.startsWith(QLatin1Char('#')))
             continue;
-        if (const auto declared = variable.match(line); declared.hasMatch()) {
-            variables[declared.captured(1)] = declared.captured(2);
+        if (trimmed.startsWith(QLatin1Char('$')))
             continue;
-        }
         if (trimmed.startsWith(QLatin1String("submap"))) {
             const qsizetype equals = trimmed.indexOf(QLatin1Char('='));
             if (equals > 0)
@@ -147,13 +198,10 @@ void addConfFile(const QByteArray &text, QSet<QString> *taken)
         // bindm binds the mouse.
         if (!found.hasMatch() || found.captured(1).contains(QLatin1Char('m')))
             continue;
-        const QStringList fields = found.captured(2).split(QLatin1Char(','));
+        const QStringList fields = withVariables(found.captured(2), variables).split(QLatin1Char(','));
         if (fields.size() < 2)
             continue;
-        QString mods = fields[0];
-        for (const auto &[name, value] : variables)
-            mods.replace(QLatin1Char('$') + name, value);
-        const QString combo = comboOf(modsOf(mods), fields[1]);
+        const QString combo = comboOf(modsOf(fields[0]), fields[1]);
         if (!combo.isEmpty())
             taken->insert(combo);
     }
@@ -191,12 +239,18 @@ QSet<QString> takenKeys(const Environment &environment)
     addLive(&taken);
     QStringList files = configFiles(environment.hyprDirectory());
     files << configFiles(QDir(environment.omarchyPath).filePath(QStringLiteral("default/hypr")));
+    std::map<QString, QByteArray> texts;
+    Variables variables;
     for (const QString &path : std::as_const(files)) {
-        const QByteArray text = fileBytes(path);
+        texts[path] = fileBytes(path);
+        if (!path.endsWith(QLatin1String(".lua")))
+            addConfVariables(texts[path], &variables);
+    }
+    for (const QString &path : std::as_const(files)) {
         if (path.endsWith(QLatin1String(".lua")))
-            addLuaFile(text, &taken);
+            addLuaFile(texts[path], &taken);
         else
-            addConfFile(text, &taken);
+            addConfFile(texts[path], variables, &taken);
     }
     return taken;
 }
@@ -212,5 +266,45 @@ KeyChoice chooseKeys(const Environment &environment)
         choice.skipped << displayCombo(combo);
     }
     return choice;
+}
+std::optional<QSet<QString>> liveUserBinds()
+{
+    const QJsonValue binds = Hyprland::query(QStringLiteral("binds"));
+    if (!binds.isArray())
+        return std::nullopt;
+    QSet<QString> keys;
+    for (const QJsonValue &value : binds.toArray()) {
+        const QJsonObject bind = value.toObject();
+        if (!bind["submap"].toString().isEmpty() || isOurs(bind["description"].toString(), bind["arg"].toString()))
+            continue;
+        const QString combo = comboOf(bind["modmask"].toInt() & (shiftBit | ctrlBit | altBit | superBit), bind["key"].toString());
+        if (!combo.isEmpty())
+            keys.insert(displayCombo(combo) + (bind["release"].toBool() ? QStringLiteral(" (release)") : QString()));
+    }
+    return keys;
+}
+
+QStringList lostBinds(const QSet<QString> &before, int waitMs)
+{
+    if (before.isEmpty())
+        return {};
+    Hyprland::reload();
+    QStringList lost;
+    // Hyprland answers the reload before every bind is back, so look again for a moment before calling one lost.
+    for (int waited = 0;; waited += 200) {
+        lost.clear();
+        const std::optional<QSet<QString>> now = liveUserBinds();
+        if (!now)
+            return {};
+        for (const QString &key : before) {
+            if (!now->contains(key))
+                lost << key;
+        }
+        if (lost.isEmpty() || waited >= waitMs)
+            break;
+        QThread::msleep(200);
+    }
+    lost.sort();
+    return lost;
 }
 }

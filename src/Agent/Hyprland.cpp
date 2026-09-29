@@ -164,6 +164,17 @@ bool usesLua()
     return QFileInfo::exists(QDir(config).filePath(QStringLiteral("hypr/hyprland.lua")));
 }
 
+QString reload()
+{
+    QString error;
+    const QString overridden = program();
+    if (overridden.isEmpty())
+        askSocket("reload", &error);
+    else
+        runProgram(overridden, {QStringLiteral("reload")}, &error);
+    return error;
+}
+
 QString dispatch(const QString &lua, const QString &legacy)
 {
     const QString overridden = program();

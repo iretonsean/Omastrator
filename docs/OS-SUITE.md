@@ -273,8 +273,8 @@ reloading it or opening a second browser.
   `~/.local/state/omastrator/setup-backups/<yyyymmdd-hhmmss>/` (with a
   manifest of the original paths), keeps the newest 5, and changes nothing if
   the copy can't be made. `omastrator setup --restore [BACKUP]` shows what
-  it would put back, asks (or `--yes`), and restores; `--list-backups` lists
-  them.
+  it would put back, asks (or `--yes`), copies what it is about to replace as
+  a new backup, and restores; `--list-backups` lists them.
 - Never takes a key you already use: it reads Hyprland's live binds and your
   config, skips that key and says so ("Super+Alt+C is already yours:
   skipped"). `--no-keys` installs with no global keys at all.
@@ -453,16 +453,55 @@ Choices the spec left open, made while building it, in build order.
   copied bytes and deletes what setup created (and the folders it made, once
   empty), so it also works after an interrupted setup that never wrote
   `setup.json`. Files setup didn't change aren't in the backup and aren't
-  touched. A restore doesn't copy the state it replaces: it shows the diff
-  and asks first.
+  touched. A restore copies the state it replaces first, as its own backup
+  (action "restore"), so a second `--restore` undoes it; if that copy can't be
+  made, nothing changes. The backup being restored from is never pruned by it.
 - **Key clashes.** Only the global keys can clash: Super+Alt+D, C, A, L, V
   (dictation), the design and Desk keys and Super+Alt+Escape. The keys inside
   Omastrator's own submaps only exist while one is active. A key counts as
   taken when a live bind (`hyprctl binds -j`) or a bind in `~/.config/hypr`
   or Omarchy's defaults uses it outside a submap; Omastrator's own binds don't
-  count, which keeps a second run quiet. Skipped keys are written to the
+  count, which keeps a second run quiet: Lua Hyprland reports every bind as
+  `__lua` with a numeric arg, so ours are told apart by their "Omastrator…"
+  description, and a release bind (which the dictation key has, described
+  "Omastrator: dictate (release)") counts as ours when the press bind on the
+  same combo is. Without a live Hyprland, the config files are read: Lua
+  `hl.bind`, Omarchy's `o.bind` and `o.bind_toggle` (never `unbind`), and
+  hyprlang `bind*` lines, whose `$variables` are collected from every file
+  first, since Hyprland shares them across `source`d files. Skipped keys are written to the
   key file's header and to `setup.json`. Binds by keycode (`code:24`) can't
   be compared with a key name and aren't detected.
+- **A key file can't hurt the binds around it** (the tester's report, 2026-09-28:
+  after setup the workspace keys, Super+number, and Super+Enter stopped
+  working). The cause is not proven, because the failure hasn't been
+  reproduced on a live desktop. Checked on Hyprland 0.56.2 with
+  `Hyprland --verify-config` (read-only, no compositor started):
+  - An error inside a `hl.define_submap` body doesn't leak. Hyprland catches
+    it, reports "error in submap …", and the next bind lands in the default
+    submap. So the theory that `pcall(dofile, …)` swallows an error and leaves
+    a submap open is wrong for this version. The source line is at the end of
+    the user's config, so nothing of the user's or Omarchy's loads inside our
+    context; the hyprlang file starts with `submap = reset`, so an unclosed
+    submap of the user's can't hold ours either.
+  - `Alt_L`, `ALT + Alt_L` and `Escape` (and `escape` in hyprlang) are valid
+    in both formats. Only an unknown key name (`Not_A_Real_Key`) fails, and
+    only that one bind.
+  - The likeliest cause is at run time: with an `omastrator-*` submap
+    latched (Super+Alt+D, C, A, L, O, the island's own mode switch, dictation's
+    heard prompt), every global bind is dead, Super+number and Super+Enter
+    included. Nothing put the keyboard back if the island or the app stopped
+    while a mode was on, and the Super+Alt+Escape hatch was itself a global
+    bind, dead in exactly that state.
+  What the key file does now: the reset key is `submap_universal` (hyprlang
+  `bindu`), so it works inside any submap, and it closes the submap itself
+  before asking `omastrator reset`. Every bind, submap body and dispatch runs
+  protected; a failure is a line in `~/.local/state/omastrator/setup.log` and
+  a Hyprland notification, and never stops the rest of the file. Leaving a
+  mode closes the submap before it runs the island command, so a failing
+  command can't leave a mode's keys held. After `--apply` (when Hyprland
+  answers), setup reloads Hyprland and reads `hyprctl binds -j` again; if any
+  bind the user had in the default submap (Super+1, Super+Return, …) is gone,
+  it restores the backup by itself, reloads, and says which keys were lost.
 - **Asking.** Each step is shown (plugin files by name, everything else as a
   unified diff) and asked about; `--yes` accepts all, `--dry-run` changes
   nothing, and a closed input answers no. Setup never installs packages: it

@@ -1,5 +1,6 @@
 #include "Agent/Setup.h"
 #include "Agent/BrowserHost.h"
+#include "Agent/Hyprland.h"
 #include "Agent/Vocabulary.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -196,6 +197,7 @@ QString Environment::menu() const { return QDir(configHome).filePath(QStringLite
 QString Environment::hyprDirectory() const { return QDir(configHome).filePath(QStringLiteral("hypr")); }
 QString Environment::record() const { return QDir(omastratorConfig()).filePath(QStringLiteral("setup.json")); }
 QString Environment::backups() const { return QDir(stateHome).filePath(QStringLiteral("omastrator/setup-backups")); }
+QString Environment::setupLog() const { return QDir(stateHome).filePath(QStringLiteral("omastrator/setup.log")); }
 QString Environment::browserHostManifest() const
 {
     return QDir(configHome).filePath(QStringLiteral("chromium/NativeMessagingHosts/%1.json").arg(QLatin1String(BrowserHost::name)));
@@ -259,7 +261,7 @@ bool submapDefined(const Environment &environment, const QString &submap)
     const QString name = lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf");
     const QByteArray keys = readFile(QDir(environment.omastratorConfig()).filePath(name)).value_or(QByteArray());
     const QByteArray hypr = readFile(QDir(environment.hyprDirectory()).filePath(name)).value_or(QByteArray());
-    const QByteArray defined = lua ? "define_submap(\"" + submap.toUtf8() + "\"" : "submap = " + submap.toUtf8() + "\n";
+    const QByteArray defined = lua ? "\nsubmap(\"" + submap.toUtf8() + "\", function()" : "submap = " + submap.toUtf8() + "\n";
     return keys.contains(defined) && hypr.contains("omastrator/" + name.toUtf8());
 }
 
@@ -457,12 +459,14 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                "kept). If that copy can't be made, nothing changes. Setup never takes a\n"
                "key you already use: it skips that key and says so.\n\n"
                "  --yes           Accept every change without asking.\n"
-               "  --apply         Also add the line that loads the keys to your Hyprland config.\n"
+               "  --apply         Also add the line that loads the keys to your Hyprland config, then\n"
+               "                  check your own keys still work; if one doesn't, restore the backup.\n"
                "  --no-keys       Install without any global keys: the app, menu and plugins only.\n"
                "  --dry-run       Show what would change; change nothing.\n"
                "  --remove        Take out exactly what setup added.\n"
                "  --restore       Put back the files from the newest backup, or from BACKUP (a\n"
                "                  name from --list-backups), after showing what will change.\n"
+               "                  The files it replaces are backed up first.\n"
                "  --list-backups  List the backups, newest first.\n";
         return 0;
     }
@@ -579,9 +583,15 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             err << QStringLiteral("Nothing was changed: setup couldn't make its backup. %1\n").arg(failure);
             return 1;
         }
-        pruneBackups(environment, backupName);
+        pruneBackups(environment, {backupName});
         out << "\nBacked up to " << backupFolder << ".\n";
     }
+
+    // What Hyprland binds now (Super+1, Super+Return and the rest), to check it still does once the keys are loaded.
+    std::optional<QSet<QString>> bindsBefore;
+    if (!removing && !dryRun && (std::find(accepted.begin(), accepted.end(), QStringLiteral("keys")) != accepted.end()
+                                 || std::find(accepted.begin(), accepted.end(), QStringLiteral("source")) != accepted.end()))
+        bindsBefore = liveUserBinds();
 
     bool reloadShell = false;
     for (const QString &key : accepted) {
@@ -677,6 +687,19 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             for (QString folder = QFileInfo(environment.record()).absolutePath(); !QFileInfo::exists(folder); folder = QFileInfo(folder).absolutePath())
                 record.directories << folder;
             writeFile(environment.record(), record.toJson());
+        }
+    }
+    if (bindsBefore) {
+        const QStringList lost = lostBinds(*bindsBefore);
+        if (!lost.isEmpty()) {
+            err << "\nAfter the change, Hyprland no longer has these keys: " << lost.mid(0, 8).join(QStringLiteral(", "))
+                << (lost.size() > 8 ? QStringLiteral(" and %1 more").arg(lost.size() - 8) : QString()) << ".\n"
+                << "Setup is putting every file back as it was. Anything Omastrator's key file logged is in " << environment.setupLog() << ".\n";
+            err.flush();
+            const int restored = runRestore(environment, backupName, true, false, in, out, err);
+            Hyprland::reload();
+            out << (restored == 0 ? "Your keys are back. Omastrator's keys were not installed.\n" : "The restore didn't finish: run `omastrator setup --restore " + backupName + "`.\n");
+            return 1;
         }
     }
     if (reloadShell && !dryRun)

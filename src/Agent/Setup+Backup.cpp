@@ -152,11 +152,11 @@ QString writeBackup(const Environment &environment, const QString &name, const Q
     return {};
 }
 
-void pruneBackups(const Environment &environment, const QString &except, int keep)
+void pruneBackups(const Environment &environment, const QStringList &except, int keep)
 {
     const QStringList names = backupNames(environment);
     for (qsizetype at = keep; at < names.size(); ++at) {
-        if (names[at] != except)
+        if (!except.contains(names[at]))
             QDir(QDir(environment.backups()).filePath(names[at])).removeRecursively();
     }
 }
@@ -266,6 +266,19 @@ int runRestore(const Environment &environment, const QString &name, bool yes, bo
         out << "Skipped.\n";
         return 0;
     }
+    // What is about to be replaced is copied first, so a restore can be undone with another one.
+    const QString backupName = newBackupName(environment);
+    QStringList paths;
+    for (const Change &change : plan)
+        paths << change.path;
+    paths.removeDuplicates();
+    if (const QString failure = writeBackup(environment, backupName, QStringLiteral("restore"), paths, nullptr); !failure.isEmpty()) {
+        err << QStringLiteral("Nothing was changed: the restore couldn't back up the current files first. %1\n").arg(failure);
+        return 1;
+    }
+    // The backup being restored from stays too, so it can be used again.
+    pruneBackups(environment, {backupName, backup->name});
+    out << "\nBacked up the current files to " << QDir(environment.backups()).filePath(backupName) << " first.\n";
     bool reload = false;
     for (const Change &change : plan) {
         if (change.after) {
