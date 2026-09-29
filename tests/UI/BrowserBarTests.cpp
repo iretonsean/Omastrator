@@ -5,6 +5,8 @@
 #include "UI/BrowserViews.h"
 #include <QLineEdit>
 #include <QSignalSpy>
+#include <QDir>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
 #include <algorithm>
@@ -98,7 +100,25 @@ struct Rig {
 class BrowserBarTests : public QObject {
     Q_OBJECT
 
+private:
+    QTemporaryDir m_directory;
+
 private slots:
+    // Before any EditorSession: QSettings caches its paths on first use, so a later change would reach the real config.
+    void initTestCase()
+    {
+        QVERIFY(m_directory.isValid());
+        qunsetenv("HYPRLAND_INSTANCE_SIGNATURE");
+        qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
+        qputenv("XDG_DATA_HOME", m_directory.filePath(QStringLiteral("data")).toUtf8());
+        qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
+    }
+
+    void settingsLiveInTheTemporaryFolder()
+    {
+        QVERIFY2(QSettings().fileName().startsWith(m_directory.path()), qPrintable(QSettings().fileName()));
+    }
+
     void anAddressIsWhatPeopleType_data()
     {
         QTest::addColumn<QString>("typed");
@@ -413,9 +433,7 @@ private slots:
 
     void signingInStopsTheFramesAndResumesThemWhenTheWindowCloses()
     {
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        qputenv("XDG_CONFIG_HOME", directory.filePath(QStringLiteral("config")).toUtf8());
+        const QDir directory(m_directory.path());
         // A browser that stays open for a moment, and never draws anything.
         const QString script = directory.filePath(QStringLiteral("chromium"));
         QFile file(script);
