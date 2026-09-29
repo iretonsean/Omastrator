@@ -314,6 +314,14 @@ Item {
     }
   }
 
+  // The focused window's class, for showing the island only with Omastrator (Logic.islandShown).
+  readonly property string activeClass: {
+    var toplevel = Hyprland.activeToplevel
+    var ipc = toplevel ? toplevel.lastIpcObject : null
+    return ipc && ipc["class"] ? String(ipc["class"]) : ""
+  }
+  readonly property bool islandShown: Logic.islandShown(status.status, activeClass)
+
   readonly property string focusedName: Hyprland.focusedMonitor ? String(Hyprland.focusedMonitor.name || "") : ""
 
   component IslandButton: Item {
@@ -384,7 +392,7 @@ Item {
       required property var modelData
       screen: modelData
       // Follows the focused monitor; before Hyprland answers, the first screen.
-      visible: root.focusedName === "" ? modelData === Quickshell.screens[0] : modelData.name === root.focusedName
+      visible: root.islandShown && (root.focusedName === "" ? modelData === Quickshell.screens[0] : modelData.name === root.focusedName)
 
       // A strip as wide as the screen and a fixed height: the surface never
       // resizes on hover. Sizing it to the tooltip moved the pill away from

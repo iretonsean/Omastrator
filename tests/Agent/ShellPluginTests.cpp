@@ -104,6 +104,9 @@ private slots:
         const QString overlay = read(QStringLiteral("omastrator.island/Overlay.qml"));
         QVERIFY(!overlay.isEmpty());
         QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Logic.designOnLine(next)")));
+        // The island's window shows through the visibility rule, so it can't drift from what the tests check.
+        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Logic.islandShown(status.status, activeClass)")));
+        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("visible: root.islandShown && ")));
         QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Overlay { status: status; islandWidth: root.pillWidth; islandHeight: root.pillHeight }")));
         const QString window = block(overlay, QStringLiteral("PanelWindow"));
         QVERIFY(window.contains(QStringLiteral("WlrLayershell.layer: WlrLayer.Overlay")));
@@ -211,6 +214,43 @@ private slots:
         spot = call("clampBar", {5000, 5000, 300, 60, screen, 80}).toMap();
         QCOMPARE(spot["x"].toInt(), 1616);
         QCOMPARE(spot["y"].toInt(), 1016);
+
+        // The bar sticks to its window: it shows on the monitor its target is on, and not at all without one.
+        QVERIFY(call("barShownOn", {QVariantMap{{"bounds", QVariantList{2000, 100, 200, 40}}}, screen}).toBool());
+        QVERIFY(!call("barShownOn", {QVariantMap{{"bounds", QVariantList{100, 100, 200, 40}}}, screen}).toBool());
+        QVERIFY(!call("barShownOn", {QVariant(), screen}).toBool());
+
+        // The island shows only with Omastrator (interim, pending a rethink of the island), and stays while it is a way out.
+        const QString own = QStringLiteral("io.github.iretonsean.Omastrator");
+        const QVariantMap quiet{{"islandShow", "with-app"}, {"dictation", "idle"}, {"ready", false}, {"proposal", ""}, {"design", QVariantMap{{"on", false}}}};
+        QVERIFY(!call("islandShown", {quiet, "foot"}).toBool());
+        QVERIFY(!call("islandShown", {quiet, ""}).toBool());
+        QVERIFY(!call("islandShown", {QVariantMap(), ""}).toBool());
+        QVERIFY(call("islandShown", {quiet, own}).toBool());
+        QVERIFY(call("islandShown", {quiet, "omastrator"}).toBool());
+        // Design mode, listening (and showing what was heard), a proposal or a result waiting: the island stays.
+        QVariantMap kept = quiet;
+        kept["design"] = QVariantMap{{"on", true}};
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        kept = quiet;
+        kept["dictation"] = "listening";
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        kept["dictation"] = "heard";
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        kept = quiet;
+        kept["ready"] = true;
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        kept = quiet;
+        kept["proposal"] = "AI: Palette";
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        kept = quiet;
+        kept["design"] = QVariantMap{{"on", false}, {"proposal", QVariantMap{{"title", "AI: Palette"}}}};
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        // The setting shows it everywhere.
+        kept = quiet;
+        kept["islandShow"] = "always";
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        QVERIFY(call("islandShown", {kept, ""}).toBool());
 
         // A lift's progress reads plainly on the bar.
         QCOMPARE(call("liftText", {QVariantMap{{"label", "div.card"}, {"stage", "Fetching pictures…"}, {"done", 3}, {"total", 8}}}).toString(),

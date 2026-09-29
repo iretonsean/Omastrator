@@ -6,6 +6,7 @@
 #include "Agent/StatusStream.h"
 #include "FakeAgentHost.h"
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalSocket>
@@ -183,6 +184,32 @@ private slots:
         QVERIFY(!follower.waitForReadyRead(200));
         other.call(QStringLiteral("select_tool"), {{"tool", "select"}});
         QCOMPARE(nextLine()["params"].toObject()["tool"].toString(), QStringLiteral("select"));
+    }
+
+    // Interim, pending a rethink of the island: it shows only with Omastrator unless told to show always.
+    void theIslandShowsWithTheAppUnlessToldToShowAlways()
+    {
+        QFile::remove(Island::visibilityPath());
+        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
+        QCOMPARE(StatusStream::compose({}, Island::State())["islandShow"].toString(), QStringLiteral("with-app"));
+        QCOMPARE(island({QStringLiteral("show"), QStringLiteral("always")}), 0);
+        QCOMPARE(Island::visibility(), QStringLiteral("always"));
+        QCOMPARE(StatusStream::compose({}, Island::State())["islandShow"].toString(), QStringLiteral("always"));
+        // It is kept in the config, not the session's runtime state, so it survives logout.
+        QVERIFY(QFileInfo::exists(Island::visibilityPath()));
+        QVERIFY(!Island::visibilityPath().startsWith(Island::runtimeDirectory()));
+        QCOMPARE(island({QStringLiteral("show"), QStringLiteral("with-app")}), 0);
+        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
+        QVERIFY(!Island::setVisibility(QStringLiteral("sometimes")).isEmpty());
+        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
+        QCOMPARE(Island::setVisibility(QStringLiteral("always")), QString());
+        // Anything unreadable falls back to the default.
+        QFile file(Island::visibilityPath());
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write("not json");
+        file.close();
+        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
+        QFile::remove(Island::visibilityPath());
     }
 
     void islandCliKeepsTheMode()
