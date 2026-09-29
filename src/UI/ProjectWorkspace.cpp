@@ -82,11 +82,13 @@ ProjectTab &ProjectWorkspace::addTab(bool reuseEmpty, const QString &name)
     return current();
 }
 
-// A paste from another app says once what it couldn't bring along.
+// A paste from another app says once what it couldn't bring along; a locked document says so when it turns an edit away.
 void ProjectWorkspace::watchPaste(ProjectTab &tab)
 {
     connect(&tab.session, &EditorSession::pasteLeftOut, this,
             [this](const QStringList &warnings) { showError(QStringLiteral("Some of what you pasted was left out"), warnings.join(QLatin1Char('\n'))); });
+    // A refused edit says why on the status line.
+    connect(&tab.session, &EditorSession::editRefused, this, [this] { setNotice(EditorSession::lockedNotice()); });
 }
 
 // A lone empty tab gives way to what arrives.

@@ -172,7 +172,8 @@ const std::vector<ShortcutDefinition> &ShortcutDefinition::all()
             // Figma's keys for the commands that had none; a plain Shift letter is safe because typing keeps its capitals.
             entry("Add Auto Layout", "a", 8, true), entry("Remove Auto Layout", "a", 10, true), entry("Flip Horizontal", "h", 8, true),
             entry("Flip Vertical", "v", 8, true), entry("Export for Screens", "e", 9, true), entry("Properties", "8", 2, true),
-            entry("Keyboard Shortcuts", "/", 9, true)};
+            entry("Keyboard Shortcuts", "/", 9, true),
+            entry("Lock Document", "l", 11, true)};
         // Illustrator's type keys: they work on selected type and while typing, and rest otherwise.
         const QString left(QChar(0xf702)), right(QChar(0xf703)), up(QChar(0xf700)), down(QChar(0xf701));
         for (const auto &[title, key, modifiers] : std::vector<std::tuple<const char *, QString, int>>{

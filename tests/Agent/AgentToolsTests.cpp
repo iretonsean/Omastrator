@@ -1,6 +1,7 @@
 #include "Agent/AgentProtocol.h"
 #include "Agent/AgentTools.h"
 #include "FakeAgentHost.h"
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSignalSpy>
@@ -117,6 +118,50 @@ private slots:
         QCOMPARE(failure(tools, QStringLiteral("document_get"), {}), int(AgentProtocol::noDocument));
         host.hasSession = false;
         QCOMPARE(failure(tools, QStringLiteral("insert_svg"), {{"svg", square}}), int(AgentProtocol::noDocument));
+    }
+
+    void aLockedDocumentTurnsEveryEditAwayAndStillReads()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({200, 200});
+        const QUuid shape = rectangle(host.editor, {0, 0, 10, 10});
+        host.editor.setDocumentLocked(true);
+        const VectorDocument before = *host.editor.document();
+        AgentTools tools(host);
+        QString message;
+        const QList<std::pair<QString, QJsonObject>> edits{
+            {"insert_svg", {{"svg", square}}},
+            {"delete", {{"ids", QJsonArray{shape.toString()}}}},
+            {"rename", {{"names", QJsonObject{{shape.toString(), "Renamed"}}}}},
+            {"group", {{"ids", QJsonArray{shape.toString()}}}},
+        };
+        for (const auto &[method, params] : edits) {
+            QCOMPARE(failure(tools, method, params, &message), int(AgentProtocol::documentLocked));
+            QVERIFY2(message.contains(QStringLiteral("Unlock Document")), qPrintable(method));
+        }
+        QVERIFY(!tools.hasProposal());
+        QVERIFY(*host.editor.document() == before);
+        // Reading, selecting and measuring stay open.
+        QVERIFY(tools.call(QStringLiteral("document_get"), {}).contains(QStringLiteral("objects")));
+        tools.call(QStringLiteral("select"), {{"ids", QJsonArray{shape.toString()}}});
+        QCOMPARE(host.editor.selection(), std::vector<QUuid>{shape});
+        // Unlocking gives the agent its edits back.
+        host.editor.setDocumentLocked(false);
+        tools.call(QStringLiteral("rename"), {{"names", QJsonObject{{shape.toString(), "Renamed"}}}});
+        QCOMPARE(host.editor.document()->find(shape)->name, QStringLiteral("Renamed"));
+    }
+
+    void aLockedDocumentStillSavesAndExports()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({200, 200});
+        rectangle(host.editor, {0, 0, 10, 10});
+        host.editor.setDocumentLocked(true);
+        AgentTools tools(host);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("out.svg"));
+        tools.call(QStringLiteral("export"), {{"path", path}});
+        QVERIFY(QFile::exists(path));
     }
 
     void aUsersDragIsNeverWrittenOver()

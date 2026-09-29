@@ -1,12 +1,14 @@
 #include "Document/PathOperations.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
+#include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "TemporaryConfig.h"
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
 #include <QSettings>
+#include <QToolButton>
 #include <QStandardPaths>
 #include <QtTest>
 
@@ -45,6 +47,8 @@ private slots:
     void typeMenuConvertsPointAndArea();
     void figmaKeysWorkFromAnyPanel();
     void figmaKeysSitBesideIllustratorsOnTheirEntries();
+    void lockDocumentTogglesAndClosesTheEditingEntries();
+    void aLockedDocumentShowsItsLockAndSaysWhyOnARefusedEdit();
 };
 
 void MenusTests::initTestCase()
@@ -85,7 +89,7 @@ void MenusTests::everyMenuKeyHasOneDefinition()
         QVERIFY2(definition != ShortcutDefinition::all().end(), qPrintable(entry->objectName()));
         used[definition->id()] += 1;
     }
-    QCOMPARE(keyed, 79);
+    QCOMPARE(keyed, 80);
     for (const ShortcutDefinition &definition : ShortcutDefinition::all()) {
         if (definition.isMenu())
             QVERIFY2(used.value(definition.id()) == 1, qPrintable(definition.id()));
@@ -449,6 +453,55 @@ void MenusTests::figmaKeysSitBesideIllustratorsOnTheirEntries()
     QVERIFY(ShortcutSettings::shared().save({{QStringLiteral("Menus:Lock Selection"), ShortcutChord("l", 3)}}));
     QCOMPARE(menus.action("lockSelection")->shortcuts().first(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_L));
     QCOMPARE(menus.action("lockSelection")->shortcuts().last(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L));
+}
+
+void MenusTests::lockDocumentTogglesAndClosesTheEditingEntries()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    QVERIFY(!menus.action("lockDocument")->isEnabled());
+    workspace.createDocument(QSizeF(200, 200));
+    EditorSession &session = workspace.current().session;
+    box(session, 10);
+    // Ctrl+K is the command palette; Figma's lock key with Alt is this one.
+    QCOMPARE(menus.action("lockDocument")->shortcut(), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_L));
+    QCOMPARE(menus.action("lockDocument")->text(), QString("Lock Document"));
+    QVERIFY(menus.action("lockDocument")->isEnabled());
+    QVERIFY(menus.action("group")->isEnabled() || menus.action("bringToFront")->isEnabled());
+    menus.action("lockDocument")->trigger();
+    QVERIFY(session.isDocumentLocked());
+    QCOMPARE(menus.action("lockDocument")->text(), QString("Unlock Document"));
+    for (const QString name : {"cut", "paste", "pasteInPlace", "pasteInFront", "pasteInBack", "place", "bringToFront", "undo", "redo"})
+        QVERIFY2(!menus.action(name)->isEnabled(), qPrintable(name));
+    // Looking, keeping and sending it out stay open, and so does the way back.
+    for (const QString name : {"copy", "save", "saveAs", "exportPNG", "exportSVG", "exportPDF", "selectAll", "zoomIn", "lockDocument"})
+        QVERIFY2(menus.action(name)->isEnabled(), qPrintable(name));
+    menus.action("lockDocument")->trigger();
+    QVERIFY(!session.isDocumentLocked());
+    QVERIFY(menus.action("bringToFront")->isEnabled());
+    QCOMPARE(menus.action("lockDocument")->text(), QString("Lock Document"));
+}
+
+void MenusTests::aLockedDocumentShowsItsLockAndSaysWhyOnARefusedEdit()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    workspace.createDocument(QSizeF(200, 200));
+    EditorSession &session = workspace.current().session;
+    const QUuid id = box(session, 10);
+    ProjectTabStrip *strip = window.findChild<ProjectTabStrip *>();
+    QVERIFY(strip);
+    QVERIFY(strip->buttons().first()->findChild<QToolButton *>()->icon().isNull());
+    session.setDocumentLocked(true);
+    QToolButton *select = strip->buttons().first()->findChild<QToolButton *>();
+    QVERIFY(!select->icon().isNull());
+    QVERIFY(select->toolTip().contains(QStringLiteral("Unlock Document")));
+    session.rename(id, QStringLiteral("Nope"));
+    QCOMPARE(session.document()->find(id)->name, QStringLiteral("Box"));
+    QVERIFY(workspace.cloudStatusText().contains(QStringLiteral("locked")));
+    session.setDocumentLocked(false);
+    QVERIFY(strip->buttons().first()->findChild<QToolButton *>()->icon().isNull());
 }
 
 QTEST_MAIN(MenusTests)

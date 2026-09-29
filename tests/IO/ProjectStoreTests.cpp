@@ -63,6 +63,18 @@ private slots:
         QVERIFY(read == document);
     }
 
+    void aLockedFileStaysLockedAndOldFilesAreNot()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("drawing.omai"));
+        VectorDocument document = sample();
+        ProjectStore::write(document, path);
+        QVERIFY(!ProjectStore::read(path).locked);
+        document.locked = true;
+        ProjectStore::write(document, path);
+        QVERIFY(ProjectStore::read(path).locked);
+    }
+
     void overwritesAnExistingFile()
     {
         QTemporaryDir dir;

@@ -95,8 +95,8 @@ void KeyboardShortcutsTests::theListIsIllustratorsKeys()
     const std::vector<ShortcutDefinition> &all = ShortcutDefinition::all();
     // Sixty-eight menu entries (Keyboard Shortcuts the last in), eleven type keys, twenty tools (Type on a
     // Path's Shift+T, Width, Artboard and Frame among them) and Figma's three tool aliases, five keys, eight nudges.
-    QCOMPARE(int(all.size()), 115);
-    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 79);
+    QCOMPARE(int(all.size()), 116);
+    QCOMPARE(int(std::count_if(all.begin(), all.end(), [](const ShortcutDefinition &each) { return each.isMenu(); })), 80);
     QCOMPARE(named("Join").original, ShortcutChord("j", 1));
     QCOMPARE(named("Hide Guides").original, ShortcutChord(";", 1));
     QCOMPARE(named("Scissors tool").original, ShortcutChord("c"));

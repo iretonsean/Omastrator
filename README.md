@@ -151,6 +151,8 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   them. Copy Properties and Paste Properties (Ctrl+Alt+C, Ctrl+Alt+V) move a
   whole appearance between objects; the eyedropper's Alt-click gives the
   selection's style to what you click.
+- File ▸ Lock Document (Ctrl+Alt+Shift+L) makes a file read-only, saved in the
+  `.omai`; you can still select, inspect, measure, export and share it.
 - Layers and groups with visibility, locking and drag-to-reorder, clipping masks,
   opacity masks (Object ▸ Opacity Mask: the top object's luminance masks the
   rest, with Clip and Invert Mask) and compound paths.
