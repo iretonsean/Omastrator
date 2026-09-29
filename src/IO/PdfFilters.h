@@ -10,6 +10,10 @@
 // undecoded for the image decoder, named in `imageFilter`.
 namespace PdfFilters {
 
+// No single stream decodes past this; a Flate or LZW bomb is cut off here
+// with a warning instead of exhausting memory.
+constexpr qint64 maximumDecodedSize = 128LL * 1024 * 1024;
+
 struct Decoded {
     QByteArray bytes;
     // Empty once every filter named has produced plain samples. Otherwise the
@@ -25,11 +29,13 @@ struct Decoded {
 Decoded decodeStream(const Pdf::Dict &dict, const QByteArray &rawBytes,
                       const std::function<Pdf::Object(const Pdf::Object &)> &resolve);
 
-QByteArray inflate(const QByteArray &data);
-QByteArray decodeLZW(const QByteArray &data, int earlyChange = 1);
+// Each decoder keeps whatever it decoded before a corrupt, truncated or
+// oversized stream gave out, and says so once in `warnings` (when given).
+QByteArray inflate(const QByteArray &data, QStringList *warnings = nullptr);
+QByteArray decodeLZW(const QByteArray &data, int earlyChange = 1, QStringList *warnings = nullptr);
 QByteArray decodeAsciiHex(const QByteArray &data);
 QByteArray decodeAscii85(const QByteArray &data);
-QByteArray decodeRunLength(const QByteArray &data);
+QByteArray decodeRunLength(const QByteArray &data, QStringList *warnings = nullptr);
 // PNG predictors 10-15 and TIFF predictor 2; predictor <= 1 returns `data` unchanged.
 QByteArray applyPredictor(const QByteArray &data, int predictor, int colors, int bitsPerComponent, int columns);
 
