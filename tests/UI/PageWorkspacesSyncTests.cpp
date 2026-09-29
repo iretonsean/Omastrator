@@ -219,6 +219,7 @@ void PageWorkspacesSyncTests::aClosedStandInStaysClosedUntilTheUserNavigatesTher
     rig.world.settle();
     const QString a = rig.name(0), b = rig.name(1), c = rig.name(2);
     // Super+W on the first page's stand-in.
+    QVERIFY(!rig.world.stand(a).isEmpty());
     auto *standIn = qobject_cast<PageStandIn *>(rig.world.window(rig.world.stand(a))->owner);
     QVERIFY(standIn);
     standIn->close();

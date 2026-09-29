@@ -15,7 +15,8 @@ public:
             return;
         file.write("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$0.log\"\n"
                    "if [ \"$1\" = \"-j\" ] && [ -f \"$0.$2.json\" ]; then cat \"$0.$2.json\"; fi\n"
-                   "if [ -f \"$0.fail\" ]; then echo 'no' >&2; exit 1; fi\n");
+                   "if [ -f \"$0.fail\" ]; then echo 'no' >&2; exit 1; fi\n"
+                   "if [ \"$1\" != \"-j\" ] && [ -f \"$0.faildispatch\" ]; then echo 'no' >&2; exit 1; fi\n");
         file.close();
         file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
     }
@@ -29,6 +30,14 @@ public:
             write(m_path + QStringLiteral(".fail"), "1");
         else
             QFile::remove(m_path + QStringLiteral(".fail"));
+    }
+    // Queries still answer; every dispatcher fails (exit 1).
+    void setDispatchFailing(bool failing) const
+    {
+        if (failing)
+            write(m_path + QStringLiteral(".faildispatch"), "1");
+        else
+            QFile::remove(m_path + QStringLiteral(".faildispatch"));
     }
     void clearLog() const { QFile::remove(m_path + QStringLiteral(".log")); }
     QStringList log() const
