@@ -1,4 +1,5 @@
 #include "Document/PathOperations.h"
+#include "WidgetCleanup.h"
 #include "UI/ProjectWorkspace.h"
 #include <QApplication>
 #include <QFile>
@@ -97,10 +98,7 @@ void ProjectWorkspaceTests::init()
 // Alerts left open would answer the next test.
 void ProjectWorkspaceTests::cleanup()
 {
-    for (QWidget *widget : QApplication::topLevelWidgets()) {
-        if (qobject_cast<QMessageBox *>(widget))
-            delete widget;
-    }
+    deleteTopLevelWidgets([](QWidget *widget) { return qobject_cast<QMessageBox *>(widget) != nullptr; });
 }
 
 void ProjectWorkspaceTests::theFirstEmptyTabIsReused()
