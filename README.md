@@ -532,6 +532,17 @@ omastrator setup
   light in omarchy-shell, the Hyprland keys, the Omarchy menu entries, the
   Chromium extension) and asks before making it. `omastrator setup --remove`
   undoes it.
+- **Safe to try:** before it changes anything, setup copies every file it will
+  change to `~/.local/state/omastrator/setup-backups/<date-time>/` (the newest
+  5 are kept; if the copy can't be made, nothing changes).
+  `omastrator setup --restore` puts the newest backup back (after showing you
+  what will change), `--restore NAME` a named one, and `--list-backups` lists
+  them.
+- **Your keys stay yours:** setup never takes a key you already use. It checks
+  Hyprland's live binds and your config, skips any key that's taken and says
+  so ("Super+Alt+C is already yours: skipped"). `omastrator setup --no-keys`
+  installs with no global keys at all; reach design mode from the Omarchy menu
+  or with `omastrator design on`.
 
 Coming, to make installing quicker (the PKGBUILDs are tested locally, the
 release and CI workflows are written but have **never run**, and nothing is

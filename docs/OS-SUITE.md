@@ -269,6 +269,15 @@ reloading it or opening a second browser.
 - Offers the bar widget, the Hyprland `source` line and voxtype.
 - Every change to a user file is shown first and needs confirmation; `--yes`
   confirms all. `omastrator setup --remove` undoes exactly what setup added.
+- Before it writes anything, setup copies every file it will change to
+  `~/.local/state/omastrator/setup-backups/<yyyymmdd-hhmmss>/` (with a
+  manifest of the original paths), keeps the newest 5, and changes nothing if
+  the copy can't be made. `omastrator setup --restore [BACKUP]` shows what
+  it would put back, asks (or `--yes`), and restores; `--list-backups` lists
+  them.
+- Never takes a key you already use: it reads Hyprland's live binds and your
+  config, skips that key and says so ("Super+Alt+C is already yours:
+  skipped"). `--no-keys` installs with no global keys at all.
 - Checks for the needed tools (hyprpicker, grim, slurp, wl-clipboard,
   chromium, voxtype) and names each missing one with the Omarchy or pacman
   command to add it.
@@ -438,6 +447,22 @@ Choices the spec left open, made while building it, in build order.
   folder only once it is empty. The tests check a temporary HOME is
   byte-for-byte the same after setup and remove, and that each command run
   twice changes nothing the second time.
+- **Backups and restore.** The backup is written before the first file is
+  touched, and its manifest last, so a folder without one is a copy that never
+  finished and setup hadn't started. `--restore` puts every file back to its
+  copied bytes and deletes what setup created (and the folders it made, once
+  empty), so it also works after an interrupted setup that never wrote
+  `setup.json`. Files setup didn't change aren't in the backup and aren't
+  touched. A restore doesn't copy the state it replaces: it shows the diff
+  and asks first.
+- **Key clashes.** Only the global keys can clash: Super+Alt+D, C, A, L, V
+  (dictation), the design and Desk keys and Super+Alt+Escape. The keys inside
+  Omastrator's own submaps only exist while one is active. A key counts as
+  taken when a live bind (`hyprctl binds -j`) or a bind in `~/.config/hypr`
+  or Omarchy's defaults uses it outside a submap; Omastrator's own binds don't
+  count, which keeps a second run quiet. Skipped keys are written to the
+  key file's header and to `setup.json`. Binds by keycode (`code:24`) can't
+  be compared with a key name and aren't detected.
 - **Asking.** Each step is shown (plugin files by name, everything else as a
   unified diff) and asked about; `--yes` accepts all, `--dry-run` changes
   nothing, and a closed input answers no. Setup never installs packages: it
