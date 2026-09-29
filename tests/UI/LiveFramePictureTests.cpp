@@ -78,10 +78,12 @@ QByteArray pageWithBand(const char *band)
         + "\"></div>\n"
           "<script>\n"
           "let last = null;\n"
+          "window.polls = 0;\n"
           "setInterval(async () => {\n"
           "  const text = await (await fetch('style.css', {cache: 'no-store'})).text();\n"
           "  if (last !== null && text !== last) document.getElementById('style').href = 'style.css?' + Date.now();\n"
           "  last = text;\n"
+          "  window.polls++;\n"
           "}, 150);\n"
           "</script>\n";
 }
@@ -330,7 +332,11 @@ private slots:
 
         // Reload: a change the page picks up only when it loads again.
         write(folder + QStringLiteral("/index.html"), pageWithBand("#f90"));
-        QTest::qWait(300);
+        // The page's hot reload polls the stylesheet, never this file. Waiting isn't proof it looked: the poll has to have run
+        // twice since the write (the first pass may have begun before it), and the canvas is checked after that.
+        const int polls = inTab(session, frame, QStringLiteral("window.polls")).toInt();
+        QVERIFY2(polls > 0, "the page's poll never ran, so it can't show that it leaves this file alone");
+        QTRY_VERIFY_WITH_TIMEOUT(inTab(session, frame, QStringLiteral("window.polls")).toInt() >= polls + 2, follow);
         QVERIFY(near(at(session, frame, {300, 230}), QColor(0x88, 0x88, 0x88)));
         views->act(frame, BrowserViewHost::Action::reload);
         QTRY_VERIFY2_WITH_TIMEOUT(near(at(session, frame, {300, 230}), QColor(0xff, 0x99, 0x00)), "the canvas kept the picture from before Reload", follow);
