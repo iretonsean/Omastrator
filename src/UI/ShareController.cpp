@@ -275,8 +275,9 @@ QString ShareController::render(Share::Format format, const QString &baseName, Q
     if (!sharesSelection() && !session.document()->artboard(session.activeArtboard()).exported)
         return QStringLiteral("“%1” is set not to export. Turn it on in Properties ▸ Document, or pick another artboard.")
             .arg(session.document()->artboard(session.activeArtboard()).name);
-    const VectorDocument document = sharesSelection() ? Share::selectionDocument(*session.document(), session.selection())
-        : session.document()->artboards.empty() ? *session.document() : session.document()->artboardDocument(session.activeArtboard());
+    const VectorDocument &design = session.designDocument();
+    const VectorDocument document = sharesSelection() ? Share::selectionDocument(design, session.selection())
+        : design.artboards.empty() ? design : design.artboardDocument(session.activeArtboard());
     m_folder = std::make_unique<QTemporaryDir>(QDir::temp().filePath(QStringLiteral("omastrator-share-XXXXXX")));
     *file = m_folder->filePath(QStringLiteral("%1.%2").arg(baseName, Share::suffix(format)));
     try {

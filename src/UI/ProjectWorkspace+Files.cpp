@@ -145,7 +145,7 @@ bool ProjectWorkspace::saveTo(ProjectTab &tab, const QString &path)
     // The newest picture of each Browser View goes in with the file.
     BrowserViews::of(tab.session)->flushPictures();
     try {
-        ProjectStore::write(*tab.session.document(), path);
+        ProjectStore::write(tab.session.designDocument(), path);
     } catch (const FileError &error) {
         showError(QStringLiteral("Couldn’t save “%1”").arg(QFileInfo(path).fileName()), error.message());
         return false;
@@ -221,10 +221,10 @@ QString notExportedReason(const EditorSession &session)
 bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format format, const RasterOptions &options)
 {
     EditorSession &session = current().session;
-    const std::optional<VectorDocument> &document = session.document();
-    if (!document)
+    if (!session.hasDocument())
         return false;
     BrowserViews::of(session)->flushPictures();
+    const VectorDocument *document = &session.designDocument();
     if (const QString reason = notExportedReason(session); !reason.isEmpty()) {
         showError(QStringLiteral("Couldn’t export “%1”").arg(QFileInfo(path).fileName()), reason);
         return false;
@@ -422,7 +422,7 @@ void ProjectWorkspace::exportAs(DocumentExporter::Format format)
     dialog->setWindowTitle(format == DocumentExporter::Format::png ? QStringLiteral("Export PNG") : QStringLiteral("Export JPEG"));
     auto *layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(0, 0, 0, 0);
-    const VectorDocument &shown = *current().session.document();
+    const VectorDocument &shown = current().session.designDocument();
     const VectorDocument page = shown.artboards.empty() ? shown : shown.artboardDocument(current().session.activeArtboard());
     layout->addWidget(new ExportSheet(page, format, [dialog, choosePath](std::optional<RasterOptions> chosen) {
         dialog->done(chosen ? QDialog::Accepted : QDialog::Rejected);

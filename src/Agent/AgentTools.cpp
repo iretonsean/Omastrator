@@ -406,7 +406,7 @@ QJsonObject AgentTools::exportFile(const QJsonObject &params)
         fail(QStringLiteral("“scale” must be above zero."));
     if (quality < 0 || quality > 100)
         fail(QStringLiteral("“quality” must be 0 to 100."));
-    const VectorDocument &current = document();
+    const VectorDocument &current = session().designDocument();
     int sheets = 0;
     switch (format) {
     case DocumentExporter::Format::pdf:
