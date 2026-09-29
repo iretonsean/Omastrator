@@ -141,9 +141,12 @@ public:
     QString startLive(const QUrl &url, const QString &folder, const QString &command = QString(), bool app = false);
     // Writes the live edits back: the certain ones directly, the rest through the agent. `agentRequest` gets the
     // agent's request id when it took some. Nothing opens; each write is recorded for Review changes.
-    QString liveWriteBack(QString *agentRequest = nullptr);
+    // `folder` names the project when the edits are in Browser Views rather than the window (else the window's).
+    QString liveWriteBack(QString *agentRequest = nullptr, const QString &folder = QString());
+    // The window's edits, the Browser Views' and the held ones, for a project.
+    std::vector<LiveEdit> pendingEdits(const QString &folder) const;
     // "Ask AI…" in the page: the agent changes the code in a worktree of its own.
-    QString liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest = nullptr);
+    QString liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest = nullptr, const QString &folder = QString());
     // Hand to agent: the front document as a mockup, for an app whose code is in `folder`.
     QString handToAgent(const QString &folder, const QString &instruction);
     // Hand to Agent from any surface (docs/ANYWHERE.md): a page that isn't yours, a lifted app, art on the overlay.
@@ -216,7 +219,7 @@ public:
     // `live_deployed` from the agent deploying.
     QString liveDeployed(const QString &requestId, const QString &url, const QString &command, const QString &error);
     // The project Deploy, Save and History act on.
-    QString deployProject() const;
+    QString deployProject();
     struct DeployState {
         // idle, writing, committing, github, pushing, deploying, done, failed.
         QString stage = QStringLiteral("idle");

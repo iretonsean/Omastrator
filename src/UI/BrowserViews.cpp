@@ -2,6 +2,7 @@
 #include "Canvas/EditorCanvas.h"
 #include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
+#include "UI/LiveFrames.h"
 #include <QCoreApplication>
 #include <QEvent>
 #include <QFileInfo>
@@ -272,6 +273,8 @@ void BrowserViews::shutdownPool()
     BrowserPool *&instance = poolInstance();
     if (!instance)
         return;
+    // Their sessions live on the pool's thread, which is about to end.
+    LiveFrames::stopAll();
     delete instance;
     instance = nullptr;
     for (BrowserViews *views : std::as_const(instances()))
@@ -318,6 +321,8 @@ QUuid BrowserViews::frameOf(const QUuid &key) const
 
 void BrowserViews::resetAll()
 {
+    // Every frame's Live ends first, so nothing re-attaches to a tab the reset closes.
+    LiveFrames::stopAll();
     for (BrowserViews *views : std::as_const(instances())) {
         for (auto it = views->m_entries.begin(); it != views->m_entries.end(); ++it) {
             views->savePicture(it.key(), *it);
@@ -646,6 +651,8 @@ void BrowserViews::dropEntry(const QUuid &frame)
     const auto found = m_entries.find(frame);
     if (found == m_entries.end())
         return;
+    if (LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly))
+        live->stop(frame);
     if (found->state == State::live || found->state == State::paused || found->state == State::opening)
         BrowserViews::pool()->close(found->key);
     m_frameOfKey.remove(found->key);

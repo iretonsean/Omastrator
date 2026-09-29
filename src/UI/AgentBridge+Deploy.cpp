@@ -1,5 +1,6 @@
 #include "Agent/Setup.h"
 #include "UI/AgentBridge.h"
+#include "UI/LiveFrames.h"
 #include "UI/AgentSheets.h"
 #include "UI/LiveHistoryPanel.h"
 #include <QCoreApplication>
@@ -80,9 +81,20 @@ void AgentBridge::wireDeploy()
     });
 }
 
-QString AgentBridge::deployProject() const
+QString AgentBridge::deployProject()
 {
+    // A selected Browser View that runs Live on the user's own site is the page being worked on.
+    if (const QString framed = LiveFrames::selectedProject(session()); !framed.isEmpty())
+        return framed;
     return m_live.project().isEmpty() ? m_lastProject : canonical(m_live.project());
+}
+
+std::vector<LiveEdit> AgentBridge::pendingEdits(const QString &folder) const
+{
+    std::vector<LiveEdit> edits = LiveFrames::pendingEdits(folder);
+    if (!m_live.project().isEmpty() && canonical(m_live.project()) == canonical(folder))
+        edits.insert(edits.begin(), m_live.edits().begin(), m_live.edits().end());
+    return edits;
 }
 
 void AgentBridge::setStage(const QString &stage, const QString &message)
@@ -166,9 +178,9 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     for (const auto &[id, work] : m_liveJobs)
         if (canonical(work.project) == folder)
             m_pipeline.waitingFor << id;
-    if (m_live.state() == LiveSession::State::running && canonical(m_live.project()) == folder && !m_live.edits().empty()) {
+    if (!pendingEdits(folder).empty()) {
         QString agentRequest;
-        if (const QString failure = liveWriteBack(&agentRequest); !failure.isEmpty()) {
+        if (const QString failure = liveWriteBack(&agentRequest, folder); !failure.isEmpty()) {
             if (m_pipeline.active)
                 pipelineFailed(failure);
             return failure;

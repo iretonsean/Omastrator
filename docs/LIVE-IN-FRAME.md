@@ -427,3 +427,24 @@ Deploy, Changes and History on the island already go through
   - A frame's tab can't take `Page.captureScreenshot` ("Not attached to an
     active page"); the frame is seen through a screencast. The no-chrome test
     checks the page's DOM instead, which is what the screencast would carry.
+
+- **Commit 2 (`LiveFrames`).**
+  - One `LiveFrames` per `EditorSession` (a child, like `BrowserViews`), with a
+    static list for the cross-document calls. The UI never calls a frame's
+    session: it reads a `Snapshot` the session publishes from the pool's thread
+    after each `changed` or `geometryChanged`, and sends commands with `run`,
+    which execute on the pool's thread and answer on the UI thread.
+  - `stop` (deleting the frame, closing the document, reset, the pool shutting
+    down) ends the session on its own thread and waits, so nothing of it posts
+    afterwards. Edits made on a user's own site are then **held** per project
+    folder, in memory, until they are written or the app quits. A mock-up's or
+    another site's edits are not held.
+  - Pending edits of a project are the window's, the frames' and the held ones
+    (`AgentBridge::pendingEdits`). Write-back, Ask and Deploy read them all and
+    clear all three. Edits left for the agent go back to the window if it is on
+    the project, else are held; the Ask that follows takes them.
+  - `deployProject()` is the selected Browser View's project while its Live
+    runs on the user's own site, else the window's, else the last one. The
+    status stream's `live` key stays the window's.
+  - The agent's brief for a project that is only in a frame has no screenshot
+    (the window's session takes those) and carries the frame's address.

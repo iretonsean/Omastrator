@@ -5,6 +5,7 @@
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
 #include "UI/BrowserViews.h"
+#include "UI/LiveFrames.h"
 #include "UI/LivePanel.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -50,22 +51,28 @@ void AgentBridge::record(const QString &title, const QString &summary, const std
     emit liveReviewChanged();
 }
 
-QString AgentBridge::liveWriteBack(QString *agentRequest)
+QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
 {
-    if (m_live.project().isEmpty())
+    const QString project = folder.isEmpty() ? m_live.project() : canonical(folder);
+    if (project.isEmpty())
         return QStringLiteral("This page is a mock-up, so its changes stay in the browser. Start Live with the page's project folder to write them back.");
-    if (m_live.edits().empty())
+    const std::vector<LiveEdit> edits = pendingEdits(project);
+    if (edits.empty())
         return QStringLiteral("There are no live edits to write back.");
-    const QString project = m_live.project();
     // The plan reads the files as they are, so the user's uncommitted edits stay in them.
-    const WriteBack::Plan plan = WriteBack::plan(project, m_live.edits());
+    const WriteBack::Plan plan = WriteBack::plan(project, edits);
     if (const QString failure = WriteBack::apply(plan.changes); !failure.isEmpty()) {
         WriteBack::restore(plan.changes);
         return failure;
     }
     if (!plan.changes.empty())
         record(QStringLiteral("Live edits"), plan.done.join(QLatin1Char('\n')), plan.changes, project);
-    m_live.setEdits(plan.unresolved);
+    // Written edits are gone from every host; the ones left for the agent stay with the window if it is on the project.
+    LiveFrames::clearPending(project);
+    if (!m_live.project().isEmpty() && canonical(m_live.project()) == canonical(project))
+        m_live.setEdits(plan.unresolved);
+    else
+        LiveFrames::hold(project, plan.unresolved);
     m_liveMessage.clear();
     m_liveLog.clear();
     if (plan.unresolved.empty()) {
@@ -76,7 +83,7 @@ QString AgentBridge::liveWriteBack(QString *agentRequest)
     for (const LiveEdit &edit : plan.unresolved)
         if (!elements.contains(edit.element))
             elements.append(edit.element);
-    const QString agentFailure = liveAsk(QString(), elements, agentRequest);
+    const QString agentFailure = liveAsk(QString(), elements, agentRequest, project);
     if (!agentFailure.isEmpty())
         m_liveMessage = QStringLiteral("%1 edits weren't certain enough to write directly, and the agent couldn't take them: %2")
                             .arg(plan.unresolved.size())
@@ -85,27 +92,31 @@ QString AgentBridge::liveWriteBack(QString *agentRequest)
     return agentFailure.isEmpty() ? QString() : m_liveMessage;
 }
 
-QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest)
+QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest, const QString &folder)
 {
-    if (m_live.project().isEmpty())
+    const QString project = folder.isEmpty() ? m_live.project() : canonical(folder);
+    if (project.isEmpty())
         return QStringLiteral("This page is a mock-up: there's no project folder for the agent to change.");
+    const bool inWindow = !m_live.project().isEmpty() && canonical(m_live.project()) == canonical(project);
     QString error;
     const QString agent = AgentLauncher::defaultAgent(&error);
     if (agent.isEmpty())
         return error;
     // The agent starts from the last commit; whatever is on disk by the time it's done (the user's edits,
     // Omastrator's own) is merged with its change, and only a real clash stops it.
-    AgentWork work{m_live.project(), {}, {}, requestId(), true};
+    AgentWork work{project, {}, {}, requestId(), true};
     if (const QString failure = work.prepare(); !failure.isEmpty())
         return failure;
     QString screenshot;
-    if (!elements.isEmpty()) {
+    // Only the window's page can be captured from here; a Browser View's brief goes without a picture.
+    if (!elements.isEmpty() && inWindow) {
         screenshot = QDir::temp().filePath(QStringLiteral("omastrator-live-%1.png").arg(work.requestId));
         if (!m_live.screenshot(screenshot, elements.first().toObject()["selector"].toString()).isEmpty())
             screenshot.clear();
     }
-    AgentWork::Brief brief{instruction, instruction.isEmpty() ? m_live.edits() : std::vector<LiveEdit>{}, elements, screenshot,
-                           m_live.url().toString(), Setup::shellQuote(QCoreApplication::applicationFilePath())};
+    const QUrl url = inWindow ? m_live.url() : LiveFrames::urlOf(project);
+    AgentWork::Brief brief{instruction, instruction.isEmpty() ? pendingEdits(project) : std::vector<LiveEdit>{}, elements, screenshot,
+                           url.toString(), Setup::shellQuote(QCoreApplication::applicationFilePath())};
     error = launchProject(work.requestId, work.worktree, QStringLiteral("live"), work.prompt(brief));
     if (!error.isEmpty()) {
         work.cleanup();
@@ -116,13 +127,17 @@ QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &eleme
     if (m_pipeline.active && m_deployState.stage == QLatin1String("writing") && canonical(work.project) == m_pipeline.folder
         && !m_pipeline.waitingFor.contains(work.requestId))
         m_pipeline.waitingFor << work.requestId;
-    if (instruction.isEmpty())
-        m_live.setEdits({});
+    if (instruction.isEmpty()) {
+        LiveFrames::clearPending(project);
+        if (inWindow)
+            m_live.setEdits({});
+    }
     if (agentRequest)
         *agentRequest = work.requestId;
     m_waiting = Waiting{work.requestId, Task::live, agent};
     emit waitingChanged();
-    m_live.notice(QStringLiteral("Asked %1. The change is written to the code when it's done.").arg(displayName(agent)));
+    if (inWindow && m_live.state() == LiveSession::State::running)
+        m_live.notice(QStringLiteral("Asked %1. The change is written to the code when it's done.").arg(displayName(agent)));
     return {};
 }
 
