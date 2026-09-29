@@ -60,6 +60,8 @@ std::vector<QUuid> VectorDocument::hitTestAll(QPointF point, double tolerance, s
     std::vector<QUuid> result;
     for (auto it = objects.rbegin(); it != objects.rend() && result.size() < limit; ++it) {
         const VectorObject &object = *it;
+        if (!isOnCurrentPage(object.id))
+            continue;
         if ((object.isContainer() && object.kind != ObjectKind::frame) || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id))
             continue;
         // What a frame clips away can't be clicked.
@@ -98,7 +100,7 @@ std::vector<QUuid> VectorDocument::matching(const QUuid &like, SameAttribute att
     if ((attribute == SameAttribute::fontFamily || attribute == SameAttribute::fontFamilyStyleSize) && source->kind != ObjectKind::text)
         return result;
     for (const VectorObject &object : objects) {
-        if (object.isContainer() || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id))
+        if (object.isContainer() || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id) || !isOnCurrentPage(object.id))
             continue;
         if (object.id == like || shares(*source, object, attribute))
             result.push_back(object.id);
@@ -110,7 +112,7 @@ std::vector<QUuid> VectorDocument::matching(ObjectFilter filter) const
 {
     std::vector<QUuid> result;
     for (const VectorObject &object : objects) {
-        if (object.kind == ObjectKind::layer || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id))
+        if (object.kind == ObjectKind::layer || !isEffectivelyVisible(object.id) || isEffectivelyLocked(object.id) || !isOnCurrentPage(object.id))
             continue;
         bool wanted = false;
         switch (filter) {

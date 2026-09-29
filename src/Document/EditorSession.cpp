@@ -306,7 +306,8 @@ std::vector<QUuid> EditorSession::objectsIn(const QRectF &rect, bool deep) const
             continue;
         if (isolated && !m_document->isAncestor(*isolated, object.id))
             continue;
-        if (object.kind == ObjectKind::layer || !m_document->isEffectivelyVisible(object.id) || m_document->isEffectivelyLocked(object.id))
+        if (object.kind == ObjectKind::layer || !m_document->isEffectivelyVisible(object.id) || m_document->isEffectivelyLocked(object.id)
+            || !m_document->isOnCurrentPage(object.id))
             continue;
         if (deep ? object.isContainer() : (!isolated && (!object.parentID || m_document->topLevelObject(object.id) != object.id)))
             continue;
