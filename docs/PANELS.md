@@ -48,3 +48,27 @@ to about 540 px.
 Not changed: which sections exist, their order, every control and its object
 name (tests and the agent tools find them by name), and the Document section's
 contents.
+
+## Frame presets
+
+While the Frame tool is active, a **Frame** section leads the panel (whatever
+is selected). A group menu (Phone, Tablet, Desktop, Social, Paper, and Saved
+when there are any) picks which sizes the list below shows, each row a name and
+its size in 24 px rows. The last group looked at is remembered
+(`properties/framePresetGroup`). Decisions:
+
+- **A click drops a frame, and the tool goes back to Select.** Figma does the
+  same, and it brings up the new frame's Layout and Transform. The frame is
+  centred in the view (the active artboard's middle when there is no view),
+  on whole points, named for the preset ("iPhone 16"; "iPhone 16 2" when the
+  name is taken). It is one "Frame" undo step, and nests in a frame it sits
+  inside, as a drawn one does.
+- **Your own sizes:** ⋯ ▸ Save Selected Frame as Preset… (one frame selected)
+  saves its rounded size under a name; the same name replaces the saved one.
+  Right-click a saved row for Rename and Delete, a built-in for Hide; Show
+  Hidden Presets is in the ⋯. Names of built-ins are refused. No confirm on
+  delete, as with document presets.
+- **Storage:** the `frames` section of `presets.json`, shared with the welcome
+  sheet's document presets (`PresetStore`). The file is read when the section
+  first shows and again on each later show.
+- The built-in list is in code (`FramePresets::builtIn`), in points.

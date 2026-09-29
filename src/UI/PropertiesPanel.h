@@ -13,6 +13,7 @@
 #include <array>
 
 class CharacterSection;
+class FramePresetsSection;
 class ParagraphSection;
 class NumberField;
 class PaintStack;
@@ -106,6 +107,7 @@ private:
     EditorSession &m_session;
     FloatingPanel m_picker{QStringLiteral("colorPickerPanel"), *this};
     bool m_editingText = false;
+    FramePresetsSection *m_framePresets = nullptr;
     PanelSection *m_document = nullptr;
     PanelSection *m_transform = nullptr;
     CharacterSection *m_character = nullptr;

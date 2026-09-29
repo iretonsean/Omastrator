@@ -254,7 +254,10 @@ public:
     // Object ▸ Frame Selection (Ctrl+Alt+G): the selection inside a new frame its size.
     void frameSelection();
     // The Frame tool: a frame over `rect`, inside the innermost frame that holds it. Selected.
-    QUuid addFrame(const QRectF &rect);
+    // A preset gives its `name`, kept as is unless an object already has it.
+    QUuid addFrame(const QRectF &rect, const QString &name = {});
+    // Where a frame of `size` lands when picked from a list: centred in the view, else on the active artboard, on whole points.
+    QRectF framePlacement(QSizeF size) const;
     // Shift+A (docs/AUTO-LAYOUT.md): a selected frame without auto layout gets it, its direction, gap and
     // padding read from where its children are; anything else goes into a new auto-layout frame that hugs it.
     void addAutoLayout();
