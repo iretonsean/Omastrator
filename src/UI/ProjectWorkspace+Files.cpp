@@ -207,7 +207,8 @@ bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format fo
     const VectorDocument page = document->artboards.empty() ? *document : document->artboardDocument(session.activeArtboard());
     try {
         switch (format) {
-        case DocumentExporter::Format::pdf: DocumentExporter::writePdf(page, path); break;
+        // The PDF is the whole document: every artboard on every page.
+        case DocumentExporter::Format::pdf: DocumentExporter::writePdf(*document, path); break;
         case DocumentExporter::Format::png: DocumentExporter::writePng(page, path, options.scale, options.transparent); break;
         case DocumentExporter::Format::jpeg: DocumentExporter::writeJpeg(page, path, options.scale, options.quality); break;
         case DocumentExporter::Format::svg: SvgExporter::write(page, path); break;

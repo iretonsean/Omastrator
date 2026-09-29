@@ -26,10 +26,10 @@ struct Progress {
 // The suffix a scale's file name takes: empty at 1×, "@2x", "@0.5x", and so on.
 QString scaleSuffix(double scale);
 
-// Artboards (by index into `document.allArtboards()`) and export assets (object ids, cropped
+// Artboards (by id, on any page) and export assets (object ids, cropped
 // the way Share's "just this selection" export is) as their own files, named "<safe
-// name><suffix>.<ext>". Vector formats (svg, pdf) write once, at 1×; webp fails cleanly, file by
+// name><suffix>.<ext>", in a folder per page ("<page>/…") when the document has two or more. Vector formats (svg, pdf) write once, at 1×; webp fails cleanly, file by
 // file, without the plugin. Returns every path actually written, in the order they were.
-QStringList run(const VectorDocument &document, const std::vector<int> &artboardIndices, const std::vector<QUuid> &assetIds,
+QStringList run(const VectorDocument &document, const std::vector<QUuid> &artboardIds, const std::vector<QUuid> &assetIds,
                 const Settings &settings, const std::function<void(const Progress &)> &progress = {});
 }

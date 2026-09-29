@@ -57,9 +57,21 @@ ExportForScreensSheet::ExportForScreensSheet(EditorSession &session, QWidget *pa
     layout->setContentsMargins(24, 20, 24, 20);
     layout->setSpacing(10);
 
-    const std::vector<Artboard> boards = m_session.document() ? m_session.document()->allArtboards() : std::vector<Artboard>();
-    for (int index = 0; index < int(boards.size()); ++index)
-        checkableItem(m_artboards, boards[size_t(index)].name, index, true);
+    if (const std::optional<VectorDocument> &document = m_session.document()) {
+        // Every page's artboards, under a heading per page once there are two or more.
+        const std::vector<Page> pages = document->allPages();
+        for (const Page &page : pages) {
+            if (pages.size() > 1) {
+                auto *heading = new QListWidgetItem(page.name, m_artboards);
+                heading->setFlags(Qt::ItemIsEnabled);
+                QFont bold = heading->font();
+                bold.setBold(true);
+                heading->setFont(bold);
+            }
+            for (const Artboard &board : document->artboardsOn(page.id))
+                checkableItem(m_artboards, board.name, board.id.toString(QUuid::WithoutBraces), true);
+        }
+    }
     layout->addWidget(new QLabel(QStringLiteral("Artboards"), this));
     layout->addWidget(m_artboards);
 
@@ -141,12 +153,12 @@ void ExportForScreensSheet::browse()
         m_folder->setText(chosen);
 }
 
-std::vector<int> ExportForScreensSheet::checkedArtboards() const
+std::vector<QUuid> ExportForScreensSheet::checkedArtboards() const
 {
-    std::vector<int> result;
+    std::vector<QUuid> result;
     for (int row = 0; row < m_artboards->count(); ++row) {
         if (m_artboards->item(row)->checkState() == Qt::Checked)
-            result.push_back(m_artboards->item(row)->data(Qt::UserRole).toInt());
+            result.push_back(QUuid::fromString(m_artboards->item(row)->data(Qt::UserRole).toString()));
     }
     return result;
 }
@@ -213,7 +225,7 @@ void ExportForScreensSheet::runExport()
 {
     if (!m_session.document() || m_folder->text().trimmed().isEmpty())
         return;
-    const std::vector<int> artboards = checkedArtboards();
+    const std::vector<QUuid> artboards = checkedArtboards();
     const std::vector<QUuid> assets = checkedAssets();
     const std::vector<double> scales = checkedScales();
     const QStringList formats = checkedFormats();

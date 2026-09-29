@@ -1,3 +1,4 @@
+#include "Document/EditorSession.h"
 #include "Document/PathOperations.h"
 #include "IO/DocumentExporter.h"
 #include <QFile>
@@ -53,6 +54,44 @@ private slots:
         const QRegularExpression mediaBox(QStringLiteral(R"(/MediaBox \[0 0 200(\.0+)? 100(\.0+)?\])"));
         QVERIFY(mediaBox.match(QString::fromLatin1(bytes)).hasMatch());
         QVERIFY(!bytes.contains("/Subtype /Image"));
+    }
+
+    void pdfHasOnePagePerArtboardAcrossPages()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addArtboard(QRectF(300, 0, 120, 80));
+        session.addPage(QStringLiteral("Second"));
+        session.renameArtboard(0, QStringLiteral("Wide"));
+        session.addArtboard(QRectF(300, 0, 50, 60));
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("all.pdf"));
+        DocumentExporter::writePdf(*session.document(), path);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString text = QString::fromLatin1(file.readAll());
+        // Four artboards, four pages, sized page 1's two then page 2's two, whichever page is current.
+        QRegularExpression box(QStringLiteral(R"(/MediaBox \[0 0 (\d+)(?:\.0+)? (\d+)(?:\.0+)?\])"));
+        QStringList sizes;
+        for (auto it = box.globalMatch(text); it.hasNext();) {
+            const auto match = it.next();
+            sizes << match.captured(1) + QLatin1Char('x') + match.captured(2);
+        }
+        QCOMPARE(sizes, (QStringList{"200x100", "120x80", "200x100", "50x60"}));
+    }
+
+    void pngExportsTheCurrentPagesFirstArtboard()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addPage(QStringLiteral("Second"));
+        session.renameArtboard(0, QStringLiteral("Wide"));
+        session.setArtboardSize(QSizeF(80, 40));
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("page.png"));
+        DocumentExporter::writePng(*session.document(), path);
+        QCOMPARE(QImageReader(path).size(), QSize(80, 40));
     }
 
     void typeExportsAsItDraws()

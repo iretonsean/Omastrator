@@ -76,8 +76,14 @@ Format format(const QString &path)
 
 void writePdf(const VectorDocument &document, const QString &path)
 {
-    // Several artboards: this call exports the first one alone.
-    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    // One PDF page per artboard, across every page in page then artboard order.
+    std::vector<VectorDocument> sheets;
+    for (const Page &page : document.allPages()) {
+        VectorDocument shown = document;
+        shown.currentPage = page.id;
+        for (int index = 0; index < shown.artboardCount(); ++index)
+            sheets.push_back(shown.artboards.empty() ? shown : shown.artboardDocument(index));
+    }
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);
@@ -87,12 +93,14 @@ void writePdf(const VectorDocument &document, const QString &path)
         writer.setTitle(QFileInfo(path).completeBaseName());
         // One device unit per point: document coordinates draw as they are.
         writer.setResolution(72);
-        writer.setPageSize(QPageSize(page.size, QPageSize::Point, QString(), QPageSize::ExactMatch));
         writer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout::Point);
         QPainter painter;
-        if (!painter.begin(&writer))
-            throw FileError(QStringLiteral("The PDF could not be started."));
-        VectorRenderer::draw(painter, page, {});
+        for (size_t index = 0; index < sheets.size(); ++index) {
+            writer.setPageSize(QPageSize(sheets[index].size, QPageSize::Point, QString(), QPageSize::ExactMatch));
+            if (index == 0 ? !painter.begin(&writer) : !writer.newPage())
+                throw FileError(QStringLiteral("The PDF could not be started."));
+            VectorRenderer::draw(painter, sheets[index], {});
+        }
         painter.end();
     }
     save(bytes, path);

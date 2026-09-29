@@ -84,9 +84,14 @@ QString ShareController::scopeText() const
     if (sharesSelection())
         return QStringLiteral("the selection (%1)").arg(count(m_workspace.current().session.selection().size()));
     const EditorSession &session = m_workspace.current().session;
-    if (const std::optional<VectorDocument> &document = session.document(); document && document->artboardCount() > 1)
-        return QStringLiteral("the artboard “%1”").arg(document->artboard(session.activeArtboard()).name);
-    return QStringLiteral("the artboard");
+    QString text = QStringLiteral("the artboard");
+    const std::optional<VectorDocument> &document = session.document();
+    if (document && document->artboardCount() > 1)
+        text += QStringLiteral(" “%1”").arg(document->artboard(session.activeArtboard()).name);
+    // With two or more pages it says which one the artboard is on.
+    if (document && document->pageCount() > 1)
+        text += QStringLiteral(" on “%1”").arg(document->allPages()[size_t(document->pageIndex(document->currentPageId()))].name);
+    return text;
 }
 
 Share::DocumentShares ShareController::shares() const
