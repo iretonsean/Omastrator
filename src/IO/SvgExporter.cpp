@@ -325,8 +325,9 @@ private:
             QPainterPath shape = object.kind == ObjectKind::text ? object.transform.map(object.text.outline()) : object.path.painterPath();
             one.kind = ObjectKind::path;
             one.transform = {};
-            one.path = VectorPath::fromPainterPath(StrokeGeometry::area(shape, stroke));
-            one.path.fillRule = Qt::WindingFill;
+            const QPainterPath covered = StrokeGeometry::area(shape, stroke);
+            one.path = VectorPath::fromPainterPath(covered);
+            one.path.fillRule = covered.fillRule();
             one.fill = stroke.paint.withCompositeOf(Paint());
             writeObjectBody(one);
         }
