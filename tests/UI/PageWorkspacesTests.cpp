@@ -79,6 +79,7 @@ private slots:
     void aSwitchAskedWithFocusButPlacedWithoutItLeavesTheUserAlone();
     void noStandInIsShownWhileNoWindowOfOursHasFocus();
     void everyWorkspaceKeepsItsIdAcrossTenSwaps();
+    void aRefusedMoveStopsItAndSaysSoOnce();
     void hyprlangAndLuaDispatchStrings();
 
 private:
@@ -541,6 +542,30 @@ void PageWorkspacesTests::everyWorkspaceKeepsItsIdAcrossTenSwaps()
     for (const QString &name : rig.world.deleted())
         QVERIFY2(!name.startsWith(prefix), qPrintable(name));
     QCOMPARE(rig.world.on(QStringLiteral("special:omastrator-spare")).size(), 1);
+}
+
+void PageWorkspacesTests::aRefusedMoveStopsItAndSaysSoOnce()
+{
+    Rig rig;
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    QCOMPARE(rig.pages().claimedNames().size(), 2);
+    rig.ctl.setDispatchFailing(true);
+    rig.session().addPage();
+    rig.world.settle();
+    QVERIFY(rig.pages().claimedNames().isEmpty());
+    QCOMPARE(rig.pages().standInCount(), 0);
+    QVERIFY(WorkspaceClaims::read().isEmpty());
+    const QString notice = QStringLiteral("Pages as Workspaces stopped: Hyprland refused a move.");
+    QCOMPARE(rig.workspace.cloudStatusText().count(notice), 1);
+    // It stays stopped: no more moves are tried, even when Hyprland is willing again.
+    rig.ctl.setDispatchFailing(false);
+    rig.ctl.clearLog();
+    rig.session().addPage();
+    rig.world.settle();
+    QVERIFY(rig.ctl.dispatches().isEmpty());
+    QVERIFY(rig.pages().claimedNames().isEmpty());
 }
 
 void PageWorkspacesTests::hyprlangAndLuaDispatchStrings()

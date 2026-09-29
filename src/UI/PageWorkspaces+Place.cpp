@@ -257,6 +257,7 @@ void PageWorkspaces::place()
         else if (window.workspaceName.startsWith(QLatin1String("design:")) && !claimed.contains(window.workspaceName) && !m_returnName.isEmpty())
             moves.push_back({window.address, m_returnName, returnSelector, window.workspaceName, false});
     }
+    bool refused = false;
     while (!moves.empty()) {
         size_t pick = 0;
         for (size_t i = 0; i < moves.size(); ++i) {
@@ -269,13 +270,22 @@ void PageWorkspaces::place()
         moves.erase(moves.begin() + long(pick));
         const bool follow = move.editor && m_followNext && followsFocus();
         const QString failure = Hyprland::moveWindow(move.address, move.selector, follow);
-        if (!failure.isEmpty())
+        if (!failure.isEmpty()) {
             qCDebug(lcApp).noquote() << "Pages as Workspaces: move failed:" << failure;
+            if (!m_lost) {
+                refused = true;
+                break;
+            }
+        }
         --occupancy[move.from];
         ++occupancy[move.workspace];
     }
     // Following is for the switch that asked for it, never for a later one.
     m_followNext = false;
+    if (refused) {
+        stopAfterRefusedMove();
+        return;
+    }
 
     // Someone standing on a workspace we gave back goes where their windows went.
     if (!m_released.isEmpty() && !m_returnName.isEmpty()) {
@@ -297,4 +307,21 @@ void PageWorkspaces::place()
         m_retries = 0;
     }
     writeClaims();
+}
+
+void PageWorkspaces::stopAfterRefusedMove()
+{
+    // Whatever Hyprland won't do, more moves won't fix: give back what can be given back and leave it be.
+    m_lost = true;
+    for (const Claim &claim : m_claims)
+        m_released.insert(claim.name);
+    m_claims.clear();
+    m_declined.clear();
+    place();
+    m_events.stop();
+    m_pictures.clear();
+    forgetReturn();
+    m_key.clear();
+    writeClaims();
+    notify(QStringLiteral("Pages as Workspaces stopped: Hyprland refused a move."));
 }

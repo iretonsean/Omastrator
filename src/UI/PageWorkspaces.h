@@ -69,6 +69,7 @@ private:
     QString documentLabel(const ProjectTab &tab, const std::vector<Claim> &kept);
     void place();
     void placeSoon();
+    void stopAfterRefusedMove();
     void workspaceEntered(const QString &name);
     void arrived();
     void createStandIn(const QString &workspace);
