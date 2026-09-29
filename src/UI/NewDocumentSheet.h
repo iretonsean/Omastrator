@@ -35,7 +35,6 @@ public:
     static double pointsPer(LengthUnit unit);
     // A length typed in `unit`, in points, when in range.
     static std::optional<double> dimension(const QString &text, LengthUnit unit);
-    static constexpr double maximumPoints = 16384;
 
 protected:
     void showEvent(QShowEvent *event) override;
@@ -46,6 +45,7 @@ private:
         bool builtIn = false;
     };
     void fillPresets(const QString &select);
+    PresetStore::Section reload();
     int customIndex() const { return int(m_choices.size()); }
     const Choice *chosen() const;
     QString nameProblem(const QString &name, const QString &ignoring) const;

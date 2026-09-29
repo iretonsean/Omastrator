@@ -65,6 +65,7 @@ private slots:
     void renameAndDeleteApplyToSavedOnly();
     void builtInsHideAndReturn();
     void savedPresetsKeepTheirUnit();
+    void twoSheetsDoNotOverwriteEachOther();
 
 private:
     QTemporaryDir m_config;
@@ -265,6 +266,27 @@ void NewDocumentSheetTests::savedPresetsShowAtTheTopNextTime()
     QCOMPARE(next.width().text(), QString("1920"));
     next.create().click();
     QCOMPARE(next.created.value(), QSizeF(1920, 1080));
+}
+
+// Each empty tab has its own sheet; an older one must not drop what a newer one saved.
+void NewDocumentSheetTests::twoSheetsDoNotOverwriteEachOther()
+{
+    Sheet a, b;
+    a.choose(a.preset(), 3);
+    answer = "Poster";
+    a.action("savePreset").trigger();
+    QCOMPARE(b.names().first(), QString("Letter"));
+    b.choose(b.preset(), 0);
+    QCOMPARE(b.preset().currentText(), QString("Letter"));
+    b.action("hidePreset").trigger();
+    const PresetStore::Section onDisk = PresetStore::read(PresetStore::documents);
+    QCOMPARE(onDisk.saved.size(), size_t(1));
+    QCOMPARE(onDisk.saved[0].name, QString("Poster"));
+    QCOMPARE(onDisk.hidden, QStringList({"Letter"}));
+    // Sheet b shows both changes, and sheet a picks up the hidden Letter when it is shown again.
+    QCOMPARE(b.names(), QStringList({"Poster", "A4", "A3", "1920 × 1080", "1080 × 1080", "Custom"}));
+    a.sheet.show();
+    QCOMPARE(a.names(), b.names());
 }
 
 void NewDocumentSheetTests::savingNeedsAGoodSizeAndNameAndReplacesSameName()

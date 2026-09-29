@@ -2,6 +2,7 @@
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ProjectWorkspace.h"
 #include <QFileInfo>
+#include <algorithm>
 #include <QGridLayout>
 #include <QInputDialog>
 #include <QMenu>
@@ -57,7 +58,7 @@ std::optional<double> NewDocumentSheet::dimension(const QString &text, LengthUni
 {
     bool number = false;
     const double value = text.trimmed().toDouble(&number) * pointsPer(unit);
-    if (!number || !std::isfinite(value) || value < 1 || value > maximumPoints)
+    if (!number || !std::isfinite(value) || value < 1 || value > PresetStore::maximumPoints)
         return std::nullopt;
     return value;
 }
@@ -212,6 +213,8 @@ void NewDocumentSheet::fillPresets(const QString &select)
             firstBuiltIn = int(i);
     }
     m_preset->addItem(QStringLiteral("Custom"));
+    if (select == QLatin1String("Custom"))
+        index = customIndex();
     if (index < 0)
         index = firstBuiltIn >= 0 ? firstBuiltIn : m_choices.empty() ? customIndex() : 0;
     // Every preset gone: leave the size that's there, or start from Letter.
@@ -252,6 +255,14 @@ std::optional<QString> NewDocumentSheet::askName(const QString &title, const QSt
     return accepted ? std::optional<QString>(name) : std::nullopt;
 }
 
+// Every tab's welcome sheet lives on, so an action starts from what is on disk, not from
+// what this sheet read when it was built; otherwise it would drop presets saved elsewhere.
+PresetStore::Section NewDocumentSheet::reload()
+{
+    m_stored = PresetStore::read(PresetStore::documents);
+    return m_stored;
+}
+
 // Keeps the new list for this session even when it can't be written, and says so.
 void NewDocumentSheet::store(const PresetStore::Section &section, const QString &select)
 {
@@ -273,12 +284,13 @@ void NewDocumentSheet::savePreset()
     const QString name = asked ? asked->trimmed() : QString();
     if (name.isEmpty())
         return;
+    reload();
     if (const QString problem = nameProblem(name, name); !problem.isEmpty()) {
         m_note->setText(problem);
         m_note->setForegroundRole(QPalette::BrightText);
         return;
     }
-    PresetStore::Section next = m_stored;
+    PresetStore::Section next = reload();
     std::erase_if(next.saved, [&](const PresetStore::Entry &entry) { return entry.name.compare(name, Qt::CaseInsensitive) == 0; });
     next.saved.insert(next.saved.begin(), {name, QSizeF(*width, *height), unit()});
     store(next, name);
@@ -294,12 +306,13 @@ void NewDocumentSheet::renamePreset()
     const QString name = asked ? asked->trimmed() : QString();
     if (name.isEmpty() || name == old)
         return;
+    reload();
     if (const QString problem = nameProblem(name, old); !problem.isEmpty()) {
         m_note->setText(problem);
         m_note->setForegroundRole(QPalette::BrightText);
         return;
     }
-    PresetStore::Section next = m_stored;
+    PresetStore::Section next = reload();
     for (PresetStore::Entry &entry : next.saved)
         if (entry.name == old)
             entry.name = name;
@@ -311,7 +324,7 @@ void NewDocumentSheet::deletePreset()
     const Choice *current = chosen();
     if (!current || current->builtIn)
         return;
-    PresetStore::Section next = m_stored;
+    PresetStore::Section next = reload();
     const QString name = current->entry.name;
     std::erase_if(next.saved, [&](const PresetStore::Entry &entry) { return entry.name == name; });
     store(next, QString());
@@ -322,14 +335,15 @@ void NewDocumentSheet::hidePreset()
     const Choice *current = chosen();
     if (!current || !current->builtIn)
         return;
-    PresetStore::Section next = m_stored;
-    next.hidden << current->entry.name;
+    PresetStore::Section next = reload();
+    if (!next.hidden.contains(current->entry.name))
+        next.hidden << current->entry.name;
     store(next, QString());
 }
 
 void NewDocumentSheet::showHiddenPresets()
 {
-    PresetStore::Section next = m_stored;
+    PresetStore::Section next = reload();
     next.hidden.clear();
     store(next, m_preset->currentText());
 }
@@ -392,5 +406,11 @@ void NewDocumentSheet::create()
 void NewDocumentSheet::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    const PresetStore::Section onDisk = PresetStore::read(PresetStore::documents);
+    const auto same = [](const PresetStore::Entry &a, const PresetStore::Entry &b) { return a.name == b.name && a.points == b.points && a.unit == b.unit; };
+    if (onDisk.hidden != m_stored.hidden || !std::ranges::equal(onDisk.saved, m_stored.saved, same)) {
+        m_stored = onDisk;
+        fillPresets(m_preset->currentText());
+    }
     m_width->setFocus();
 }
