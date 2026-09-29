@@ -311,6 +311,20 @@ top of `tests/Agent/FakeHyprctl.h`. Decisions made while building:
 - **Hyprland to app.** Events within 50 ms act once, on the last. A page the
   user walked to is already on screen, so the editor is moved silently and
   then focused, and only if the active workspace is still that page's.
+- **A refused move stops it.** The first `moveWindow` Hyprland refuses ends
+  the feature for this run: it gives back what it can, drops its stand-ins,
+  and says once "Pages as Workspaces stopped: Hyprland refused a move." It
+  starts again when reachability is re-checked (turning it off and on).
+- **No event stream, no claims.** If the event socket can't be reached when
+  the first workspace would be claimed, nothing is claimed and the notice
+  reads "Pages as Workspaces needs Hyprland." once.
+- **Events are filtered.** Opening, closing or moving someone else's window
+  doesn't place anything; only our editor or stand-ins (by address, or a
+  stand-in's first title while its address is unknown), and windows moved
+  onto a workspace we claim, do.
+- **Stale claims files.** At start, a file whose pid is running is left alone
+  only if that process has our name (`/proc/<pid>/comm`); a reused pid is
+  treated as dead. Stand-ins don't keep the app alive (`WA_QuitOnClose` off).
 - **Closing a stand-in** declines that page's claim until the page is made
   current again (Pages list, Next or Previous Page, undo). The front page is
   never declined.
