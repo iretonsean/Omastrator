@@ -51,6 +51,11 @@ QString setDestination(const QString &surfaceKey, const QString &destination);
 QString handoffFolder(const QString &surfaceKey);
 QString setHandoffFolder(const QString &surfaceKey, const QString &folder);
 
+// "Bar follows focus": the floating bar goes wherever the pointer or focus goes, as it did before it began
+// sticking to the app design mode started on. Off unless turned on.
+bool barFollowsFocus();
+QString setBarFollowsFocus(bool follows);
+
 // The Desk's Hyprland workspace: a named special workspace unless changed.
 QString deskWorkspace();
 }

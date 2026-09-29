@@ -1,3 +1,6 @@
+#include "Agent/Island.h"
+#include <QCheckBox>
+#include <QTemporaryDir>
 #include "Canvas/EditorCanvas.h"
 #include "ContentView.h"
 #include "Document/PathOperations.h"
@@ -377,6 +380,32 @@ private slots:
         QTest::keyClick(&w.canvas(), Qt::Key_Left);
         QCOMPARE(w.session().document()->bounds(a).left(), 7.5);
         EditorCanvas::setKeyboardIncrement(1);
+    }
+
+    // Interim, pending a rethink of the island: Preferences chooses whether it shows on every window.
+    void preferencesChooseWhereTheIslandShows()
+    {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray before = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        Window w;
+        QDialog *dialog = ObjectDialogs::preferences(&w.view);
+        auto *always = dialog->findChild<QCheckBox *>(QStringLiteral("islandAlways"));
+        QVERIFY(always);
+        QVERIFY(!always->isChecked());
+        always->setChecked(true);
+        dialog->findChild<QPushButton *>(QStringLiteral("dialogOK"))->click();
+        QCOMPARE(Island::visibility(), QStringLiteral("always"));
+        QDialog *again = ObjectDialogs::preferences(&w.view);
+        QVERIFY(again->findChild<QCheckBox *>(QStringLiteral("islandAlways"))->isChecked());
+        again->findChild<QCheckBox *>(QStringLiteral("islandAlways"))->setChecked(false);
+        again->findChild<QPushButton *>(QStringLiteral("dialogOK"))->click();
+        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
+        if (before.isNull())
+            qunsetenv("XDG_CONFIG_HOME");
+        else
+            qputenv("XDG_CONFIG_HOME", before);
     }
 };
 

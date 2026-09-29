@@ -250,7 +250,7 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "required": ["action"], "properties": {
    "action": {"type": "string", "enum": ["on", "off", "toggle", "status", "tool", "alt", "select", "selectArt", "deselect", "measure", "draw",
                                          "action", "ask", "keep", "discard", "send", "undo", "redo", "clear", "onboarding", "desk",
-                                         "lift", "look", "restyle", "reset"]},
+                                         "lift", "look", "restyle", "reset", "home", "barFollowsFocus"]},
    "monitor": {"type": "string", "description": "on, toggle: the monitor; default the focused one."},
    "tool": {"type": "string", "enum": ["point", "inspect", "pen", "rectangle", "ellipse", "line", "arrow", "text", "note"]},
    "on": {"type": "boolean", "description": "alt: whether Alt is held. measure: start or stop measuring."},

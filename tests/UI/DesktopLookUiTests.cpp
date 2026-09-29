@@ -243,6 +243,8 @@ private slots:
         app.call(QStringLiteral("onboarding"), {{"finish", false}});
         app.desktop->pointer = QPoint(40, 10);
         app.design().mode().poll();
+        // The bar sticks to the window design mode started on until the Omarchy bar is chosen.
+        app.call(QStringLiteral("home"), {{"target", app.design().mode().hover()->id}});
         QJsonObject bar = app.design().status()["bar"].toObject();
         QCOMPARE(bar["kind"].toString(), QStringLiteral("shellBar"));
         QCOMPARE(bar["label"].toString(), QStringLiteral("Desktop (DP-1)"));

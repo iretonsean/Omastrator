@@ -403,6 +403,8 @@ private slots:
         // The heading, lifted onto the overlay from the page.
         desktop->pointer = QPoint(40, 60);
         design.mode().poll();
+        // The bar sticks to the terminal design mode started on until the browser is chosen.
+        design.run(QStringLiteral("home"), {{"target", design.mode().hover()->id}}, result);
         const QJsonObject bar = design.status()["bar"].toObject();
         QCOMPARE(bar["kind"].toString(), QStringLiteral("web"));
         const QString key = bar["surface"].toString();

@@ -171,6 +171,20 @@ QString setHandoffFolder(const QString &surfaceKey, const QString &folder)
     return write(settings);
 }
 
+bool barFollowsFocus()
+{
+    return read()["barFollowsFocus"].toBool(false);
+}
+
+QString setBarFollowsFocus(bool follows)
+{
+    QJsonObject settings = read();
+    if (settings["barFollowsFocus"].toBool(false) == follows)
+        return {};
+    settings["barFollowsFocus"] = follows;
+    return write(settings);
+}
+
 QString deskWorkspace()
 {
     const QString chosen = read()["deskWorkspace"].toString().trimmed();

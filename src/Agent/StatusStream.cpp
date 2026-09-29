@@ -25,6 +25,7 @@ QJsonObject compose(const QJsonObject &app, const Island::State &island)
     QFile dictation(QDir(Island::runtimeDirectory()).filePath(QStringLiteral("dictation.json")));
     const QJsonObject heard = dictation.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(dictation.readAll()).object() : QJsonObject();
     status.insert(QStringLiteral("dictation"), heard["state"].toString(QStringLiteral("idle")));
+    status.insert(QStringLiteral("islandShow"), Island::visibility());
     const QJsonObject own = island.toJson();
     for (auto it = own.begin(); it != own.end(); ++it)
         status.insert(it.key(), it.value());
@@ -57,7 +58,7 @@ Follower::~Follower()
 
 void Follower::start()
 {
-    for (const QString &path : {Island::statePath(), Island::seenPath()}) {
+    for (const QString &path : {Island::statePath(), Island::seenPath(), Island::visibilityPath()}) {
         const QString folder = QFileInfo(path).absolutePath();
         QDir().mkpath(folder);
         m_watcher.addPath(folder);

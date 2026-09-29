@@ -75,6 +75,8 @@ signals:
 
 private:
     void pollOnce();
+    // Reads windows and monitors again when they're 0.5 s old; says `changed` if the desktop moved on.
+    void watchDesktop();
     Inspection inspect(QPoint point, bool deep);
     Surface surfaceFor(const std::optional<Hyprland::Window> &window, QPoint point, std::optional<QJsonObject> *page);
     void remember(Inspection &inspection);
@@ -89,6 +91,7 @@ private:
     std::vector<Hyprland::Window> m_windows;
     std::vector<Hyprland::Monitor> m_monitors;
     QElapsedTimer m_sinceRefresh;
+    QString m_signature;
     std::optional<QPoint> m_cursor;
     // Polls the pointer has rested; the slower accessibility and colour reads wait for a rest.
     int m_rest = 0;

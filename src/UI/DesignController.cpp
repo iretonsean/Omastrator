@@ -105,7 +105,12 @@ void DesignController::setSource(std::unique_ptr<DesktopSource> source)
     connect(m_mode.get(), &DesignMode::changed, this, &DesignController::changed);
     connect(m_mode.get(), &DesignMode::toggled, this, [this](bool on) {
         m_detail.reset();
+        m_home.reset();
+        m_barHover.reset();
+        m_seenArt.clear();
+        m_seenPinned = 0;
         if (on) {
+            homeOnFocus();
             // The first run of design mode asks about the designer's work, once.
             m_onboardingOpen = AnywhereSettings::needsOnboarding();
             m_placementTimer.start();
@@ -165,7 +170,7 @@ void DesignController::say(const QString &line)
     emit changed();
 }
 
-std::optional<Surface> DesignController::locate(const QString &key)
+std::optional<Surface> DesignController::locate(const QString &key, const QString &preferAddress)
 {
     const QString kind = key.section(QLatin1Char(':'), 0, 0);
     const QString rest = key.section(QLatin1Char(':'), 1);
@@ -188,7 +193,8 @@ std::optional<Surface> DesignController::locate(const QString &key)
         if (!Hyprland::isShown(window, monitors))
             continue;
         const bool matches = kind == QLatin1String("window") ? window.className == rest : showsLivePage(m_bridge.liveSession(), window);
-        if (matches && (!best || window.focusHistory < best->focusHistory))
+        auto rank = [&](const Hyprland::Window &each) { return each.address == preferAddress ? -1 : each.focusHistory; };
+        if (matches && (!best || rank(window) < rank(*best)))
             best = &window;
     }
     if (!best)
@@ -215,6 +221,103 @@ std::optional<Surface> DesignController::locate(const QString &key)
         surface.scroll = QPointF(scroll.at(0).toDouble(), scroll.at(1).toDouble());
     }
     return surface;
+}
+
+void DesignController::setHome(const Surface &surface)
+{
+    if (m_home && m_home->key == surface.key && m_home->address == surface.address)
+        return;
+    m_home = Home{surface.key, surface.address};
+    m_barHover.reset();
+}
+
+void DesignController::homeOnFocus()
+{
+    const auto &windows = m_mode->windows();
+    const auto &monitors = m_mode->monitors();
+    const auto monitor = Hyprland::monitorNamed(m_mode->monitor(), monitors);
+    const Hyprland::Window *focused = nullptr;
+    for (const Hyprland::Window &window : windows) {
+        if (!Hyprland::isShown(window, monitors) || (monitor && window.monitor != monitor->id))
+            continue;
+        if (!focused || window.focusHistory < focused->focusHistory)
+            focused = &window;
+    }
+    if (focused) {
+        if (const auto surface = locate(QStringLiteral("window:") + focused->className, focused->address)) {
+            setHome(*surface);
+            return;
+        }
+        Surface plain;
+        plain.kind = Surface::Kind::window;
+        plain.key = QStringLiteral("window:") + focused->className;
+        plain.address = focused->address;
+        setHome(plain);
+        return;
+    }
+    Surface desktop;
+    desktop.key = Surface::keyFor(Surface::Kind::desktop, m_mode->monitor(), {});
+    setHome(desktop);
+}
+
+void DesignController::syncHome()
+{
+    if (!m_mode->isOn() || barFollowsFocus())
+        return;
+    const QString art = m_overlays.selectedSurface();
+    if (art != m_seenArt) {
+        m_seenArt = art;
+        if (!art.isEmpty()) {
+            const auto surface = locate(art, m_home ? m_home->address : QString());
+            Surface picked = surface.value_or(Surface());
+            picked.key = art;
+            setHome(picked);
+        }
+    }
+    const int pinned = m_mode->selected() ? m_mode->selected()->id : 0;
+    if (pinned != m_seenPinned) {
+        m_seenPinned = pinned;
+        if (pinned)
+            setHome(m_mode->selected()->surface);
+    }
+    // The home window closed for good: the bar goes to what has focus now.
+    if (m_home && !m_home->address.isEmpty()) {
+        const auto &windows = m_mode->windows();
+        const bool exists = std::any_of(windows.begin(), windows.end(), [&](const Hyprland::Window &window) { return window.address == m_home->address; });
+        if (!exists && !windows.empty())
+            homeOnFocus();
+    }
+}
+
+bool DesignController::onHome(const Surface &surface) const
+{
+    if (!m_home)
+        return true;
+    if (!m_home->address.isEmpty() && !surface.address.isEmpty())
+        return m_home->address == surface.address;
+    return m_home->key == surface.key;
+}
+
+bool DesignController::homeShown() const
+{
+    if (!m_home || m_home->address.isEmpty())
+        return true;
+    for (const Hyprland::Window &window : m_mode->windows()) {
+        if (window.address == m_home->address)
+            return Hyprland::isShown(window, m_mode->monitors());
+    }
+    return false;
+}
+
+QRect DesignController::placedBounds(const Inspection &inspection) const
+{
+    if (inspection.surface.address.isEmpty())
+        return inspection.bounds;
+    for (const Hyprland::Window &window : m_mode->windows()) {
+        if (window.address == inspection.surface.address)
+            return inspection.bounds.translated(window.rect.topLeft() - inspection.surface.rect.topLeft());
+    }
+    return inspection.bounds;
 }
 
 void DesignController::updatePlacements()
@@ -274,6 +377,8 @@ std::optional<DesignController::Target> DesignController::target(const QJsonObje
     if (id > 0) {
         if (const auto found = m_mode->target(id))
             return Target{found, QString()};
+        if (m_barHover && m_barHover->id == id)
+            return Target{m_barHover, QString()};
         return failed(QStringLiteral("That's no longer under the pointer. Point at it again."));
     }
     const QString surface = params["surface"].toString();
@@ -288,6 +393,8 @@ std::optional<DesignController::Target> DesignController::target(const QJsonObje
         return Target{m_mode->selected(), QString()};
     if (m_mode->hover())
         return Target{m_mode->hover(), QString()};
+    if (m_barHover && m_mode->tool() == QLatin1String("inspect"))
+        return Target{m_barHover, QString()};
     return failed(QStringLiteral("Point at something first."));
 }
 
@@ -339,6 +446,9 @@ QJsonObject DesignController::status()
                                     {"reservedTop", monitor.reservedTop}});
     status["monitors"] = monitors;
     status["message"] = m_message;
+    status["barFollowsFocus"] = barFollowsFocus();
+    if (m_home && m_mode->isOn() && !barFollowsFocus())
+        status["home"] = QJsonObject{{"key", m_home->key}, {"address", m_home->address}, {"shown", homeShown()}};
     const AnywhereSettings::Answers answers = AnywhereSettings::Answers::fromJson(m_settings["onboarding"].toObject());
     QJsonObject onboarding{{"open", m_onboardingOpen}, {"needed", !answers.done}, {"answers", answers.toJson()}};
     if (m_onboardingOpen) {
@@ -361,22 +471,37 @@ QJsonObject DesignController::status()
     if (m_lift && m_lift->isRunning())
         status["lift"] = m_lift->status();
 
-    // The floating bar: next to the selected art, else what's pinned, else what's hovered.
+    // The floating bar: next to the selected art, else what's pinned, else what's hovered. It sticks to its
+    // window (m_home) unless "Bar follows focus" is on.
+    const bool follows = barFollowsFocus();
+    syncHome();
     std::optional<Target> shown;
     const QString art = m_overlays.selectedSurface();
-    if (!art.isEmpty() && m_mode->isOn())
-        shown = Target{std::nullopt, art};
-    else if (m_mode->selected())
+    if (!art.isEmpty() && m_mode->isOn()) {
+        // Art whose window is off screen has nowhere to put the bar.
+        if (locate(art, follows || !m_home ? QString() : m_home->address))
+            shown = Target{std::nullopt, art};
+    } else if (m_mode->selected()) {
         shown = Target{m_mode->selected(), QString()};
-    else if (m_mode->hover() && m_mode->tool() == QLatin1String("inspect"))
-        shown = Target{m_mode->hover(), QString()};
+    } else if (m_mode->tool() == QLatin1String("inspect")) {
+        if (m_mode->hover() && (follows || onHome(m_mode->hover()->surface)))
+            m_barHover = m_mode->hover();
+        if (follows)
+            shown = m_mode->hover() ? std::optional<Target>(Target{m_mode->hover(), QString()}) : std::nullopt;
+        else if (m_barHover)
+            shown = Target{m_barHover, QString()};
+    } else {
+        m_barHover.reset();
+    }
+    if (shown && !follows && !homeShown())
+        shown.reset();
     if (shown && m_mode->isOn()) {
         const QString kind = kindOf(*shown);
         const QString key = surfaceKeyOf(*shown);
         QRectF bounds;
         QString label;
         if (shown->inspection) {
-            bounds = shown->inspection->bounds;
+            bounds = placedBounds(*shown->inspection);
             label = shown->inspection->surface.label();
         } else {
             const Surface surface = surfaceOf(*shown);

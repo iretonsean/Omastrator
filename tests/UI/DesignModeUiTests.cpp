@@ -254,6 +254,121 @@ private slots:
         QVERIFY(overlays.surfaces().isEmpty());
     }
 
+    // Alpha feedback: the bar followed the pointer from window to window instead of sticking with the program.
+    // It stays with the window design mode started on; picking another window explicitly moves it.
+    void theBarSticksToTheWindowDesignModeStartedOn()
+    {
+        App app;
+        app.desktop->addWindow(QStringLiteral("firefox"), QRect(1000, 50, 800, 600), 4343);
+        app.call(QStringLiteral("on"));
+        app.call(QStringLiteral("onboarding"), {{"finish", false}});
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
+        QVERIFY(!app.status()["barFollowsFocus"].toBool());
+        QCOMPARE(app.status()["home"].toObject()["key"].toString(), QStringLiteral("window:foot"));
+
+        app.desktop->pointer = QPoint(300, 300);
+        app.design().mode().poll();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
+        const QJsonArray footRect = app.status()["bar"].toObject()["bounds"].toArray();
+
+        // The pointer crosses to another window: the bar stays where it was, on the terminal.
+        app.desktop->pointer = QPoint(1200, 300);
+        app.design().mode().poll();
+        QJsonObject bar = app.status()["bar"].toObject();
+        QCOMPARE(bar["surface"].toString(), QStringLiteral("window:foot"));
+        QCOMPARE(bar["bounds"].toArray(), footRect);
+
+        // So does focus moving to the other window.
+        app.desktop->clients[0].focusHistory = 1;
+        app.desktop->clients[1].focusHistory = 0;
+        app.design().mode().refresh();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
+
+        // Its window goes to a workspace that isn't showing: the bar hides with it, and comes back with it.
+        app.desktop->clients[0].workspace = 3;
+        app.design().mode().refresh();
+        QVERIFY(!app.status().contains("bar"));
+        QVERIFY(!app.status()["home"].toObject()["shown"].toBool(true));
+        app.desktop->clients[0].workspace = 1;
+        app.design().mode().refresh();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
+
+        // A window moved by the user takes the bar with it.
+        app.desktop->clients[0].rect.moveTopLeft(QPoint(200, 100));
+        app.design().mode().refresh();
+        QCOMPARE(app.status()["bar"].toObject()["bounds"].toArray()[0].toInt(), 200);
+
+        // Picking the other window explicitly (the pointer's target) moves the bar there, where it then sticks.
+        app.desktop->pointer = QPoint(1200, 300);
+        app.design().mode().poll();
+        const int picked = app.design().mode().hover()->id;
+        app.call(QStringLiteral("home"), {{"target", picked}});
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:firefox"));
+        app.desktop->pointer = QPoint(300, 300);
+        app.design().mode().poll();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:firefox"));
+
+        // Pinning a thing with select is picking too.
+        app.call(QStringLiteral("select"), {{"target", app.design().mode().hover()->id}});
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
+        QCOMPARE(app.status()["home"].toObject()["key"].toString(), QStringLiteral("window:foot"));
+        app.call(QStringLiteral("deselect"));
+    }
+
+    void theBarFollowsFocusSettingRestoresTheOldBehaviour()
+    {
+        App app;
+        app.desktop->addWindow(QStringLiteral("firefox"), QRect(1000, 50, 800, 600), 4343);
+        QString error;
+        app.call(QStringLiteral("barFollowsFocus"), {{"on", true}}, &error);
+        QCOMPARE(error, QString());
+        QVERIFY(AnywhereSettings::barFollowsFocus());
+        app.call(QStringLiteral("on"));
+        app.call(QStringLiteral("onboarding"), {{"finish", false}});
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
+        QVERIFY(app.status()["barFollowsFocus"].toBool());
+        app.desktop->pointer = QPoint(300, 300);
+        app.design().mode().poll();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
+        app.desktop->pointer = QPoint(1200, 300);
+        app.design().mode().poll();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:firefox"));
+        // Off again (the default): it sticks to the window design mode started on.
+        app.call(QStringLiteral("barFollowsFocus"), {{"on", false}});
+        QVERIFY(!AnywhereSettings::barFollowsFocus());
+        app.desktop->pointer = QPoint(300, 300);
+        app.design().mode().poll();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
+        app.desktop->pointer = QPoint(1200, 300);
+        app.design().mode().poll();
+        QCOMPARE(app.status()["bar"].toObject()["surface"].toString(), QStringLiteral("window:foot"));
+    }
+
+    void everyEscapeHatchStillWorksWithAStickyBar()
+    {
+        App app;
+        app.desktop->addWindow(QStringLiteral("firefox"), QRect(1000, 50, 800, 600), 4343);
+        app.call(QStringLiteral("on"));
+        app.call(QStringLiteral("onboarding"), {{"finish", false}});
+        app.call(QStringLiteral("tool"), {{"tool", "inspect"}});
+        app.desktop->pointer = QPoint(300, 300);
+        app.design().mode().poll();
+        QVERIFY(app.status().contains("bar"));
+        // The home window is off screen and the bar hidden: Leave and reset still leave.
+        app.desktop->clients[0].workspace = 3;
+        app.design().mode().refresh();
+        QVERIFY(!app.status().contains("bar"));
+        app.call(QStringLiteral("off"));
+        QVERIFY(!app.design().mode().isOn());
+        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
+        app.call(QStringLiteral("on"));
+        app.call(QStringLiteral("reset"));
+        QVERIFY(!app.design().mode().isOn());
+        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
+        // The home is forgotten with design mode: the next session homes on whatever has focus then.
+        QVERIFY(!app.status().contains("home"));
+    }
+
     void workGoesWhereTheUserChoosesAndTheDeskLabelsItsSource()
     {
         App app;
@@ -289,6 +404,9 @@ private slots:
         app.call(QStringLiteral("deselect"));
         app.desktop->pointer = QPoint(1500, 900);
         app.design().mode().poll();
+        // The bar sticks to the window it was on; choosing the desktop moves it there.
+        QVERIFY(!app.status().contains("bar"));
+        app.call(QStringLiteral("home"), {{"target", app.design().mode().hover()->id}});
         QCOMPARE(app.status()["bar"].toObject()["kind"].toString(), QStringLiteral("desktop"));
         const QJsonObject captured = app.call(QStringLiteral("action"), {{"id", "capture"}});
         QVERIFY(captured["label"].toString().startsWith(QStringLiteral("Desktop (DP-1) · ")));
@@ -522,6 +640,15 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(app.status().contains("proposal"), 20000);
         QTRY_COMPARE_WITH_TIMEOUT(app.status()["proposal"].toObject()["title"].toString(), QStringLiteral("AI: Mock-up"), 20000);
         QCOMPARE(app.bridge().designTarget(), &overlay);
+        // The home window leaves the screen: the bar hides with it, but the proposal stays in the status with the
+        // design monitor, so the overlay's own Keep and Discard card has somewhere to show and can answer it.
+        app.desktop->clients[0].workspace = 3;
+        app.design().mode().refresh();
+        QVERIFY(!app.status().contains("bar"));
+        QVERIFY(app.status().contains("proposal"));
+        QVERIFY(!app.status()["monitor"].toString().isEmpty());
+        app.desktop->clients[0].workspace = 1;
+        app.design().mode().refresh();
         // Nothing else draws on the overlay until it's kept or discarded.
         app.call(QStringLiteral("draw"), {{"tool", "line"}, {"points", QJsonArray{QJsonArray{110, 60}, QJsonArray{120, 70}}}}, &error);
         QVERIFY(error.contains(QLatin1String("proposal")));

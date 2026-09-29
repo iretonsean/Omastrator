@@ -88,6 +88,25 @@ QString seenPath()
     return QDir(stateHome()).filePath(QStringLiteral("omastrator/island-seen.json"));
 }
 
+QString visibilityPath()
+{
+    const QString given = qEnvironmentVariable("XDG_CONFIG_HOME");
+    const QString config = given.isEmpty() ? QDir::home().filePath(QStringLiteral(".config")) : given;
+    return QDir(config).filePath(QStringLiteral("omastrator/island-visibility.json"));
+}
+
+QString visibility()
+{
+    return readJson(visibilityPath())["show"].toString() == QLatin1String("always") ? QStringLiteral("always") : QStringLiteral("with-app");
+}
+
+QString setVisibility(const QString &mode)
+{
+    if (mode != QLatin1String("always") && mode != QLatin1String("with-app"))
+        return QStringLiteral("Choose always or with-app.");
+    return writeJson(visibilityPath(), {{"show", mode}});
+}
+
 QJsonObject State::toJson() const
 {
     return {{"mode", mode},
@@ -208,6 +227,9 @@ QString helpText()
         "  new                Bring Omastrator forward on a new document.\n"
         "  show <swatches|variations|roast|connect-agent>\n"
         "                     Bring Omastrator forward on a panel.\n"
+        "  show <always|with-app>\n"
+        "                     Where the island shows: with-app (the default) only while\n"
+        "                     an Omastrator window is focused, or always.\n"
         "  ai <generate|edit|roast|vectorize|cancel> [--prompt TEXT] [--count N]\n"
         "     [--fit] [--mode logo|sketch]\n"
         "                     Start an AI flow. Without a prompt, Generate and Edit\n"
@@ -318,6 +340,11 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
             words.remove(at, std::min<qsizetype>(2, words.size() - at));
         }
         const QString failure = setActivity(words.join(QLatin1Char(' ')).trimmed(), seconds);
+        return failure.isEmpty() ? 0 : failed(failure);
+    }
+    // `show always|with-app` is where the island shows; `show <panel>` opens a panel.
+    if (verb == QLatin1String("show") && (args.value(1) == QLatin1String("always") || args.value(1) == QLatin1String("with-app"))) {
+        const QString failure = setVisibility(args[1]);
         return failure.isEmpty() ? 0 : failed(failure);
     }
     if (verb == QLatin1String("new") || verb == QLatin1String("show")) {

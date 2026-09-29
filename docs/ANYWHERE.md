@@ -49,7 +49,8 @@ don't own.
     surface.
   - **A hotkey** enters design mode on the current surface; Esc leaves.
   - **A floating contextual bar** appears next to whatever you hover or
-    select, anywhere on screen. It's the in-app task bar, now OS-wide.
+    select on the window design mode started on (it sticks to its app; see
+    "The floating bar sticks to its app" below). It's the in-app task bar, now OS-wide.
 - **AI in the bar.**
   - An **Ask** field is always there for the thing you're pointing at
     ("tighten this header", "pull this site's palette"). Results are previews
@@ -260,6 +261,82 @@ everywhere) on 2026-09-27.
 - **The tools**: pen (freehand, smoothed with the pencil's curve fit),
   rectangle, ellipse, line, arrow, text and note (a pale card with its words,
   grouped). Strokes take the Omarchy theme's accent.
+
+### The floating bar sticks to its app
+
+An alpha tester said the bar "follows me between windows instead of sticking
+with the program". This is what it did, and what it does now.
+
+- **What "follows" meant.** The bar had no home. Its target was whichever thing
+  was pinned, else (in Inspect) whatever was under the pointer, so crossing
+  into another window moved the bar there. Art's bar was placed by looking up
+  the art's surface among the shown windows, taking the most recently focused
+  one when several share a class. A pinned thing kept its old bounds, so its
+  bar stayed where the window used to be, and art whose window was off screen
+  got a bar with nowhere sensible to sit.
+- **Now the bar has a home.** When design mode starts, its home is the window
+  that has focus on the design monitor (the desktop if none). The bar shows
+  only for things on the home window. Moving the pointer onto or focusing
+  another window leaves it where it was, attached to its app. It follows its
+  window when it moves. While the home window is off screen (another
+  workspace, hidden, closed to the tray) the bar is hidden, and it comes back
+  with the window. If the window is closed for good, the home goes to
+  whichever window has focus. The status stream carries `design.home`
+  (`key`, `address`, `shown`).
+- **Picking another window moves the home.** That's any explicit choice:
+  pinning a thing with `select` (the bar's own way of choosing), selecting art
+  (a new drawing is selected, so drawing on another window moves it too), or
+  `omastrator design home [--target N]` (the window under the pointer, or the
+  inspection N). A plain click with the Point tool can't do it, because the
+  overlay is click-through and never sees the click.
+- **"Bar follows focus" is the old behaviour**, off unless turned on:
+  `omastrator design follow on|off`, saved as `barFollowsFocus` in
+  `anywhere.json`. On, the bar goes wherever the pointer is; nothing else about
+  it changes.
+- **The escape hatches don't depend on the bar.** Esc, the island's Leave,
+  `omastrator reset` and Super+Alt+Escape work whether the bar is showing,
+  hidden with its window, or on another monitor. The bar is only drawn on the
+  monitor its target is on, and never above the topmost clear space, so it is
+  never over the Omarchy bar or the island (`OverlayLogic.barPosition`,
+  `clampBar` and `barShownOn`, tested in a JavaScript engine).
+- Desktop changes are noticed while the pointer rests, because the home
+  window can move or leave without the pointer doing anything
+  (`DesignMode::watchDesktop`, every 500 ms at most).
+
+### A waiting proposal doesn't depend on the bar's home
+
+Keep and Discard sit on the floating bar, and the bar hides while its home
+window is off screen. So a proposal (or an agent being waited on) that the bar
+can't show gets its own small card at the bottom of the design monitor,
+without the bar's home rule: the overlay shows it whenever the bar isn't up
+(`proposalCard` in `Overlay.qml`), and its clicks join the input mask. The
+island is not used for this: it is hidden with other apps, and a card at the
+screen the user was designing on is where they look. Tested in
+`DesignModeUiTests` (the proposal stays in the status with the bar hidden) and
+`ShellPluginTests` (the card's condition).
+
+### The island shows only with Omastrator (interim)
+
+Alpha testers didn't want the island on screen everywhere. Until the island's
+UX is rethought (scrap it, or change what it does), this is the default,
+**pending a rethink of the island**:
+
+- The island shows while an Omastrator window is focused (Hyprland's active
+  window class is `io.github.iretonsean.Omastrator`), and is hidden otherwise.
+- It is a way out, so it stays while design mode is on, while dictation is
+  listening, transcribing or showing what it heard, while an agent is being
+  waited on (Stop is on the island), while Live is starting or running or a
+  deploy is running (Stop Live, Changes and Deploy are island-only, and Live's
+  browser is not an Omastrator window), and while a proposal or result waits
+  for Keep or Discard (`OverlayLogic.islandShown`, tested in a JavaScript
+  engine). The tray light is always there as the entry.
+- The focused class is read from the Wayland app id (`toplevel.wayland.appId`)
+  first, since Hyprland's own record is only filled after a refresh, then from
+  Hyprland's record, refreshed on every focus change for XWayland windows.
+- **To show it always**: Preferences, "Show the island on every window", or
+  `omastrator island show always` (`with-app` goes back). It is kept as `show`
+  in `~/.config/omastrator/island-visibility.json`, and the status stream carries
+  it as `islandShow`.
 
 ### The floating bar and Ask
 

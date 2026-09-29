@@ -322,7 +322,11 @@ Omastrator also works outside its window, through Omarchy's own shell
   tools; *Capture* picks a colour anywhere on screen, traces a screenshot
   region, pastes clipboard SVG as paths, or loads your theme's colours as
   swatches. *AI* starts Generate…, Edit with Instruction…, Roast My Design and
-  Vectorize with AI, and shows when your agent is working.
+  Vectorize with AI, and shows when your agent is working. For now, and
+  pending a rethink of the island, it shows only while an Omastrator window is
+  focused (and while design mode, dictation or a waiting result needs it); the
+  tray light is always there. Preferences, or `omastrator island show always`,
+  shows it everywhere.
 - **Live**: open a web page, or a project folder on this machine, in
   Omastrator's own Chromium. Click an element to select it (Shift-click adds),
   then change its text, colour, spacing, size, type or radius from a bar beside
@@ -364,6 +368,10 @@ Clicks go straight through it to your apps.
 
 - **Super+Alt+O** (or the island's Design mode) turns design mode on for the
   monitor you're on. Esc leaves.
+- **The floating bar sticks to its app**: it stays with the window design mode
+  started on, and hides while that window is off screen. Pick another window
+  (`omastrator design home`) to move it, or turn on `omastrator design follow on`
+  to have it follow the pointer as before.
 - **Inspect and measure**: point at anything to see its size and position, and
   its colours and font where they can be read. A page open in Omastrator's
   browser is read from its DOM, including sites that aren't yours. Other apps

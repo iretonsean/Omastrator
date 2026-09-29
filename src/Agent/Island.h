@@ -19,6 +19,14 @@ QString statePath();
 // The modes whose label has shown once, kept across sessions under $XDG_STATE_HOME.
 QString seenPath();
 
+// Where the island shows: "with-app" (the default, only while an Omastrator window is focused, plus the exceptions
+// in docs/ANYWHERE.md) or "always". Kept in island-visibility.json under ~/.config/omastrator, so it survives logout.
+// Interim, pending a rethink of the island.
+QString visibilityPath();
+QString visibility();
+// Returns why it failed, or empty; anything but "always" or "with-app" fails.
+QString setVisibility(const QString &mode);
+
 struct State {
     QString mode = QStringLiteral("normal");
     bool expanded = false;

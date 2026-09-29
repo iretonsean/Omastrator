@@ -58,6 +58,30 @@ function onScreen(rect, screen) {
       && rect[1] < screen.y + screen.height && rect[1] + rect[3] > screen.y
 }
 
+// The bar shows on the monitor its target is on: a bar that sticks to a window on another monitor stays
+// off this one, instead of being squeezed against its edge.
+function barShownOn(bar, screen) {
+  return !!bar && !!bar.bounds && onScreen(bar.bounds, screen)
+}
+
+// Interim, pending a rethink of the island: it shows while an Omastrator window is focused, and the island is a way
+// out, so it also stays while design mode is on, dictation is listening, transcribing or showing what it heard, an
+// agent is being waited on (Stop is on the island), Live is starting or running or deploying (its tools are island-only),
+// or a proposal or result waits for Keep/Discard. islandShow "always" (Preferences, `omastrator island show always`) shows it everywhere.
+var ownClasses = ["io.github.iretonsean.omastrator", "omastrator"]
+function islandShown(status, activeClass) {
+  var s = status || {}
+  if (s.islandShow === "always") return true
+  if (ownClasses.indexOf(String(activeClass || "").toLowerCase()) >= 0) return true
+  var design = s.design || {}
+  if (design.on || design.proposal) return true
+  if (s.dictation === "listening" || s.dictation === "transcribing" || s.dictation === "heard") return true
+  if (s.waiting) return true
+  var live = s.live || {}
+  if (live.state === "running" || live.state === "starting" || (live.deploy && live.deploy.running)) return true
+  return !!s.ready || !!s.proposal
+}
+
 // The floating bar next to `bounds`: centred under it, above when there's no room, inside the screen.
 function barPosition(bounds, barWidth, barHeight, screen, gap, topClear) {
   var top = Math.max(gap, topClear || 0)
