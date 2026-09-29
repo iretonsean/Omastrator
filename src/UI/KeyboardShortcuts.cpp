@@ -228,21 +228,27 @@ ShortcutSettings::ShortcutSettings()
     reload();
 }
 
+QHash<QString, ShortcutChord> ShortcutSettings::decode(const QByteArray &json)
+{
+    QHash<QString, ShortcutChord> saved;
+    const QJsonObject object = QJsonDocument::fromJson(json).object();
+    for (auto value = object.constBegin(); value != object.constEnd(); ++value) {
+        const QJsonObject chord = value->toObject();
+        // Nudges were named for fixed steps before the increment became a preference.
+        QString id = value.key();
+        if (id.startsWith(QLatin1String("Canvas & Layers:Nudge ")))
+            id.replace(QLatin1String(" 10 pt"), QStringLiteral(" ×10")).remove(QLatin1String(" 1 pt"));
+        saved.insert(id, ShortcutChord(chord.value(QLatin1String("key")).toString(), chord.value(QLatin1String("modifiers")).toInt(-1)));
+    }
+    return saved;
+}
+
 void ShortcutSettings::reload()
 {
     m_overrides.clear();
     const QByteArray data = QSettings().value(QLatin1String(storageKey)).toByteArray();
     if (!data.isEmpty()) {
-        QHash<QString, ShortcutChord> saved;
-        const QJsonObject object = QJsonDocument::fromJson(data).object();
-        for (auto value = object.constBegin(); value != object.constEnd(); ++value) {
-            const QJsonObject chord = value->toObject();
-            // Nudges were named for fixed steps before the increment became a preference.
-            QString id = value.key();
-            if (id.startsWith(QLatin1String("Canvas & Layers:Nudge ")))
-                id.replace(QLatin1String(" 10 pt"), QStringLiteral(" ×10")).remove(QLatin1String(" 1 pt"));
-            saved.insert(id,ShortcutChord(chord.value(QLatin1String("key")).toString(), chord.value(QLatin1String("modifiers")).toInt(-1)));
-        }
+        const QHash<QString, ShortcutChord> saved = decode(data);
         // Swift keeps stored overrides only while they hold together.
         if (const std::optional<QString> wrong = problem(saved))
             qCWarning(lcApp).noquote() << "stored keyboard shortcuts ignored:" << *wrong;

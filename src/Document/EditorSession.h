@@ -215,6 +215,8 @@ public:
     // How many steps each document keeps; a preference shared by every session.
     static int historyLimit();
     static void setHistoryLimit(int steps);
+    // Reads the stored limit again, after settings were imported.
+    static void reloadHistoryLimit();
     void markSaved();
     void markUnsaved();
 

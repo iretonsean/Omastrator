@@ -70,6 +70,11 @@ int EditorSession::historyLimit()
     return cachedHistoryLimit;
 }
 
+void EditorSession::reloadHistoryLimit()
+{
+    cachedHistoryLimit = 0;
+}
+
 void EditorSession::setHistoryLimit(int steps)
 {
     cachedHistoryLimit = std::clamp(steps, 1, 1000);
