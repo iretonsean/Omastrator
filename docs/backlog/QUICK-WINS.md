@@ -30,6 +30,8 @@ file with the work. Don't delete finished items.
 - HIGH-EFFORT.md isn't scheduled, apart from its item 1, which is item 9
   here.
 - Effects waits on the author's review of docs/EFFECTS.md.
+- GIT-NATIVE.md (readable files, a file CLI, an agent skill, linked
+  libraries, flows) is in the backlog, not scheduled.
 
 ## Agents and models (the author, 2026-09-28)
 
