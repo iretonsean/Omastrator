@@ -214,6 +214,44 @@ private slots:
         QVERIFY(rig.canvas.isEditingAddress());
     }
 
+    void drawingAtAFractionalZoomGivesWholeCssPixels()
+    {
+        Rig rig;
+        rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
+        const double zoom = rig.canvas.documentToView().m11();
+        const QPoint from = rig.view({200, 300}).toPoint();
+        const QPoint to = rig.view({900, 800}).toPoint();
+        // The pointer lands on whole view points, so the drag itself is a fractional number of CSS px.
+        const double rawWidth = (to.x() - from.x()) / zoom;
+        const double rawHeight = (to.y() - from.y()) / zoom;
+        QVERIFY(qAbs(rawWidth - std::round(rawWidth)) > 0.01 && qAbs(rawHeight - std::round(rawHeight)) > 0.01);
+        rig.draw({200, 300}, {900, 800});
+        QVERIFY(rig.session.selectedBrowserView().has_value());
+        const QRectF bounds = rig.object(*rig.session.selectedBrowserView())->path.bounds();
+        QCOMPARE(bounds.width(), std::round(rawWidth));
+        QCOMPARE(bounds.height(), std::round(rawHeight));
+    }
+
+    void aHandleDragAtAFractionalZoomShowsWholeCssPixels()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
+        rig.session.select({rig.frame});
+        const double zoom = rig.canvas.documentToView().m11();
+        const QPoint handle = rig.view({700, 400}).toPoint();
+        const QPoint to = handle - QPoint(101, 0);
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle);
+        QTest::mouseMove(&rig.canvas, handle - QPoint(40, 0));
+        QTest::mouseMove(&rig.canvas, to);
+        QVERIFY(rig.session.isPreviewOnly());
+        const double width = rig.object(rig.frame)->path.bounds().width();
+        // The preview is neither the raw 600 − 101/zoom nor anything but whole px.
+        QVERIFY(qAbs((600 - 101 / zoom) - std::round(600 - 101 / zoom)) > 0.01);
+        QCOMPARE(width, std::round(width));
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, to);
+    }
+
     void aClickWithTheToolDrops1280By800()
     {
         Rig rig;

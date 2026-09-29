@@ -54,7 +54,7 @@ void EditorSession::setBrowserPicture(const QUuid &frame, const QImage &picture)
 
 QUuid EditorSession::addBrowserView(const QRectF &rect, const QUrl &url)
 {
-    VectorObject frame = VectorObject::frame(rect, m_document ? m_document->uniqueName(QStringLiteral("Browser View")) : QStringLiteral("Browser View"));
+    VectorObject frame = VectorObject::frame(QRectF(rect.topLeft(), BrowserView::wholeSize(rect.size())), m_document ? m_document->uniqueName(QStringLiteral("Browser View")) : QStringLiteral("Browser View"));
     frame.browser = BrowserView{.url = url, .scroll = {}, .picture = {}};
     return addFrameObject(frame, QStringLiteral("Draw Browser View"));
 }

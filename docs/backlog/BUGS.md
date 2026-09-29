@@ -76,7 +76,7 @@ text edit twice.
   GitHub (`src/UI/LivePanel.cpp:234`). Consider showing it only when the
   project has no remote, or when its remote is on GitHub.
 
-## 5. [ ] A Browser View drawn at a fractional zoom gets a fractional design width
+## 5. [x] A Browser View drawn at a fractional zoom gets a fractional design width (2026-09-29)
 
 **Confirmed.** At the default zoom, a Browser View drawn with the tool came
 out 1279.67 × 801.11 (the Transform section shows it). "The design width is

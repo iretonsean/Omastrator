@@ -305,7 +305,11 @@ void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box, bool previe
     if (!frame || frame->kind != ObjectKind::frame || !frame->shape || !frame->shape->placement.isIdentity())
         return;
     const QRectF old = frame->shape->rect.normalized();
-    const QRectF fresh = box.normalized();
+    QRectF fresh = box.normalized();
+    // A Browser View lays its page out at its width in CSS px, so every way to size one (the handles, W and H,
+    // a breakpoint, Design Width) lands on whole pixels.
+    if (frame->browser)
+        fresh.setSize(BrowserView::wholeSize(fresh.size()));
     if (!near(fresh.width(), old.width()))
         frame->layout.width = frame->layout.width == LayoutSizing::hug ? LayoutSizing::fixed : frame->layout.width;
     if (!near(fresh.height(), old.height()))
