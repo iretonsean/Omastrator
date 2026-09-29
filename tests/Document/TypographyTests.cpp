@@ -1,3 +1,4 @@
+#include "../FontSupport.h"
 #include "Document/DocumentCodec.h"
 #include "Document/EditorSession.h"
 #include "Document/TextLayout.h"
@@ -102,6 +103,8 @@ private slots:
 
     void scaleShiftCaseAndDecorationChangeTheOutline()
     {
+        if (!haveInstalledFonts())
+            QSKIP("No fonts installed (a bare container): type has no glyphs to compare");
         const TextContent plain = text(QStringLiteral("Type"));
         TextContent wide = plain;
         wide.horizontalScale = 200;
@@ -115,9 +118,11 @@ private slots:
         TextContent caps = plain;
         caps.textCase = TextCase::allCaps;
         QVERIFY(caps.outline() != plain.outline());
-        TextContent underlined = plain;
+        // No descenders, so the underline is the lowest thing whatever the font's metrics.
+        const TextContent flat = text(QStringLiteral("Hex"));
+        TextContent underlined = flat;
         underlined.underline = true;
-        QVERIFY(underlined.outline().boundingRect().bottom() > plain.outline().boundingRect().bottom());
+        QVERIFY(underlined.outline().boundingRect().bottom() > flat.outline().boundingRect().bottom());
         TextContent struck = plain;
         struck.strikethrough = true;
         QVERIFY(struck.outline() != plain.outline());
@@ -130,7 +135,8 @@ private slots:
 
     void manualKernsMoveOnlyWhatFollows()
     {
-        TextContent content = text(QStringLiteral("ABCD"));
+        // H and I: a pair no font kerns, so the shift is the manual kern alone.
+        TextContent content = text(QStringLiteral("HIHI"));
         const TextLayout before(content);
         content.kerns[2] = 100;
         const TextLayout after(content);

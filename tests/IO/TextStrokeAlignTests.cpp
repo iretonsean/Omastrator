@@ -1,3 +1,4 @@
+#include "../FontSupport.h"
 #include "Document/EditorSession.h"
 #include "IO/DocumentExporter.h"
 #include "IO/PdfImporter.h"
@@ -94,6 +95,12 @@ private:
     }
 
 private slots:
+
+    void initTestCase()
+    {
+        if (!haveInstalledFonts())
+            QSKIP("No fonts installed (a bare container): there is no type to stroke");
+    }
 
     void insideAndOutsideStayOnTheirSideOfPointAndAreaType_data()
     {

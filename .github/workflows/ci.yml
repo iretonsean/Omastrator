@@ -15,15 +15,19 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     # Digest-pinned; docs/RELEASING.md says how to bump it.
-    container: archlinux:base-devel@sha256:51dd3d24f7fba779e7c471caeee7804c50e8c134ad948e19685a1c83a42facc3
+    container:
+      image: archlinux:base-devel@sha256:51dd3d24f7fba779e7c471caeee7804c50e8c134ad948e19685a1c83a42facc3
+      # A container's PID 1 doesn't reap orphans, so processes the tests stop linger as zombies.
+      options: --init
     steps:
       # Chromium isn't installed: its sandbox can't start in a container, and the Chromium
       # tests skip without it. Everything below the install step runs as `builder`, because
       # the suite assumes a normal user (root reads the mode-000 files its tests expect to
-      # be unreadable) and its git tests need an identity.
+      # be unreadable) and its git tests need an identity. The image has no fonts at all, and
+      # the type tests measure real glyphs, so it gets DejaVu (fontconfig's default sans).
       - name: Install build and test dependencies
         run: |
-          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq
+          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq ttf-dejavu
           useradd -m builder
 
       - uses: actions/checkout@v4

@@ -14,6 +14,19 @@
 #include <csignal>
 
 namespace {
+// Whether `pid` has exited. A zombie has: `kill(pid, 0)` still succeeds on one, and a container
+// whose PID 1 isn't an init never reaps its orphans.
+bool isGone(pid_t pid)
+{
+    if (::kill(pid, 0) != 0)
+        return true;
+    QFile stat(QStringLiteral("/proc/%1/stat").arg(pid));
+    if (!stat.open(QIODevice::ReadOnly))
+        return false;
+    const QByteArray line = stat.readAll();
+    return line.mid(line.lastIndexOf(')') + 2, 1) == "Z";
+}
+
 // Stands in for `omarchy`: names $FAKE_AGENT as the default and records a prompt launch.
 constexpr const char *fakeOmarchy = "#!/bin/sh\n"
                                     "if [ \"$1\" = default ] && [ \"$2\" = agent ]; then printf '%s\\n' \"$FAKE_AGENT\"; exit 0; fi\n"
@@ -350,7 +363,7 @@ private slots:
         QTRY_VERIFY(QFile::exists(out(QStringLiteral("claude.child"))));
         const pid_t child = pid_t(read(out(QStringLiteral("claude.child"))).trimmed().toInt());
         QVERIFY(child > 0);
-        QTRY_VERIFY(::kill(child, 0) != 0);
+        QTRY_VERIFY(isGone(child));
         QVERIFY(read(logPath).contains(QLatin1String("cancelled")));
     }
 
@@ -364,7 +377,7 @@ private slots:
         QCOMPARE(runToEnd(setup, nullptr, &logPath), AgentRun::End::timedOut);
         QVERIFY(read(logPath).contains(QLatin1String("timed out after 1 s")));
         const pid_t child = pid_t(read(out(QStringLiteral("claude.child"))).trimmed().toInt());
-        QTRY_VERIFY(child > 0 && ::kill(child, 0) != 0);
+        QTRY_VERIFY(child > 0 && isGone(child));
         // The default is five minutes, and the setting changes it.
         QCOMPARE(AgentLauncher::timeoutSeconds(AgentAccess::omastrator), 300);
         QSettings().setValue(QStringLiteral("agent/timeoutSeconds"), 42);
