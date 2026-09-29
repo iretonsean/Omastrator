@@ -242,7 +242,8 @@ private slots:
         const QJsonObject json = DocumentCodec::encode(*document.find(document.layers().front()));
         QCOMPARE(json["page"].toString(), second.toString(QUuid::WithoutBraces));
         QCOMPARE(DocumentCodec::decodeObject(json).page, second);
-        QVERIFY(!DocumentCodec::encode(*sample().find(sample().layers().front())).contains("page"));
+        const VectorDocument plain = sample();
+        QVERIFY(!DocumentCodec::encode(*plain.find(plain.layers().front())).contains("page"));
     }
 
     void unwritableFolderIsAFileError()

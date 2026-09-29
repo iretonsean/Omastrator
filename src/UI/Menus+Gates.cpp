@@ -156,7 +156,7 @@ void Menus::synchronize()
     action(QStringLiteral("hideGuides"))->setText(s.showsGuides ? QStringLiteral("Hide Guides") : QStringLiteral("Show Guides"));
     action(QStringLiteral("lockGuides"))->setChecked(s.guidesLocked);
     action(QStringLiteral("makeGuides"))->setEnabled(editing && drawn && s.canMakeGuides());
-    const bool guides = drawn && !s.document()->guides.empty();
+    const bool guides = drawn && !s.document()->guidesOnCurrentPage().empty();
     action(QStringLiteral("releaseGuides"))->setEnabled(editing && guides);
     action(QStringLiteral("clearGuides"))->setEnabled(editing && guides);
     action(QStringLiteral("showHistory"))->setEnabled(drawn);

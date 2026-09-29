@@ -88,10 +88,10 @@ void EditorSession::notify(bool documentToo)
     }
     // Artboard 1's size double as the viewport's reference point; keep the document
     // origin still on screen when it changes (a drag on the Artboard tool, or undo).
-    if (documentToo && m_document && m_document->size != m_viewportDocumentSize) {
-        const QSizeF delta = m_document->size - m_viewportDocumentSize;
+    if (documentToo && m_document && m_document->viewSize() != m_viewportDocumentSize) {
+        const QSizeF delta = m_document->viewSize() - m_viewportDocumentSize;
         viewport.pan += QSizeF(delta.width() * viewport.pointsPerPixel() / 2, delta.height() * viewport.pointsPerPixel() / 2);
-        m_viewportDocumentSize = m_document->size;
+        m_viewportDocumentSize = m_document->viewSize();
     }
     if (documentToo)
         emit documentChanged();
@@ -119,8 +119,8 @@ void EditorSession::loadDocument(VectorDocument document)
     m_activeLayer = layers.empty() ? std::nullopt : std::optional(layers.back());
     m_activeArtboard = 0;
     m_artboardSelected = false;
-    viewport.fit(m_document->size);
-    m_viewportDocumentSize = m_document->size;
+    viewport.fit(m_document->viewSize());
+    m_viewportDocumentSize = m_document->viewSize();
     notify();
 }
 
@@ -377,7 +377,7 @@ std::optional<QUuid> EditorSession::activeLayer() const
 {
     if (!m_document)
         return std::nullopt;
-    if (m_activeLayer && m_document->find(*m_activeLayer))
+    if (m_activeLayer && m_document->find(*m_activeLayer) && m_document->isOnCurrentPage(*m_activeLayer))
         return m_activeLayer;
     const auto layers = m_document->layers();
     return layers.empty() ? std::nullopt : std::optional(layers.back());
@@ -562,7 +562,7 @@ void EditorSession::zoomIn()
 {
     if (!m_document)
         return;
-    viewport.setZoom(viewport.zoom() * 2, viewport.center(), m_document->size);
+    viewport.setZoom(viewport.zoom() * 2, viewport.center(), m_document->viewSize());
     notify(false);
 }
 
@@ -570,7 +570,7 @@ void EditorSession::zoomOut()
 {
     if (!m_document)
         return;
-    viewport.setZoom(viewport.zoom() / 2, viewport.center(), m_document->size);
+    viewport.setZoom(viewport.zoom() / 2, viewport.center(), m_document->viewSize());
     notify(false);
 }
 
@@ -580,7 +580,7 @@ void EditorSession::zoomToFit()
         return;
     const Artboard first = m_document->artboard(0);
     if (m_document->artboardCount() == 1 && first.rect.topLeft() == QPointF(0, 0)) {
-        viewport.fit(m_document->size);
+        viewport.fit(m_document->viewSize());
         notify(false);
         return;
     }
@@ -591,7 +591,7 @@ void EditorSession::actualSize()
 {
     if (!m_document)
         return;
-    viewport.setZoom(viewport.backingScale, viewport.center(), m_document->size);
+    viewport.setZoom(viewport.backingScale, viewport.center(), m_document->viewSize());
     notify(false);
 }
 
@@ -599,7 +599,7 @@ void EditorSession::setZoom(double zoom, QPointF anchoredAt)
 {
     if (!m_document)
         return;
-    viewport.setZoom(zoom, anchoredAt, m_document->size);
+    viewport.setZoom(zoom, anchoredAt, m_document->viewSize());
     notify(false);
 }
 
@@ -615,7 +615,7 @@ void EditorSession::resizeView(QSizeF size, double backingScale)
 {
     if (viewport.viewSize == size && viewport.backingScale == backingScale)
         return;
-    viewport.resize(size, backingScale, m_document ? std::optional(m_document->size) : std::nullopt);
+    viewport.resize(size, backingScale, m_document ? std::optional(m_document->viewSize()) : std::nullopt);
     notify(false);
 }
 

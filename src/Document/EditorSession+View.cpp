@@ -112,7 +112,11 @@ void EditorSession::setGuidesLocked(bool locked)
 
 void EditorSession::addGuide(const Guide &guide)
 {
-    edit(QStringLiteral("Add Guide"), [&](VectorDocument &document) { document.guides.push_back(guide); });
+    edit(QStringLiteral("Add Guide"), [&](VectorDocument &document) {
+        document.guides.push_back(guide);
+        if (!document.pages.empty() && guide.page.isNull())
+            document.guides.back().page = document.currentPageId();
+    });
 }
 
 void EditorSession::moveGuide(int index, double position)
@@ -131,9 +135,11 @@ void EditorSession::removeGuide(int index)
 
 void EditorSession::clearGuides()
 {
-    if (!m_document || m_document->guides.empty())
+    if (!m_document || m_document->guidesOnCurrentPage().empty())
         return;
-    edit(QStringLiteral("Clear Guides"), [&](VectorDocument &document) { document.guides.clear(); });
+    edit(QStringLiteral("Clear Guides"), [&](VectorDocument &document) {
+        std::erase_if(document.guides, [&](const Guide &guide) { return document.isOnCurrentPage(guide); });
+    });
 }
 
 bool EditorSession::canMakeGuides() const
@@ -156,20 +162,23 @@ void EditorSession::makeGuides()
     if (paths.empty())
         return;
     edit(QStringLiteral("Make Guides"), [&](VectorDocument &document) {
+        const auto addGuide = [&](Qt::Orientation orientation, double position) {
+            document.guides.push_back({orientation, position, document.pages.empty() ? QUuid() : document.currentPageId()});
+        };
         for (const QUuid &id : paths) {
             const VectorPath &path = document.find(id)->path;
             const QRectF bounds = path.bounds();
             // A straight line across one axis is that one guide; anything else gives its box's four.
             const bool line = path.nodeCount() == 2 && path.contours.size() == 1 && !path.contours.front().closed;
             if (line && std::abs(bounds.height()) < 1e-6) {
-                document.guides.push_back({Qt::Horizontal, bounds.top()});
+                addGuide(Qt::Horizontal, bounds.top());
             } else if (line && std::abs(bounds.width()) < 1e-6) {
-                document.guides.push_back({Qt::Vertical, bounds.left()});
+                addGuide(Qt::Vertical, bounds.left());
             } else {
-                document.guides.push_back({Qt::Vertical, bounds.left()});
-                document.guides.push_back({Qt::Vertical, bounds.right()});
-                document.guides.push_back({Qt::Horizontal, bounds.top()});
-                document.guides.push_back({Qt::Horizontal, bounds.bottom()});
+                addGuide(Qt::Vertical, bounds.left());
+                addGuide(Qt::Vertical, bounds.right());
+                addGuide(Qt::Horizontal, bounds.top());
+                addGuide(Qt::Horizontal, bounds.bottom());
             }
         }
         document.remove(paths);
@@ -179,11 +188,12 @@ void EditorSession::makeGuides()
 
 void EditorSession::releaseGuides()
 {
-    if (!m_document || m_document->guides.empty())
+    if (!m_document || m_document->guidesOnCurrentPage().empty())
         return;
     edit(QStringLiteral("Release Guides"), [&](VectorDocument &document) {
         std::vector<QUuid> made;
-        const std::vector<Guide> guides = std::exchange(document.guides, {});
+        const std::vector<Guide> guides = document.guidesOnCurrentPage();
+        std::erase_if(document.guides, [&](const Guide &guide) { return document.isOnCurrentPage(guide); });
         const QRectF extent = document.artboard(activeArtboard()).rect;
         m_selection.clear();
         for (const Guide &guide : guides) {

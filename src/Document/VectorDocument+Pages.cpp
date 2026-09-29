@@ -122,3 +122,13 @@ void VectorDocument::ensurePages()
         }
     }
 }
+
+std::vector<Guide> VectorDocument::guidesOnCurrentPage() const
+{
+    std::vector<Guide> result;
+    for (const Guide &guide : guides) {
+        if (isOnCurrentPage(guide))
+            result.push_back(guide);
+    }
+    return result;
+}

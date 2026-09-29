@@ -247,6 +247,117 @@ private slots:
         QCOMPARE(QColor(two.pixel(60, 60)), QColor(Qt::blue));
     }
 
+    void rulerGuidesBelongToTheirPage()
+    {
+        Fixture f = twoPages();
+        f.document.guides.push_back({Qt::Vertical, 5, f.first});
+        f.document.guides.push_back({Qt::Horizontal, 6, f.second});
+        f.document.currentPage = f.first;
+        EditorSession session;
+        session.loadDocument(f.document);
+        QCOMPARE(session.document()->guidesOnCurrentPage().size(), size_t(1));
+        session.addGuide({Qt::Vertical, 30});
+        QCOMPARE(session.document()->guides.back().page, f.first);
+        QCOMPARE(session.document()->guidesOnCurrentPage().size(), size_t(2));
+        session.clearGuides();
+        QCOMPARE(session.document()->guides.size(), size_t(1));
+        QCOMPARE(session.document()->guides.front().page, f.second);
+        QVERIFY(session.document()->guidesOnCurrentPage().empty());
+        // Nothing left on this page to clear: no undo step.
+        session.clearGuides();
+        session.undo();
+        QCOMPARE(session.document()->guidesOnCurrentPage().size(), size_t(2));
+    }
+
+    void releasingGuidesLeavesTheOtherPagesAlone()
+    {
+        Fixture f = twoPages();
+        f.document.guides.push_back({Qt::Vertical, 5, f.first});
+        f.document.guides.push_back({Qt::Horizontal, 6, f.second});
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.releaseGuides();
+        QCOMPARE(session.document()->guides.size(), size_t(1));
+        QCOMPARE(session.document()->guides.front().page, f.second);
+    }
+
+    void aPageAlwaysKeepsOneLayerWhenItsArtIsDeleted()
+    {
+        Fixture f = twoPages();
+        f.document.currentPage = f.second;
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.deleteObjects({f.layerTwo});
+        // The page got a fresh layer, on itself; page 1 is untouched.
+        QCOMPARE(session.document()->layers().size(), size_t(1));
+        QCOMPARE(session.document()->layersOn(f.first), std::vector<QUuid>{f.layerOne});
+        QVERIFY(session.document()->find(f.red));
+        QVERIFY(!session.document()->find(f.blue));
+    }
+
+    void newLayersAndComponentLayersLandOnTheCurrentPage()
+    {
+        Fixture f = twoPages();
+        f.document.currentPage = f.second;
+        EditorSession session;
+        session.loadDocument(f.document);
+        const QUuid layer = session.addLayer();
+        QCOMPARE(session.document()->pageOf(layer), f.second);
+        QCOMPARE(session.document()->layers().size(), size_t(2));
+        QCOMPARE(session.document()->layersOn(f.first).size(), size_t(1));
+        QCOMPARE(session.activeLayer(), std::optional(layer));
+    }
+
+    void unlockAllAndShowAllStayOnTheCurrentPage()
+    {
+        Fixture f = twoPages();
+        f.document.find(f.red)->isLocked = true;
+        f.document.find(f.blue)->isLocked = true;
+        f.document.find(f.red)->isVisible = false;
+        f.document.find(f.blue)->isVisible = false;
+        f.document.currentPage = f.second;
+        EditorSession session;
+        session.loadDocument(f.document);
+        session.unlockAll();
+        QVERIFY(!session.document()->find(f.blue)->isLocked);
+        QVERIFY(session.document()->find(f.red)->isLocked);
+        session.showAll();
+        QVERIFY(session.document()->find(f.blue)->isVisible);
+        QVERIFY(!session.document()->find(f.red)->isVisible);
+    }
+
+    void pastingLandsOnTheCurrentPage()
+    {
+        Fixture f = twoPages();
+        f.document.currentPage = f.second;
+        EditorSession source;
+        source.loadDocument(f.document);
+        source.select({f.blue});
+        source.copy();
+        f.document.currentPage = f.first;
+        EditorSession target;
+        target.loadDocument(f.document);
+        target.paste(true);
+        QCOMPARE(target.selection().size(), size_t(1));
+        QCOMPARE(target.document()->pageOf(target.selection().front()), f.first);
+        QCOMPARE(target.document()->layersOn(f.second), std::vector<QUuid>{f.layerTwo});
+        QCOMPARE(target.document()->children(f.layerTwo).size(), size_t(1));
+    }
+
+    void theViewportSizeIsTheCurrentPagesFirstArtboard()
+    {
+        Fixture f = twoPages();
+        QCOMPARE(f.document.viewSize(), QSizeF(100, 100));
+        f.document.currentPage = f.second;
+        QCOMPARE(f.document.viewSize(), QSizeF(100, 100));
+        std::vector<Artboard> boards = f.document.allArtboards();
+        boards.front().rect = QRectF(0, 0, 640, 480);
+        f.document.setArtboards(boards);
+        QCOMPARE(f.document.viewSize(), QSizeF(640, 480));
+        f.document.currentPage = f.first;
+        QCOMPARE(f.document.viewSize(), QSizeF(100, 100));
+    }
+
     void uniquePageNamesNumberFromTwo()
     {
         Fixture f = twoPages();

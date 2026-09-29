@@ -64,7 +64,7 @@ EditorCanvas::State::PenTarget EditorCanvas::State::penTargetAt(QPointF view, Qt
     // Every unlocked path, topmost first, may be continued or joined.
     std::vector<QUuid> everyPath;
     for (auto object = document.objects.rbegin(); object != document.objects.rend(); ++object) {
-        if (object->kind == ObjectKind::path)
+        if (object->kind == ObjectKind::path && document.isOnCurrentPage(object->id))
             everyPath.push_back(object->id);
     }
     if (pen && penContour()) {

@@ -345,7 +345,7 @@ QUuid EditorSession::placeFromLibrary(const std::vector<VectorObject> &objects, 
                     components.name = QStringLiteral("Components");
                     components.layerColor = nextLayerColor(int(document.layers().size()));
                     layer = components.id;
-                    document.objects.push_back(components);
+                    document.appendLayer(components);
                 }
             }
             // The subtree, in order, under the Components layer.

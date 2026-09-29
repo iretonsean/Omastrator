@@ -536,6 +536,9 @@ struct VectorDocument {
     QUuid pageOf(const QUuid &id) const;
     bool isOnCurrentPage(const QUuid &id) const;
     bool isOnCurrentPage(const Guide &guide) const { return resolvePage(guide.page) == currentPageId(); }
+    std::vector<Guide> guidesOnCurrentPage() const;
+    // The size the viewport centres on: the current page's first artboard (`size` with one page).
+    QSizeF viewSize() const { return artboard(0).rect.size(); }
     // The layers of one page, bottom to top.
     std::vector<QUuid> layersOn(const QUuid &page) const;
     // `base` if no page has it, else `base 2`, `base 3`...

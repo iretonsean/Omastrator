@@ -129,7 +129,7 @@ void EditorCanvas::noteGesture()
 
 QSizeF EditorCanvas::State::documentSize() const
 {
-    return session.document() ? session.document()->size : QSizeF(1, 1);
+    return session.document() ? session.document()->viewSize() : QSizeF(1, 1);
 }
 
 double EditorCanvas::State::scale() const

@@ -397,7 +397,7 @@ private slots:
         QVERIFY(decoded.tokenModes.isEmpty());
         QCOMPARE(decoded.objects.size(), session.document()->objects.size());
         // A newer file is refused.
-        json["version"] = 6;
+        json["version"] = DocumentCodec::pagesVersion + 1;
         QVERIFY_THROWS_EXCEPTION(CodecError, DocumentCodec::decode(json));
     }
 
