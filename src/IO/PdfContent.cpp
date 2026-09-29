@@ -91,6 +91,8 @@ void Interpreter::runPage(const QByteArray &content, const Dict &resources, cons
     m_state = GraphicsState();
     m_state.ctm = pageTransform;
     m_state.insertionParent = pageLayer;
+    const VectorObject *pageObject = m_target.find(pageLayer);
+    m_pageTag = pageObject ? pageObject->page : QUuid();
     m_state.clipBounds = pageBounds;
     m_path = QPainterPath();
     m_hasOpenSubpath = false;
@@ -490,7 +492,7 @@ void Interpreter::beginMarkedContent(const QList<Object> &operands, const Dict &
     if (ocgNumber < 0 || !ocg.isDictionary())
         return;
 
-    const auto existing = m_ocgLayers.constFind(ocgNumber);
+    const auto existing = m_ocgLayers.constFind({ocgNumber, m_pageTag});
     QUuid layerId;
     if (existing != m_ocgLayers.constEnd()) {
         layerId = existing.value();
@@ -502,9 +504,10 @@ void Interpreter::beginMarkedContent(const QList<Object> &operands, const Dict &
             layer.name = QStringLiteral("Layer");
         layer.layerColor = nextLayerColor(int(m_target.layers().size()));
         layer.isVisible = !isOcgHidden(ocgNumber);
+        layer.page = m_pageTag;
         layerId = layer.id;
         m_target.objects.push_back(layer);
-        m_ocgLayers.insert(ocgNumber, layerId);
+        m_ocgLayers.insert({ocgNumber, m_pageTag}, layerId);
     }
     m_state.insertionParent = layerId;
 }

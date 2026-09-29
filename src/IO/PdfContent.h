@@ -7,6 +7,7 @@
 #include <QStack>
 #include <QStringList>
 #include <QTransform>
+#include <utility>
 
 // The content-stream interpreter: q/Q, path construction and painting,
 // clipping, color and ExtGState, text, Form and Image XObjects, shadings and
@@ -77,7 +78,9 @@ private:
     QStringList *m_warnings;
     QSet<QString> m_warnedOnce;
     QHash<QString, std::shared_ptr<Font>> m_fontCache; // keyed by the font resource's indirect reference
-    QHash<int, QUuid> m_ocgLayers; // OCG object number -> its shared top-level layer
+    // (OCG object number, page tag) -> its top-level layer: one per page when the import has pages, else shared.
+    QHash<std::pair<int, QUuid>, QUuid> m_ocgLayers;
+    QUuid m_pageTag;
     int m_formDepth = 0;
 
     QStack<GraphicsState> m_stack;
