@@ -263,7 +263,7 @@ QJsonObject AgentTools::documentGet(const QJsonObject &params)
         std::erase_if(shown.guides, [&](const Guide &guide) { return shown.resolvePage(guide.page) != keep; });
         shown.currentPage = keep;
     }
-    QJsonObject json = DocumentCodec::encode(shown);
+    QJsonObject json = DocumentCodec::encode(shown, false);
     QJsonArray pages;
     for (const Page &page : current.document()->allPages())
         pages.append(QJsonObject{{"id", idString(page.id)}, {"name", page.name}, {"current", page.id == current.document()->currentPageId()}});
@@ -308,7 +308,7 @@ QJsonObject AgentTools::selectionGet()
         for (const QUuid &nested : current.document()->descendants(id))
             objects.push_back(*current.document()->find(nested));
     }
-    return {{"selection", idArray(current.selection())}, {"objects", DocumentCodec::encode(objects)},
+    return {{"selection", idArray(current.selection())}, {"objects", DocumentCodec::encode(objects, false)},
             {"bounds", current.hasSelection() ? QJsonValue(rect(current.selectionBounds(true))) : QJsonValue(QJsonValue::Null)}};
 }
 

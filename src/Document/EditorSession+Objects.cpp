@@ -1343,7 +1343,7 @@ void EditorSession::copy() const
     }
     auto *data = new QMimeData;
     data->setData(QString::fromLatin1(DocumentCodec::clipboardMimeType),
-                  QJsonDocument(DocumentCodec::encode(objects)).toJson(QJsonDocument::Compact));
+                  QJsonDocument(DocumentCodec::encode(objects, false)).toJson(QJsonDocument::Compact));
     m_pasteCount = 0;
     QApplication::clipboard()->setMimeData(data);
 }

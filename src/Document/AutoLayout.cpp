@@ -285,6 +285,20 @@ std::optional<LayoutConstraint> layoutConstraint(const QString &raw)
     return valueOf(constraintNames, raw);
 }
 
+QString rawValue(PreviewRule rule)
+{
+    return rule == PreviewRule::fixed ? QStringLiteral("fixed") : QStringLiteral("constraints");
+}
+
+std::optional<PreviewRule> previewRule(const QString &raw)
+{
+    if (raw == QLatin1String("fixed"))
+        return PreviewRule::fixed;
+    if (raw == QLatin1String("constraints"))
+        return PreviewRule::constraints;
+    return std::nullopt;
+}
+
 void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box)
 {
     VectorObject *frame = find(id);

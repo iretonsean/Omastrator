@@ -554,10 +554,18 @@ QJsonObject encode(const VectorObject &object)
             json["moreStrokes"] = strokes;
     }
     // Additive, optional key: sizing and absolute position, left out at their defaults.
-    if (object.layout != LayoutItem{})
-        json["layout"] = QJsonObject{{"width", rawValue(object.layout.width)}, {"height", rawValue(object.layout.height)},
-                                     {"absolute", object.layout.absolute},
-                                     {"constraints", QJsonArray{rawValue(object.layout.horizontal), rawValue(object.layout.vertical)}}};
+    if (object.layout != LayoutItem{}) {
+        QJsonObject layout{{"width", rawValue(object.layout.width)}, {"height", rawValue(object.layout.height)},
+                           {"absolute", object.layout.absolute},
+                           {"constraints", QJsonArray{rawValue(object.layout.horizontal), rawValue(object.layout.vertical)}}};
+        if (object.layout.previewRule != PreviewRule::constraints)
+            layout["preview"] = rawValue(object.layout.previewRule);
+        json["layout"] = layout;
+    }
+    // Additive, optional key: the page a Browser View shows. Its picture is a child (encode of the list).
+    if (object.kind == ObjectKind::frame && object.browser)
+        json["browserView"] = QJsonObject{{"url", object.browser->url.toString(QUrl::FullyEncoded)},
+                                          {"scroll", QJsonArray{object.browser->scroll.x(), object.browser->scroll.y()}}};
     if (!object.tokenRefs.empty()) {
         QJsonObject refs;
         for (const auto &[key, token] : object.tokenRefs)
@@ -639,11 +647,23 @@ VectorObject decodeObject(const QJsonObject &json)
             object.autoLayout = layout;
         }
     }
+    if (object.kind == ObjectKind::frame && json.contains("browserView")) {
+        const QJsonObject read = json["browserView"].toObject();
+        BrowserView view;
+        view.url = QUrl(read["url"].toString(), QUrl::StrictMode);
+        if (!view.url.isValid())
+            view.url = QUrl();
+        const QJsonArray scroll = read["scroll"].toArray();
+        if (scroll.size() == 2)
+            view.scroll = QPointF(std::max(0.0, scroll[0].toDouble()), std::max(0.0, scroll[1].toDouble()));
+        object.browser = view;
+    }
     if (json.contains("layout")) {
         const QJsonObject read = json["layout"].toObject();
         object.layout.width = layoutSizing(read["width"].toString()).value_or(LayoutSizing::fixed);
         object.layout.height = layoutSizing(read["height"].toString()).value_or(LayoutSizing::fixed);
         object.layout.absolute = read["absolute"].toBool();
+        object.layout.previewRule = previewRule(read["preview"].toString()).value_or(PreviewRule::constraints);
         const QJsonArray constraints = read["constraints"].toArray();
         if (constraints.size() == 2) {
             object.layout.horizontal = layoutConstraint(constraints[0].toString()).value_or(LayoutConstraint::start);
@@ -735,27 +755,70 @@ std::vector<Guide> decodeGuides(const QJsonArray &json)
     return guides;
 }
 
-QJsonArray encode(const std::vector<VectorObject> &objects)
+namespace {
+// The long side a stored picture keeps, so a Browser View adds a few hundred KB to a file, not megabytes.
+constexpr int pictureLongSide = 2048;
+
+// A Browser View's picture as a locked, absolute image child on the frame's box, so an older build draws it.
+QJsonObject encodePicture(const VectorObject &frame)
+{
+    const BrowserView &view = *frame.browser;
+    QImage picture = view.picture;
+    if (std::max(picture.width(), picture.height()) > pictureLongSide)
+        picture = picture.scaled(pictureLongSide, pictureLongSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    const QRectF box = frame.shape->rect.normalized();
+    VectorObject child;
+    child.id = QUuid::createUuidV5(frame.id, QStringLiteral("browser-view-picture"));
+    child.kind = ObjectKind::image;
+    child.name = QStringLiteral("Last picture of %1").arg(view.url.host().isEmpty() ? QStringLiteral("page") : view.url.host());
+    child.parentID = frame.id;
+    child.isLocked = true;
+    child.image = picture;
+    child.layout.absolute = true;
+    child.transform = QTransform::fromTranslate(box.left(), box.top()) * QTransform::fromScale(box.width() / picture.width(), box.height() / picture.height());
+    QJsonObject json = encode(child);
+    json["browserPicture"] = true;
+    return json;
+}
+}
+
+QJsonArray encode(const std::vector<VectorObject> &objects, bool pictures)
 {
     QJsonArray array;
-    for (const VectorObject &object : objects)
+    for (const VectorObject &object : objects) {
         array.append(encode(object));
+        if (pictures && object.kind == ObjectKind::frame && object.browser && object.shape && !object.browser->picture.isNull())
+            array.append(encodePicture(object));
+    }
     return array;
 }
 
 std::vector<VectorObject> decodeObjects(const QJsonArray &json)
 {
     std::vector<VectorObject> objects;
-    for (const QJsonValue &value : json)
-        objects.push_back(decodeObject(value.toObject()));
+    for (const QJsonValue &value : json) {
+        const QJsonObject entry = value.toObject();
+        if (entry["browserPicture"].toBool() && entry["kind"].toString() == rawValue(ObjectKind::image)) {
+            // Taken out of the tree, so it never shows in Layers, hit tests or history.
+            const QUuid parent = QUuid::fromString(entry["parent"].toString());
+            const auto frame = std::find_if(objects.begin(), objects.end(), [&](const VectorObject &candidate) {
+                return candidate.id == parent && candidate.kind == ObjectKind::frame && candidate.browser;
+            });
+            if (frame != objects.end()) {
+                frame->browser->picture = readPng(entry["image"]);
+                continue;
+            }
+        }
+        objects.push_back(decodeObject(entry));
+    }
     return objects;
 }
 
-QJsonObject encode(const VectorDocument &document)
+QJsonObject encode(const VectorDocument &document, bool pictures)
 {
     QJsonObject json{{"format", "omastrator"}, {"version", document.pages.size() >= 2 ? pagesVersion : version},
                      {"width", document.size.width()}, {"height", document.size.height()},
-                     {"background", color(document.background)}, {"objects", encode(document.objects)},
+                     {"background", color(document.background)}, {"objects", encode(document.objects, pictures)},
                      {"guides", encode(document.guides)}};
     if (!document.textStyles.empty()) {
         QJsonArray styles;

@@ -2,6 +2,7 @@
 #include "Document/VectorDocument.h"
 #include <QPainter>
 #include <QSize>
+#include <functional>
 
 // Draws a document with QPainter in document coordinates: the canvas, PNG and
 // JPEG exports and PDF share it. The painter's transform places the artboard.
@@ -15,6 +16,9 @@ struct Options {
     double outlineWidth = 1;
     // Objects to leave out, such as text being edited in place.
     std::vector<QUuid> skip;
+    // A Browser View's live picture, when the canvas has one; without it (or when it returns a null image)
+    // a frame draws its stored last picture, as every export does.
+    std::function<QImage(const QUuid &)> livePicture;
 };
 
 void draw(QPainter &painter, const VectorDocument &document, const Options &options);

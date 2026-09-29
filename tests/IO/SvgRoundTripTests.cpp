@@ -75,6 +75,19 @@ private:
     }
 
 private slots:
+    void aBrowserViewExportsItsLastPicture()
+    {
+        VectorDocument document = VectorDocument::blank({300, 200});
+        VectorObject view = VectorObject::frame({10, 10, 100, 80}, QStringLiteral("Site"));
+        QImage picture(50, 40, QImage::Format_ARGB32_Premultiplied);
+        picture.fill(Qt::green);
+        view.browser = BrowserView{QUrl(QStringLiteral("https://example.com")), {}, picture};
+        document.insert(view, document.layers().front());
+        const QString svg = QString::fromUtf8(SvgExporter::serialize(document));
+        QVERIFY(svg.contains(QStringLiteral("<image")));
+        QVERIFY(svg.contains(QStringLiteral("data:image/png;base64,")));
+    }
+
     void artboardSizeSurvives()
     {
         const VectorDocument document = roundTrip(VectorDocument::blank({612.5, 792}));

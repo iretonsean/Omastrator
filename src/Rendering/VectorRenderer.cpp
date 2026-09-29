@@ -230,6 +230,19 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
         painter.save();
         if (container.clipsContent)
             painter.setClipPath(box, Qt::IntersectClip);
+        if (container.browser && !options.outlineMode) {
+            // A Browser View: the live picture, else the last one, stretched to the box under its children.
+            QImage picture = options.livePicture ? options.livePicture(container.id) : QImage();
+            if (picture.isNull())
+                picture = container.browser->picture;
+            if (!picture.isNull()) {
+                painter.save();
+                painter.setClipPath(box, Qt::IntersectClip);
+                painter.setRenderHint(QPainter::SmoothPixmapTransform);
+                painter.drawImage(box.boundingRect(), picture);
+                painter.restore();
+            }
+        }
         for (const QUuid &child : children)
             VectorRenderer::drawObject(painter, document, child, options);
         painter.restore();
