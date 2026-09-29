@@ -131,6 +131,11 @@ QString Browser::start(const Options &options)
     return {};
 }
 
+void Browser::abortStart()
+{
+    m_process.kill();
+}
+
 void Browser::stop()
 {
     if (m_cdp.isOpen()) {

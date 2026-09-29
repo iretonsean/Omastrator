@@ -46,6 +46,8 @@ public:
     // Starts the browser and connects to it. Returns why it failed, or empty.
     QString start(const Options &options);
     void stop();
+    // Kills the process so a start() in progress (in its own event loops) returns at once.
+    void abortStart();
     bool isRunning() const;
     // The browser's own process, which owns its windows: design mode knows its pages by it.
     qint64 processId() const { return m_process.processId(); }

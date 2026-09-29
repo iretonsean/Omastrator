@@ -95,6 +95,7 @@ private:
     void finishOpen(const QUuid &frame, const QString &context);
     void doClose(const QUuid &frame, CloseReason reason);
     void doCloseAll(CloseReason reason);
+    bool shutDown();
     void stopBrowser(bool later = false);
     void lostBrowser();
     void noteTabs();
@@ -114,6 +115,7 @@ private:
     QList<Pending> m_pending;
     QList<QUuid> m_opening;
     bool m_starting = false;
+    bool m_shutDown = false;
     bool m_closeRequested = false;
     CloseReason m_closeReason = CloseReason::reset;
     qint64 m_shownCounter = 0;

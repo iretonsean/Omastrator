@@ -28,16 +28,34 @@ BrowserPool::BrowserPool(const Options &options, QObject *parent) : QObject(pare
 BrowserPool::~BrowserPool()
 {
     if (m_thread->isRunning()) {
-        // The browser is stopped where it lives, then the thread ends.
-        // and the pool goes back to the thread that made it, so its timer and children are deleted from there.
-        QMetaObject::invokeMethod(this, [this] {
-            stopBrowser();
-            moveToThread(m_owner);
-        }, Qt::BlockingQueuedConnection);
+        // The browser is stopped where it lives, then the thread ends. While it is starting, that happens inside the
+        // start's own event loops, where the browser can't be deleted: it is told to give up, and this asks again.
+        bool done = false;
+        while (!done) {
+            QMetaObject::invokeMethod(this, [this, &done] { done = shutDown(); }, Qt::BlockingQueuedConnection);
+            if (!done)
+                QThread::msleep(10);
+        }
         m_thread->quit();
         m_thread->wait();
     }
     delete m_thread;
+}
+
+bool BrowserPool::shutDown()
+{
+    m_shutDown = true;
+    m_pending.clear();
+    if (m_starting) {
+        m_closeRequested = true;
+        if (m_browser)
+            m_browser->abortStart();
+        return false;
+    }
+    stopBrowser();
+    // The pool goes back to the thread that made it, so its timer and children are deleted from there.
+    moveToThread(m_owner);
+    return true;
 }
 
 void BrowserPool::open(const QUuid &frame, const QString &context)
@@ -125,6 +143,8 @@ void BrowserPool::noteTabs()
 
 void BrowserPool::doOpen(const QUuid &frame, const QString &context)
 {
+    if (m_shutDown)
+        return;
     if (m_tabs.contains(frame) || m_opening.contains(frame))
         return;
     for (const Pending &each : std::as_const(m_pending)) {
@@ -149,7 +169,7 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
         m_starting = false;
         if (!failure.isEmpty()) {
             m_closeRequested = false;
-            m_browser->deleteLater();
+            delete m_browser;
             m_browser = nullptr;
             emit openFailed(frame, failure);
             const QList<Pending> waiting = std::exchange(m_pending, {});
