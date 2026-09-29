@@ -21,7 +21,7 @@ file with the work. Don't delete finished items.
 - [x] 5. Per-side padding fields in auto layout (b63e6d1, 2026-09-28)
 - [x] 6. Lock Document (read-only mode) (77db2d2, 2026-09-28)
 - [x] 7. Settings that travel (7923e6b, 2026-09-28)
-- [ ] 8. Canvas size limit (check and document)
+- [x] 8. Canvas size limit (check and document) (a3899b3, 2026-09-28)
 - [ ] 9. Browser View and canvas workspaces (high effort, high priority;
       see section 9)
 
