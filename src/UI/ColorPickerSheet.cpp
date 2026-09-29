@@ -132,8 +132,11 @@ public:
         setObjectName(QStringLiteral("recentColor"));
         setFixedSize(18, 18);
         setCursor(Qt::PointingHandCursor);
-        setToolTip(color.name().toUpper());
-        setAccessibleName(QStringLiteral("Recent color %1").arg(color.name().toUpper()));
+        // A translucent colour says how much, as the sheet's opacity field will show it.
+        const QString shown = color.alpha() < 255 ? QStringLiteral("%1, %2%").arg(color.name().toUpper()).arg(std::lround(color.alphaF() * 100))
+                                                  : color.name().toUpper();
+        setToolTip(shown);
+        setAccessibleName(QStringLiteral("Recent color %1").arg(shown));
     }
     QColor color() const { return m_color; }
 
@@ -171,14 +174,20 @@ std::vector<QColor> list()
     return colors;
 }
 
+// Opaque colours as #rrggbb, translucent ones as #aarrggbb, so a recent colour keeps its opacity.
+static QString stored(const QColor &color)
+{
+    return color.name(color.alpha() < 255 ? QColor::HexArgb : QColor::HexRgb);
+}
+
 void add(const QColor &color)
 {
     if (!color.isValid())
         return;
-    QStringList names{color.name()};
+    QStringList names{stored(color)};
     for (const QColor &each : list()) {
-        if (each.rgb() != color.rgb() && names.size() < limit)
-            names << each.name();
+        if (each.rgba() != color.rgba() && names.size() < limit)
+            names << stored(each);
     }
     QSettings().setValue(QStringLiteral("colors/recent"), names);
 }
@@ -327,7 +336,11 @@ ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std
         strip->setSpacing(4);
         for (const QColor &each : recent) {
             auto *chip = new RecentChip(each, this);
-            connect(chip, &QAbstractButton::clicked, this, [this, each] { setHSB(PickerHSB::from(each)); });
+            // With an opacity field the chip's opacity comes too; without one the colour stays opaque.
+            connect(chip, &QAbstractButton::clicked, this, [this, each] {
+                setHSB(PickerHSB::from(each));
+                setAlphaPercent(int(std::lround(each.alphaF() * 100)));
+            });
             strip->addWidget(chip);
         }
         strip->addStretch(1);

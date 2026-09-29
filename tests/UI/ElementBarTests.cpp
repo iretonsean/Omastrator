@@ -1,3 +1,4 @@
+#include "TemporaryConfig.h"
 #include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/ElementBar.h"
@@ -113,7 +114,12 @@ class ElementBarTests : public QObject {
     Q_OBJECT
 
 private slots:
-    void initTestCase() { qunsetenv("HYPRLAND_INSTANCE_SIGNATURE"); }
+    void initTestCase()
+    {
+        qunsetenv("HYPRLAND_INSTANCE_SIGNATURE");
+        // The picker keeps its recent colours in the settings; a test must not write the user's.
+        useTemporaryConfig();
+    }
 
     void placeGoesBelowThenAboveThenStaysInside()
     {

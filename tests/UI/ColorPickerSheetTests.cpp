@@ -1,5 +1,7 @@
+#include "TemporaryConfig.h"
 #include "UI/ColorPickerSheet.h"
 #include <QPushButton>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -38,12 +40,16 @@ struct Picker {
 class ColorPickerSheetTests : public QObject {
     Q_OBJECT
 private slots:
+    // The recent colours are kept in the settings; a test must not write the user's.
+    void initTestCase() { useTemporaryConfig(); }
+    void init() { QSettings().clear(); }
     void hsbRoundTripsColours();
     void fieldsShowTheStartingColour();
     void channelsAndHexSetTheColour();
     void theFieldAndStripPickByPointer();
     void okAndCancelFinish();
     void opacityIsAnOptionInTheSheet();
+    void aRecentColourKeepsItsOpacity();
 };
 
 void ColorPickerSheetTests::hsbRoundTripsColours()
@@ -143,6 +149,46 @@ void ColorPickerSheetTests::opacityIsAnOptionInTheSheet()
     find<QPushButton>(picker.sheet, QStringLiteral("pickerOK")).click();
     QVERIFY(picker.finished && *picker.finished);
     QVERIFY(qAbs((*picker.finished)->alphaF() - 0.4) < 0.001);
+}
+
+void ColorPickerSheetTests::aRecentColourKeepsItsOpacity()
+{
+    // The translucent one is older, so it is the second chip; the newest is opaque.
+    RecentColors::add(QColor(200, 30, 40, 128));
+    RecentColors::add(QColor(10, 20, 30));
+    const std::vector<QColor> recent = RecentColors::list();
+    QCOMPARE(recent.size(), size_t(2));
+    QCOMPARE(recent.at(1).rgba(), QColor(200, 30, 40, 128).rgba());
+    // The same colour at another opacity is another recent colour.
+    RecentColors::add(QColor(200, 30, 40, 255));
+    QCOMPARE(RecentColors::list().size(), size_t(3));
+
+    {
+        // With an opacity field, a chip brings its opacity: 50 % and back to 100 %.
+        Picker picker(QColor(1, 2, 3), true);
+        const QList<QAbstractButton *> chips = picker.sheet.findChildren<QAbstractButton *>(QStringLiteral("recentColor"));
+        QCOMPARE(chips.size(), qsizetype(3));
+        // Newest first: opaque red, the blue-grey, then the translucent red.
+        QVERIFY(chips.at(2)->toolTip().contains(QLatin1String("50%")));
+        chips.at(2)->click();
+        QCOMPARE(picker.sheet.color().rgb(), QColor(200, 30, 40).rgb());
+        QVERIFY(qAbs(picker.sheet.color().alphaF() - 0.5) < 0.01);
+        QCOMPARE(picker.field("alpha").text(), QStringLiteral("50"));
+        chips.at(1)->click();
+        QCOMPARE(picker.sheet.color(), QColor(10, 20, 30));
+        QCOMPARE(picker.field("alpha").text(), QStringLiteral("100"));
+        // OK keeps the opacity in the recent colours too.
+        picker.sheet.setAlphaPercent(25);
+        find<QPushButton>(picker.sheet, QStringLiteral("pickerOK")).click();
+        QVERIFY(qAbs(RecentColors::list().front().alphaF() - 0.25) < 0.01);
+    }
+    {
+        // Without one, a chip sets the colour as it always did, opaque.
+        Picker plain(QColor(1, 2, 3));
+        const QList<QAbstractButton *> chips = plain.sheet.findChildren<QAbstractButton *>(QStringLiteral("recentColor"));
+        chips.at(chips.size() - 1)->click();
+        QCOMPARE(plain.sheet.color().alpha(), 255);
+    }
 }
 
 QTEST_MAIN(ColorPickerSheetTests)
