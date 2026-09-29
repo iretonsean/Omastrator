@@ -4,6 +4,7 @@
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "TemporaryConfig.h"
+#include <QImage>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
@@ -500,8 +501,22 @@ void MenusTests::aLockedDocumentShowsItsLockAndSaysWhyOnARefusedEdit()
     session.rename(id, QStringLiteral("Nope"));
     QCOMPARE(session.document()->find(id)->name, QStringLiteral("Box"));
     QVERIFY(workspace.cloudStatusText().contains(QStringLiteral("locked")));
+    // Placing a file would edit the tab, so it says no instead of reporting success.
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString picture = directory.filePath(QStringLiteral("locked.png"));
+    QImage image(20, 20, QImage::Format_ARGB32);
+    image.fill(Qt::red);
+    QVERIFY(image.save(picture));
+    const auto objects = session.document()->objects.size();
+    const QString undoName = session.undoName();
+    QVERIFY(!workspace.placeFile(picture));
+    QCOMPARE(session.document()->objects.size(), objects);
+    QCOMPARE(session.undoName(), undoName);
     session.setDocumentLocked(false);
     QVERIFY(strip->buttons().first()->findChild<QToolButton *>()->icon().isNull());
+    QVERIFY(workspace.placeFile(picture));
+    QCOMPARE(session.document()->objects.size(), objects + 1);
 }
 
 QTEST_MAIN(MenusTests)

@@ -160,6 +160,8 @@ std::vector<QUuid> addFrames(EditorSession &desk, const std::vector<Frame> &fram
         return failed(QStringLiteral("The Desk isn't open."));
     if (desk.isInteracting())
         return failed(QStringLiteral("Finish the edit on the Desk first."));
+    if (desk.isDocumentLocked())
+        return failed(EditorSession::lockedNotice());
     VectorDocument next = *desk.document();
     if (next.layers().empty())
         next = blank();

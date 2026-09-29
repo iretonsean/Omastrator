@@ -108,6 +108,8 @@ void EditorSession::createDocument(QSizeF size)
 void EditorSession::loadDocument(VectorDocument document)
 {
     m_interaction.reset();
+    m_editDepth = 0;
+    m_refusedEditDepths.clear();
     m_document = std::move(document);
     Components::sync(*m_document);
     m_history.reset();
@@ -127,6 +129,8 @@ void EditorSession::loadDocument(VectorDocument document)
 void EditorSession::closeDocument()
 {
     m_interaction.reset();
+    m_editDepth = 0;
+    m_refusedEditDepths.clear();
     m_document.reset();
     m_history.reset();
     m_selection.clear();
@@ -420,8 +424,9 @@ void EditorSession::pruneSelection()
 
 void EditorSession::beginEdit(const QString &name)
 {
+    ++m_editDepth;
     if (refuseWhenLocked()) {
-        ++m_refusedEdits;
+        m_refusedEditDepths.push_back(m_editDepth);
         return;
     }
     // The preference may have changed since this document opened.
@@ -431,8 +436,10 @@ void EditorSession::beginEdit(const QString &name)
 
 void EditorSession::endEdit()
 {
-    if (m_refusedEdits > 0) {
-        --m_refusedEdits;
+    const int depth = m_editDepth;
+    m_editDepth = std::max(0, m_editDepth - 1);
+    if (!m_refusedEditDepths.empty() && m_refusedEditDepths.back() == depth) {
+        m_refusedEditDepths.pop_back();
         return;
     }
     settle();

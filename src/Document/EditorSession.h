@@ -660,8 +660,9 @@ private:
         bool duplicated = false;
     };
     std::optional<Interaction> m_interaction;
-    // beginEdit calls a lock turned away, so their endEdit calls do nothing.
-    int m_refusedEdits = 0;
+    // Nesting of beginEdit calls, and which of those levels a lock turned away: their endEdit does nothing.
+    int m_editDepth = 0;
+    std::vector<int> m_refusedEditDepths;
     mutable int m_pasteCount = 0;
     // When the last coalescing text step ran.
     qint64 m_lastTextStep = 0;

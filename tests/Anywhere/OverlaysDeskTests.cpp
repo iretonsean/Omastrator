@@ -195,6 +195,18 @@ private slots:
         Desk::Frame empty;
         QVERIFY(!Desk::addFrame(desk, empty, &error).isNull());
 
+        // A locked Desk turns the frame away, and says so instead of reporting a placement.
+        const size_t before = Desk::frames(*desk.document()).size();
+        desk.setDocumentLocked(true);
+        error.clear();
+        QVERIFY(Desk::addFrame(desk, second, &error).isNull());
+        QCOMPARE(error, EditorSession::lockedNotice());
+        QVERIFY(Desk::addFrames(desk, {second}, QStringLiteral("Send to Desk"), &error).empty());
+        QCOMPARE(Desk::frames(*desk.document()).size(), before);
+        desk.setDocumentLocked(false);
+        QVERIFY(!Desk::addFrame(desk, second, &error).isNull());
+        desk.undo();
+
         // It saves and opens like any document.
         const QString path = m_directory.filePath(QStringLiteral("desk.omai"));
         ProjectStore::write(*desk.document(), path);

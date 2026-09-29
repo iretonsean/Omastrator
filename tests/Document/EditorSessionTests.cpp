@@ -479,10 +479,11 @@ private slots:
         session.setDocumentLocked(true);
         session.beginEdit(QStringLiteral("Refused"));
         session.setDocumentLocked(false);
-        // The refused begin's end must not swallow this edit's own end.
+        // The refused begin's end is the outer one; this edit's own end closes its group.
         session.beginEdit(QStringLiteral("Rename"));
         session.rename(box, QStringLiteral("Named"));
         session.endEdit();
+        QCOMPARE(session.undoName(), QStringLiteral("Rename"));
         session.endEdit();
         QCOMPARE(session.undoName(), QStringLiteral("Rename"));
         session.undo();

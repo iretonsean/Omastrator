@@ -152,8 +152,8 @@ Illustrator's key wins wherever the app already had it.
 ## Lock Document
 
 File ▸ Lock Document makes the file read-only until it is unlocked. Its key is
-Ctrl+Alt+Shift+L. The backlog said Ctrl+K, but that is the command palette in
-Figma and here. Figma's Ctrl+Shift+L locks the *selection*, so the whole
+Ctrl+Alt+Shift+L, and it is also in the Ctrl+K palette, like every menu
+command. Ctrl+K itself is the command palette, so it can't be the key. Figma's Ctrl+Shift+L locks the *selection*, so the whole
 document is the same key with Alt held: a heavier lock on the same finger
 pattern, and it sits with Share's Ctrl+Alt+Shift+S. It is remappable like any
 menu key.
