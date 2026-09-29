@@ -55,6 +55,7 @@ private slots:
     void typeBarsStyleSelectedTextInOneStep();
     void theWelcomeShowsWithoutADocument();
     void theStatusBarFollowsTheSession();
+    void theStatusBarNamesThePageFromTwoOn();
     void canvasKeysPickToolsAndSwapColours();
     void remappedKeysReachTheCanvasAsTheirOriginals();
     void theDockFollowsItsSettings();
@@ -262,6 +263,24 @@ void ContentViewTests::theWelcomeShowsWithoutADocument()
     QTRY_VERIFY(!editor.view.findChild<NewDocumentSheet *>());
     editor.session.closeDocument();
     QVERIFY(editor.view.findChild<NewDocumentSheet *>("newDocumentSheet"));
+}
+
+void ContentViewTests::theStatusBarNamesThePageFromTwoOn()
+{
+    Editor editor;
+    QCOMPARE(editor.status("artboardStatus"), QString("400 × 300 pt"));
+    editor.session.addPage(QStringLiteral("Page 2"));
+    QCOMPARE(editor.status("artboardStatus"), QString("Page 2 · 400 × 300 pt"));
+    editor.session.addArtboard(QRectF(500, 0, 200, 100));
+    QCOMPARE(editor.status("artboardStatus"), QString("Page 2 · Artboard 2 · 200 × 100 pt"));
+    editor.session.showPage(false);
+    QCOMPARE(editor.status("artboardStatus"), QString("Page 1 · 400 × 300 pt"));
+    // Move to Page says where the objects went, on the hint line.
+    editor.session.addPath(Shapes::rectangle(QRectF(10, 10, 50, 50)), QStringLiteral("A"));
+    editor.session.moveSelectionToPage(editor.session.document()->allPages()[1].id);
+    QCOMPARE(editor.status("hintStatus"), QString("Moved to Page 2"));
+    editor.session.deletePage(editor.session.document()->allPages()[1].id);
+    QCOMPARE(editor.status("artboardStatus"), QString("400 × 300 pt"));
 }
 
 void ContentViewTests::theStatusBarFollowsTheSession()

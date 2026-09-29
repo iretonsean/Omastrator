@@ -615,6 +615,8 @@ signals:
     void pasteLeftOut(const QStringList &warnings);
     // The page shown changed: a switch, a new or deleted page, or an undo across pages.
     void currentPageChanged(const QUuid &page);
+    // Move to Page finished: the status line says where the objects went.
+    void movedToPage(const QString &pageName);
 
 private:
     void notify(bool documentToo = true);

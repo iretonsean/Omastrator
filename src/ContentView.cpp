@@ -412,6 +412,17 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     connect(m_canvas, &EditorCanvas::pointerMoved, this, &ContentView::showPointer);
     connect(m_canvas, &EditorCanvas::textEditingChanged, m_propertiesPanel, &PropertiesPanel::setEditingText);
     connect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
+    connect(&m_session, &EditorSession::movedToPage, this, [this](const QString &page) {
+        m_flash = tr("Moved to %1").arg(page);
+        const int number = ++m_flashNumber;
+        QTimer::singleShot(4000, this, [this, number] {
+            if (number == m_flashNumber) {
+                m_flash.clear();
+                synchronize();
+            }
+        });
+        synchronize();
+    });
     connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &ContentView::retitleTools);
     retitleTools();
     synchronizePanels();
@@ -556,12 +567,16 @@ void ContentView::synchronize()
         const QLocale english(QLocale::English, QLocale::UnitedStates);
         const Artboard active = document->artboard(m_session.activeArtboard());
         const QString size = QStringLiteral("%1 × %2 pt").arg(english.toString(active.rect.width(), 'g', 6), english.toString(active.rect.height(), 'g', 6));
-        m_artboard->setText(document->artboardCount() > 1 ? active.name + QStringLiteral(" · ") + size : size);
+        // Two or more pages: the page leads, "Page 2 · Artboard 1 · 400 × 300 pt".
+        QString text = document->artboardCount() > 1 ? active.name + QStringLiteral(" · ") + size : size;
+        if (document->pageCount() > 1)
+            text = document->allPages()[size_t(document->pageIndex(document->currentPageId()))].name + QStringLiteral(" · ") + text;
+        m_artboard->setText(text);
         const size_t count = m_session.selection().size();
         m_selection->setText(count == 0 ? QStringLiteral("No selection") : count == 1 ? QStringLiteral("1 object selected")
                                                                                      : QStringLiteral("%1 objects selected").arg(count));
     }
-    m_hint->setText(document ? hint(m_session.tool()) : QStringLiteral("Ready when you are"));
+    m_hint->setText(!m_flash.isEmpty() ? m_flash : document ? hint(m_session.tool()) : QStringLiteral("Ready when you are"));
 }
 
 // No document shows the welcome; a document takes keys.

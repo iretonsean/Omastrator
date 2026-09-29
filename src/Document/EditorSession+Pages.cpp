@@ -250,6 +250,7 @@ void EditorSession::moveSelectionToPage(const QUuid &id)
         }
         m_selection.clear();
     });
+    emit movedToPage(m_document->allPages()[size_t(m_document->pageIndex(id))].name);
 }
 
 void EditorSession::setCurrentPage(const QUuid &id)

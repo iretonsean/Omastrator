@@ -110,4 +110,7 @@ private:
     QLabel *const m_selection;
     QLabel *const m_hint;
     bool m_forwarding = false;
+    // A passing message on the hint label, like "Moved to Page 2".
+    QString m_flash;
+    int m_flashNumber = 0;
 };

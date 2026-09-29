@@ -10,6 +10,7 @@
 #include <QSettings>
 #include <QFontDatabase>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPushButton>
 #include <QSlider>
 #include <QStandardPaths>
@@ -46,6 +47,7 @@ private slots:
     void transformFieldsMoveAndScaleFromTheTopLeft();
     void rotationTurnsThenReadsZero();
     void withoutSelectionTheArtboardShows();
+    void theArtboardListIsTheCurrentPages();
     void fillKindKeepsTheColour();
     void strokeSettingsApplyToTheSelection();
     void anOpacityDragIsOneStep();
@@ -135,6 +137,21 @@ void PropertiesPanelTests::rotationTurnsThenReadsZero()
     type(panel, "transformRotationField", "90");
     const QRectF corner = bounds(session, box);
     QVERIFY(std::abs(corner.left() - 0) < 1e-6 && std::abs(corner.bottom() - 0) < 1e-6);
+}
+
+void PropertiesPanelTests::theArtboardListIsTheCurrentPages()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    PropertiesPanel panel(session);
+    auto *list = panel.findChild<QListWidget *>("artboardsList");
+    QCOMPARE(list->count(), 1);
+    session.addArtboard(QRectF(500, 0, 200, 100));
+    QCOMPARE(list->count(), 2);
+    session.addPage(QStringLiteral("Second"));
+    QCOMPARE(list->count(), 1);
+    session.setCurrentPage(session.document()->allPages()[0].id);
+    QCOMPARE(list->count(), 2);
 }
 
 void PropertiesPanelTests::withoutSelectionTheArtboardShows()
