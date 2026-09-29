@@ -53,8 +53,9 @@ jobs:
   # job builds and tests on Ubuntu 24.04's Qt 6.4.2. Same shape as the Arch job above.
   build-and-test-qt-6-4:
     runs-on: ubuntu-latest
+    # Digest-pinned like the Arch job; docs/RELEASING.md says how to bump it.
     container:
-      image: ubuntu:24.04
+      image: ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
       options: --init
     steps:
       # The Arch job's packages under Ubuntu's names; qt6-declarative-dev brings Qt Qml for the overlay tests.

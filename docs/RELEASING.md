@@ -32,7 +32,7 @@ a tag, publishes a release or pushes to the AUR.
      inside the same `archlinux:base-devel` image the x86_64 job uses (slower,
      but known to work).
    - **Bumping the pinned images.** Both build images are pinned by digest in
-     `release.yml` (and `ci.yml` for the Arch one), so a moved tag can't change
+     `release.yml` (and `ci.yml` for the Arch one and Ubuntu 24.04's, the Qt 6.4 job), so a moved tag can't change
      what builds the published binaries. To bump one, look up the tag's
      current digest, for example
      `docker buildx imagetools inspect archlinux:base-devel` (or
