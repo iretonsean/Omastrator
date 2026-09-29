@@ -70,6 +70,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   editable, its label reads "not exported", and Export, Export for Screens
   and Share leave it out. Export assets you collect on such a board still
   export from Export for Screens, since you picked them one by one.
+- New-document presets are yours to edit. On the welcome sheet, the ⋯ beside
+  Preset saves the current size and units under a name (Save Preset…), renames
+  or deletes a saved one, and hides a built-in (Letter, A4, A3, 1920 × 1080,
+  1080 × 1080), which Show Hidden Presets brings back. Saved presets list first
+  and live in `~/.config/omastrator/presets.json`. The built-ins can be hidden
+  but never deleted or renamed.
 - The rail's tools sit in slots that share a button when more than one lives
   together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
   Paint, Navigate): a corner triangle marks a group, right-click or a long
