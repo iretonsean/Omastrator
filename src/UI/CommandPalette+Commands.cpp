@@ -49,6 +49,8 @@ QString keywordsFor(const QString &name)
         {"snapToGrid", "snapping grid"},
         {"outline", "outline mode wireframe preview"},
         {"preferences", "settings options"},
+        {"exportSettings", "preferences backup transfer move sync keys workspace presets"},
+        {"importSettings", "preferences restore transfer move sync keys workspace presets"},
         {"keyboardShortcuts", "keys hotkeys remap bindings"},
         {"generate", "ai new art create variations"},
         {"editWithInstruction", "ai ask change instruct"},

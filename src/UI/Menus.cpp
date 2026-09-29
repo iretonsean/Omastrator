@@ -212,6 +212,8 @@ void Menus::buildEdit(QMenuBar &bar)
     edit->addSeparator();
     add(edit, QStringLiteral("preferences"), QStringLiteral("Preferences…"), QKeySequence(), [this] { ObjectDialogs::preferences(&m_window); })
         ->setMenuRole(QAction::PreferencesRole);
+    add(edit, QStringLiteral("exportSettings"), QStringLiteral("Export Settings…"), QKeySequence(), [this] { m_workspace.exportSettings(); });
+    add(edit, QStringLiteral("importSettings"), QStringLiteral("Import Settings…"), QKeySequence(), [this] { m_workspace.importSettings(); });
 }
 
 void Menus::buildObject(QMenuBar &bar)
