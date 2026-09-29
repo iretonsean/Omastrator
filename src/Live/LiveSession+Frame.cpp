@@ -153,8 +153,7 @@ void LiveSession::leaveProject()
     if (!m_project.isEmpty() && !m_edits.empty())
         emit editsLeft(m_project, m_edits);
     m_edits.clear();
-    m_undo.clear();
-    m_redo.clear();
+    forgetSteps();
 }
 
 bool LiveSession::needsServer() const
