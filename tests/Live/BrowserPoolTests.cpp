@@ -100,7 +100,8 @@ private slots:
         pool.open(a);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 60'000);
         QCOMPARE(pool.tabCount(), 2);
-        // The starting tab (about:blank) is Chromium's own; ours are the two more.
+        // The starting tab (about:blank) is closed once ours are up, so the pages are the two.
+        QTRY_COMPARE_WITH_TIMEOUT(pageTargets(pool), 2, 10'000);
         const int before = pageTargets(pool);
         pool.close(a);
         QTRY_COMPARE(closed.count(), 1);
@@ -165,8 +166,8 @@ private slots:
         QCOMPARE(closed.count(), 2);
         QCOMPARE(pool.tabCount(), cap);
         QVERIFY2(most <= cap, qPrintable(QString::number(most)));
-        // Chromium's own starting tab is one more.
-        QVERIFY(pageTargets(pool) <= cap + 1);
+        // Chromium's own starting tab is closed, so the pages are ours alone.
+        QTRY_COMPARE_WITH_TIMEOUT(pageTargets(pool), cap, 10'000);
     }
 
     void aFrameClosedWhileTheBrowserStartsGetsNoTab()
@@ -181,8 +182,8 @@ private slots:
         QTest::qWait(1000);
         QCOMPARE(opened.count(), 0);
         QCOMPARE(pool.tabCount(), 0);
-        // Only Chromium's own starting tab is left.
-        QVERIFY(pageTargets(pool) <= 1);
+        // Chromium's own starting tab is closed too.
+        QTRY_VERIFY_WITH_TIMEOUT(pageTargets(pool) <= 0, 10'000);
     }
 
     void stopsWhenIdleAndClearsItsFile()

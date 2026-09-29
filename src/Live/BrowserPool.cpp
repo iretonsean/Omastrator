@@ -191,6 +191,14 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
         connect(&m_browser->cdp(), &CdpConnection::event, this,
                 [this](const QString &method, const QJsonObject &params, const QString &session) { onEvent(method, params, session); });
         connect(m_browser, &Browser::exited, this, [this] { lostBrowser(); });
+        // Chromium's own starting about:blank tab is a renderer nobody uses. Asked before any tab of ours is made, so
+        // its answer lists only that one.
+        m_browser->cdp().call(QStringLiteral("Target.getTargets"), {}, QString(), [this](const QJsonObject &result, const QString &) {
+            for (const QJsonValue &each : result["targetInfos"].toArray()) {
+                if (m_browser && each["type"].toString() == QLatin1String("page"))
+                    m_browser->cdp().call(QStringLiteral("Target.closeTarget"), {{"targetId", each["targetId"].toString()}}, QString());
+            }
+        });
         emit started();
         if (std::exchange(m_closeRequested, false)) {
             m_pending.clear();
