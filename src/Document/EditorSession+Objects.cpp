@@ -471,9 +471,32 @@ void EditorSession::setClipsContent(bool clips)
     });
 }
 
-QUuid EditorSession::addFrame(const QRectF &rect)
+QRectF EditorSession::framePlacement(QSizeF size) const
 {
-    VectorObject frame = VectorObject::frame(rect, m_document ? m_document->uniqueName(QStringLiteral("Frame")) : QStringLiteral("Frame 1"));
+    if (!m_document)
+        return QRectF(QPointF(0, 0), size);
+    const QPointF middle = viewport.viewSize.isEmpty() ? m_document->artboard(m_activeArtboard).rect.center()
+                                                       : viewport.documentPoint(viewport.center(), m_document->size);
+    return QRectF(QPointF(std::round(middle.x() - size.width() / 2), std::round(middle.y() - size.height() / 2)), size);
+}
+
+QUuid EditorSession::addFrame(const QRectF &rect, const QString &name)
+{
+    const auto taken = [&](const QString &candidate) {
+        return std::any_of(m_document->objects.begin(), m_document->objects.end(), [&](const VectorObject &o) { return o.name == candidate; });
+    };
+    QString label = QStringLiteral("Frame 1");
+    if (m_document) {
+        if (name.isEmpty()) {
+            label = m_document->uniqueName(QStringLiteral("Frame"));
+        } else {
+            // A second pick of a preset is "iPhone 16 2": the first keeps the bare name.
+            label = name;
+            for (int number = 2; taken(label); ++number)
+                label = QStringLiteral("%1 %2").arg(name).arg(number);
+        }
+    }
+    VectorObject frame = VectorObject::frame(rect, label);
     const QUuid id = frame.id;
     edit(QStringLiteral("Frame"), [&](VectorDocument &document) {
         // Drawn inside a frame, it nests in the innermost one there, as Figma's do.
