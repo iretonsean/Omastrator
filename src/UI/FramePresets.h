@@ -18,7 +18,7 @@ struct Preset {
     const char *name;
     QSizeF size;
 };
-// Phone, tablet, desktop, social and paper sizes, in points (pixels at 72 ppi); Figma's names.
+// Phone, tablet, desktop, social and paper sizes, in points (pixels at 72 ppi); Figma's sizes where Figma has them.
 const std::vector<Preset> &builtIn();
 }
 

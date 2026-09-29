@@ -486,8 +486,16 @@ QUuid EditorSession::addFrame(const QRectF &rect, const QString &name)
         return std::any_of(m_document->objects.begin(), m_document->objects.end(), [&](const VectorObject &o) { return o.name == candidate; });
     };
     QString label = QStringLiteral("Frame 1");
-    if (m_document)
-        label = !name.isEmpty() && !taken(name) ? name : m_document->uniqueName(name.isEmpty() ? QStringLiteral("Frame") : name);
+    if (m_document) {
+        if (name.isEmpty()) {
+            label = m_document->uniqueName(QStringLiteral("Frame"));
+        } else {
+            // A second pick of a preset is "iPhone 16 2": the first keeps the bare name.
+            label = name;
+            for (int number = 2; taken(label); ++number)
+                label = QStringLiteral("%1 %2").arg(name).arg(number);
+        }
+    }
     VectorObject frame = VectorObject::frame(rect, label);
     const QUuid id = frame.id;
     edit(QStringLiteral("Frame"), [&](VectorDocument &document) {

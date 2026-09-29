@@ -183,9 +183,11 @@ void FramePresetsTests::pickingTwiceGivesEachFrameItsOwnName()
     f.click("iPhone 16");
     f.session.selectTool(Tool::frame);
     f.click("iPhone 16");
-    QVERIFY(f.session.document()->find(f.session.selection().front())->name != QString("iPhone 16"));
-    QVERIFY(f.session.document()->find(f.session.selection().front())->name.startsWith("iPhone 16"));
-    QCOMPARE(f.session.document()->objects.size(), before + 2);
+    QCOMPARE(f.session.document()->find(f.session.selection().front())->name, QString("iPhone 16 2"));
+    f.session.selectTool(Tool::frame);
+    f.click("iPhone 16");
+    QCOMPARE(f.session.document()->find(f.session.selection().front())->name, QString("iPhone 16 3"));
+    QCOMPARE(f.session.document()->objects.size(), before + 3);
 }
 
 void FramePresetsTests::aSavedFrameSizeBecomesAPreset()

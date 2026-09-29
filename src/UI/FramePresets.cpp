@@ -59,7 +59,7 @@ const std::vector<FramePresets::Preset> &FramePresets::builtIn()
         {"Phone", "iPhone 16 Plus", QSizeF(430, 932)},
         {"Phone", "iPhone 16 Pro", QSizeF(402, 874)},
         {"Phone", "iPhone 16 Pro Max", QSizeF(440, 956)},
-        {"Phone", "iPhone SE", QSizeF(375, 667)},
+        {"Phone", "iPhone 8", QSizeF(375, 667)},
         {"Phone", "Android Compact", QSizeF(412, 917)},
         {"Tablet", "iPad mini 8.3\"", QSizeF(744, 1133)},
         {"Tablet", "iPad 10.9\"", QSizeF(820, 1180)},
