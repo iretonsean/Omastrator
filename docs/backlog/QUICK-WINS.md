@@ -35,6 +35,8 @@ file with the work. Don't delete finished items.
 
 ## Backlog, not queued
 
+- **Heavy work off the UI thread:** see docs/backlog/BACKGROUND-WORK.md
+  (the author, 2026-09-28).
 - **Update the screenshots on the public repo page** (the author,
   2026-09-28).
   - **Today:** the README's hero image and its 35-picture gallery
