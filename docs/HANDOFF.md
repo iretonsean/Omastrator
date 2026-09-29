@@ -15,8 +15,6 @@ here" just below.** Everything under "Earlier notes" is history.
   - The old history is kept in a local backup,
     `~/Projects/.omastrator-history-backup-2026-09-28.git`. It holds promo
     material, so never push it.
-  - The local branch `old-main-before-rewrite` is no longer needed. Delete
-    it with `git branch -D`.
   - Other clones need `git fetch && git reset --hard origin/main`.
 - **Done today, all merged:**
   - the five branches: PDF, AI and EPS import; Figma; Sketch, Penpot and
@@ -39,6 +37,24 @@ here" just below.** Everything under "Earlier notes" is history.
   Check `gh run list`.
 
 ### Next, in order
+0. **Merge the "Off-axis" app icon** (the author, 2026-09-29). It was never
+   merged. It's saved as a patch at
+   `~/Projects/.omastrator-promo/0001-New-app-icon-the-island-s-pill-one-pen-stroke-a-sele.patch`.
+   - Take only the icon: `packaging/icons/app-icon.svg`, the regenerated
+     PNG sizes, and the CMake lines that install the SVG as the scalable icon.
+   - Nothing from the promo comes into the repo: the patch also edits
+     `media/promo/promo-v3.html`. Leave that hunk out (for example with
+     `git apply --exclude='media/*'`).
+   - The patch was made on the old history, so apply it by hand or with
+     `git apply --3way` onto the current main.
+   - The design: an ink tile, a saffron pill top-left, a paper pen stroke
+     through the centre, and a cobalt open-square point bottom-right. The
+     palette is ink #14151D, paper #F1ECE2, saffron #F2A93B and cobalt
+     #3D5AFE.
+   - Check that the Chromium extension's icons and the README's hero still
+     match, and update them if they use the old mark.
+   - It's a small branch: Sonnet builds it, Opus reviews it, and the
+     author's OK is needed before push.
 1. **Size fixes:** `~/Projects/.omastrator-briefs/SIZE-FIXES.md`. Strip the
    release binary, add `OMASTRATOR_BUILD_TESTS` (off for installs), try LTO,
    and cap captures, logs, backups and the Browser View Chromium cache. It's
@@ -50,16 +66,17 @@ here" just below.** Everything under "Earlier notes" is history.
    author's review of docs/EFFECTS.md.
 
 ### Waiting on the author
-- **The island:** keep it, scrap it, or change what it does. The interim
-  rule is in docs/ANYWHERE.md.
-- **The "Off-axis" app icon** was never merged. It's saved as a patch in
-  `~/Projects/.omastrator-promo/`. Merge it or drop it?
+- **The island:** the author wants to rethink it with the next session (keep
+  it, scrap it, or change what it does). The interim rule is in
+  docs/ANYWHERE.md. Raise it early, and don't build anything on the island
+  until the author decides.
 - **The history backup:** delete it when the author says so. Optionally, ask
   GitHub for a cached-views purge so the old commits stop resolving.
-- **Reply to the alpha tester (@Madmasx on X):** setup's fixes are pushed.
-  Ask for their Hyprland version, Lua or conf config, and
-  `hyprctl binds -j` if keys die again. The cause wasn't reproduced; the
-  leading theory is a latched submap (docs/OS-SUITE.md).
+- **The alpha tester (@Madmasx):** the author replied, and the tester liked
+  the reply. The setup and bar fixes are pushed. If the tester reports keys
+  dying again, ask for their Hyprland version, whether their config is Lua
+  or conf, and `hyprctl binds -j`. The cause wasn't reproduced; the leading
+  theory is a latched submap (docs/OS-SUITE.md).
 - **Installed build:** `~/.local` still runs the build from 2026-09-28
   10:09, before all of today's work. Reinstall with
   `scripts/install-local.sh` and restart the daemon only with the author's OK
