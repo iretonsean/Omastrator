@@ -424,6 +424,11 @@ struct VectorObject {
 // The artboard and its objects, bottom to top; children follow their parent's
 // order in `objects`, so z-order is the vector's order within each parent.
 struct VectorDocument {
+    // The longest side an artboard may have, in points (about 350 m). Tested in
+    // tests/UI/LargeArtboardTests.cpp; the new-document sheet, the Artboard Size dialog, the
+    // edits and the file codec all read this one number.
+    static constexpr double maximumArtboardSide = 1'000'000;
+
     QSizeF size{800, 600};
     // The artboard's paper; transparent exports leave it out.
     QColor background = Qt::white;

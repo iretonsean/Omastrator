@@ -64,6 +64,8 @@ public:
     // Saves valid overrides; answers whether it did.
     bool save(const QHash<QString, ShortcutChord> &values);
     static std::optional<QString> problem(const QHash<QString, ShortcutChord> &values);
+    // The overrides in stored JSON, as reload() reads them.
+    static QHash<QString, ShortcutChord> decode(const QByteArray &json);
     // Null swallows the press; else the press to handle.
     std::unique_ptr<QKeyEvent> canvasEvent(const QKeyEvent &event) const;
     std::unique_ptr<QKeyEvent> textEvent(const QKeyEvent &event) const;

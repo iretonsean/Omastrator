@@ -76,6 +76,15 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Move to Page, and Alt+PgDn/PgUp step between them. PDF, Figma, Sketch and
   Penpot files with several pages open as pages, and File ▸ Export ▸ PDF
   writes every exported artboard of every page.
+- Canvas size limit: an artboard can be up to 1,000,000 points a side (about
+  350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
+  0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.
+  PNG and JPEG hold at most 30,000 px a side and 200 megapixels, so a huge
+  artboard exports at a smaller resolution (the Export sheet offers only the
+  ones that fit; Export for Screens says which files it skipped). SVG and PDF
+  have no such limit, though PDF viewers such as Acrobat stop at 14,400 pt.
+  Edits (sizes, Fit Artboard to Artwork) stop at the limit; an import can bring
+  in a bigger page, which is untested but saves and reopens like any other.
 - New-document presets are yours to edit. On the welcome sheet, the ⋯ beside
   Preset saves the current size and units under a name (Save Preset…), renames
   or deletes a saved one, and hides a built-in (Letter, A4, A3, 1920 × 1080,
@@ -89,6 +98,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   size as your own preset (a Saved group); right-click a row to rename or delete
   a saved one or hide a built-in, and Show Hidden Presets brings those back. They
   share `presets.json` with the document presets, in a `frames` section.
+- Settings travel. Edit ▸ Export Settings… writes your preferences, remapped
+  keys, workspace, swatches and size presets to one JSON file, on this computer
+  or on cloud storage, and Import Settings… on another computer reads it back.
+  Import shows what it will replace and asks once; what you had is saved first
+  in `~/.config/omastrator/backups/`. The Figma token, cloud sign-ins, recent
+  files and folders on this computer are never in the file.
 - The rail's tools sit in slots that share a button when more than one lives
   together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
   Paint, Navigate): a corner triangle marks a group, right-click or a long

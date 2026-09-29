@@ -20,8 +20,8 @@ file with the work. Don't delete finished items.
 - [x] 4. Frame presets (86f0681, 2026-09-28)
 - [x] 5. Per-side padding fields in auto layout (b63e6d1, 2026-09-28)
 - [x] 6. Lock Document (read-only mode) (77db2d2, 2026-09-28)
-- [ ] 7. Settings that travel
-- [ ] 8. Canvas size limit (check and document)
+- [x] 7. Settings that travel (7923e6b, 2026-09-28)
+- [x] 8. Canvas size limit (check and document) (a3899b3, 2026-09-28)
 - [ ] 9. Browser View and canvas workspaces (high effort, high priority;
       see section 9)
 
@@ -35,6 +35,8 @@ file with the work. Don't delete finished items.
 
 ## Backlog, not queued
 
+- **Heavy work off the UI thread:** see docs/backlog/BACKGROUND-WORK.md
+  (the author, 2026-09-28).
 - **Update the screenshots on the public repo page** (the author,
   2026-09-28).
   - **Today:** the README's hero image and its 35-picture gallery
@@ -69,7 +71,7 @@ file with the work. Don't delete finished items.
   `--model claude-opus-5-5 --effort medium`.
 - **Every item** gets an Opus review before it merges. The lead merges,
   ticks the item here, and asks the author before pushing.
-- **Build rules:** `flock ~/.cache/omastrator-build.lock` with `-j2`. Never
+- **Build rules:** `omastrator-build-slot` (in ~/.local/bin: two slots, the first being `~/.cache/omastrator-build.lock`) with `-j3`, so at most two builds run at once (the author, 2026-09-28). Never
   touch the running daemon.
 
 ## 1. Text stroke inside/outside (verify first)

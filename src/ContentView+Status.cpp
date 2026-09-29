@@ -40,8 +40,12 @@ QWidget *ContentView::makeStatus()
 
 QString ContentView::percent(double zoom)
 {
-    QString number = QLocale(QLocale::English, QLocale::UnitedStates).toString(zoom * 100, 'f', 1);
-    if (number.endsWith(QLatin1String(".0")))
+    // Hundredths below 1%, where a huge artboard's fit lands, so it never reads "0%".
+    const double percent = zoom * 100;
+    QString number = QLocale(QLocale::English, QLocale::UnitedStates).toString(percent, 'f', percent < 1 ? 2 : 1);
+    if (number.endsWith(QLatin1String(".00")))
+        number.chop(3);
+    else if (number.endsWith(QLatin1String(".0")))
         number.chop(2);
     return number + QLatin1Char('%');
 }

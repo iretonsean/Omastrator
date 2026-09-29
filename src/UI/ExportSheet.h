@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <functional>
 #include <optional>
+#include <vector>
 
 class QCheckBox;
 class QComboBox;
@@ -36,6 +37,8 @@ private:
     const std::function<void(std::optional<RasterOptions>)> m_finish;
     RasterOptions m_options;
     qint64 m_bytes = -1;
+    bool m_reduced = false;
+    std::vector<double> m_scales;
     QTimer *const m_wait;
     Preview *const m_preview;
     QComboBox *const m_scale;

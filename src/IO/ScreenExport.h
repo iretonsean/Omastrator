@@ -28,8 +28,9 @@ QString scaleSuffix(double scale);
 
 // Artboards (by id, on any page) and export assets (object ids, cropped
 // the way Share's "just this selection" export is) as their own files, named "<safe
-// name><suffix>.<ext>", in a folder per page ("<page>/…") when the document has two or more. Vector formats (svg, pdf) write once, at 1×; webp fails cleanly, file by
-// file, without the plugin. Returns every path actually written, in the order they were.
+// name><suffix>.<ext>", in a folder per page ("<page>/…") when the document has two or more. Vector formats (svg, pdf)
+// write once, at 1×; webp fails cleanly, file by file, without the plugin. Returns every path actually written, in the
+// order they were; the reasons a file wasn't (too large at that scale, an unwritable folder) go to `skipped`, once each.
 QStringList run(const VectorDocument &document, const std::vector<QUuid> &artboardIds, const std::vector<QUuid> &assetIds,
-                const Settings &settings, const std::function<void(const Progress &)> &progress = {});
+                const Settings &settings, const std::function<void(const Progress &)> &progress = {}, QStringList *skipped = nullptr);
 }

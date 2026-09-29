@@ -9,6 +9,13 @@
 namespace {
 // Deploys can build a whole site; half an hour is the most one gets.
 constexpr int longestStepMs = 30 * 60 * 1000;
+
+// A finished or never-started process has id 0, and kill(-0) would signal our own group.
+void signalGroup(const QProcess *process, int signal)
+{
+    if (process && process->processId() > 0)
+        ::kill(-pid_t(process->processId()), signal);
+}
 }
 
 DeployJob::DeployJob(QObject *parent) : QObject(parent)
@@ -17,7 +24,7 @@ DeployJob::DeployJob(QObject *parent) : QObject(parent)
     connect(&m_timeout, &QTimer::timeout, this, [this] {
         write(QStringLiteral("\nStopped after 30 minutes.\n"));
         if (m_process)
-            ::kill(-pid_t(m_process->processId()), SIGTERM);
+            signalGroup(m_process, SIGTERM);
     });
 }
 
@@ -25,7 +32,7 @@ DeployJob::~DeployJob()
 {
     if (m_process) {
         m_process->disconnect(this);
-        ::kill(-pid_t(m_process->processId()), SIGTERM);
+        signalGroup(m_process, SIGTERM);
         m_process->waitForFinished(2000);
     }
 }
@@ -173,7 +180,7 @@ void DeployJob::cancel()
         return;
     if (m_process) {
         m_process->disconnect(this);
-        ::kill(-pid_t(m_process->processId()), SIGTERM);
+        signalGroup(m_process, SIGTERM);
         if (!m_process->waitForFinished(3000))
             m_process->kill();
         m_process->deleteLater();

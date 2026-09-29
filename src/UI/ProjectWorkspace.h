@@ -82,6 +82,12 @@ public:
     // File ▸ Import from Figma Link…
     void importFigmaLink();
     void exportAs(DocumentExporter::Format format);
+    // Edit ▸ Export Settings… and Import Settings… (SettingsBundle): to or from a file, on this
+    // computer or through the cloud browser. Import shows what it replaces and asks once.
+    void exportSettings();
+    void importSettings();
+    bool exportSettingsTo(const QString &path);
+    void importSettingsFrom(const QString &path);
     // Each `done` runs from the event loop, never inline.
     void close(QUuid id, std::function<void()> done = {});
     void confirmQuit(std::function<void(bool)> done);

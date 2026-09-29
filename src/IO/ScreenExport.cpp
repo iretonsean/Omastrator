@@ -102,7 +102,7 @@ QString scaleSuffix(double scale)
 }
 
 QStringList run(const VectorDocument &document, const std::vector<QUuid> &artboardIds, const std::vector<QUuid> &assetIds,
-                const Settings &settings, const std::function<void(const Progress &)> &progress)
+                const Settings &settings, const std::function<void(const Progress &)> &progress, QStringList *skipped)
 {
     QStringList written;
     const std::vector<Subject> items = subjects(document, artboardIds, assetIds);
@@ -122,26 +122,33 @@ QStringList run(const VectorDocument &document, const std::vector<QUuid> &artboa
         const bool transparent = item.document.background.alpha() == 0;
         for (const QString &format : settings.formats) {
             const QString ext = format == QLatin1String("jpeg") ? QStringLiteral("jpg") : format;
-            try {
-                if (format == QLatin1String("svg")) {
-                    const QString path = QDir(folder).filePath(item.name + QStringLiteral(".svg"));
-                    SvgExporter::write(item.document, path, {false, !transparent});
+            const auto skip = [&](const FileError &error) {
+                // One file's failure (too large at that scale, an unwritable folder) doesn't stop the rest.
+                if (skipped && !skipped->contains(error.message()))
+                    skipped->append(error.message());
+                report(item.name);
+            };
+            if (format == QLatin1String("svg") || format == QLatin1String("pdf")) {
+                const bool svg = format == QLatin1String("svg");
+                const QString path = QDir(folder).filePath(item.name + (svg ? QStringLiteral(".svg") : QStringLiteral(".pdf")));
+                try {
+                    if (svg)
+                        SvgExporter::write(item.document, path, {false, !transparent});
+                    else
+                        DocumentExporter::writePdf(item.document, path);
                     written << path;
                     report(item.name);
-                    continue;
+                } catch (const FileError &error) {
+                    skip(error);
                 }
-                if (format == QLatin1String("pdf")) {
-                    const QString path = QDir(folder).filePath(item.name + QStringLiteral(".pdf"));
-                    DocumentExporter::writePdf(item.document, path);
-                    written << path;
-                    report(item.name);
-                    continue;
-                }
-                for (double scale : scales) {
-                    const QString path = QDir(folder).filePath(item.name + scaleSuffix(scale) + QStringLiteral(".") + ext);
+                continue;
+            }
+            for (double scale : scales) {
+                const QString path = QDir(folder).filePath(item.name + scaleSuffix(scale) + QStringLiteral(".") + ext);
+                try {
                     if (format == QLatin1String("webp")) {
                         // Fails cleanly, file by file, when the plugin isn't installed.
-                        const QImage image = VectorRenderer::render(item.document, scale, transparent);
+                        const QImage image = DocumentExporter::renderPage(item.document, scale, transparent);
                         QImageWriter writer(path, "webp");
                         if (writer.write(image))
                             written << path;
@@ -153,10 +160,9 @@ QStringList run(const VectorDocument &document, const std::vector<QUuid> &artboa
                         written << path;
                     }
                     report(item.name);
+                } catch (const FileError &error) {
+                    skip(error);
                 }
-            } catch (const FileError &) {
-                // One subject's failure (too large, an unwritable folder) doesn't stop the rest.
-                report(item.name);
             }
         }
     }

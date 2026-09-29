@@ -246,13 +246,15 @@ void ExportForScreensSheet::runExport()
     m_export->setEnabled(false);
     m_progress->setVisible(true);
     m_progress->setValue(0);
+    QStringList skipped;
     const QStringList written = ScreenExport::run(*m_session.document(), artboards, assets, settings, [this](const ScreenExport::Progress &progress) {
         m_progress->setMaximum(std::max(1, progress.total));
         m_progress->setValue(progress.done);
         m_status->setText(QStringLiteral("Writing %1…").arg(progress.name));
         QCoreApplication::processEvents();
-    });
+    }, &skipped);
     m_export->setEnabled(true);
-    m_status->setText(QStringLiteral("Wrote %1 file(s) to %2").arg(written.size()).arg(m_folder->text()));
+    m_status->setText(QStringLiteral("Wrote %1 file(s) to %2").arg(written.size()).arg(m_folder->text())
+                      + (skipped.isEmpty() ? QString() : QStringLiteral(". Skipped: ") + skipped.join(QLatin1Char(' '))));
     m_openFolder->setEnabled(!written.isEmpty());
 }

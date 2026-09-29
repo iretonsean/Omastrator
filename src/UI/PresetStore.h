@@ -1,4 +1,6 @@
 #pragma once
+#include "Document/VectorDocument.h"
+#include <QJsonObject>
 #include <QSizeF>
 #include <QString>
 #include <QStringList>
@@ -16,7 +18,9 @@ enum class LengthUnit { pt, px, in, mm };
 namespace PresetStore {
 inline constexpr const char *documents = "documents";
 inline constexpr const char *frames = "frames";
-inline constexpr double maximumPoints = 16384;
+inline constexpr double maximumPoints = VectorDocument::maximumArtboardSide;
+// "1,000,000 points (about 350 m)", for the notes that state the limit.
+QString limitDescription();
 
 struct Entry {
     QString name;
@@ -35,4 +39,12 @@ Section read(const QString &section, bool *valid = nullptr);
 // Returns why it failed, or empty. Other sections stay as they are. A file that exists but
 // can't be read is never replaced: this refuses, so nothing the user wrote is lost.
 QString write(const QString &section, const Section &value);
+// The documents and frames sections as they'd be written, for Export Settings; `valid` is
+// false (and the result empty) for a file that can't be read.
+QJsonObject exportSections(bool *valid = nullptr);
+// `sections` cleaned up as reading them would: bad entries and repeated names dropped.
+QJsonObject normalised(const QJsonObject &sections);
+// Import Settings: replaces each of the two sections found in `sections` (bad entries skipped)
+// and keeps everything else in the file. Refuses an unreadable file like write().
+QString replaceSections(const QJsonObject &sections);
 }
