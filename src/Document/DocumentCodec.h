@@ -22,12 +22,14 @@ constexpr int version = 5;
 constexpr int pagesVersion = 6;
 constexpr const char *clipboardMimeType = "application/x-omastrator-objects";
 
-QJsonObject encode(const VectorDocument &document);
+// `pictures` off leaves a Browser View's last picture out (the clipboard, the agent's reads).
+QJsonObject encode(const VectorDocument &document, bool pictures = true);
 VectorDocument decode(const QJsonObject &json);
 
 QJsonObject encode(const VectorObject &object);
 VectorObject decodeObject(const QJsonObject &json);
-QJsonArray encode(const std::vector<VectorObject> &objects);
+// A Browser View's picture is written as a locked image child right after its frame, and taken back out on read.
+QJsonArray encode(const std::vector<VectorObject> &objects, bool pictures = true);
 std::vector<VectorObject> decodeObjects(const QJsonArray &json);
 
 QJsonObject encode(const TextContent &text);

@@ -190,6 +190,9 @@ QJsonObject AgentTools::selectTool(const QJsonObject &params)
 VectorDocument AgentTools::draft()
 {
     EditorSession &current = session();
+    // A held breakpoint width isn't an edit: it ends, the way any edit ends it.
+    if (current.isPreviewOnly())
+        current.cancelInteraction();
     if (current.isInteracting() && !ownsProposal(current))
         throw Error(AgentProtocol::busy, QStringLiteral("The user is in the middle of an edit. Try again in a moment."));
     return *current.document();
@@ -199,6 +202,8 @@ void AgentTools::propose(const QString &title, const VectorDocument &document, c
 {
     EditorSession &current = session();
     requireUnlocked(current);
+    if (current.isPreviewOnly())
+        current.cancelInteraction();
     if (!ownsProposal(current)) {
         if (current.isInteracting())
             throw Error(AgentProtocol::busy, QStringLiteral("The user is in the middle of an edit. Try again in a moment."));
@@ -263,7 +268,7 @@ QJsonObject AgentTools::documentGet(const QJsonObject &params)
         std::erase_if(shown.guides, [&](const Guide &guide) { return shown.resolvePage(guide.page) != keep; });
         shown.currentPage = keep;
     }
-    QJsonObject json = DocumentCodec::encode(shown);
+    QJsonObject json = DocumentCodec::encode(shown, false);
     QJsonArray pages;
     for (const Page &page : current.document()->allPages())
         pages.append(QJsonObject{{"id", idString(page.id)}, {"name", page.name}, {"current", page.id == current.document()->currentPageId()}});
@@ -308,7 +313,7 @@ QJsonObject AgentTools::selectionGet()
         for (const QUuid &nested : current.document()->descendants(id))
             objects.push_back(*current.document()->find(nested));
     }
-    return {{"selection", idArray(current.selection())}, {"objects", DocumentCodec::encode(objects)},
+    return {{"selection", idArray(current.selection())}, {"objects", DocumentCodec::encode(objects, false)},
             {"bounds", current.hasSelection() ? QJsonValue(rect(current.selectionBounds(true))) : QJsonValue(QJsonValue::Null)}};
 }
 
@@ -406,7 +411,7 @@ QJsonObject AgentTools::exportFile(const QJsonObject &params)
         fail(QStringLiteral("“scale” must be above zero."));
     if (quality < 0 || quality > 100)
         fail(QStringLiteral("“quality” must be 0 to 100."));
-    const VectorDocument &current = document();
+    const VectorDocument &current = session().designDocument();
     int sheets = 0;
     switch (format) {
     case DocumentExporter::Format::pdf:

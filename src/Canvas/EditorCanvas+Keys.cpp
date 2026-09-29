@@ -47,6 +47,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
 {
     if (!session.hasDocument())
         return false;
+    if (browseKey(event, true))
+        return true;
     // Open type is a text field: it takes every key it knows.
     if (text) {
         if (event->key() == Qt::Key_Escape) {
@@ -91,6 +93,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             cancelDrag();
         } else if (pen) {
             finishPen();
+        } else if (endHeldPreview()) {
+            // A breakpoint button's width lets go.
         } else if (session.isolatedGroup()) {
             session.exitIsolation();
         } else if (!session.pickedNodes().empty()) {
@@ -243,6 +247,8 @@ void EditorCanvas::State::finishOpacity()
 
 bool EditorCanvas::State::keyRelease(QKeyEvent *event)
 {
+    if (browseKey(event, false))
+        return true;
     // Alt's release ends the measurements and Shape Builder's erase highlight.
     if (event->key() == Qt::Key_Alt) {
         modifiers &= ~Qt::AltModifier;

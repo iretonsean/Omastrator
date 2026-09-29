@@ -405,7 +405,8 @@ private:
         writeCommon(frame);
         writeFrameBox(frame, true);
         const std::vector<QUuid> children = document.children(frame.id);
-        if (!children.empty()) {
+        const bool pictured = frame.showsBrowserPicture() && !frame.browser->picture.isNull();
+        if (!children.empty() || pictured) {
             QString clip;
             if (frame.clipsContent) {
                 clip = definitionID("clip");
@@ -420,6 +421,16 @@ private:
             xml.writeStartElement(QStringLiteral("g"));
             if (!clip.isEmpty())
                 xml.writeAttribute(QStringLiteral("clip-path"), QStringLiteral("url(#%1)").arg(clip));
+            if (pictured) {
+                // A Browser View's last picture, stretched to the box under the children.
+                VectorObject picture;
+                picture.kind = ObjectKind::image;
+                picture.image = frame.browser->picture;
+                const QRectF box = frame.shape->rect.normalized();
+                picture.transform = QTransform::fromTranslate(box.left(), box.top())
+                    * QTransform::fromScale(box.width() / picture.image.width(), box.height() / picture.image.height());
+                writeImage(picture);
+            }
             for (const QUuid &child : children)
                 writeObject(child);
             xml.writeEndElement();

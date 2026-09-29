@@ -146,3 +146,19 @@ void DocumentHistory::trim(const std::optional<VectorDocument> &current)
             break;
     }
 }
+
+void DocumentHistory::mapDocuments(const std::function<void(VectorDocument &)> &change)
+{
+    const auto each = [&](Snapshot &snapshot) {
+        if (snapshot.document)
+            change(*snapshot.document);
+    };
+    for (auto *steps : {&m_past, &m_future}) {
+        for (Entry &entry : *steps) {
+            each(entry.before);
+            each(entry.after);
+        }
+    }
+    if (m_pending)
+        each(*m_pending);
+}

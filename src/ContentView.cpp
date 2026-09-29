@@ -1,4 +1,5 @@
 #include "ContentView.h"
+#include "UI/BrowserViews.h"
 #include "Logging.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentPanels.h"
@@ -27,7 +28,7 @@
 #include <cmath>
 
 const std::vector<std::vector<std::vector<Tool>>> ContentView::toolSlotGroups{
-    {{Tool::select, Tool::directSelect}, {Tool::frame, Tool::artboard}},
+    {{Tool::select, Tool::directSelect, Tool::browse}, {Tool::frame, Tool::browserView, Tool::artboard}},
     {{Tool::pen, Tool::pencil, Tool::scissors}, {Tool::text}, {Tool::typeOnPath},
      {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::line}, {Tool::shapeBuilder}},
     {{Tool::rotate, Tool::scale}, {Tool::gradient, Tool::eyedropper}, {Tool::width}},
@@ -372,6 +373,7 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     m_canvasSlot->addWidget(m_canvas, 0, 0);
     m_canvasSlot->addWidget(m_dropRing, 0, 0);
     m_canvas->installEventFilter(this);
+    BrowserViews::of(m_session)->attach(m_canvas);
     // Tool keys and the rest also work from a panel: only text fields keep them.
     qApp->installEventFilter(this);
     setAcceptDrops(true);
@@ -412,17 +414,9 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     connect(m_canvas, &EditorCanvas::pointerMoved, this, &ContentView::showPointer);
     connect(m_canvas, &EditorCanvas::textEditingChanged, m_propertiesPanel, &PropertiesPanel::setEditingText);
     connect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
-    connect(&m_session, &EditorSession::movedToPage, this, [this](const QString &page) {
-        m_flash = tr("Moved to %1").arg(page);
-        const int number = ++m_flashNumber;
-        QTimer::singleShot(4000, this, [this, number] {
-            if (number == m_flashNumber) {
-                m_flash.clear();
-                synchronize();
-            }
-        });
-        synchronize();
-    });
+    connect(&m_session, &EditorSession::movedToPage, this, [this](const QString &page) { flash(tr("Moved to %1").arg(page)); });
+    connect(m_canvas, &EditorCanvas::notice, this, &ContentView::flash);
+    connect(BrowserViews::of(m_session), &BrowserViews::notice, this, &ContentView::flash);
     connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &ContentView::retitleTools);
     retitleTools();
     synchronizePanels();
@@ -434,6 +428,7 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
 ContentView::~ContentView()
 {
     disconnect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
+    BrowserViews::of(m_session)->detach(m_canvas);
     m_canvas->removeEventFilter(this);
 }
 

@@ -1,9 +1,10 @@
 #include "Agent/AgentProtocol.h"
 #include "Agent/Setup.h"
 #include "Document/EditorSession.h"
+#include "Live/Registry.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
-#include "Live/Registry.h"
+#include "UI/BrowserViews.h"
 #include "UI/LivePanel.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -134,7 +135,9 @@ QString AgentBridge::handToAgent(const QString &folder, const QString &instructi
     handOff.folder = folder;
     handOff.instruction = instruction;
     handOff.source = QStringLiteral("the document in front");
-    handOff.art = *front->document();
+    // The design, not a held breakpoint preview, with each Browser View's newest picture.
+    BrowserViews::of(*front)->flushPictures();
+    handOff.art = front->designDocument();
     return this->handOff(handOff);
 }
 

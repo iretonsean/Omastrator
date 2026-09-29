@@ -31,6 +31,8 @@ QString titleFor(const QAction &entry, const QString &menu)
         return QStringLiteral("Select Inverse");
     if (menu == QLatin1String("Select ▸ Object"))
         return QStringLiteral("Select ") + text;
+    if (menu.endsWith(QLatin1String("Browser View")))
+        return QStringLiteral("Browser View: ") + text;
     if (menu.endsWith(QLatin1String("Compound Path")) || menu.endsWith(QLatin1String("Clipping Mask")))
         return text + QLatin1Char(' ') + menu.section(QStringLiteral(" ▸ "), -1);
     if (name == QLatin1String("imageTraceMake"))

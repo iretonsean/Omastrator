@@ -1,5 +1,6 @@
 #include "UI/ExportForScreensSheet.h"
 #include "IO/ScreenExport.h"
+#include "UI/BrowserViews.h"
 #include <QCheckBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -239,6 +240,7 @@ void ExportForScreensSheet::runExport()
         return;
     }
     saveSettings();
+    BrowserViews::of(m_session)->flushPictures();
     ScreenExport::Settings settings;
     settings.scales = scales;
     settings.formats = formats;
@@ -247,7 +249,7 @@ void ExportForScreensSheet::runExport()
     m_progress->setVisible(true);
     m_progress->setValue(0);
     QStringList skipped;
-    const QStringList written = ScreenExport::run(*m_session.document(), artboards, assets, settings, [this](const ScreenExport::Progress &progress) {
+    const QStringList written = ScreenExport::run(m_session.designDocument(), artboards, assets, settings, [this](const ScreenExport::Progress &progress) {
         m_progress->setMaximum(std::max(1, progress.total));
         m_progress->setValue(progress.done);
         m_status->setText(QStringLiteral("Writing %1…").arg(progress.name));

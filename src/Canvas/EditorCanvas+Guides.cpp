@@ -167,6 +167,8 @@ void EditorCanvas::State::drawIsolated(QPainter &painter, const VectorDocument &
 {
     VectorRenderer::Options options;
     options.outlineMode = session.showsOutline;
+    if (browserHost)
+        options.livePicture = [host = browserHost](const QUuid &frame) { return host->picture(frame); };
     if (!options.outlineMode) {
         for (const Artboard &board : document.allArtboards())
             painter.fillRect(board.rect, board.background);

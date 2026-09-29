@@ -12,8 +12,12 @@
 class Browser : public QObject {
     Q_OBJECT
 public:
+    // The disk cache a Chromium keeps: minimal is 1 byte (tests, whose profile lives in a temporary folder), capped is 64 MB
+    // (the profile that lives for good). Automatic is minimal when headless and capped otherwise.
+    enum class Cache { automatic, minimal, capped };
     struct Options {
         bool headless = false;
+        Cache cache = Cache::automatic;
         // Default: defaultProfile().
         QString profile;
         // Opens this URL as an app window (an Omarchy web app) instead of a normal window.
@@ -42,6 +46,8 @@ public:
     // Starts the browser and connects to it. Returns why it failed, or empty.
     QString start(const Options &options);
     void stop();
+    // Kills the process so a start() in progress (in its own event loops) returns at once.
+    void abortStart();
     bool isRunning() const;
     // The browser's own process, which owns its windows: design mode knows its pages by it.
     qint64 processId() const { return m_process.processId(); }

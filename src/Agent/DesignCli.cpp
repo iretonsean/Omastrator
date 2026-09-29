@@ -1,6 +1,7 @@
 #include "Agent/DesignCli.h"
 #include "Agent/AgentClient.h"
 #include "Agent/AgentProtocol.h"
+#include "Agent/BrowserPoolState.h"
 #include "Agent/Island.h"
 #include "Agent/WorkspaceClaims.h"
 #include <QJsonArray>
@@ -305,9 +306,13 @@ int runReset(QTextStream &out, QTextStream &err)
             AgentClient::Connection connection;
             connection.call(QStringLiteral("design"), {{"action", "reset"}}, 10'000);
         } catch (const AgentProtocol::Error &failure) {
+            BrowserPoolState::endLeftover();
             return failed(err, QStringLiteral("The island is back to normal, but the app didn't answer: ") + failure.message());
         }
     }
+    // The Browser View browser stops with the app's reset; one left by a crash, or by an app that didn't answer, is ended here.
+    if (BrowserPoolState::endLeftover())
+        out << "Stopped Omastrator's browser.\n";
     out << "Reset.\n";
     return 0;
 }

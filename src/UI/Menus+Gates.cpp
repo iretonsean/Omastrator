@@ -128,6 +128,12 @@ void Menus::synchronize()
         action(QString::fromLatin1(name))->setEnabled(typeKeys);
     for (const char *name : {"typeSizeMenu", "typeTrackingMenu", "typeLeadingMenu", "typeBaselineMenu"})
         action(QString::fromLatin1(name))->setEnabled(drawn);
+    const bool browserSelected = editing && m_canvas && m_canvas->browserViewHost() && s.selectedBrowserView().has_value();
+    action(QStringLiteral("browserViewMenu"))->setEnabled(browserSelected);
+    for (const char *name : {"browserViewCopyUrl", "browserViewOpen", "browserViewReload", "browserViewReloadHard", "browserViewSignIn"})
+        action(QString::fromLatin1(name))->setEnabled(browserSelected);
+    // Only while a breakpoint button is holding a width.
+    action(QStringLiteral("browserViewDesignWidth"))->setEnabled(browserSelected && s.isPreviewOnly());
     const bool agent = m_agent != nullptr;
     action(QStringLiteral("imageTraceMenu"))->setEnabled(drawn);
     action(QStringLiteral("imageTraceMake"))->setEnabled(editing && s.selectedImage().has_value());

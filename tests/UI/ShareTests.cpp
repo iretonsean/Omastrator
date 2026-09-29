@@ -5,6 +5,7 @@
 #include "Document/PathOperations.h"
 #include "Live/Deploy.h"
 #include "Live/WriteBack.h"
+#include "UI/BrowserViews.h"
 #include "UI/CommandPalette.h"
 #include "UI/ContextMenus.h"
 #include "UI/ProjectWorkspaceView.h"
@@ -239,6 +240,29 @@ private slots:
         QCOMPARE(list.front().link, clipboard());
         QVERIFY(!readFile(Share::storePath()).contains(FakeCloud::secret));
         QVERIFY(!clipboard().contains(QLatin1String(FakeCloud::secret)));
+    }
+
+    void aBrowserViewSharesItsNewestPicture()
+    {
+        // No Chromium is started: the picture is put in as if a page had streamed it a moment ago.
+        qputenv("OMASTRATOR_CHROMIUM", "/nonexistent/chromium");
+        m_cloud->addRemote(QStringLiteral("work"), QStringLiteral("drive"));
+        Window w;
+        const QUuid frame = w.session().addBrowserView({0, 0, 200, 100}, QUrl(QStringLiteral("https://example.com/")));
+        w.session().deselectAll();
+        BrowserViews *views = BrowserViews::of(w.session());
+        QTRY_VERIFY(views->state(frame) == BrowserViews::State::unavailable);
+        QImage picture(200, 100, QImage::Format_ARGB32_Premultiplied);
+        picture.fill(Qt::green);
+        views->notePicture(frame, picture);
+        QVERIFY(w.session().document()->find(frame)->browser->picture.isNull());
+        w.find<QToolButton>(QStringLiteral("shareToolbar"))->click();
+        QVERIFY(w.waitShared());
+        qunsetenv("OMASTRATOR_CHROMIUM");
+        const QStringList files = filesIn(m_cloud->remoteFile(QStringLiteral("work"), QStringLiteral("Omastrator Shares")));
+        QCOMPARE(files.size(), 1);
+        const QImage shared(m_cloud->remoteFile(QStringLiteral("work"), QStringLiteral("Omastrator Shares/") + files.front()));
+        QCOMPARE(shared.pixelColor(shared.width() / 2, shared.height() / 2), QColor(Qt::green));
     }
 
     void theScopeNamesThePageFromTwoPagesOn()

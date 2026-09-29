@@ -47,7 +47,9 @@ Each folder builds as its own static library:
   `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, `EditSets` (edits to
   sites that aren't yours, kept per origin), write-back
   (`WriteBack`, `AgentWork`), and Deploy (`Deploy`, `DeployJob`, `History`,
-  with GitHub through `gh`). The page overlay
+  with GitHub through `gh`). Browser View's Chromium (docs/BROWSER-VIEW.md) is
+  `BrowserPool` (its own thread, tabs, idle stop, the cap) and `Breakpoints`
+  (the widths a site's stylesheets name). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
   tests run the fixtures in `tests/Live/fixtures` and skip without Chromium.
 - `src/Anywhere` → `oma_anywhere`. Design mode everywhere (docs/ANYWHERE.md):

@@ -214,6 +214,27 @@ void frame(QPainter &painter)
     painter.drawLine(QPointF(2.5, 11.5), QPointF(15.5, 11.5));
 }
 
+// A window: the frame's box with a bar across the top and a dot in it.
+void browserView(QPainter &painter)
+{
+    painter.drawRoundedRect(QRectF(2.5, 3.5, 13, 11), 1.5, 1.5);
+    painter.drawLine(QPointF(2.5, 7), QPointF(15.5, 7));
+    painter.drawPoint(QPointF(5, 5.25));
+}
+
+// A window with the pointer poking into it.
+void browse(QPainter &painter)
+{
+    painter.drawRoundedRect(QRectF(2.5, 3.5, 13, 11), 1.5, 1.5);
+    painter.drawLine(QPointF(2.5, 7), QPointF(15.5, 7));
+    painter.save();
+    painter.translate(6.5, 6);
+    painter.scale(0.55, 0.55);
+    painter.setBrush(painter.pen().color());
+    painter.drawPath(arrow());
+    painter.restore();
+}
+
 void artboard(QPainter &painter)
 {
     constexpr double inset = 3, arm = 4;
@@ -259,6 +280,8 @@ void ToolIcons::paint(QPainter &painter, Tool tool, QPointF origin, double side,
     case Tool::zoom: zoom(painter); break;
     case Tool::artboard: artboard(painter); break;
     case Tool::frame: frame(painter); break;
+    case Tool::browserView: browserView(painter); break;
+    case Tool::browse: browse(painter); break;
     }
     painter.restore();
 }

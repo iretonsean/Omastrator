@@ -107,7 +107,7 @@ Contents load(const QString &name)
 QByteArray serialize(const Contents &library)
 {
     QJsonObject json{{"format", "omastrator-library"}, {"version", 1}, {"name", library.name}, {"tokens", DesignTokens::encode(library.tokens)},
-                     {"components", DocumentCodec::encode(library.objects)}};
+                     {"components", DocumentCodec::encode(library.objects, false)}};
     if (!library.modes.isEmpty())
         json["modes"] = QJsonArray::fromStringList(library.modes);
     return QJsonDocument(json).toJson(QJsonDocument::Indented);

@@ -105,6 +105,9 @@ bool ContentView::canvasKey(QKeyEvent *event)
         }
         return false;
     }
+    // A page with the keys gets them as they are: no tool keys, no remaps.
+    if (m_canvas->isBrowsing())
+        return false;
     const bool typing = m_canvas->isEditingText();
     const std::unique_ptr<QKeyEvent> typed = typing ? ShortcutSettings::shared().textEvent(*event) : ShortcutSettings::shared().canvasEvent(*event);
     if (!typed)

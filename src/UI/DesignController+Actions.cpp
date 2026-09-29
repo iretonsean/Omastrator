@@ -6,6 +6,7 @@
 #include "Anywhere/AnywhereSettings.h"
 #include "Document/PathOperations.h"
 #include "UI/AgentBridge.h"
+#include "UI/BrowserViews.h"
 #include "UI/DesignController.h"
 #include "UI/PageWorkspaces.h"
 #include "UI/ProjectWorkspace.h"
@@ -117,6 +118,8 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
         const bool hadPages = PageWorkspaces::isTurnedOn();
         PageWorkspaces::setTurnedOn(false);
         Island::resetKeys();
+        // The frames' tabs close and Omastrator's browser stops; they stay paused until a frame is clicked.
+        BrowserViews::resetAll();
         // Live in the user's own tab takes that page's clicks: the tab goes back to them. Omastrator's own browser stays.
         if (m_bridge.liveSession().inUserBrowser())
             m_bridge.liveSession().stop();

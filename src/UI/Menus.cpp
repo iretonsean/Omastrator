@@ -1,4 +1,5 @@
 #include "UI/Menus.h"
+#include "Document/BrowserAddress.h"
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
@@ -16,6 +17,8 @@
 #include "UI/DesignSystemPanel.h"
 #include <QApplication>
 #include <QClipboard>
+#include <QDesktopServices>
+#include "Canvas/BrowserViewHost.h"
 #include <QFileInfo>
 #include <QMenu>
 #include <QMessageBox>
@@ -313,6 +316,36 @@ void Menus::buildObject(QMenuBar &bar)
           QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_M));
     add(clipping, QStringLiteral("releaseClippingMask"), QStringLiteral("Release"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_7),
         [this] { session().releaseClippingMask(); });
+    QMenu *browserView = object->addMenu(QStringLiteral("Browser View"));
+    browserView->menuAction()->setObjectName(QStringLiteral("browserViewMenu"));
+    // The bar's right-click menu, for the selected frame; they name the Browser View in Ctrl+K.
+    const auto browserFrame = [this] { return m_canvas && m_canvas->browserViewHost() ? session().selectedBrowserView() : std::nullopt; };
+    add(browserView, QStringLiteral("browserViewCopyUrl"), QStringLiteral("Copy URL"), QKeySequence(), [this, browserFrame] {
+        if (const auto frame = browserFrame())
+            QApplication::clipboard()->setText(session().document()->find(*frame)->browser->url.toString());
+    });
+    add(browserView, QStringLiteral("browserViewOpen"), QStringLiteral("Open in My Chromium"), QKeySequence(), [this, browserFrame] {
+        if (const auto frame = browserFrame()) {
+            const QUrl url = session().document()->find(*frame)->browser->url;
+            if (BrowserAddress::allowed(url))
+                QDesktopServices::openUrl(url);
+        }
+    });
+    add(browserView, QStringLiteral("browserViewDesignWidth"), QStringLiteral("Set as Design Width"), QKeySequence(),
+        [this] { session().setPreviewAsDesignWidth(); });
+    browserView->addSeparator();
+    add(browserView, QStringLiteral("browserViewReload"), QStringLiteral("Reload"), QKeySequence(), [this, browserFrame] {
+        if (const auto frame = browserFrame())
+            m_canvas->browserViewHost()->act(*frame, BrowserViewHost::Action::reload);
+    });
+    add(browserView, QStringLiteral("browserViewReloadHard"), QStringLiteral("Reload Ignoring Cache"), QKeySequence(), [this, browserFrame] {
+        if (const auto frame = browserFrame())
+            m_canvas->browserViewHost()->act(*frame, BrowserViewHost::Action::reloadIgnoringCache);
+    });
+    add(browserView, QStringLiteral("browserViewSignIn"), QStringLiteral("Sign in to Omastrator's browser…"), QKeySequence(), [this] {
+        if (m_canvas && m_canvas->browserViewHost())
+            m_canvas->browserViewHost()->signIn();
+    });
     QMenu *opacityMask = object->addMenu(QStringLiteral("Opacity Mask"));
     opacityMask->menuAction()->setObjectName(QStringLiteral("opacityMaskMenu"));
     add(opacityMask, QStringLiteral("makeOpacityMask"), QStringLiteral("Make Mask"), QKeySequence(), [this] { session().makeOpacityMask(); });

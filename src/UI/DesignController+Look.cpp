@@ -4,6 +4,7 @@
 #include "System/ConfigBackup.h"
 #include "System/DesktopLook.h"
 #include "UI/AgentBridge.h"
+#include "UI/BrowserViews.h"
 #include "UI/DesignController.h"
 #include "UI/DesktopLookPanel.h"
 #include "UI/ProjectWorkspace.h"
@@ -113,7 +114,9 @@ QString DesignController::look(const QJsonObject &params, QJsonObject &result)
             return QStringLiteral("Open the document whose artboard should be the wallpaper, then try again.");
         m_mode->refresh();
         const auto monitor = Hyprland::focusedMonitor(m_mode->monitors());
-        const VectorDocument &document = *tab.session.document();
+        // The design, not a held breakpoint preview, with each Browser View's newest picture.
+        BrowserViews::of(tab.session)->flushPictures();
+        const VectorDocument &document = tab.session.designDocument();
         const double width = monitor ? monitor->rect.width() * monitor->scale : 1920;
         const double scale = document.size.width() > 0 ? width / document.size.width() : 1;
         const QString folder = QDir(Island::runtimeDirectory()).filePath(QStringLiteral("wallpapers"));

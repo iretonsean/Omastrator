@@ -250,6 +250,12 @@ PanelSection *PropertiesPanel::layoutSection()
     switches->addWidget(m_layoutClip);
     switches->addStretch(1);
     body->addLayout(switches);
+    // For the children of a Browser View: a note or callout that stays put while the site is previewed at other widths.
+    m_layoutFixedPreview = new QCheckBox(QStringLiteral("Fixed while previewing"), m_layout);
+    m_layoutFixedPreview->setObjectName(QStringLiteral("layoutFixedPreview"));
+    m_layoutFixedPreview->setToolTip(QStringLiteral("Stay where the design put it when the Browser View is previewed at another width"));
+    connect(m_layoutFixedPreview, &QCheckBox::toggled, this, [this](bool on) { m_session.setFixedWhilePreviewing(on); });
+    body->addWidget(m_layoutFixedPreview);
     m_layout->summary = [this] {
         const std::optional<AutoLayout> layout = m_session.selectedAutoLayout();
         if (!layout)
@@ -338,6 +344,12 @@ void PropertiesPanel::synchronizeLayout()
         const QSignalBlocker quietX(m_constraintX), quietY(m_constraintY);
         m_constraintX->setCurrentIndex(int(first->layout.horizontal));
         m_constraintY->setCurrentIndex(int(first->layout.vertical));
+    }
+    const bool inBrowserView = first && parent && parent->browser;
+    m_layoutFixedPreview->setVisible(inBrowserView);
+    if (inBrowserView) {
+        const QSignalBlocker quiet(m_layoutFixedPreview);
+        m_layoutFixedPreview->setChecked(first->layout.previewRule == PreviewRule::fixed);
     }
     m_layoutClip->setVisible(!frames.empty());
     {

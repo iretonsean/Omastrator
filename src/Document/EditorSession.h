@@ -41,11 +41,13 @@ enum class Tool {
     zoom,            // Z
     artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
     frame,           // F: Figma's frame, after the artboard for the same reason
+    browserView,     // no key: a frame that shows a web page (docs/BROWSER-VIEW.md)
+    browse,          // no key: clicks, keys and the wheel go to a Browser View's page
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::typeOnPath, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
-                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame};
+                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame, Tool::browserView, Tool::browse};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -91,6 +93,36 @@ public:
     // edit entry point asks it; so does anything that starts editing outside the session, as
     // the canvas's inline type does.
     bool refuseWhenLocked();
+
+    // Browser Views (EditorSession+Browser.cpp) -------------------------------
+    // The page moved on its own (a link, a redirect): the file is marked unsaved but
+    // no undo step is made (a scroll alone marks nothing), and the recorded steps follow the new address so an undo doesn't
+    // send the tab back. Locked documents take it too, since it isn't an edit.
+    void setBrowserLocation(const QUuid &frame, const QUrl &url, QPointF scroll);
+    // The Browser View tool: a frame over `rect` showing `url` (or "no page yet"), nested as addFrame nests. Selected.
+    QUuid addBrowserView(const QRectF &rect, const QUrl &url = QUrl());
+    // "Change URL": the address the user typed, one undo step. Undo goes back to the page before.
+    void setBrowserUrl(const QUuid &frame, const QUrl &url);
+    // A resize preview of a Browser View (docs/BROWSER-VIEW.md, section 6): an interaction that is never recorded. Committing
+    // it, or any edit, undo or tool change but Browse, ends it as cancelInteraction does.
+    void beginPreview(const QString &name);
+    // Shows `frame` at `box`, its children following their constraints (or staying, when fixed). No step is made.
+    void previewFrameBox(const QUuid &frame, const QRectF &box);
+    bool isPreviewOnly() const { return m_interaction && m_interaction->discard; }
+    // What is saved, exported and shared: the document without a held preview's width.
+    const VectorDocument &designDocument() const { return m_interaction && m_interaction->discard ? m_interaction->before : *m_document; }
+    // The frame's box before the preview began, or its box now.
+    QRectF designBox(const QUuid &frame) const;
+    // "Design Width": the frame's box becomes `box`, one undo step, as Transform's W does.
+    void setDesignBox(const QUuid &frame, const QRectF &box);
+    // The width a preview is showing becomes the design width ("Design Width"); nothing when no preview is showing.
+    void setPreviewAsDesignWidth();
+    // The selected Browser View's children keep their design-width place in the preview ("Fixed while previewing").
+    void setFixedWhilePreviewing(bool fixed);
+    // The one selected Browser View, for the menu's Browser View commands.
+    std::optional<QUuid> selectedBrowserView() const;
+    // The last picture, refreshed silently: not unsaved, not a step, no signal.
+    void setBrowserPicture(const QUuid &frame, const QImage &picture);
 
     // Artboards (EditorSession+Artboards.cpp) ---------------------------------
     // The Artboard tool, the list, next/previous and select() all set this.
@@ -655,6 +687,7 @@ private:
     // The shared tail of paste(): renumbers ids, places the objects and selects them.
     void pasteObjects(std::vector<VectorObject> objects, PastePosition position);
     void insertNew(VectorDocument &document, VectorObject object);
+    QUuid addFrameObject(VectorObject frame, const QString &step);
     void restore(const DocumentHistory::Snapshot &snapshot);
     // Pages' view memory: what leaving a page keeps, and what entering one restores.
     void rememberPageView();
@@ -697,6 +730,8 @@ private:
         // The last previewTransform, and whether the selection was copied first.
         std::optional<QTransform> transform;
         bool duplicated = false;
+        // A preview that is never recorded (a Browser View's width).
+        bool discard = false;
     };
     std::optional<Interaction> m_interaction;
     struct PageView {

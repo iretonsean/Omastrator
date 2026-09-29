@@ -48,6 +48,8 @@ void EditorCanvas::contextMenuEvent(QContextMenuEvent *event)
         menu->popup(event->globalPos());
         return;
     }
+    if (!(event->reason() == QContextMenuEvent::Keyboard) && m_state->browserBarMenu(event->pos(), event->globalPos()))
+        return;
     m_state->finishOpacity();
     if (m_state->pen)
         m_state->finishPen();

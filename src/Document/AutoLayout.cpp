@@ -285,7 +285,21 @@ std::optional<LayoutConstraint> layoutConstraint(const QString &raw)
     return valueOf(constraintNames, raw);
 }
 
-void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box)
+QString rawValue(PreviewRule rule)
+{
+    return rule == PreviewRule::fixed ? QStringLiteral("fixed") : QStringLiteral("constraints");
+}
+
+std::optional<PreviewRule> previewRule(const QString &raw)
+{
+    if (raw == QLatin1String("fixed"))
+        return PreviewRule::fixed;
+    if (raw == QLatin1String("constraints"))
+        return PreviewRule::constraints;
+    return std::nullopt;
+}
+
+void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box, bool preview)
 {
     VectorObject *frame = find(id);
     if (!frame || frame->kind != ObjectKind::frame || !frame->shape || !frame->shape->placement.isIdentity())
@@ -301,7 +315,12 @@ void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box)
     const bool flows = frame->autoLayout.has_value();
     std::vector<QUuid> moving;
     for (const QUuid &child : children(id)) {
-        const VectorObject *object = find(child);
+        VectorObject *object = find(child);
+        if (object && preview && object->layout.previewRule == PreviewRule::fixed) {
+            // Absolute takes it out of the flow, so it stays where the design put it.
+            object->layout.absolute = true;
+            continue;
+        }
         // Children in a flow are placed by the layout, which runs after.
         if (object && (!flows || object->layout.absolute))
             moving.push_back(child);

@@ -70,6 +70,8 @@ void EditorCanvas::State::paint(QPainter &painter)
     VectorRenderer::Options options;
     options.outlineMode = session.showsOutline;
     options.outlineWidth = 1;
+    if (browserHost)
+        options.livePicture = [host = browserHost](const QUuid &frame) { return host->picture(frame); };
     if (options.outlineMode) {
         for (const Artboard &board : boards)
             painter.fillRect(board.rect, Qt::white);
@@ -99,8 +101,11 @@ void EditorCanvas::State::paint(QPainter &painter)
         painter.drawRect(artboard);
         painter.restore();
     }
+    drawBrowserMessages(painter);
     drawArtboardLabels(painter);
     drawFrameLabels(painter);
+    drawBrowserBars(painter);
+    drawSignInStrip(painter);
     drawGuides(painter);
     drawOverlay(painter);
 }

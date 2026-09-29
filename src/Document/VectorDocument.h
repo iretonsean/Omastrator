@@ -12,6 +12,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTransform>
+#include <QUrl>
 #include <QUuid>
 #include <array>
 #include <cstdint>
@@ -327,6 +328,11 @@ enum class LayoutConstraint { start, end, both, center, scale };
 QString rawValue(LayoutConstraint constraint);
 std::optional<LayoutConstraint> layoutConstraint(const QString &rawValue);
 
+// A Browser View's resize preview: constraints (the default) or fixed, exactly where the design put it.
+enum class PreviewRule { constraints, fixed };
+QString rawValue(PreviewRule rule);
+std::optional<PreviewRule> previewRule(const QString &rawValue);
+
 // How an object sizes itself, and whether an auto-layout parent flows it.
 struct LayoutItem {
     LayoutSizing width = LayoutSizing::fixed;
@@ -336,7 +342,20 @@ struct LayoutItem {
     // Outside a flow (a plain frame, or Absolute), how it follows its frame's resize.
     LayoutConstraint horizontal = LayoutConstraint::start;
     LayoutConstraint vertical = LayoutConstraint::start;
+    // In a Browser View's resize preview: follow the frame's constraints and flow, or stay at the design-width place.
+    PreviewRule previewRule = PreviewRule::constraints;
     friend bool operator==(const LayoutItem &, const LayoutItem &) = default;
+};
+
+// A frame that shows a web page (docs/BROWSER-VIEW.md). The design width is the frame's own width.
+struct BrowserView {
+    // Empty is "no page yet".
+    QUrl url;
+    // The page's scroll offset in CSS px, so art drawn over it lines up again after a reopen.
+    QPointF scroll;
+    // The last picture at 1x the frame's size: view state kept in the file, refreshed silently.
+    QImage picture;
+    friend bool operator==(const BrowserView &, const BrowserView &) = default;
 };
 
 // Groups (P2-9): the top child's luminance masks the rest. Clip hides whatever
@@ -385,6 +404,8 @@ struct VectorObject {
     bool clipsContent = true;
     // Frames: auto layout, when on.
     std::optional<AutoLayout> autoLayout;
+    // Frames: a web page it shows (Browser View).
+    std::optional<BrowserView> browser;
     // Its own sizing, and its place in an auto-layout parent's flow.
     LayoutItem layout;
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for
@@ -400,6 +421,8 @@ struct VectorObject {
     std::optional<InstanceInfo> instance;
 
     bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group || kind == ObjectKind::frame; }
+    // A Browser View's picture is stretched over the box, so only a frame that isn't rotated or skewed can show it.
+    bool showsBrowserPicture() const { return browser && shape && shape->placement.isIdentity(); }
     bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text || kind == ObjectKind::frame; }
     // A frame around `rect`, in document coordinates, with a white fill as Figma's new frames have.
     static VectorObject frame(const QRectF &rect, const QString &name = QStringLiteral("Frame"));
@@ -519,7 +542,8 @@ struct VectorDocument {
     void applyAutoLayout();
     // Figma's resize: the frame's box to `box`, its children outside a flow moved and sized by their
     // constraints (and theirs, in child frames, in turn). Sized by hand, a hugging frame becomes fixed.
-    void resizeFrame(const QUuid &id, const QRectF &box);
+    // A `preview` (a Browser View's resize preview) leaves children whose preview rule is fixed where they are, out of the flow too.
+    void resizeFrame(const QUuid &id, const QRectF &box, bool preview = false);
     // The same for loose art: each of `ids` follows its constraints as the box `old` becomes `fresh`
     // (an artboard's art, whose box isn't an object). Left and Top, the default, follow the top left.
     void constrainToBox(const std::vector<QUuid> &ids, const QRectF &old, const QRectF &fresh);

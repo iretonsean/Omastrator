@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 23> toolInfo{{
+const std::array<ToolInfo, 25> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -34,6 +34,8 @@ const std::array<ToolInfo, 23> toolInfo{{
     {Tool::zoom, "zoom", "Zoom"},
     {Tool::artboard, "artboard", "Artboard"},
     {Tool::frame, "frame", "Frame"},
+    {Tool::browserView, "browserView", "Browser View"},
+    {Tool::browse, "browse", "Browse"},
 }};
 }
 
@@ -180,7 +182,8 @@ void EditorSession::selectTool(Tool tool)
             pruneSelection();
         }
     }
-    if (m_interaction)
+    // Browse can look at a page held at a preview width.
+    if (m_interaction && !(m_interaction->discard && tool == Tool::browse))
         commitInteraction();
     m_tool = tool;
     if (tool != Tool::directSelect && tool != Tool::pen)
@@ -497,6 +500,11 @@ void EditorSession::undo()
 {
     if (refuseWhenLocked())
         return;
+    // A held width isn't a step: the first undo puts the design back and the next one undoes the last step.
+    if (isPreviewOnly()) {
+        cancelInteraction();
+        return;
+    }
     if (m_interaction)
         cancelInteraction();
     if (const auto snapshot = m_history.undo())
@@ -531,7 +539,7 @@ void EditorSession::beginInteraction(const QString &name)
         return;
     if (m_interaction)
         commitInteraction();
-    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false};
+    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false, false};
 }
 
 void EditorSession::previewTransform(const QTransform &transform, bool reflowAreaText)
@@ -567,6 +575,10 @@ void EditorSession::commitInteraction()
 {
     if (!m_interaction)
         return;
+    if (m_interaction->discard) {
+        cancelInteraction();
+        return;
+    }
     Interaction interaction = std::move(*m_interaction);
     m_interaction.reset();
     if (!m_document || *m_document == interaction.before) {

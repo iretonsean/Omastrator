@@ -1,5 +1,6 @@
 #include "Document/PathOperations.h"
 #include "WidgetCleanup.h"
+#include "IO/ProjectStore.h"
 #include "UI/ProjectWorkspace.h"
 #include <QApplication>
 #include <QFile>
@@ -71,6 +72,7 @@ private slots:
     void closingAnUnmodifiedTabRemovesIt();
     void closingAModifiedTabAsks();
     void savingWritesTheDocumentAndClearsTheDot();
+    void savingDuringAHeldPreviewWritesTheDesignWidth();
     void openingTheSamePathSelectsItsTab();
     void svgsAndPicturesOpenAsDocuments();
     void excalidrawOpensAndPlaces();
@@ -217,6 +219,36 @@ void ProjectWorkspaceTests::savingWritesTheDocumentAndClearsTheDot()
     QCOMPARE(leaves(document, ObjectKind::path), 2);
     QCOMPARE(reopened.current().title(), QString("Poster"));
     QVERIFY(!reopened.current().session.isModified());
+}
+
+void ProjectWorkspaceTests::savingDuringAHeldPreviewWritesTheDesignWidth()
+{
+    const QString path = m_dir->filePath("Site.omai");
+    ProjectWorkspace workspace;
+    workspace.createDocument(QSizeF(1000, 800));
+    EditorSession &session = workspace.current().session;
+    VectorDocument document = VectorDocument::blank({1000, 800});
+    VectorObject view = VectorObject::frame({0, 0, 400, 300}, QStringLiteral("Site"));
+    view.browser = BrowserView{QUrl(QStringLiteral("http://localhost/")), {}, {}};
+    const QUuid frame = view.id;
+    document.insert(view, document.layers().front());
+    VectorObject note = VectorObject::frame({320, 10, 60, 30}, QStringLiteral("Badge"));
+    note.layout.horizontal = LayoutConstraint::end;
+    note.layout.previewRule = PreviewRule::fixed;
+    const QUuid badge = note.id;
+    document.insert(note, frame);
+    session.loadDocument(document);
+    session.beginPreview(QStringLiteral("Preview Width"));
+    session.previewFrameBox(frame, QRectF(0, 0, 390, 300));
+    QVERIFY(session.isPreviewOnly());
+    QVERIFY(workspace.saveTo(workspace.current(), path));
+    // The held width stays on screen; the file has the design.
+    QVERIFY(session.isPreviewOnly());
+    QCOMPARE(session.document()->bounds(frame).width(), 390.0);
+    const VectorDocument saved = ProjectStore::read(path);
+    QCOMPARE(saved.bounds(frame).width(), 400.0);
+    QVERIFY(!saved.find(badge)->layout.absolute);
+    QCOMPARE(saved.find(badge)->layout.previewRule, PreviewRule::fixed);
 }
 
 void ProjectWorkspaceTests::openingTheSamePathSelectsItsTab()

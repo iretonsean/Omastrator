@@ -179,7 +179,9 @@ The test ruled out the first choice, and the author approved this instead:
    default; WORKSPACES.md section 7). Whether Super+Tab reaches the named
    workspaces on a live desktop is still to be checked by hand.
 3. **The Browser View frame:** the tool, the frame controls, streaming, the
-   Browse tool, breakpoint buttons and resize-as-preview.
+   Browse tool, breakpoint buttons and resize-as-preview. **Built** (the
+   Object ▸ Browser View menu and the Frame flyout's Browser View tool; the
+   design and what was decided while building are in BROWSER-VIEW.md).
 4. **Live inside the frame:** the element bar, tokens, Review changes,
    History, Deploy, and "Build it" through the agent. Then remove Live mode
    from the island.

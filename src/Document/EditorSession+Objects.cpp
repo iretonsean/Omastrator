@@ -502,9 +502,14 @@ QUuid EditorSession::addFrame(const QRectF &rect, const QString &name)
                 label = QStringLiteral("%1 %2").arg(name).arg(number);
         }
     }
-    VectorObject frame = VectorObject::frame(rect, label);
+    return addFrameObject(VectorObject::frame(rect, label), QStringLiteral("Frame"));
+}
+
+QUuid EditorSession::addFrameObject(VectorObject frame, const QString &step)
+{
     const QUuid id = frame.id;
-    edit(QStringLiteral("Frame"), [&](VectorDocument &document) {
+    const QRectF rect = frame.path.bounds();
+    edit(step, [&](VectorDocument &document) {
         // Drawn inside a frame, it nests in the innermost one there, as Figma's do.
         std::optional<QUuid> host;
         for (const VectorObject &object : document.objects) {
@@ -1343,7 +1348,7 @@ void EditorSession::copy() const
     }
     auto *data = new QMimeData;
     data->setData(QString::fromLatin1(DocumentCodec::clipboardMimeType),
-                  QJsonDocument(DocumentCodec::encode(objects)).toJson(QJsonDocument::Compact));
+                  QJsonDocument(DocumentCodec::encode(objects, false)).toJson(QJsonDocument::Compact));
     m_pasteCount = 0;
     QApplication::clipboard()->setMimeData(data);
 }

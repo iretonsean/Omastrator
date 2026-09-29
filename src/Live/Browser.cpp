@@ -59,9 +59,11 @@ QStringList Browser::chromiumArguments(const Options &options, const QString &pr
         return arguments;
     arguments << QStringLiteral("--no-first-run") << QStringLiteral("--no-default-browser-check") << QStringLiteral("--disable-sync");
     if (options.headless)
-        // Headless is tests (docs/OS-SUITE.md): keep the profile small, since it usually lives in a QTemporaryDir.
-        arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800") << QStringLiteral("--disk-cache-size=1")
-                  << QStringLiteral("--media-cache-size=1") << QStringLiteral("--disable-gpu-shader-disk-cache");
+        arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800");
+    const bool minimal = options.cache == Cache::minimal || (options.cache == Cache::automatic && options.headless);
+    if (minimal)
+        // Tests (docs/OS-SUITE.md): keep the profile small, since it usually lives in a QTemporaryDir.
+        arguments << QStringLiteral("--disk-cache-size=1") << QStringLiteral("--media-cache-size=1") << QStringLiteral("--disable-gpu-shader-disk-cache");
     else
         // The profile lives for good under ~/.local/share/omastrator/browser (docs/BROWSER-FRAMES.md): 64 MB of cache, no more.
         arguments << QStringLiteral("--disk-cache-size=67108864") << QStringLiteral("--media-cache-size=67108864");
@@ -127,6 +129,11 @@ QString Browser::start(const Options &options)
     if (!m_cdp.openAndWait(socket, &error))
         return QStringLiteral("Could not connect to Chromium's DevTools: %1").arg(error);
     return {};
+}
+
+void Browser::abortStart()
+{
+    m_process.kill();
 }
 
 void Browser::stop()

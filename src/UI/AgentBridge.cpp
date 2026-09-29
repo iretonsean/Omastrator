@@ -3,6 +3,7 @@
 #include "Logging.h"
 #include "UI/AgentPanels.h"
 #include "UI/AgentSheets.h"
+#include "UI/BrowserViews.h"
 #include "UI/DesignController.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/SwatchesPanel.h"
@@ -108,6 +109,11 @@ AgentBridge::AgentBridge(ProjectWorkspace &workspace, QWidget &window) : QObject
                         &AgentBridge::roastChanged})
         connect(this, signal, &m_server, &AgentServer::statusMayHaveChanged);
     connect(&m_live, &LiveSession::changed, &m_server, &AgentServer::statusMayHaveChanged);
+    // Live's window uses the profile Browser Views' tabs run on, so they step aside while it is up.
+    connect(&m_live, &LiveSession::changed, this, [this] {
+        const bool up = (m_live.state() == LiveSession::State::starting || m_live.state() == LiveSession::State::running) && !m_live.inUserBrowser();
+        BrowserViews::setLiveOpen(up);
+    });
     connect(this, &AgentBridge::liveReviewChanged, &m_server, &AgentServer::statusMayHaveChanged);
     wireDeploy();
     // The extension's side panel runs the agent socket's methods and follows the same status.

@@ -1,12 +1,18 @@
 #pragma once
+#include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/InlineTextEditor.h"
 #include "Canvas/SmartGuides.h"
 #include <QCursor>
 #include <QElapsedTimer>
+#include <QFontMetricsF>
+#include <QHash>
 #include <QLineF>
+#include <QPointer>
 #include <QTimer>
 #include <memory>
+
+class QLineEdit;
 
 class Rulers;
 
@@ -60,6 +66,8 @@ struct EditorCanvas::State {
         // The Artboard tool, or the Select tool on a selected artboard: drawing a new one, moving
         // or resizing one, or moving the fresh copy an Alt-drag made.
         artboard,
+        // The Browse tool: the button is down in a Browser View's page (`object`).
+        browse,
     };
     struct Drag {
         DragKind kind = DragKind::pan;
@@ -94,6 +102,8 @@ struct EditorCanvas::State {
         std::optional<QUuid> keyCandidate;
         // Width tool: the point's position along the path (0..1), fixed at press.
         double pathT = 0;
+        // A handle drag on a Browser View is a preview of its width, never a step.
+        std::optional<QUuid> previewFrame;
     };
     std::optional<Drag> drag;
     // A fresh drag of `kind` pressed at `view`.
@@ -194,7 +204,86 @@ struct EditorCanvas::State {
     // Top-level frames' names above their corner, as Figma shows them; a click on one selects its frame.
     std::vector<std::pair<QUuid, QRectF>> frameLabels() const;
     void drawFrameLabels(QPainter &painter) const;
+    // A Browser View's line over the frame, as "Paused by reset" (EditorCanvas+Browser.cpp).
+    void drawBrowserMessages(QPainter &painter) const;
+    BrowserViewHost *browserHost = nullptr;
+    // A Browser View's address bar and sign-in strip (EditorCanvas+BrowserBar.cpp), laid out in view pixels.
+    struct BrowserBarLayout {
+        QUuid frame;
+        QRectF bar, back, forward, reload, name, address, tag;
+        // The breakpoint buttons and the width each previews, ascending; the design width is among them.
+        std::vector<std::pair<QRectF, int>> widths;
+        int designWidth = 0;
+        bool collapsed = false;
+    };
+    struct SignInStrip {
+        QRectF strip, signIn, notNow;
+    };
+    std::vector<BrowserBarLayout> browserBars() const;
+    void drawBrowserBars(QPainter &painter) const;
+    std::optional<QUuid> browserBarAt(QPointF view) const;
+    QString browserBarTip(QPointF view) const;
+    // True when the press was the bar's or the strip's.
+    bool browserBarPress(QPointF view);
+    bool browserBarMenu(QPointF view, QPoint global);
+    void openAddressEditor(const QUuid &frame);
+    void closeAddressEditor();
+    std::optional<SignInStrip> signInStrip() const;
+    void drawSignInStrip(QPainter &painter) const;
+    bool signInPress(QPointF view);
+    // The breakpoint buttons (EditorCanvas+Breakpoints.cpp) ---------------------------------
+    struct HeldPreview {
+        QUuid frame;
+        int width = 0;
+    };
+    // The width a button holds a frame at, until the same button, the design-width button, Esc, a new press or a tool change.
+    std::optional<HeldPreview> held;
+    // The width the frame is showing at while a preview is (held, or the handle drag's), rounded; nothing otherwise.
+    std::optional<int> previewedWidth(const QUuid &frame) const;
+    bool showsWidths(const QUuid &frame) const;
+    // Lays the buttons out to the left of `right`, and answers where the rest of the bar now ends.
+    double addWidthButtons(BrowserBarLayout &layout, double right, double left, const QFontMetricsF &metrics) const;
+    void holdPreview(const QUuid &frame, int width);
+    // False when nothing was held.
+    bool endHeldPreview();
+    void setDesignWidth(const QUuid &frame, int width);
+    void drawWidthButtons(QPainter &painter, const BrowserBarLayout &layout) const;
+    QPointer<QLineEdit> addressEdit;
+    QUuid addressFrame;
     std::optional<QUuid> frameLabelAt(QPointF view) const;
+
+    // Browse (EditorCanvas+Browse.cpp) -------------------------------------------------
+    // The topmost Browser View under the point, and the box its page fills, in document units.
+    std::optional<QUuid> browseFrameAt(QPointF view) const;
+    QRectF browseBox(const QUuid &frame) const;
+    void browsePress(QPointF view, Qt::KeyboardModifiers modifiers, bool doubleClick);
+    void browseMove(QPointF view, Qt::KeyboardModifiers modifiers, bool held);
+    void browseRelease(QPointF view, Qt::KeyboardModifiers modifiers);
+    bool browseWheel(QWheelEvent *event);
+    // True when the page took the key (or Browse claims it), so it goes no further.
+    bool browseKey(QKeyEvent *event, bool down);
+    bool browseReserved(const QKeyEvent *event) const;
+    bool browseInput(QInputMethodEvent *event);
+    // Whether keys go to a page: a click has put focus in one.
+    bool browseFocused() const { return session.tool() == Tool::browse && browseFocus.has_value(); }
+    // Browse ended or lost its page: the pressed button comes up and the page forgets the pointer.
+    void browseLeave();
+    void browseSend(const QUuid &frame, const QString &type, QPointF view, Qt::MouseButton button, Qt::MouseButtons buttons, int clicks,
+                    Qt::KeyboardModifiers modifiers);
+    void setBrowseFocus(const std::optional<QUuid> &frame);
+    std::optional<QUuid> browseFocus;
+    std::optional<QUuid> browseHover;
+    QElapsedTimer browseClickClock;
+    QElapsedTimer browseMoveClock;
+    QPointF browseClickView;
+    int browseClicks = 0;
+    // Keys sent down and not yet up, so leaving Browse can release them: a page that sees Shift stuck stays selecting.
+    struct BrowseKeyDown {
+        QUuid frame;
+        QString text;
+        Qt::KeyboardModifiers modifiers;
+    };
+    QHash<int, BrowseKeyDown> browseKeysDown;
 
     // Scissors (C) ------------------------------------------------------------------
     void scissorsPress(QPointF view);
@@ -254,6 +343,7 @@ struct EditorCanvas::State {
     void shapePress(QPointF view);
     void dragShape(QPointF view, Qt::KeyboardModifiers modifiers);
     void dragFrame(const QRectF &rect);
+    void finishBrowserView();
     VectorPath shapePath(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers) const;
 
     // Shape Builder (Shift-M) -------------------------------------------------

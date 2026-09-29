@@ -3,6 +3,7 @@
 #include <QString>
 #include <QUuid>
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -44,6 +45,8 @@ public:
     std::optional<Snapshot> undo();
     std::optional<Snapshot> redo();
     qint64 retainedBytes(const std::optional<VectorDocument> &current) const;
+    // Rewrites every recorded snapshot, so a change that isn't an edit (a page's own navigation) isn't undone by a later step.
+    void mapDocuments(const std::function<void(VectorDocument &)> &change);
 
 private:
     struct Entry {

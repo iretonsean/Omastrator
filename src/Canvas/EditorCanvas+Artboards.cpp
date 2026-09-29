@@ -208,6 +208,14 @@ std::vector<std::pair<QUuid, QRectF>> EditorCanvas::State::frameLabels() const
             const VectorObject *object = document.find(id);
             if (!object || object->kind != ObjectKind::frame || !document.isEffectivelyVisible(id))
                 continue;
+            if (object->browser && browserHost) {
+                // A Browser View's name is part of its bar.
+                for (const BrowserBarLayout &layout : browserBars()) {
+                    if (layout.frame == id)
+                        labels.emplace_back(id, layout.name);
+                }
+                continue;
+            }
             const QRectF box = object->path.painterPath().boundingRect();
             const QPointF at = toView(box.topLeft()) - QPointF(0, 5);
             const double width = std::min(metrics.horizontalAdvance(object->name) + 2, std::max(24.0, toView(box.topRight()).x() - at.x()));
@@ -227,6 +235,9 @@ void EditorCanvas::State::drawFrameLabels(QPainter &painter) const
     painter.save();
     painter.setFont(font);
     for (const auto &[id, rect] : labels) {
+        // The bar draws a Browser View's own.
+        if (session.document()->find(id)->browser && browserHost)
+            continue;
         painter.setPen(session.isSelected(id) ? accent() : canvas.palette().color(QPalette::PlaceholderText));
         const QString name = QFontMetricsF(font).elidedText(session.document()->find(id)->name, Qt::ElideRight, rect.width());
         painter.drawText(rect, Qt::AlignLeft | Qt::AlignBottom, name);

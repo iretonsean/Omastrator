@@ -346,10 +346,20 @@ void EditorCanvas::State::dragScale(QPointF view, Qt::KeyboardModifiers modifier
     if (!drag->started)
         return;
     if (!drag->interacting) {
-        session.beginInteraction(QStringLiteral("Scale"));
+        // Resizing a Browser View's handles previews the site at that width and leaves the design alone.
+        if (const std::optional<QUuid> frame = session.selectedBrowserView(); frame && session.document()->find(*frame)->shape) {
+            drag->previewFrame = frame;
+            session.beginPreview(QStringLiteral("Preview Width"));
+        } else {
+            session.beginInteraction(QStringLiteral("Scale"));
+        }
         drag->interacting = true;
     }
-    session.previewTransform(handleScale(drag->startBounds, drag->handle, view, modifiers), true);
+    const QTransform scale = handleScale(drag->startBounds, drag->handle, view, modifiers);
+    if (drag->previewFrame)
+        session.previewFrameBox(*drag->previewFrame, scale.mapRect(drag->startBounds));
+    else
+        session.previewTransform(scale, true);
 }
 
 void EditorCanvas::State::dragRotate(QPointF view, Qt::KeyboardModifiers modifiers)

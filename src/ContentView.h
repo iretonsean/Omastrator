@@ -85,6 +85,8 @@ private:
     // Canvas keys pressed while a panel holds focus: true when the canvas took them.
     bool panelKey(QWidget *focus, QKeyEvent *event);
     void showPointer(std::optional<QPointF> point);
+    // A line in the status bar's hint for a few seconds.
+    void flash(const QString &text);
     void retitleTools();
 
     EditorSession &m_session;

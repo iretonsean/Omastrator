@@ -13,6 +13,8 @@ QString path();
 // "https://example.com", "http://localhost:5173".
 QString originOf(const QUrl &url);
 std::optional<QString> folderFor(const QUrl &url);
+// Whether the page is one of the user's own sites (a registered origin): the rest are somebody else's.
+bool owns(const QUrl &url);
 // Returns why it couldn't save, or empty.
 QString remember(const QUrl &url, const QString &folder);
 QString forget(const QUrl &url);
