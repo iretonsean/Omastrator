@@ -70,6 +70,8 @@ private slots:
     void characterReadsMixedAcrossTexts();
     void areaTextResizesItsBoxNotItsGlyphs();
     void theLayoutSectionDrivesAutoLayout();
+    void paddingCanBeSetPerSide();
+    void inferredUnevenPaddingShowsEverySide();
 
 };
 
@@ -816,6 +818,98 @@ void PropertiesPanelTests::theLayoutSectionDrivesAutoLayout()
         session.select({frame});
         QTest::qWait(100);
         panel.grab().save(QString::fromLocal8Bit(grab) + QStringLiteral("/layout-panel.png"));
+    }
+}
+
+void PropertiesPanelTests::paddingCanBeSetPerSide()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = session.addPath(Shapes::rectangle(QRectF(20, 20, 40, 30)), QStringLiteral("A"));
+    session.select({a});
+    session.frameSelection();
+    const QUuid frame = session.selection().front();
+    session.addAutoLayout();
+    PropertiesPanel panel(session);
+    panel.resize(300, 900);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    const auto shown = [&](const char *name) { return panel.findChild<QWidget *>(name)->isVisible(); };
+    const auto padding = [&] { return *session.document()->find(frame)->autoLayout; };
+    auto *toggle = panel.findChild<QToolButton *>("layoutPaddingSides");
+    QVERIFY(shown("layoutPaddingX") && shown("layoutPaddingY") && !shown("layoutPaddingLeft") && !toggle->isChecked());
+    // The toggle opens a field per side, showing what the pair did.
+    toggle->click();
+    QVERIFY(!shown("layoutPaddingX") && shown("layoutPaddingLeft") && shown("layoutPaddingTop")
+            && shown("layoutPaddingRight") && shown("layoutPaddingBottom"));
+    QCOMPARE(numberNamed(panel, "layoutPaddingRight")->value(), padding().paddingRight);
+    // Each side is its own edit.
+    type(panel, "layoutPaddingLeftField", "3");
+    type(panel, "layoutPaddingTopField", "5");
+    type(panel, "layoutPaddingRightField", "7");
+    type(panel, "layoutPaddingBottomField", "11");
+    QCOMPARE(padding().paddingLeft, 3.0);
+    QCOMPARE(padding().paddingTop, 5.0);
+    QCOMPARE(padding().paddingRight, 7.0);
+    QCOMPARE(padding().paddingBottom, 11.0);
+    QCOMPARE(session.undoName(), QString("Padding"));
+    // Uneven sides stay open, and the pair reads Mixed.
+    toggle->click();
+    QVERIFY(toggle->isChecked() && shown("layoutPaddingLeft"));
+    if (const QByteArray grab = qgetenv("OMASTRATOR_TEST_GRAB"); !grab.isEmpty()) {
+        QTest::qWait(100);
+        panel.grab().save(QString::fromLocal8Bit(grab) + QStringLiteral("/layout-padding-sides.png"));
+    }
+    // A scrub passes through many values and undoes in one step.
+    const std::vector<QString> before = session.undoNames();
+    scrub(numberNamed(panel, "layoutPaddingBottom")->handle(), 20);
+    QCOMPARE(padding().paddingBottom, 31.0);
+    QCOMPARE(padding().paddingTop, 5.0);
+    QCOMPARE(session.undoNames().size(), before.size() + 1);
+    session.undo();
+    QCOMPARE(padding().paddingBottom, 11.0);
+    // Equal pairs let the toggle go back to the pair.
+    type(panel, "layoutPaddingRightField", "3");
+    type(panel, "layoutPaddingBottomField", "5");
+    toggle->click();
+    QVERIFY(shown("layoutPaddingX") && !shown("layoutPaddingLeft"));
+    QCOMPARE(numberNamed(panel, "layoutPaddingX")->value(), 3.0);
+    QCOMPARE(numberNamed(panel, "layoutPaddingY")->value(), 5.0);
+    // A pair scrub is one step as well.
+    const size_t steps = session.undoNames().size();
+    scrub(numberNamed(panel, "layoutPaddingX")->handle(), 10);
+    QCOMPARE(padding().paddingLeft, 13.0);
+    QCOMPARE(padding().paddingRight, 13.0);
+    QCOMPARE(session.undoNames().size(), steps + 1);
+}
+
+// What Add Auto Layout inferred on the author's canvas: the pair read "Mixed" and hid why children sat off-centre.
+void PropertiesPanelTests::inferredUnevenPaddingShowsEverySide()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(400, 300));
+    const QUuid a = session.addPath(Shapes::rectangle(QRectF(20, 20, 40, 30)), QStringLiteral("A"));
+    session.select({a});
+    session.frameSelection();
+    session.addAutoLayout();
+    AutoLayout layout = *session.selectedAutoLayout();
+    layout.paddingLeft = 10;
+    layout.paddingTop = 10;
+    layout.paddingRight = 316;
+    layout.paddingBottom = 118;
+    session.setAutoLayout(layout, QStringLiteral("Padding"));
+    PropertiesPanel panel(session);
+    panel.resize(300, 900);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    QVERIFY(panel.findChild<QToolButton *>("layoutPaddingSides")->isChecked());
+    QVERIFY(panel.findChild<QWidget *>("layoutPaddingLeft")->isVisible() && !panel.findChild<QWidget *>("layoutPaddingX")->isVisible());
+    const std::array<std::pair<const char *, double>, 4> sides{{{"layoutPaddingLeft", 10}, {"layoutPaddingTop", 10},
+                                                                {"layoutPaddingRight", 316}, {"layoutPaddingBottom", 118}}};
+    for (const auto &[name, value] : sides) {
+        QVERIFY(!numberNamed(panel, name)->isMixed());
+        QCOMPARE(numberNamed(panel, name)->value(), value);
+        QCOMPARE(numberNamed(panel, name)->field->text(), NumberField::formatted(value));
     }
 }
 

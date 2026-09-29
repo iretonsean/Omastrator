@@ -183,6 +183,13 @@ void corner(QPainter &painter)
     painter.drawPath(path);
 }
 
+// A box with a smaller one inset: the room a frame keeps around its content.
+void padding(QPainter &painter)
+{
+    painter.drawRect(QRectF(2.5, 2.5, 13, 13));
+    painter.drawRect(QRectF(6.5, 6.5, 5, 5));
+}
+
 // Two overlapping squares; the part the operation keeps is filled.
 void pathfinder(QPainter &painter, int operation)
 {
@@ -305,6 +312,7 @@ void PanelIcons::paint(QPainter &painter, PanelIcon icon, QPointF origin, double
     case PanelIcon::more: dots(painter); break;
     case PanelIcon::leading: leadingGlyph(painter); break;
     case PanelIcon::tracking: trackingGlyph(painter); break;
+    case PanelIcon::padding: padding(painter); break;
     }
     painter.restore();
 }
