@@ -105,6 +105,8 @@ public:
     void retryUpload(QUuid id);
     void resolveConflict(QUuid id);
     CloudUploader::Status uploadStatus(QUuid id) const;
+    // A passing notice in the status line.
+    void showNotice(const QString &text) { setNotice(text); }
     // The status line: a passing notice, else the front tab's upload.
     QString cloudStatusText() const;
     // Recent entries: a cloud one reads "logo.omai — Google Drive" with its badge.

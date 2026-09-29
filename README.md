@@ -76,6 +76,11 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Move to Page, and Alt+PgDn/PgUp step between them. PDF, Figma, Sketch and
   Penpot files with several pages open as pages, and File ▸ Export ▸ PDF
   writes every exported artboard of every page.
+- View ▸ Pages as Workspaces (Hyprland only, off by default): each page of a
+  document with two or more pages is its own Hyprland workspace,
+  `design:<document> · <page>`, so Super+Tab and swipes move between pages.
+  Closing the document, turning it off, or `omastrator reset` gives the
+  workspaces back.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.

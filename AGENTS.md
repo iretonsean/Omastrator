@@ -84,6 +84,8 @@ Each folder builds as its own static library:
   `SharePanels`; its tests use the fake rclone and a fake `gh`. Send to a device
   (AirDrop) is `DeviceSend` and `ShareController+Device.cpp`, tested against a
   fake omdrop and omadrop.
+  Pages as Workspaces (docs/WORKSPACES.md) is `PageWorkspaces` (+Place, +Sync)
+  and `PageStandIn`; its tests run a fake Hyprland, `tests/UI/FakeHyprlandWorld.h`.
 - `src/OmastratorApp.cpp` holds `main`. `omastrator --daemon` runs the app in the
   background with no window until one is asked for (`show_window`); a second
   `omastrator` hands its files to the running one.
@@ -113,7 +115,7 @@ Each folder builds as its own static library:
   through `OMASTRATOR_HYPRPICKER`, `OMASTRATOR_SLURP`, `OMASTRATOR_GRIM`,
   `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
   `OMASTRATOR_OMDROP`, `OMASTRATOR_OMADROP`, `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL`, `OMASTRATOR_RCLONE`,
-  `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_HYPRLAND` (the `Hyprland --verify-config` check), `OMASTRATOR_ATSPI`,
+  `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_HYPRLAND_EVENTS` (the event socket's path), `OMASTRATOR_HYPRLAND` (the `Hyprland --verify-config` check), `OMASTRATOR_ATSPI`,
   `OMASTRATOR_ATSPI_TREE`, `OMASTRATOR_WL_COPY` and `OMASTRATOR_GIT`. Design
   system tests use temporary projects, a temporary `HOME` for themes and
   libraries, and a fake Omarchy command. Unset `HYPRLAND_INSTANCE_SIGNATURE` in

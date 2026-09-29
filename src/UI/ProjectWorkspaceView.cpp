@@ -77,6 +77,7 @@ ProjectWorkspaceView::ProjectWorkspaceView(ProjectWorkspace &workspace, QWidget 
     connect(m_zoomIn, &QAction::triggered, this, [this] { m_workspace.current().session.zoomIn(); });
     connect(m_zoomOut, &QAction::triggered, this, [this] { m_workspace.current().session.zoomOut(); });
     connect(&m_workspace, &ProjectWorkspace::changed, this, &ProjectWorkspaceView::synchronize);
+    m_pageWorkspaces = new PageWorkspaces(m_workspace, *this);
     synchronize();
 }
 

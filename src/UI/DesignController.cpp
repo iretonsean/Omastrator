@@ -5,8 +5,10 @@
 #include "Anywhere/Desk.h"
 #include "IO/ProjectStore.h"
 #include "UI/AgentBridge.h"
+#include "UI/PageWorkspaces.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/TaskBarActions.h"
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -237,11 +239,20 @@ void DesignController::homeOnFocus()
     const auto &monitors = m_mode->monitors();
     const auto monitor = Hyprland::monitorNamed(m_mode->monitor(), monitors);
     const Hyprland::Window *focused = nullptr;
+    // A page's stand-in is never a home: the bar goes to the editor that stands in for it.
+    const QStringList standIns = PageWorkspaces::allStandInAddresses();
     for (const Hyprland::Window &window : windows) {
         if (!Hyprland::isShown(window, monitors) || (monitor && window.monitor != monitor->id))
             continue;
         if (!focused || window.focusHistory < focused->focusHistory)
             focused = &window;
+    }
+    if (focused && standIns.contains(focused->address)) {
+        focused = nullptr;
+        for (const Hyprland::Window &window : windows) {
+            if (window.pid == QCoreApplication::applicationPid() && !standIns.contains(window.address))
+                focused = &window;
+        }
     }
     if (focused) {
         if (const auto surface = locate(QStringLiteral("window:") + focused->className, focused->address)) {

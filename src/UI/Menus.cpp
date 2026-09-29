@@ -8,6 +8,7 @@
 #include "UI/HistoryPanel.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ObjectDialogs.h"
+#include "UI/PageWorkspaces.h"
 #include "UI/ShareController.h"
 #include "UI/SharePanels.h"
 #include "UI/TaskBarActions.h"
@@ -504,6 +505,10 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
     view->addSeparator();
     add(view, QStringLiteral("contextualTaskBar"), QStringLiteral("Contextual Task Bar"), QKeySequence(), [this] {
         TaskBar::setTurnedOn(!TaskBar::isTurnedOn());
+        synchronize();
+    })->setCheckable(true);
+    add(view, QStringLiteral("pageWorkspaces"), QStringLiteral("Pages as Workspaces"), QKeySequence(), [this] {
+        PageWorkspaces::setTurnedOn(!PageWorkspaces::isTurnedOn());
         synchronize();
     })->setCheckable(true);
     QMenu *window = bar.addMenu(QStringLiteral("&Window"));

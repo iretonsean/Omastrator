@@ -51,6 +51,7 @@ constexpr Known known[] = {
     {"toolSlot/", true, "Workspace", "Tool on the rail"},
     {"referencePoint", false, "Workspace", "Transform reference point"},
     {"view/contextualTaskBar", false, "Workspace", "Contextual task bar"},
+    {"view/pageWorkspaces", false, "Workspace", "Pages as Workspaces"},
     {"view/taskBarOffset", false, "Workspace", "Task bar position"},
     {"view/taskBarPinned", false, "Workspace", "Task bar pinned"},
     {"view/taskBarPinnedAt", false, "Workspace", "Task bar pinned position"},
