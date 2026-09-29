@@ -8,6 +8,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <algorithm>
 
 // Live in a Browser View's tab (docs/LIVE-IN-FRAME.md): the session lives on the pool's thread, attaches to the frame's
 // tab and follows it. Headless Chromium on a throwaway profile; skips without Chromium.
@@ -37,13 +38,20 @@ private:
         return value;
     }
 
+    // Running, with the page's tokens scanned: the session says it runs before the overlay's scan, which waits on
+    // Chromium, so an edit sent at once can be made before there's a token to snap to.
     bool waitRunning()
     {
         for (int i = 0; i < 1200; ++i) {
             QTest::qWait(50);
             LiveSession::State state = LiveSession::State::off;
-            onPool([&] { state = m_live->state(); });
-            if (state == LiveSession::State::running)
+            bool scanned = false;
+            onPool([&] {
+                state = m_live->state();
+                const auto &tokens = m_live->tokens().tokens();
+                scanned = std::any_of(tokens.begin(), tokens.end(), [](const Token &token) { return token.name == QLatin1String("--brand"); });
+            });
+            if (state == LiveSession::State::running && scanned)
                 return true;
             if (state == LiveSession::State::failed)
                 return false;
