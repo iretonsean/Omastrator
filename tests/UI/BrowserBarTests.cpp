@@ -377,6 +377,22 @@ private slots:
         QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
     }
 
+    void aHeldPreviewEndedByUndoLeavesNothingHeld()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        rig.click(rig.button(390, rig.host.widths));
+        rig.session.undo();
+        QVERIFY(!rig.session.isPreviewOnly());
+        // Another preview, not the button's: pressing the old button must start its own, not end this one as "held".
+        rig.session.beginPreview(QStringLiteral("Other"));
+        rig.session.previewFrameBox(rig.frame, QRectF(100, 200, 500, 400));
+        rig.click(rig.button(390, rig.host.widths));
+        QVERIFY(rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 390.0);
+    }
+
     void aHeldPreviewSurvivesTheBrowseTool()
     {
         Rig rig;

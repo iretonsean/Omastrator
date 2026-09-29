@@ -434,6 +434,9 @@ void EditorCanvas::State::documentChanged()
     builderRegion.reset();
     builderEdge.reset();
     const std::optional<VectorDocument> &document = session.document();
+    // Undo, an edit or the agent ended the preview: the button no longer holds anything.
+    if (held && !session.isPreviewOnly())
+        held.reset();
     if (browseFocus && (!document || !document->find(*browseFocus)))
         setBrowseFocus(std::nullopt);
     if (browseHover && (!document || !document->find(*browseHover)))
