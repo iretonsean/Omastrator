@@ -3,7 +3,10 @@
 #include "UI/ProjectWorkspace.h"
 #include <QPushButton>
 #include <QSettings>
+#include <QTemporaryDir>
 #include <QStandardPaths>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtTest>
 
 // The welcome: presets, units, validation, create and recent files.
@@ -21,6 +24,15 @@ struct Sheet {
     int opens = 0;
     QString recent;
     NewDocumentSheet sheet{[this](QSizeF size) { created = size; }, [this] { ++opens; }, [this](const QString &path) { recent = path; }};
+    QAction &action(const char *name) { return find<QAction>(sheet, name); }
+    QStringList names() const
+    {
+        QStringList all;
+        const auto *combo = sheet.findChild<QComboBox *>("presetInput");
+        for (int i = 0; i < combo->count(); ++i)
+            all << combo->itemText(i);
+        return all;
+    }
     QComboBox &preset() { return find<QComboBox>(sheet, "presetInput"); }
     QComboBox &unit() { return find<QComboBox>(sheet, "unitInput"); }
     QLineEdit &width() { return find<QLineEdit>(sheet, "widthInput"); }
@@ -46,17 +58,36 @@ private slots:
     void invalidSizesRestCreate();
     void createAndOpenReachTheirCallbacks();
     void recentFilesAreListed();
+    void storeKeepsWhatItDoesNotOwn();
+    void storeSkipsBadEntries();
+    void aFileThatCannotBeReadIsNeverOverwritten();
+    void savedPresetsShowAtTheTopNextTime();
+    void savingNeedsAGoodSizeAndNameAndReplacesSameName();
+    void renameAndDeleteApplyToSavedOnly();
+    void builtInsHideAndReturn();
+    void savedPresetsKeepTheirUnit();
+    void twoSheetsDoNotOverwriteEachOther();
+
+private:
+    QTemporaryDir m_config;
+    static std::optional<QString> answer;
 };
+std::optional<QString> NewDocumentSheetTests::answer;
 
 void NewDocumentSheetTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QVERIFY(m_config.isValid());
+    qputenv("XDG_CONFIG_HOME", m_config.path().toUtf8());
     ProjectWorkspace::clearRecent();
+    NewDocumentSheet::setNamer([](QWidget *, const QString &, const QString &) { return answer; });
 }
 
 void NewDocumentSheetTests::cleanup()
 {
     ProjectWorkspace::clearRecent();
+    QFile::remove(PresetStore::path());
+    answer.reset();
     QSettings().remove(QLatin1String(ShortcutSettings::storageKey));
     ShortcutSettings::shared().reload();
 }
@@ -160,6 +191,276 @@ void NewDocumentSheetTests::recentFilesAreListed()
     QCOMPARE(entries.at(0)->toolTip(), QString("/tmp/second.svg"));
     entries.at(1)->click();
     QCOMPARE(sheet.recent, QString("/tmp/first.omai"));
+}
+
+void NewDocumentSheetTests::storeKeepsWhatItDoesNotOwn()
+{
+    QDir().mkpath(QFileInfo(PresetStore::path()).absolutePath());
+    QFile file(PresetStore::path());
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(R"({"version": 1, "frames": {"saved": [{"name": "Phone", "width": 393, "height": 852, "unit": "px"}], "hidden": []}, "extra": 7})");
+    file.close();
+    QVERIFY(PresetStore::write(PresetStore::documents, {{{"Poster", QSizeF(1200, 1800), LengthUnit::mm}}, {"A3"}}).isEmpty());
+    // The documents section is ours; frames and unknown keys stay.
+    const PresetStore::Section documents = PresetStore::read(PresetStore::documents);
+    QCOMPARE(documents.saved.size(), size_t(1));
+    QCOMPARE(documents.saved[0].name, QString("Poster"));
+    QCOMPARE(documents.saved[0].points, QSizeF(1200, 1800));
+    QVERIFY(documents.saved[0].unit == LengthUnit::mm);
+    QCOMPARE(documents.hidden, QStringList{"A3"});
+    const PresetStore::Section frames = PresetStore::read(PresetStore::frames);
+    QCOMPARE(frames.saved.size(), size_t(1));
+    QCOMPARE(frames.saved[0].name, QString("Phone"));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object()["extra"].toInt(), 7);
+}
+
+void NewDocumentSheetTests::storeSkipsBadEntries()
+{
+    QDir().mkpath(QFileInfo(PresetStore::path()).absolutePath());
+    QFile file(PresetStore::path());
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(R"({"documents": {"saved": [
+        {"name": "Good", "width": 100, "height": 200, "unit": "in"},
+        {"name": "", "width": 100, "height": 200},
+        {"name": "Huge", "width": 99999, "height": 200},
+        {"name": "good", "width": 5, "height": 5},
+        {"name": "Odd unit", "width": 5, "height": 5, "unit": "furlong"},
+        7], "hidden": ["A4", "A4", 3]}})");
+    file.close();
+    const PresetStore::Section section = PresetStore::read(PresetStore::documents);
+    QCOMPARE(section.saved.size(), size_t(2));
+    QCOMPARE(section.saved[0].name, QString("Good"));
+    QCOMPARE(section.saved[1].name, QString("Odd unit"));
+    QVERIFY(section.saved[1].unit == LengthUnit::px);
+    QCOMPARE(section.hidden, QStringList{"A4"});
+}
+
+// What the user has in the file is theirs: if it can't be read, it is not replaced.
+void NewDocumentSheetTests::aFileThatCannotBeReadIsNeverOverwritten()
+{
+    QDir().mkpath(QFileInfo(PresetStore::path()).absolutePath());
+    const PresetStore::Section one{{{"Kept", QSizeF(10, 10), LengthUnit::pt}}, {}};
+    const auto plant = [](const QByteArray &bytes) {
+        QFile file(PresetStore::path());
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(bytes);
+    };
+    // Not JSON, or JSON that isn't an object: not valid, not written, byte for byte still there.
+    for (const QByteArray &bytes : {QByteArray("not json at all"), QByteArray("[1, 2]"), QByteArray(R"({"documents": )")}) {
+        plant(bytes);
+        bool valid = true;
+        QVERIFY(PresetStore::read(PresetStore::documents, &valid).saved.empty());
+        QVERIFY(!valid);
+        QVERIFY(!PresetStore::write(PresetStore::documents, one).isEmpty());
+        QFile file(PresetStore::path());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), bytes);
+    }
+    // A sheet acts the same way: it says so and leaves the file.
+    plant("not json at all");
+    {
+        Sheet sheet;
+        sheet.choose(sheet.preset(), 3);
+        answer = "Zine cover";
+        sheet.action("savePreset").trigger();
+        QVERIFY(!find<QLabel>(sheet.sheet, "documentNote").text().isEmpty());
+    }
+    QFile file(PresetStore::path());
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("not json at all"));
+    file.close();
+    // Present but unreadable (root can read anything, so this part is skipped there).
+    plant(R"({"documents": {"saved": [{"name": "Mine", "width": 5, "height": 5}]}})");
+    QVERIFY(file.setPermissions(QFileDevice::WriteOwner));
+    bool valid = true;
+    if (QFile(PresetStore::path()).open(QIODevice::ReadOnly))
+        QSKIP("This user can read a file with no read permission.");
+    QVERIFY(PresetStore::read(PresetStore::documents, &valid).saved.empty());
+    QVERIFY(!valid);
+    QVERIFY(!PresetStore::write(PresetStore::documents, one).isEmpty());
+    QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    QCOMPARE(PresetStore::read(PresetStore::documents, &valid).saved.at(0).name, QString("Mine"));
+    QVERIFY(valid);
+    // Missing and empty files are just empty, and can be written.
+    QVERIFY(file.remove());
+    QVERIFY(PresetStore::read(PresetStore::documents, &valid).saved.empty());
+    QVERIFY(valid);
+    plant("  \n");
+    QVERIFY(PresetStore::write(PresetStore::documents, one).isEmpty());
+    QCOMPARE(PresetStore::read(PresetStore::documents, &valid).saved.size(), size_t(1));
+    QVERIFY(valid);
+}
+
+void NewDocumentSheetTests::savedPresetsShowAtTheTopNextTime()
+{
+    {
+        Sheet first;
+        first.choose(first.preset(), 3);
+        answer = "Zine cover";
+        // 1920 × 1080 px is now a preset of its own, on top.
+        first.action("savePreset").trigger();
+        QCOMPARE(first.names(), QStringList({"Zine cover", "Letter", "A4", "A3", "1920 × 1080", "1080 × 1080", "Custom"}));
+        QCOMPARE(first.preset().currentText(), QString("Zine cover"));
+    }
+    Sheet next;
+    QCOMPARE(next.names().first(), QString("Zine cover"));
+    // The default stays the first built-in, so Return in a fresh sheet still makes Letter.
+    QCOMPARE(next.preset().currentText(), QString("Letter"));
+    next.choose(next.preset(), 0);
+    QCOMPARE(next.unit().currentText(), QString("px"));
+    QCOMPARE(next.width().text(), QString("1920"));
+    next.create().click();
+    QCOMPARE(next.created.value(), QSizeF(1920, 1080));
+}
+
+// Each empty tab has its own sheet; an older one must not drop what a newer one saved.
+void NewDocumentSheetTests::twoSheetsDoNotOverwriteEachOther()
+{
+    Sheet a, b;
+    a.choose(a.preset(), 3);
+    answer = "Poster";
+    a.action("savePreset").trigger();
+    QCOMPARE(b.names().first(), QString("Letter"));
+    b.choose(b.preset(), 0);
+    QCOMPARE(b.preset().currentText(), QString("Letter"));
+    b.action("hidePreset").trigger();
+    const PresetStore::Section onDisk = PresetStore::read(PresetStore::documents);
+    QCOMPARE(onDisk.saved.size(), size_t(1));
+    QCOMPARE(onDisk.saved[0].name, QString("Poster"));
+    QCOMPARE(onDisk.hidden, QStringList({"Letter"}));
+    // Sheet b shows both changes, and sheet a picks up the hidden Letter when it is shown again.
+    QCOMPARE(b.names(), QStringList({"Poster", "A4", "A3", "1920 × 1080", "1080 × 1080", "Custom"}));
+    a.sheet.show();
+    QCOMPARE(a.names(), b.names());
+}
+
+void NewDocumentSheetTests::savingNeedsAGoodSizeAndNameAndReplacesSameName()
+{
+    Sheet sheet;
+    auto &note = find<QLabel>(sheet.sheet, "documentNote");
+    sheet.width().setText("0");
+    QVERIFY(!sheet.action("savePreset").isEnabled());
+    answer = "Nope";
+    sheet.action("savePreset").trigger();
+    QCOMPARE(sheet.names().size(), 6);
+    sheet.width().setText("100");
+    QVERIFY(sheet.action("savePreset").isEnabled());
+    // A blank or cancelled name saves nothing.
+    answer = "   ";
+    sheet.action("savePreset").trigger();
+    answer.reset();
+    sheet.action("savePreset").trigger();
+    QCOMPARE(sheet.names().size(), 6);
+    // A built-in's name is taken, whatever its case.
+    answer = "a4";
+    sheet.action("savePreset").trigger();
+    QCOMPARE(sheet.names().size(), 6);
+    QVERIFY(note.text().contains("built-in"));
+    answer = "Custom";
+    sheet.action("savePreset").trigger();
+    QCOMPARE(sheet.names().size(), 6);
+    // The same saved name again replaces it, and moves it to the top.
+    answer = "Banner";
+    sheet.action("savePreset").trigger();
+    sheet.width().setText("30");
+    answer = "Sticker";
+    sheet.action("savePreset").trigger();
+    sheet.width().setText("40");
+    answer = "banner";
+    sheet.action("savePreset").trigger();
+    QCOMPARE(sheet.names().mid(0, 3), QStringList({"banner", "Sticker", "Letter"}));
+    QCOMPARE(PresetStore::read(PresetStore::documents).saved.size(), size_t(2));
+    QCOMPARE(sheet.width().text(), QString("40"));
+}
+
+void NewDocumentSheetTests::renameAndDeleteApplyToSavedOnly()
+{
+    Sheet sheet;
+    // Nothing saved yet: the built-in Letter can't be renamed or deleted, only hidden.
+    QVERIFY(!sheet.action("renamePreset").isEnabled());
+    QVERIFY(!sheet.action("deletePreset").isEnabled());
+    QVERIFY(sheet.action("hidePreset").isEnabled());
+    sheet.width().setText("100");
+    answer = "Flyer";
+    sheet.action("savePreset").trigger();
+    sheet.width().setText("200");
+    answer = "Leaflet";
+    sheet.action("savePreset").trigger();
+    QVERIFY(sheet.action("renamePreset").isEnabled());
+    QVERIFY(sheet.action("deletePreset").isEnabled());
+    QVERIFY(!sheet.action("hidePreset").isEnabled());
+    // Rename keeps the size and follows the preset to its new name.
+    answer = "Handbill";
+    sheet.action("renamePreset").trigger();
+    QCOMPARE(sheet.names().mid(0, 3), QStringList({"Handbill", "Flyer", "Letter"}));
+    QCOMPARE(sheet.preset().currentText(), QString("Handbill"));
+    QCOMPARE(sheet.width().text(), QString("200"));
+    // Names already used are refused, in the note.
+    answer = "flyer";
+    sheet.action("renamePreset").trigger();
+    QCOMPARE(sheet.preset().currentText(), QString("Handbill"));
+    QVERIFY(find<QLabel>(sheet.sheet, "documentNote").text().contains("already"));
+    answer = "Letter";
+    sheet.action("renamePreset").trigger();
+    QCOMPARE(sheet.preset().currentText(), QString("Handbill"));
+    sheet.action("deletePreset").trigger();
+    QCOMPARE(sheet.names().mid(0, 2), QStringList({"Flyer", "Letter"}));
+    // Back on the first built-in.
+    QCOMPARE(sheet.preset().currentText(), QString("Letter"));
+    QCOMPARE(PresetStore::read(PresetStore::documents).saved.size(), size_t(1));
+    // Renaming a built-in does nothing.
+    sheet.action("renamePreset").trigger();
+    QCOMPARE(sheet.names().size(), 7);
+}
+
+void NewDocumentSheetTests::builtInsHideAndReturn()
+{
+    {
+        Sheet sheet;
+        QVERIFY(!sheet.action("showHiddenPresets").isEnabled());
+        sheet.action("hidePreset").trigger();
+        QCOMPARE(sheet.names(), QStringList({"A4", "A3", "1920 × 1080", "1080 × 1080", "Custom"}));
+        QCOMPARE(sheet.preset().currentText(), QString("A4"));
+        QCOMPARE(sheet.width().text(), QString("210"));
+        QVERIFY(sheet.action("showHiddenPresets").isEnabled());
+    }
+    // Hidden stays hidden in the next session.
+    Sheet next;
+    QCOMPARE(next.names().first(), QString("A4"));
+    next.action("showHiddenPresets").trigger();
+    QCOMPARE(next.names().first(), QString("Letter"));
+    QCOMPARE(next.names().size(), 6);
+    QVERIFY(PresetStore::read(PresetStore::documents).hidden.isEmpty());
+    // Hide every built-in: only Custom is left, and the size stays usable.
+    for (int i = 0; i < 5; ++i)
+        next.action("hidePreset").trigger();
+    QCOMPARE(next.names(), QStringList({"Custom"}));
+    QVERIFY(next.create().isEnabled());
+    QVERIFY(!next.action("hidePreset").isEnabled());
+    // Saving into an empty list works.
+    answer = "Only one";
+    next.action("savePreset").trigger();
+    QCOMPARE(next.names(), QStringList({"Only one", "Custom"}));
+}
+
+void NewDocumentSheetTests::savedPresetsKeepTheirUnit()
+{
+    Sheet sheet;
+    sheet.choose(sheet.unit(), int(LengthUnit::mm));
+    sheet.width().setText("100");
+    sheet.height().setText("150");
+    answer = "Postcard";
+    sheet.action("savePreset").trigger();
+    sheet.choose(sheet.preset(), 1);
+    QCOMPARE(sheet.unit().currentText(), QString("in"));
+    sheet.choose(sheet.preset(), 0);
+    QCOMPARE(sheet.unit().currentText(), QString("mm"));
+    QCOMPARE(sheet.width().text(), QString("100"));
+    QCOMPARE(sheet.height().text(), QString("150"));
+    sheet.create().click();
+    QVERIFY(std::abs(sheet.created.value().width() - 100 * 72 / 25.4) < 0.01);
 }
 
 QTEST_MAIN(NewDocumentSheetTests)

@@ -2,11 +2,13 @@
 #include "UI/OmarchyTheme.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "TemporaryConfig.h"
 #include <QApplication>
 #include <QDir>
 #include <QFontDatabase>
 #include <QLabel>
 #include <QListWidget>
+#include <QStandardPaths>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QTemporaryDir>
@@ -96,6 +98,11 @@ extern "C" ssize_t read(int descriptor, void *buffer, size_t count)
 class OmarchyThemeTests : public QObject {
     Q_OBJECT
 private slots:
+    void initTestCase()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        useTemporaryConfig();
+    }
     void theFileParsesIntoColoursAndRefusesWhatIsMissingOrMalformed();
     void lightAndDarkThemesFillThePalette();
     void withoutAThemeTheBuiltInDarkApplies();

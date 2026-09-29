@@ -1,5 +1,6 @@
 #include "Document/PathOperations.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "TemporaryConfig.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QStandardPaths>
@@ -48,6 +49,7 @@ private slots:
 void ProjectWorkspaceViewTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    useTemporaryConfig();
 }
 
 void ProjectWorkspaceViewTests::theStripFollowsTheTabsWithTheirDots()

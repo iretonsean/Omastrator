@@ -2,7 +2,10 @@
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ProjectWorkspace.h"
 #include <QFileInfo>
+#include <algorithm>
 #include <QGridLayout>
+#include <QInputDialog>
+#include <QMenu>
 #include <QShortcut>
 #include <QVBoxLayout>
 #include <cmath>
@@ -27,6 +30,12 @@ QLabel *text(const QString &words, int pixels, QFont::Weight weight, QPalette::C
     return label;
 }
 
+NewDocumentSheet::Namer &customNamer()
+{
+    static NewDocumentSheet::Namer namer;
+    return namer;
+}
+
 QString shown(double points, LengthUnit unit)
 {
     const double value = points / NewDocumentSheet::pointsPer(unit);
@@ -49,23 +58,40 @@ std::optional<double> NewDocumentSheet::dimension(const QString &text, LengthUni
 {
     bool number = false;
     const double value = text.trimmed().toDouble(&number) * pointsPer(unit);
-    if (!number || !std::isfinite(value) || value < 1 || value > maximumPoints)
+    if (!number || !std::isfinite(value) || value < 1 || value > PresetStore::maximumPoints)
         return std::nullopt;
     return value;
 }
 
 NewDocumentSheet::NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::function<void()> onOpen,
                                    std::function<void(const QString &)> onOpenRecent, QWidget *parent, std::function<void()> onCloud)
-    : QWidget(parent), m_onCreate(std::move(onCreate)), m_preset(new QComboBox(this)), m_width(new QLineEdit(this)), m_height(new QLineEdit(this)),
+    : QWidget(parent), m_onCreate(std::move(onCreate)), m_preset(new QComboBox(this)), m_presetMenu(new QToolButton(this)), m_stored(PresetStore::read(PresetStore::documents)), m_width(new QLineEdit(this)), m_height(new QLineEdit(this)),
       m_unit(new QComboBox(this)), m_note(text(QString(), 12, QFont::Normal, QPalette::PlaceholderText, this)),
       m_create(new QPushButton(QStringLiteral("Create"), this))
 {
     setObjectName(QStringLiteral("newDocumentSheet"));
     setFixedWidth(500);
     m_preset->setObjectName(QStringLiteral("presetInput"));
-    for (const Preset &preset : presets)
-        m_preset->addItem(QString::fromUtf8(preset.name));
-    m_preset->addItem(QStringLiteral("Custom"));
+    m_presetMenu->setObjectName(QStringLiteral("presetMenu"));
+    m_presetMenu->setText(QStringLiteral("⋯"));
+    m_presetMenu->setToolTip(QStringLiteral("Save, rename, delete or hide presets"));
+    m_presetMenu->setAccessibleName(QStringLiteral("Preset options"));
+    m_presetMenu->setPopupMode(QToolButton::InstantPopup);
+    m_presetMenu->setFixedSize(28, 28);
+    auto *menu = new QMenu(m_presetMenu);
+    const auto action = [&](const QString &label, const QString &name, void (NewDocumentSheet::*run)()) {
+        QAction *made = menu->addAction(label);
+        made->setObjectName(name);
+        connect(made, &QAction::triggered, this, run);
+        return made;
+    };
+    m_save = action(QStringLiteral("Save Preset…"), QStringLiteral("savePreset"), &NewDocumentSheet::savePreset);
+    m_rename = action(QStringLiteral("Rename Preset…"), QStringLiteral("renamePreset"), &NewDocumentSheet::renamePreset);
+    m_delete = action(QStringLiteral("Delete Preset"), QStringLiteral("deletePreset"), &NewDocumentSheet::deletePreset);
+    m_hide = action(QStringLiteral("Hide Preset"), QStringLiteral("hidePreset"), &NewDocumentSheet::hidePreset);
+    menu->addSeparator();
+    m_showHidden = action(QStringLiteral("Show Hidden Presets"), QStringLiteral("showHiddenPresets"), &NewDocumentSheet::showHiddenPresets);
+    m_presetMenu->setMenu(menu);
     m_width->setObjectName(QStringLiteral("widthInput"));
     m_height->setObjectName(QStringLiteral("heightInput"));
     m_unit->setObjectName(QStringLiteral("unitInput"));
@@ -81,7 +107,11 @@ NewDocumentSheet::NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::fu
     fields->setHorizontalSpacing(12);
     fields->setVerticalSpacing(8);
     fields->addWidget(text(QStringLiteral("Preset"), 12, QFont::Medium, QPalette::WindowText, this), 0, 0);
-    fields->addWidget(m_preset, 1, 0);
+    auto *presetRow = new QHBoxLayout;
+    presetRow->setSpacing(4);
+    presetRow->addWidget(m_preset, 1);
+    presetRow->addWidget(m_presetMenu);
+    fields->addLayout(presetRow, 1, 0);
     fields->addWidget(text(QStringLiteral("Width"), 12, QFont::Medium, QPalette::WindowText, this), 0, 1);
     fields->addWidget(m_width, 1, 1);
     fields->addWidget(text(QStringLiteral("×"), 14, QFont::Normal, QPalette::PlaceholderText, this), 1, 2);
@@ -136,7 +166,7 @@ NewDocumentSheet::NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::fu
     connect(m_preset, &QComboBox::activated, this, &NewDocumentSheet::choosePreset);
     connect(m_unit, &QComboBox::activated, this, &NewDocumentSheet::changeUnit);
     for (QLineEdit *field : {m_width, m_height}) {
-        connect(field, &QLineEdit::textEdited, this, [this] { m_preset->setCurrentIndex(int(presets.size())); });
+        connect(field, &QLineEdit::textEdited, this, [this] { m_preset->setCurrentIndex(customIndex()); });
         connect(field, &QLineEdit::textChanged, this, &NewDocumentSheet::validate);
     }
     // Return anywhere on the sheet creates, unless remapped.
@@ -151,7 +181,7 @@ NewDocumentSheet::NewDocumentSheet(std::function<void(QSizeF)> onCreate, std::fu
     follow();
     connect(m_create, &QPushButton::clicked, this, &NewDocumentSheet::create);
     connect(open, &QPushButton::clicked, this, [onOpen = std::move(onOpen)] { onOpen(); });
-    choosePreset(0);
+    fillPresets(QString());
 }
 
 LengthUnit NewDocumentSheet::unit() const
@@ -159,18 +189,188 @@ LengthUnit NewDocumentSheet::unit() const
     return LengthUnit(m_unit->currentIndex());
 }
 
+void NewDocumentSheet::setNamer(Namer namer)
+{
+    customNamer() = std::move(namer);
+}
+
+// Saved presets first, then the built-ins that aren't hidden. Selects `select`, else the first built-in.
+void NewDocumentSheet::fillPresets(const QString &select)
+{
+    m_choices.clear();
+    for (const PresetStore::Entry &entry : m_stored.saved)
+        m_choices.push_back({entry, false});
+    for (const Preset &preset : presets)
+        if (!m_stored.hidden.contains(QString::fromUtf8(preset.name)))
+            m_choices.push_back({{QString::fromUtf8(preset.name), preset.points, preset.unit}, true});
+    m_preset->clear();
+    int index = -1, firstBuiltIn = -1;
+    for (size_t i = 0; i < m_choices.size(); ++i) {
+        m_preset->addItem(m_choices[i].entry.name);
+        if (m_choices[i].entry.name == select)
+            index = int(i);
+        if (m_choices[i].builtIn && firstBuiltIn < 0)
+            firstBuiltIn = int(i);
+    }
+    m_preset->addItem(QStringLiteral("Custom"));
+    if (select == QLatin1String("Custom"))
+        index = customIndex();
+    if (index < 0)
+        index = firstBuiltIn >= 0 ? firstBuiltIn : m_choices.empty() ? customIndex() : 0;
+    // Every preset gone: leave the size that's there, or start from Letter.
+    if (index == customIndex() && m_width->text().isEmpty()) {
+        m_unit->setCurrentIndex(int(presets[0].unit));
+        m_shownUnit = presets[0].unit;
+        m_width->setText(shown(presets[0].points.width(), presets[0].unit));
+        m_height->setText(shown(presets[0].points.height(), presets[0].unit));
+    }
+    choosePreset(index);
+}
+
+const NewDocumentSheet::Choice *NewDocumentSheet::chosen() const
+{
+    const int index = m_preset->currentIndex();
+    return index >= 0 && index < customIndex() ? &m_choices[size_t(index)] : nullptr;
+}
+
+QString NewDocumentSheet::nameProblem(const QString &name, const QString &ignoring) const
+{
+    bool reserved = name.compare(QStringLiteral("Custom"), Qt::CaseInsensitive) == 0;
+    for (const Preset &preset : presets)
+        reserved = reserved || name.compare(QString::fromUtf8(preset.name), Qt::CaseInsensitive) == 0;
+    if (reserved)
+        return QStringLiteral("“%1” is the name of a built-in preset.").arg(name);
+    for (const PresetStore::Entry &entry : m_stored.saved)
+        if (entry.name.compare(name, Qt::CaseInsensitive) == 0 && entry.name.compare(ignoring, Qt::CaseInsensitive) != 0)
+            return QStringLiteral("There is already a preset called “%1”.").arg(name);
+    return {};
+}
+
+std::optional<QString> NewDocumentSheet::askName(const QString &title, const QString &initial)
+{
+    if (customNamer())
+        return customNamer()(this, title, initial);
+    bool accepted = false;
+    const QString name = QInputDialog::getText(this, title, QStringLiteral("Name"), QLineEdit::Normal, initial, &accepted);
+    return accepted ? std::optional<QString>(name) : std::nullopt;
+}
+
+// Every tab's welcome sheet lives on, so an action starts from what is on disk, not from
+// what this sheet read when it was built; otherwise it would drop presets saved elsewhere.
+PresetStore::Section NewDocumentSheet::reload()
+{
+    m_stored = PresetStore::read(PresetStore::documents);
+    return m_stored;
+}
+
+// Keeps the new list for this session even when it can't be written, and says so.
+void NewDocumentSheet::store(const PresetStore::Section &section, const QString &select)
+{
+    m_stored = section;
+    const QString problem = PresetStore::write(PresetStore::documents, section);
+    fillPresets(select);
+    if (!problem.isEmpty()) {
+        m_note->setText(problem);
+        m_note->setForegroundRole(QPalette::BrightText);
+    }
+}
+
+void NewDocumentSheet::savePreset()
+{
+    const std::optional<double> width = dimension(m_width->text(), unit()), height = dimension(m_height->text(), unit());
+    if (!width || !height)
+        return;
+    const std::optional<QString> asked = askName(QStringLiteral("Save Preset"), QString());
+    const QString name = asked ? asked->trimmed() : QString();
+    if (name.isEmpty())
+        return;
+    reload();
+    if (const QString problem = nameProblem(name, name); !problem.isEmpty()) {
+        m_note->setText(problem);
+        m_note->setForegroundRole(QPalette::BrightText);
+        return;
+    }
+    PresetStore::Section next = reload();
+    std::erase_if(next.saved, [&](const PresetStore::Entry &entry) { return entry.name.compare(name, Qt::CaseInsensitive) == 0; });
+    next.saved.insert(next.saved.begin(), {name, QSizeF(*width, *height), unit()});
+    store(next, name);
+}
+
+void NewDocumentSheet::renamePreset()
+{
+    const Choice *current = chosen();
+    if (!current || current->builtIn)
+        return;
+    const QString old = current->entry.name;
+    const std::optional<QString> asked = askName(QStringLiteral("Rename Preset"), old);
+    const QString name = asked ? asked->trimmed() : QString();
+    if (name.isEmpty() || name == old)
+        return;
+    reload();
+    if (const QString problem = nameProblem(name, old); !problem.isEmpty()) {
+        m_note->setText(problem);
+        m_note->setForegroundRole(QPalette::BrightText);
+        return;
+    }
+    PresetStore::Section next = reload();
+    for (PresetStore::Entry &entry : next.saved)
+        if (entry.name == old)
+            entry.name = name;
+    store(next, name);
+}
+
+void NewDocumentSheet::deletePreset()
+{
+    const Choice *current = chosen();
+    if (!current || current->builtIn)
+        return;
+    PresetStore::Section next = reload();
+    const QString name = current->entry.name;
+    std::erase_if(next.saved, [&](const PresetStore::Entry &entry) { return entry.name == name; });
+    store(next, QString());
+}
+
+void NewDocumentSheet::hidePreset()
+{
+    const Choice *current = chosen();
+    if (!current || !current->builtIn)
+        return;
+    PresetStore::Section next = reload();
+    if (!next.hidden.contains(current->entry.name))
+        next.hidden << current->entry.name;
+    store(next, QString());
+}
+
+void NewDocumentSheet::showHiddenPresets()
+{
+    PresetStore::Section next = reload();
+    next.hidden.clear();
+    store(next, m_preset->currentText());
+}
+
+void NewDocumentSheet::updatePresetMenu()
+{
+    const Choice *current = chosen();
+    m_save->setEnabled(dimension(m_width->text(), unit()) && dimension(m_height->text(), unit()));
+    m_rename->setEnabled(current && !current->builtIn);
+    m_delete->setEnabled(current && !current->builtIn);
+    m_hide->setEnabled(current && current->builtIn);
+    m_showHidden->setEnabled(!m_stored.hidden.isEmpty());
+}
+
 void NewDocumentSheet::choosePreset(int index)
 {
     m_preset->setCurrentIndex(index);
-    if (index >= int(presets.size())) {
+    if (index >= customIndex()) {
         validate();
         return;
     }
-    const Preset &preset = presets.at(size_t(index));
-    m_unit->setCurrentIndex(int(preset.unit));
-    m_shownUnit = preset.unit;
-    m_width->setText(shown(preset.points.width(), preset.unit));
-    m_height->setText(shown(preset.points.height(), preset.unit));
+    const PresetStore::Entry &entry = m_choices[size_t(index)].entry;
+    m_unit->setCurrentIndex(int(entry.unit));
+    m_shownUnit = entry.unit;
+    m_width->setText(shown(entry.points.width(), entry.unit));
+    m_height->setText(shown(entry.points.height(), entry.unit));
+    validate();
 }
 
 // The same lengths, shown in the new unit.
@@ -193,6 +393,7 @@ void NewDocumentSheet::validate()
                           : QStringLiteral("Enter sizes from 1 to 16,384 points."));
     m_note->setForegroundRole(valid ? QPalette::PlaceholderText : QPalette::BrightText);
     m_create->setEnabled(valid);
+    updatePresetMenu();
 }
 
 void NewDocumentSheet::create()
@@ -205,5 +406,11 @@ void NewDocumentSheet::create()
 void NewDocumentSheet::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    const PresetStore::Section onDisk = PresetStore::read(PresetStore::documents);
+    const auto same = [](const PresetStore::Entry &a, const PresetStore::Entry &b) { return a.name == b.name && a.points == b.points && a.unit == b.unit; };
+    if (onDisk.hidden != m_stored.hidden || !std::ranges::equal(onDisk.saved, m_stored.saved, same)) {
+        m_stored = onDisk;
+        fillPresets(m_preset->currentText());
+    }
     m_width->setFocus();
 }

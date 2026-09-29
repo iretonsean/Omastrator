@@ -2,6 +2,7 @@
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "TemporaryConfig.h"
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
@@ -49,6 +50,7 @@ private slots:
 void MenusTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    useTemporaryConfig();
     clearShortcuts();
     QSettings().remove(ContentView::layersKey);
 }

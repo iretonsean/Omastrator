@@ -9,6 +9,7 @@
 #include "UI/PaintStack.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "UI/PropertiesPanel.h"
+#include "TemporaryConfig.h"
 #include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
@@ -68,6 +69,7 @@ private slots:
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
+        useTemporaryConfig();
         QSettings().clear();
         ShortcutSettings::shared().reload();
     }
