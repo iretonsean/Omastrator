@@ -59,6 +59,12 @@ QJsonValue query(const QString &what, QString *error = nullptr);
 // Runs a dispatcher: `lua` on Omarchy 4's Lua config (through `hyprctl eval`), else `legacy` (`hyprctl dispatch …`).
 // Returns why it failed, or empty.
 QString dispatch(const QString &lua, const QString &legacy);
+// Window and workspace dispatchers (docs/WORKSPACES.md). Each builds both dialects; each returns why it failed, or empty.
+// `workspace` is a named workspace's name and `address` a window's, with or without the leading 0x. `follow` also goes there.
+// Renaming a workspace is never needed: a rename empties the old one and Hyprland deletes it.
+QString moveWindow(const QString &address, const QString &workspace, bool follow);
+QString focusWorkspace(const QString &workspace);
+QString focusWindow(const QString &address);
 // Asks Hyprland to reload its config only (`reload config-only`: monitors and runtime state stay). Returns why it failed, or empty.
 QString reload();
 // Hyprland's own check of a config file (`Hyprland --verify-config -c PATH`, which starts no compositor; $OMASTRATOR_HYPRLAND in tests).

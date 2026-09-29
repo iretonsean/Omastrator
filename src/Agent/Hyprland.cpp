@@ -223,6 +223,40 @@ QString dispatch(const QString &lua, const QString &legacy)
     return error;
 }
 
+namespace {
+QString luaString(QString text)
+{
+    return text.replace(QLatin1Char('\\'), QStringLiteral("\\\\")).replace(QLatin1Char('"'), QStringLiteral("\\\""));
+}
+
+QString withZeroX(const QString &address)
+{
+    return address.startsWith(QLatin1String("0x")) ? address : QStringLiteral("0x") + address;
+}
+}
+
+QString moveWindow(const QString &address, const QString &workspace, bool follow)
+{
+    const QString window = withZeroX(address);
+    return dispatch(QStringLiteral("hl.dispatch(hl.dsp.window.move({ workspace = \"name:%1\", follow = %2, window = \"address:%3\" }))")
+                        .arg(luaString(workspace), follow ? QStringLiteral("true") : QStringLiteral("false"), window),
+                    QStringLiteral("%1 name:%2,address:%3")
+                        .arg(follow ? QStringLiteral("movetoworkspace") : QStringLiteral("movetoworkspacesilent"), workspace, window));
+}
+
+QString focusWorkspace(const QString &workspace)
+{
+    return dispatch(QStringLiteral("hl.dispatch(hl.dsp.focus({ workspace = \"%1\" }))").arg(luaString(workspace)),
+                    QStringLiteral("workspace %1").arg(workspace));
+}
+
+QString focusWindow(const QString &address)
+{
+    const QString window = withZeroX(address);
+    return dispatch(QStringLiteral("hl.dispatch(hl.dsp.focus({ window = \"address:%1\" }))").arg(window),
+                    QStringLiteral("focuswindow address:%1").arg(window));
+}
+
 bool isShown(const Window &window, const std::vector<Monitor> &monitors)
 {
     if (!window.mapped || window.hidden)
