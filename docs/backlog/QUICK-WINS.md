@@ -16,7 +16,7 @@ file with the work. Don't delete finished items.
 
 - [x] 1. Text stroke inside/outside (check first) (cefed5e, 2026-09-28)
 - [x] 2. Non-printing / non-exporting artboards (a711523, 2026-09-28)
-- [ ] 3. Editable document presets
+- [x] 3. Editable document presets (bcd5b25, 2026-09-28)
 - [ ] 4. Frame presets
 - [x] 5. Per-side padding fields in auto layout (b63e6d1, 2026-09-28)
 - [ ] 6. Lock Document (read-only mode)
