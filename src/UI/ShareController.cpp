@@ -4,6 +4,7 @@
 #include "Live/History.h"
 #include "Live/WriteBack.h"
 #include "UI/AgentBridge.h"
+#include "UI/BrowserViews.h"
 #include "UI/ProjectWorkspace.h"
 #include <QClipboard>
 #include <QFileInfo>
@@ -270,8 +271,10 @@ QString ShareController::start(const Options &options)
 
 QString ShareController::render(Share::Format format, const QString &baseName, QString *file)
 {
-    const ProjectTab &tab = m_workspace.current();
-    const EditorSession &session = tab.session;
+    ProjectTab &tab = m_workspace.current();
+    EditorSession &session = tab.session;
+    // Share and Send to a device both come through here: the newest picture of each Browser View goes out with them.
+    BrowserViews::of(session)->flushPictures();
     if (!sharesSelection() && !session.document()->artboard(session.activeArtboard()).exported)
         return QStringLiteral("“%1” is set not to export. Turn it on in Properties ▸ Document, or pick another artboard.")
             .arg(session.document()->artboard(session.activeArtboard()).name);

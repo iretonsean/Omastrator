@@ -37,6 +37,8 @@ public:
     void resume(const QUuid &frame);
     // The newest picture and address go into the document now, as before a save or an export.
     void flushPictures();
+    // A streamed picture as it arrives; it goes into the document at the next flush. Tests use it in place of a page.
+    void notePicture(const QUuid &frame, const QImage &image);
 
     QImage picture(const QUuid &frame) const override;
     QString message(const QUuid &frame) const override;

@@ -177,6 +177,17 @@ void BrowserViews::decodeNext(const QUuid &frame)
     });
 }
 
+void BrowserViews::notePicture(const QUuid &frame, const QImage &image)
+{
+    const auto found = m_entries.find(frame);
+    if (found == m_entries.end() || image.isNull())
+        return;
+    found->image = image;
+    found->imageSaved = false;
+    found->lost = 0;
+    scheduleRepaint(frame);
+}
+
 void BrowserViews::decoded(const QUuid &frame, const QImage &image, int ack)
 {
     const auto found = m_entries.find(frame);
@@ -184,12 +195,7 @@ void BrowserViews::decoded(const QUuid &frame, const QImage &image, int ack)
         return;
     Entry &entry = *found;
     entry.decoding = false;
-    if (!image.isNull()) {
-        entry.image = image;
-        entry.imageSaved = false;
-        entry.lost = 0;
-        scheduleRepaint(frame);
-    }
+    notePicture(frame, image);
     // The ack is the back-pressure: the next frame comes once this one has been turned into pixels.
     if (entry.state == State::live || entry.state == State::paused)
         call(entry, QStringLiteral("Page.screencastFrameAck"), {{"sessionId", ack}});
