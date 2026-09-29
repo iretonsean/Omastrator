@@ -121,6 +121,18 @@ QList<double> ColorSpace::defaultComponents() const
 
 ColorSpace ColorSpace::load(const Document &document, const Object &spaceObject, QStringList *warnings)
 {
+    return loadAt(document, spaceObject, warnings, 0);
+}
+
+// Real files nest a base space two or three deep; a deeper chain is a loop or a bomb.
+ColorSpace ColorSpace::loadAt(const Document &document, const Object &spaceObject, QStringList *warnings, int depth)
+{
+    constexpr int maximumDepth = 8;
+    if (depth > maximumDepth) {
+        if (warnings)
+            *warnings << QStringLiteral("A color space nested too deeply and was treated as RGB.");
+        return deviceRGB();
+    }
     const Object resolved = document.resolve(spaceObject);
 
     QByteArray family;
@@ -146,7 +158,7 @@ ColorSpace ColorSpace::load(const Document &document, const Object &spaceObject,
         if (n == 0) {
             const Object alternate = stream.at(QStringLiteral("Alternate"));
             if (!alternate.isNull())
-                return load(document, alternate, warnings);
+                return loadAt(document, alternate, warnings, depth + 1);
             n = 3; // no /N and no /Alternate: assume RGB, the common case
         }
         if (n == 1)
@@ -171,8 +183,8 @@ ColorSpace ColorSpace::load(const Document &document, const Object &spaceObject,
         ColorSpace space;
         space.m_kind = Kind::indexed;
         space.m_components = 1;
-        space.m_base = std::make_shared<ColorSpace>(load(document, familyArray[1], warnings));
-        space.m_highValue = int(document.resolve(familyArray[2]).toInt(0));
+        space.m_base = std::make_shared<ColorSpace>(loadAt(document, familyArray[1], warnings, depth + 1));
+        space.m_highValue = int(std::clamp<qint64>(document.resolve(familyArray[2]).toInt(0), 0, 255));
         const Object lookupObject = document.resolve(familyArray[3]);
         if (lookupObject.isStream())
             space.m_lookup = document.streamData(lookupObject).bytes;
@@ -185,7 +197,7 @@ ColorSpace ColorSpace::load(const Document &document, const Object &spaceObject,
         ColorSpace space;
         space.m_kind = Kind::separation;
         space.m_components = 1;
-        space.m_base = std::make_shared<ColorSpace>(load(document, familyArray[2], warnings));
+        space.m_base = std::make_shared<ColorSpace>(loadAt(document, familyArray[2], warnings, depth + 1));
         if (familyArray.size() > 3)
             space.m_tintTransform = Function::load(document, familyArray[3]);
         return space;
@@ -193,8 +205,8 @@ ColorSpace ColorSpace::load(const Document &document, const Object &spaceObject,
     if (family == "DeviceN" && familyArray.size() > 2) {
         ColorSpace space;
         space.m_kind = Kind::separation;
-        space.m_components = std::max(1, int(document.resolve(familyArray[1]).toArray().size()));
-        space.m_base = std::make_shared<ColorSpace>(load(document, familyArray[2], warnings));
+        space.m_components = std::clamp(int(document.resolve(familyArray[1]).toArray().size()), 1, 32);
+        space.m_base = std::make_shared<ColorSpace>(loadAt(document, familyArray[2], warnings, depth + 1));
         if (familyArray.size() > 3)
             space.m_tintTransform = Function::load(document, familyArray[3]);
         return space;
@@ -205,7 +217,7 @@ ColorSpace ColorSpace::load(const Document &document, const Object &spaceObject,
         space.m_kind = Kind::pattern;
         space.m_components = 1;
         if (familyArray.size() > 1)
-            space.m_base = std::make_shared<ColorSpace>(load(document, familyArray[1], warnings));
+            space.m_base = std::make_shared<ColorSpace>(loadAt(document, familyArray[1], warnings, depth + 1));
         return space;
     }
 
