@@ -4,6 +4,7 @@
 #include <QPaintDevice>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
 QPainter::CompositionMode compositionMode(LayerBlendMode mode)
@@ -148,6 +149,23 @@ double maskRasterScale(const QPainter &painter)
     return std::clamp(scale, 0.25, 8.0);
 }
 
+// A mask group's raster stays under this many pixels, so a group as big as a 50 m artboard
+// can't ask for gigabytes.
+constexpr double maximumIsolatedPixels = 16'000'000;
+
+// What the painter can show, in its own coordinates. clipBoundingRect alone is empty when no clip is set.
+QRectF visibleRect(const QPainter &painter)
+{
+    bool invertible = false;
+    const QTransform back = painter.combinedTransform().inverted(&invertible);
+    if (!invertible || !painter.device())
+        return painter.hasClipping() ? painter.clipBoundingRect() : QRectF(-1e12, -1e12, 2e12, 2e12);
+    QRectF visible = back.mapRect(QRectF(0, 0, painter.device()->width(), painter.device()->height()));
+    if (painter.hasClipping())
+        visible = visible.intersected(painter.clipBoundingRect());
+    return visible;
+}
+
 // `ids` drawn alone, in `bounds` (document coordinates), at `scale` pixels per unit.
 QImage renderIsolated(const VectorDocument &document, const std::vector<QUuid> &ids, const QRectF &bounds, double scale,
                       const QPainter &like, const VectorRenderer::Options &options)
@@ -227,12 +245,16 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
         // The top child is the mask; everything under it is what it masks.
         const QRectF bounds = document.bounds(container.id, true);
         if (bounds.width() > 0 && bounds.height() > 0) {
-            const double scale = maskRasterScale(painter);
-            const std::vector<QUuid> content(children.begin(), children.end() - 1);
-            QImage rendered = renderIsolated(document, content, bounds, scale, painter, options);
-            const QImage maskImage = renderIsolated(document, {children.back()}, bounds, scale, painter, options);
-            applyLuminanceMask(rendered, maskImage, *container.mask);
-            painter.drawImage(bounds, rendered);
+            // Only what the painter can show is rasterized: the view on the canvas, the page in an export.
+            const QRectF shown = bounds.intersected(visibleRect(painter).adjusted(-1, -1, 1, 1));
+            if (shown.width() > 0 && shown.height() > 0) {
+                const double scale = std::min(maskRasterScale(painter), std::sqrt(maximumIsolatedPixels / (shown.width() * shown.height())));
+                const std::vector<QUuid> content(children.begin(), children.end() - 1);
+                QImage rendered = renderIsolated(document, content, shown, scale, painter, options);
+                const QImage maskImage = renderIsolated(document, {children.back()}, shown, scale, painter, options);
+                applyLuminanceMask(rendered, maskImage, *container.mask);
+                painter.drawImage(shown, rendered);
+            }
             painter.restore();
             return;
         }
@@ -355,9 +377,11 @@ QImage render(const VectorDocument &document, double scale, bool transparent)
 {
     // Several artboards: render the first one alone, moved to the origin.
     const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
-    const QSize size(std::max(1, int(std::ceil(page.size.width() * scale))),
-                     std::max(1, int(std::ceil(page.size.height() * scale))));
-    QImage image(size, QImage::Format_RGBA8888_Premultiplied);
+    const double width = std::max(1.0, std::ceil(page.size.width() * scale)), height = std::max(1.0, std::ceil(page.size.height() * scale));
+    // A QImage holds at most 2 GB; past that there is nothing to draw into (the caller says why).
+    if (width * height * 4 > double(std::numeric_limits<int>::max()))
+        return {};
+    QImage image(QSize(int(width), int(height)), QImage::Format_RGBA8888_Premultiplied);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.scale(scale, scale);

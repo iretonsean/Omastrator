@@ -32,7 +32,7 @@ QImage render(const VectorDocument &document, double scale, bool transparent)
         throw FileError(QStringLiteral("The export scale must be above zero."));
     const VectorDocument page = DocumentExporter::exportedPage(document);
     const double width = std::ceil(page.size.width() * scale), height = std::ceil(page.size.height() * scale);
-    if (width > maximumSide || height > maximumSide || width * height > double(maximumPixels))
+    if (!DocumentExporter::rasterFits(page.size, scale))
         throw FileError(QStringLiteral("%1 × %2 pixels is too large to export. Choose a smaller scale.").arg(width).arg(height));
     QImage image = VectorRenderer::render(page, scale, transparent);
     if (image.isNull())
@@ -59,6 +59,24 @@ QByteArray encode(const QImage &image, const char *format, int quality, double s
 }
 
 namespace DocumentExporter {
+bool rasterFits(QSizeF page, double scale)
+{
+    const double width = std::ceil(page.width() * scale), height = std::ceil(page.height() * scale);
+    return width <= maximumSide && height <= maximumSide && width * height <= double(maximumPixels);
+}
+
+double largestRasterScale(QSizeF page)
+{
+    if (!(page.width() > 0 && page.height() > 0))
+        return 1;
+    return std::min({maximumSide / page.width(), maximumSide / page.height(), std::sqrt(double(maximumPixels) / (page.width() * page.height()))});
+}
+
+QImage renderPage(const VectorDocument &document, double scale, bool transparent)
+{
+    return render(document, scale, transparent);
+}
+
 Format format(const QString &path)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();

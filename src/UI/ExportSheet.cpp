@@ -1,4 +1,5 @@
 #include "UI/ExportSheet.h"
+#include "IO/DocumentExporter.h"
 #include "Rendering/VectorRenderer.h"
 #include "UI/KeyboardShortcuts.h"
 #include <QBuffer>
@@ -38,7 +39,26 @@ QString fileSize(qint64 bytes)
     return QLocale(QLocale::English, QLocale::UnitedStates).formattedDataSize(bytes, 1, QLocale::DataSizeSIFormat);
 }
 
-constexpr std::array scales{1.0, 2.0, 3.0, 4.0};
+// The preview and its size estimate are only drawn up to this many pixels.
+constexpr double maximumPreviewPixels = 16'000'000;
+
+// 1× to 4× while they fit; a page too big for 1× (a 50 m artboard) gets smaller steps instead,
+// so PNG and JPEG stay possible. PDF and SVG have no size limit.
+std::vector<double> scaleChoices(QSizeF page)
+{
+    std::vector<double> chosen;
+    for (const double each : {1.0, 2.0, 3.0, 4.0}) {
+        if (DocumentExporter::rasterFits(page, each))
+            chosen.push_back(each);
+    }
+    if (!chosen.empty())
+        return chosen;
+    for (const double each : {0.5, 0.25, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001}) {
+        if (DocumentExporter::rasterFits(page, each))
+            chosen.push_back(each);
+    }
+    return chosen;
+}
 }
 
 // Dark gray behind the fitted preview, a checkerboard under transparency.
@@ -92,10 +112,14 @@ ExportSheet::ExportSheet(const VectorDocument &document, DocumentExporter::Forma
     auto *scale = new QHBoxLayout;
     scale->addWidget(new QLabel(QStringLiteral("Resolution"), this));
     m_scale->setObjectName(QStringLiteral("exportScale"));
-    for (const double each : scales)
+    m_scales = scaleChoices(m_document.size);
+    if (m_scales.empty())
+        m_scales = {DocumentExporter::largestRasterScale(m_document.size) * 0.99};
+    m_options.scale = m_scales.front();
+    for (const double each : m_scales)
         m_scale->addItem(QStringLiteral("%1× · %2 ppi").arg(each).arg(72 * each));
     connect(m_scale, &QComboBox::activated, this, [this](int index) {
-        m_options.scale = scales.at(size_t(index));
+        m_options.scale = m_scales.at(size_t(index));
         request();
     });
     scale->addWidget(m_scale);
@@ -174,7 +198,19 @@ void ExportSheet::encode()
 {
     m_wait->stop();
     const bool jpeg = m_format == DocumentExporter::Format::jpeg;
-    const QImage rendered = VectorRenderer::render(m_document, m_options.scale, !jpeg && m_options.transparent);
+    // A page too big to draw whole previews smaller, and its file size isn't known until it's exported.
+    const double pixels = m_document.size.width() * m_document.size.height() * m_options.scale * m_options.scale;
+    const bool reduced = pixels > maximumPreviewPixels;
+    const double previewScale = reduced ? m_options.scale * std::sqrt(maximumPreviewPixels / pixels) : m_options.scale;
+    const QImage rendered = VectorRenderer::render(m_document, previewScale, !jpeg && m_options.transparent);
+    m_reduced = reduced;
+    if (reduced) {
+        m_bytes = -1;
+        m_preview->image = rendered;
+        m_preview->update();
+        synchronize();
+        return;
+    }
     QByteArray data;
     QBuffer buffer(&data);
     buffer.open(QIODevice::WriteOnly);
@@ -195,6 +231,8 @@ void ExportSheet::synchronize()
     const qint64 width = std::lround(m_document.size.width() * m_options.scale), height = std::lround(m_document.size.height() * m_options.scale);
     m_size->setText(QStringLiteral("%1 × %2 px").arg(english.toString(width), english.toString(height)));
     m_percent->setText(QStringLiteral("%1%").arg(m_options.quality));
-    m_note->setText(m_bytes >= 0 ? QStringLiteral("· ") + fileSize(m_bytes) : QStringLiteral("· Updating preview…"));
-    m_export->setEnabled(width > 0 && height > 0);
+    m_note->setText(m_bytes >= 0 ? QStringLiteral("· ") + fileSize(m_bytes)
+                    : m_reduced ? QStringLiteral("· Preview at reduced size")
+                                : QStringLiteral("· Updating preview…"));
+    m_export->setEnabled(width > 0 && height > 0 && DocumentExporter::rasterFits(m_document.size, m_options.scale));
 }
