@@ -23,6 +23,28 @@ private slots:
         QVERIFY(!arguments.contains(QStringLiteral("--disk-cache-size=67108864")));
     }
 
+    void headlessWithACappedCacheGetsTheSixtyFourMegabyteLimits()
+    {
+        Browser::Options options;
+        options.headless = true;
+        options.cache = Browser::Cache::capped;
+        const QStringList arguments = Browser::chromiumArguments(options, QStringLiteral("/profile"));
+        QVERIFY(arguments.contains(QStringLiteral("--headless=new")));
+        QVERIFY(arguments.contains(QStringLiteral("--disk-cache-size=67108864")));
+        QVERIFY(arguments.contains(QStringLiteral("--media-cache-size=67108864")));
+        QVERIFY(!arguments.contains(QStringLiteral("--disk-cache-size=1")));
+    }
+
+    void aWindowWithAMinimalCacheGetsOneByte()
+    {
+        Browser::Options options;
+        options.cache = Browser::Cache::minimal;
+        const QStringList arguments = Browser::chromiumArguments(options, QStringLiteral("/profile"));
+        QVERIFY(!arguments.contains(QStringLiteral("--headless=new")));
+        QVERIFY(arguments.contains(QStringLiteral("--disk-cache-size=1")));
+        QVERIFY(!arguments.contains(QStringLiteral("--disk-cache-size=67108864")));
+    }
+
     void extraArgumentsComeLastSoTheyCanOverride()
     {
         Browser::Options options;

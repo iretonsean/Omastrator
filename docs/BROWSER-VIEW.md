@@ -426,3 +426,29 @@ The tests:
   by itself takes the keyboard and a workspace slot. The author's
   escape-hatch rule is that nothing grabs either. Opening it on the first
   frame is a one-line change if the author prefers it.
+
+## Decided while building
+
+- **Model (commit 1).**
+  - The picture child's id is a UUIDv5 of the frame's id, so it's stable
+    across saves.
+  - A stored picture is scaled to at most 2048 px on its long side.
+  - The renderer stretches the picture over the frame's box.
+  - The clipboard, the agent's reads and the library leave pictures out;
+    the SVG export embeds the last picture.
+  - A `browserView` URL that doesn't parse reads as "no page yet".
+- **BrowserPool (commit 2).**
+  - `open(frameId, context)` opens an `about:blank` tab, attached with Page
+    enabled, and emits `opened`. Navigating is a `call`, so the controller
+    sets the metrics before the first load.
+  - Past the 8-tab cap the paused tab shown least recently closes
+    (`CloseReason::evicted`). If every tab is on screen the oldest goes,
+    since refusing the newest would leave a frame that can't open.
+  - A Chromium that exits on its own closes every tab with
+    `CloseReason::lost`. The frames can then open again.
+  - The state file's code (`BrowserPoolState`) lives in oma_agent, not
+    oma_live, because `runReset` is in oma_agent and oma_live links it, not
+    the other way round. `runReset` ends the browser after the app's reset
+    (and if the app didn't answer), so a hung pool goes too.
+  - The app's own reset calls `closeAll` on the pool from `BrowserViews`
+    (commit 3), the first place the app owns one.

@@ -12,8 +12,12 @@
 class Browser : public QObject {
     Q_OBJECT
 public:
+    // The disk cache a Chromium keeps: minimal is 1 byte (tests, whose profile lives in a temporary folder), capped is 64 MB
+    // (the profile that lives for good). Automatic is minimal when headless and capped otherwise.
+    enum class Cache { automatic, minimal, capped };
     struct Options {
         bool headless = false;
+        Cache cache = Cache::automatic;
         // Default: defaultProfile().
         QString profile;
         // Opens this URL as an app window (an Omarchy web app) instead of a normal window.
