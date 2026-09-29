@@ -5,6 +5,8 @@
 #include "UI/BrowserViews.h"
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
+#include <QTimer>
 #include <QJsonArray>
 #include <QPointer>
 #include <QProcess>
@@ -14,10 +16,18 @@ namespace {
 constexpr auto signInKey = "browserView/signInOffered";
 constexpr qint64 ownershipCheckMs = 2000;
 
-void windowClosed(QProcess *window)
+// A process's start time in ticks, or 0 once it is gone or a zombie; it tells a pid's reuse from the same process.
+quint64 startTicks(qint64 pid)
 {
-    window->deleteLater();
-    BrowserViews::setSignInWindow(false);
+    QFile stat(QStringLiteral("/proc/%1/stat").arg(pid));
+    if (!stat.open(QIODevice::ReadOnly))
+        return 0;
+    const QByteArray line = stat.readAll();
+    // The name is in parentheses and may hold spaces, so the fields are counted after the last ")".
+    const QList<QByteArray> fields = line.mid(line.lastIndexOf(')') + 2).split(' ');
+    if (fields.size() < 20 || fields.at(0) == "Z" || fields.at(0) == "X")
+        return 0;
+    return fields.at(19).toULongLong();
 }
 }
 
@@ -160,15 +170,27 @@ void BrowserViews::signIn()
     // The window is the user's to use; nothing here drives it.
     arguments.removeIf([](const QString &argument) { return argument.startsWith(QLatin1String("--remote-debugging")); });
     arguments << QStringLiteral("about:blank");
-    auto *window = new QProcess(qApp);
-    connect(window, &QProcess::finished, qApp, [window] { windowClosed(window); });
-    connect(window, &QProcess::errorOccurred, qApp, [window](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart)
-            windowClosed(window);
-    });
-    window->setStandardOutputFile(QProcess::nullDevice());
-    window->setStandardErrorFile(QProcess::nullDevice());
-    window->start(Browser::executable(), arguments);
+    // Detached, so quitting Omastrator doesn't close the window the user may be signing in on; its pid is watched.
+    QProcess window;
+    window.setProgram(Browser::executable());
+    window.setArguments(arguments);
+    window.setStandardOutputFile(QProcess::nullDevice());
+    window.setStandardErrorFile(QProcess::nullDevice());
+    qint64 pid = 0;
+    if (!window.startDetached(&pid)) {
+        setSignInWindow(false);
+    } else {
+        const quint64 started = startTicks(pid);
+        auto *watch = new QTimer(qApp);
+        watch->setInterval(500);
+        connect(watch, &QTimer::timeout, qApp, [watch, pid, started] {
+            if (started != 0 && startTicks(pid) == started)
+                return;
+            watch->deleteLater();
+            setSignInWindow(false);
+        });
+        watch->start();
+    }
     if (m_canvas)
         m_canvas->update();
 }

@@ -3,6 +3,7 @@
 #include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
 #include "UI/BrowserViews.h"
+#include <QProcess>
 #include <QLineEdit>
 #include <QSignalSpy>
 #include <QDir>
@@ -530,6 +531,9 @@ private slots:
         QVERIFY(line.contains(QStringLiteral("--user-data-dir=") + options.profile));
         QVERIFY(!line.contains(QStringLiteral("--headless")));
         QVERIFY(!line.contains(QStringLiteral("--remote-debugging")));
+        // Nothing of ours owns the window, so quitting Omastrator leaves it open.
+        QVERIFY(qApp->findChildren<QProcess *>().isEmpty());
+        QVERIFY(BrowserViews::isSigningIn());
         QTRY_VERIFY_WITH_TIMEOUT(!BrowserViews::isSigningIn(), 10'000);
         QVERIFY(views->state(rig.frame) != BrowserViews::State::liveOpen);
         BrowserViews::setSignInAnswered(false);
