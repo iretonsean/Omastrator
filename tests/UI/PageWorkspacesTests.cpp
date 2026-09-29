@@ -80,6 +80,7 @@ private slots:
     void aSwitchAskedWithFocusButPlacedWithoutItLeavesTheUserAlone();
     void noStandInIsShownWhileNoWindowOfOursHasFocus();
     void everyWorkspaceKeepsItsIdAcrossTenSwaps();
+    void aStandInDoesNotKeepTheAppAlive();
     void aRefusedMoveStopsItAndSaysSoOnce();
     void hyprlangAndLuaDispatchStrings();
 
@@ -564,6 +565,12 @@ void PageWorkspacesTests::everyWorkspaceKeepsItsIdAcrossTenSwaps()
     for (const QString &name : rig.world.deleted())
         QVERIFY2(!name.startsWith(prefix), qPrintable(name));
     QCOMPARE(rig.world.on(QStringLiteral("special:omastrator-spare")).size(), 1);
+}
+
+void PageWorkspacesTests::aStandInDoesNotKeepTheAppAlive()
+{
+    PageStandIn standIn(1);
+    QVERIFY(!standIn.testAttribute(Qt::WA_QuitOnClose));
 }
 
 void PageWorkspacesTests::aRefusedMoveStopsItAndSaysSoOnce()

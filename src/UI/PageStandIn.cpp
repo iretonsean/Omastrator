@@ -7,6 +7,8 @@ PageStandIn::PageStandIn(int number) : QWidget(nullptr, Qt::Window | Qt::Framele
 {
     setObjectName(QStringLiteral("pageStandIn"));
     setAttribute(Qt::WA_ShowWithoutActivating);
+    // Closing the editor while a stand-in is left must still let the app quit.
+    setAttribute(Qt::WA_QuitOnClose, false);
     setFocusPolicy(Qt::NoFocus);
     setAutoFillBackground(true);
     resize(1280, 820);
