@@ -81,7 +81,7 @@ void EditorCanvas::State::finishBuilder(Qt::KeyboardModifiers modifiers)
     }
     // A click on an edge acts on the edge alone, when edges take clicks at all.
     if (gesture.click && !gesture.edges.empty() && (gesture.erase || session.shapeBuilder.clickingStrokeSplits)) {
-        gesture.edges.resize(1);
+        gesture.edges.erase(gesture.edges.begin() + 1, gesture.edges.end());
         gesture.regions.clear();
     }
     building = {};
