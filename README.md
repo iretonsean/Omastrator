@@ -65,6 +65,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Artwork Bounds, Switch Orientation and Next/Previous (Shift+PgDn/PgUp); an
   Artboards list sits in Properties ▸ Document. Export, Share and the active
   artboard's own size and background follow whichever one is active.
+- Pages: each page is its own canvas of layers, artboards and guides. The
+  Pages list tops the Layers panel (click to switch, double-click to rename,
+  drag to reorder), Object ▸ Pages has New, Duplicate, Rename, Delete and
+  Move to Page, and Alt+PgDn/PgUp step between them. PDF, Figma, Sketch and
+  Penpot files with several pages open as pages, and File ▸ Export ▸ PDF
+  writes every artboard of every page.
 - The rail's tools sit in slots that share a button when more than one lives
   together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
   Paint, Navigate): a corner triangle marks a group, right-click or a long

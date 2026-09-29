@@ -59,8 +59,9 @@ once works everywhere:
   warning.
 - **Strokes**: weight, align, cap, join, dashes. Per-side stroke weights
   aren't in the model; the one weight is used all round, warned once.
-- **Pages** → artboards, one per Kiwi `CANVAS`/REST canvas page, laid out
-  left to right with a gap, each sized to its own content's bounds.
+- **Pages** → pages (docs/PAGES.md), one per Kiwi `CANVAS`/REST canvas page,
+  each with an artboard sized to its own content's bounds, at the origin. A
+  file with one page stays a plain one-page document.
 - **Multi-page or single-node REST imports** both land as a new, unsaved tab
   (`ProjectWorkspace::openDocument`), the same as File ▸ Open.
 
@@ -114,12 +115,11 @@ once works everywhere:
   anyone reading the code expecting it to survive; the mapper skips an
   instance's own `nodeChanges` children entirely and leans on `sync` plus
   the guid-path override resolution above.
-- **Pages become artboards laid out left to right,** each sized to its own
-  top-level content's bounds (falling back to 800×600 when a page is empty),
-  with a fixed gap between them. Figma's pages are independent canvases with
-  unrelated coordinate spaces; this is the same convention Figma's own
-  "flatten to one canvas" tools use, and keeps every page's art readable
-  without overlap.
+- **Pages become pages,** each with an artboard sized to its own top-level
+  content's bounds (falling back to 800×600 when a page is empty), the
+  content moved to the origin. Figma's pages are independent canvases with
+  unrelated coordinate spaces, and so are ours now. A file with one page is a
+  plain one-page document (its artboard is named after the page).
 - **A lone `IMAGE` fill on a childless rectangle or frame becomes an actual
   image object**, matching how images are represented everywhere else in
   this model (their own layer, never a fill). Any other placement (mixed
@@ -159,9 +159,9 @@ once works everywhere:
   the HTML), used by `canPaste()` on every menu refresh, and a full `read`
   that only Paste runs. What a paste leaves out reaches the user through
   `EditorSession::pasteLeftOut`, shown by `ProjectWorkspace`.
-- **Several pages** each sit inside their own artboard (artboards go left to
-  right with a gutter, and a page's content is moved to its artboard's
-  origin).
+- **Several pages** each sit inside their own artboard on their own page
+  (a page's content is moved to its artboard's origin). An instance on one
+  page of a component on another stays on its own page.
 
 ## Tests (`tests/IO/FigmaImporterTests.cpp`, `tests/IO/ZipReaderTests.cpp`)
 

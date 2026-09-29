@@ -4,7 +4,9 @@ Phase 1 of BROWSER-FRAMES.md, and item 9 of FIGMA-AUDIT.md. A page is its own
 canvas holding layers, artboards and guides, as Figma's pages are. It is
 useful before workspaces exist, and phase 2 maps each page to a Hyprland named
 workspace by its id, so **a page's id never changes and its name is unique in
-its document**. Nothing here is built yet.
+its document**. Built in phase 1 (feat/pages): sections 1 to 6, the importers of
+section 5 and the agent tool. Where the build differs from the design, the
+notes under "Build notes" at the end say how.
 
 ## 1. The model
 
@@ -239,3 +241,33 @@ Build plan, one commit each, with its tests:
 
 Commits 1 to 9 are a shippable phase 1; 10 to 13 can land separately. Phase 2
 builds on `currentPageChanged`, `Page::id` and `Page::name`.
+
+## Build notes (phase 1, as built)
+
+Where the build chose something the design left open, or differs from it:
+
+- **The agent's `page` tool is not part of the proposal.** It runs through
+  `idleSession()`, so each page operation is the designer's own named undo
+  step, and it waits while a proposal is open. It has no delete.
+- **`document_get`** replaces the codec's `pages` key with
+  `[{id, name, current}]`, so an agent sees the list, not the tags.
+- **`render` with `page` and `selectionOnly` is rejected.** A selection lives
+  on one page. **`align` with `page`** uses that page's first artboard, or the
+  active artboard when it is the current page.
+- **Views of another page** (export, render, align) copy the document and set
+  `currentPage` on the copy, so the live view never moves.
+- **Importers make pages only for a source with more than one page.** A single
+  page stays a plain document, and its name goes to the layer and the artboard
+  as before. Each importer sets `pages`, `currentPage` (the first), `artboards`,
+  `size` and `background` directly, and tags every layer and artboard.
+- **Penpot** pages used to overlap on one canvas; they are now separate pages,
+  each laid out from its own origin. **Sketch's Symbols** page stays a page.
+- **PDF optional-content layers** are made once per page when the import has
+  pages (the key is the OCG object and the page tag), so a layer used on two
+  PDF pages is two top-level layers, one on each.
+- **Moving a selection to another page** emits `movedToPage(name)` and the
+  status bar flashes it, since the art leaves the view.
+- **Export for Screens** carries the page's `folder` in `Subject`, for the
+  per-page folders.
+- **The link between undo and view:** undoing an edit that changed the current
+  page restores it, as section 3 says; page switching itself is never a step.

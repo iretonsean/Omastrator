@@ -90,15 +90,15 @@ couldn't be tested without real files.
   allows either; a flat fill (the pattern's underlying/average color where
   known, gray otherwise) keeps the object visible and selectable rather
   than invisible, which seemed more useful given "lift, don't trace."
-- **Multi-page layout is left-to-right, not stacked.** Nothing in the brief
-  specifies a direction; left-to-right with a 40pt gap was the simplest
-  choice and mirrors how Illustrator's own default new-artboard layout
-  reads.
-- **OCG layers are shared across pages, not duplicated per page.**
-  Omastrator's layers already span every artboard (there's no per-artboard
-  layer list), so a `BDC /OC` block is mapped once per distinct Optional
+- **A PDF of several pages becomes several pages** (docs/PAGES.md), "Page N"
+  each, with one artboard at the origin of its own page, the first showing.
+  A one-page PDF stays a plain one-page document. (This replaced a
+  left-to-right layout on one canvas, which put a 40pt gap between pages.)
+- **OCG layers are shared across artboards, and made once per page when the
+  PDF has pages.** A `BDC /OC` block is mapped once per distinct Optional
   Content Group (keyed by its object number) to one top-level layer, reused
-  if content in a later page references the same OCG. Content outside any
+  if content in a later page references the same OCG. A layer belongs to one
+  page, so with several pages each gets its own layer of that name. Content outside any
   `/OC` block stays in that page's own "Page N" layer.
 - **Ghostscript is a program, never a library**, consistent with the
   licence rule (no Poppler/MuPDF linked in) — run via `QProcess`, located
@@ -166,7 +166,7 @@ couldn't be tested without real files.
 - Optional content: `/OCProperties`/`BDC /OC … EMC` become named layers,
   shared across pages by OCG identity; an OCG listed in `/D /OFF` imports
   hidden.
-- Structure: each page becomes an artboard (from `/CropBox`, falling back
+- Structure: each page becomes a page with an artboard (from `/CropBox`, falling back
   to `/MediaBox`), laid out left to right; `/Rotate` is honoured (verified
   against Ghostscript's own rendering of a 90°-rotated asymmetric fixture,
   pixel region by pixel region — 180° and 270° are implemented the same
