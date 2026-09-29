@@ -9,6 +9,7 @@
 #include <QRectF>
 #include <QThreadPool>
 #include <QTimer>
+#include <QWindow>
 #include <QUrl>
 #include <QUuid>
 
@@ -57,6 +58,10 @@ public:
     // The sign-in window holds the profile too, apart from Live: closing one must not free it for the other.
     static void setSignInWindow(bool open);
 
+    // A frame paused this long has its tab closed, so a hidden window doesn't hold Chromium up for good; showing it
+    // again reopens the tab. Tests shorten it.
+    static void setPausedCloseMs(int ms);
+
     // The pool every session shares. Tests give it their own profile and no idle wait; the app uses the defaults.
     static void setPoolOptions(const BrowserPool::Options &options);
     static BrowserPool *pool();
@@ -101,6 +106,8 @@ private:
         QString mainFrame;
         bool casting = false;
         bool frozen = false;
+        // When it went paused (m_clock), so a long pause can close the tab.
+        qint64 pausedAt = 0;
         bool shown = false;
         bool loading = false;
         bool canGoBack = false;
@@ -157,6 +164,10 @@ private:
 
     // Decides what each frame should be doing, and tells the tabs.
     void scheduleReconcile();
+    // Whether the canvas can be seen: shown, and its window exposed (not minimized or on another workspace).
+    bool onScreen() const;
+    void watchWindow();
+    void closeLongPaused();
     void reconcile();
     Want wanted(const QUuid &frame, const VectorObject &object, int streaming) const;
     void sync(const QUuid &frame, Entry &entry, const Want &want);
@@ -184,6 +195,8 @@ private:
     QTimer m_settle;
     QTimer m_repaint;
     QTimer m_flush;
+    QTimer m_pausedClose;
+    QPointer<QWindow> m_watchedWindow;
     QRectF m_dirty;
     std::vector<QUuid> m_lastSelection;
     // Frames the Browse tool has sent input to; they stream every frame.

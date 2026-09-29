@@ -119,6 +119,7 @@ private slots:
     void cleanup()
     {
         BrowserViews::setLiveOpen(false);
+        BrowserViews::setPausedCloseMs(5 * 60 * 1000);
         BrowserViews::shutdownPool();
         qunsetenv("OMASTRATOR_CHROMIUM");
     }
@@ -218,6 +219,24 @@ private slots:
         QVERIFY(!rig.session.isModified());
         rig.canvas.show();
         QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, 10'000);
+    }
+
+    void aFramePausedForALongTimeClosesItsTabAndReopensWhenShown()
+    {
+        NEEDS_CHROMIUM;
+        BrowserViews::setPausedCloseMs(1500);
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_VERIFY_WITH_TIMEOUT(rig.red(rig.views()->picture(rig.frame)), patience);
+        rig.canvas.hide();
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::paused, 10'000);
+        QCOMPARE(BrowserViews::pool()->tabCount(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::closed, 10'000);
+        QTRY_COMPARE_WITH_TIMEOUT(BrowserViews::pool()->tabCount(), 0, 10'000);
+        // The picture stays for the canvas, and showing the frame again opens a new tab.
+        QVERIFY(rig.red(rig.views()->picture(rig.frame)));
+        rig.canvas.show();
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, 30'000);
+        BrowserViews::setPausedCloseMs(5 * 60 * 1000);
     }
 
     void aFrameOffScreenNeverOpensATab()

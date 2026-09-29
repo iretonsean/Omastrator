@@ -7,6 +7,8 @@
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QSet>
+#include <QWidget>
+#include <QWindow>
 #include <algorithm>
 #include <cmath>
 
@@ -58,6 +60,17 @@ constexpr double minimumShownWidth = 160;
 constexpr int castLimit = 2560;
 constexpr qint64 castSettleMs = 150;
 constexpr qint64 scaleSettleMs = 300;
+
+int &pausedCloseMs()
+{
+    static int ms = 5 * 60 * 1000;
+    return ms;
+}
+}
+
+void BrowserViews::setPausedCloseMs(int ms)
+{
+    pausedCloseMs() = ms;
 }
 
 BrowserViews *BrowserViews::of(EditorSession &session)
@@ -81,6 +94,8 @@ BrowserViews::BrowserViews(EditorSession &session) : QObject(&session), m_sessio
     connect(&m_reconcile, &QTimer::timeout, this, &BrowserViews::reconcile);
     connect(&m_settle, &QTimer::timeout, this, &BrowserViews::reconcile);
     connect(&m_flush, &QTimer::timeout, this, &BrowserViews::flushLocations);
+    m_pausedClose.setSingleShot(true);
+    connect(&m_pausedClose, &QTimer::timeout, this, &BrowserViews::closeLongPaused);
     connect(&m_repaint, &QTimer::timeout, this, [this] {
         if (m_canvas && !m_dirty.isNull())
             m_canvas->update(m_dirty.toAlignedRect().adjusted(-2, -2, 2, 2));
@@ -113,7 +128,28 @@ void BrowserViews::attach(EditorCanvas *canvas)
         return;
     canvas->setBrowserViewHost(this);
     canvas->installEventFilter(this);
+    watchWindow();
     scheduleReconcile();
+}
+
+bool BrowserViews::onScreen() const
+{
+    if (!m_canvas || !m_canvas->isVisible())
+        return false;
+    const QWindow *window = m_canvas->window()->windowHandle();
+    return window && window->isExposed();
+}
+
+void BrowserViews::watchWindow()
+{
+    QWindow *window = m_canvas ? m_canvas->window()->windowHandle() : nullptr;
+    if (window == m_watchedWindow)
+        return;
+    if (m_watchedWindow)
+        m_watchedWindow->removeEventFilter(this);
+    m_watchedWindow = window;
+    if (window)
+        window->installEventFilter(this);
 }
 
 void BrowserViews::detach(EditorCanvas *canvas)
@@ -123,6 +159,9 @@ void BrowserViews::detach(EditorCanvas *canvas)
     if (canvas->browserViewHost() == this)
         canvas->setBrowserViewHost(nullptr);
     canvas->removeEventFilter(this);
+    if (m_watchedWindow)
+        m_watchedWindow->removeEventFilter(this);
+    m_watchedWindow = nullptr;
     m_canvas = nullptr;
     scheduleReconcile();
 }
@@ -132,6 +171,9 @@ bool BrowserViews::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_canvas) {
         switch (event->type()) {
         case QEvent::Show:
+            watchWindow();
+            scheduleReconcile();
+            break;
         case QEvent::Hide:
         case QEvent::Resize:
             scheduleReconcile();
@@ -139,6 +181,9 @@ bool BrowserViews::eventFilter(QObject *watched, QEvent *event)
         default:
             break;
         }
+    } else if (watched == m_watchedWindow && (event->type() == QEvent::Expose || event->type() == QEvent::Show || event->type() == QEvent::Hide)) {
+        // Minimizing, or a switch of workspace, exposes or hides the window without a widget event.
+        scheduleReconcile();
     }
     return QObject::eventFilter(watched, event);
 }
@@ -366,7 +411,7 @@ BrowserViews::Want BrowserViews::wanted(const QUuid &frame, const VectorObject &
     const VectorDocument &document = *m_session.document();
     const QRectF box = document.bounds(frame);
     want.css = QSize(std::max(1, int(std::lround(box.width()))), std::max(1, int(std::lround(box.height()))));
-    if (!m_canvas || !m_canvas->isVisible() || !document.isOnCurrentPage(frame) || !document.isEffectivelyVisible(frame))
+    if (!onScreen() || !document.isOnCurrentPage(frame) || !document.isEffectivelyVisible(frame))
         return want;
     want.view = m_canvas->documentToView().mapRect(box);
     want.shown = want.view.width() >= minimumShownWidth && want.view.intersects(QRectF(m_canvas->rect()));
@@ -405,7 +450,7 @@ void BrowserViews::reconcile()
         if (!object.browser)
             continue;
         present.insert(object.id);
-        if (m_canvas && m_canvas->isVisible() && document.isOnCurrentPage(object.id))
+        if (onScreen() && document.isOnCurrentPage(object.id))
             ++streaming;
     }
     // An override that names nothing runnable counts as no Chromium too.
@@ -559,7 +604,32 @@ void BrowserViews::pause(const QUuid &frame, Entry &entry)
     }
     BrowserViews::pool()->setShown(entry.key, false);
     savePicture(frame, entry);
+    if (entry.state != State::paused) {
+        entry.pausedAt = m_clock.elapsed();
+        if (!m_pausedClose.isActive())
+            m_pausedClose.start(pausedCloseMs());
+    }
     note(frame, State::paused);
+}
+
+void BrowserViews::closeLongPaused()
+{
+    const qint64 now = m_clock.elapsed();
+    qint64 next = -1;
+    for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
+        if (it->state != State::paused)
+            continue;
+        const qint64 left = it->pausedAt + pausedCloseMs() - now;
+        if (left <= 0) {
+            // The pool's closed signal puts it back to closed; coming on screen again opens a new tab.
+            savePicture(it.key(), *it);
+            BrowserViews::pool()->close(it->key);
+        } else {
+            next = next < 0 ? left : std::min(next, left);
+        }
+    }
+    if (next >= 0)
+        m_pausedClose.start(int(next) + 10);
 }
 
 void BrowserViews::dropEntry(const QUuid &frame)
