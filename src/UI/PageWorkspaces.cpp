@@ -9,6 +9,7 @@
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QSettings>
+#include <QWindow>
 #include <algorithm>
 
 namespace {

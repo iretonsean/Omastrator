@@ -47,7 +47,7 @@ public:
     bool isStream() const { return m_type == Type::stream; }
     bool isReference() const { return m_type == Type::reference; }
     // A name equal to this literal (the common "is this /Type the thing I expect" check).
-    bool isName(QLatin1StringView literal) const { return m_type == Type::name && m_bytes == literal; }
+    bool isName(QLatin1StringView literal) const { return m_type == Type::name && m_bytes == QByteArrayView(literal.data(), literal.size()); }
 
     double toReal(double fallback = 0) const { return isNumber() ? m_number : fallback; }
     qint64 toInt(qint64 fallback = 0) const { return isNumber() ? qint64(m_number) : fallback; }

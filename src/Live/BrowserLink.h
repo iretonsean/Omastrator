@@ -1,13 +1,13 @@
 #pragma once
 #include "Live/Cdp.h"
 #include <QJsonObject>
+#include <QLocalSocket>
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
 #include <functional>
 
 class QLocalServer;
-class QLocalSocket;
 
 // The user's own Chromium (docs/OS-SUITE.md, "Live in your own browser"):
 // Omastrator's extension talks to `omastrator browser-host`, which Chromium
