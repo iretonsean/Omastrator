@@ -6,9 +6,9 @@ here" just below.** Everything under "Earlier notes" is history.
 ## Next session starts here
 
 ### State (2026-09-29, later)
-- **Local `main` is 7 commits ahead of `origin/main` and not pushed:** it
-  waits on the author's OK. The last full check was 127/127, and the sweep
-  was clean. It holds:
+- **Local `main` is ahead of `origin/main` and not pushed:** it waits on the
+  author's OK. The last full check was 138/138, and the sweep was clean. It
+  holds:
   - **the Off-axis app icon** (d851871): the patch minus the promo hunk. The
     Chromium extension's icons are updated too. The README's hero is an app
     screenshot, so it didn't change;
@@ -28,21 +28,32 @@ here" just below.** Everything under "Earlier notes" is history.
       - do the Lua dispatcher key names work, including the
         `special:omastrator-spare` move;
       - does a refused dispatch exit non-zero?
+  - **Browser View phase 3, the frame** (`feat/browser-view`): streaming
+    through a headless Omastrator profile, the Browse tool, breakpoints and
+    resize as a preview. docs/BROWSER-VIEW.md holds "Decided while building",
+    the review round and the follow-ups.
+    - It went through two parallel reviews (A: model and canvas; B: the
+      browser and streaming), a fix round, a verification and two lead fixes.
+    - Sign-in is offered in the frame, not opened by itself (the lead's call;
+      the author can reverse it).
+    - **For the author's live check:** the bar and its buttons have never
+      been seen on a real screen.
 - **The island: decided 2026-09-29.** The author keeps the interim rule
   (the island shows only with Omastrator) and will revisit it after more
   tester feedback. Don't re-raise it, and don't build on it.
 - **CI:** the run on d162240 is green.
 
 ### Next, in order
-1. **Browser View phase 3, the frame** (in progress). An Opus agent is
-   writing docs/BROWSER-VIEW.md on `feat/browser-view` in
-   ~/Projects/Omastrator-share-device, from
-   browser-view/PHASE3-DESIGN.md. Then Sonnet builds it, Opus reviews it,
-   there's a fix round and a verification, and it merges.
-2. **Phase 4, Live inside the frame.** Its last step, "remove Live mode
-   from the island", touches the island: ask the author before that step.
-3. **Phase 5**, then tick QUICK-WINS item 9 with each phase's commit.
-4. **Stop there.** MEDIUM-EFFORT.md is on hold. Effects waits on the author.
+1. **Phase 4, Live inside the frame** (in progress). The design is
+   docs/LIVE-IN-FRAME.md on `feat/live-in-frame` in
+   ~/Projects/Omastrator-shortcuts, and it lists four lead decisions the
+   author can reverse. A Sonnet agent (`livebuild`) is building it, logging
+   progress in quick-wins/reports/feat-live-in-frame.md. Then it gets a
+   review, a fix round, a verification and a merge.
+   - **"The island step"** (removing Live mode from the island) is not
+     built: ask the author first.
+2. **Phase 5**, then tick QUICK-WINS item 9 with each phase's commit.
+3. **Stop there.** MEDIUM-EFFORT.md is on hold. Effects waits on the author.
 - **A small follow-up, not queued:** the `.arg(x).arg(n)` pattern in page
   naming (`EditorSession+Pages.cpp`, `VectorDocument+Pages.cpp`,
   `DocumentCodec.cpp`) mangles names that contain `%1` or `%2`. Use
