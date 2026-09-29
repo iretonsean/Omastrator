@@ -168,6 +168,36 @@ private slots:
         QCOMPARE(token, QStringLiteral("--brand"));
     }
 
+    // Live reports running once the tab is attached, a moment before the page's tokens are scanned. Looking without a pause,
+    // the first look that finds it running is inside that attach, so this edit comes in before the scan and still snaps.
+    void anEditMadeTheMomentLiveRunsSnapsToTheTokens()
+    {
+        openFrame();
+        navigate(QStringLiteral("/index.html"));
+        LiveSession::Target target;
+        target.frame = m_frame;
+        target.pool = m_pool;
+        onPool([&] { QVERIFY(m_live->start(target).isEmpty()); });
+        bool edited = false;
+        QString failure;
+        for (int i = 0; i < 200'000 && !edited && failure != QLatin1String("Live failed to start."); ++i) {
+            onPool([&] {
+                if (m_live->state() == LiveSession::State::running) {
+                    // Before the overlay is in, the page can't take an edit yet: the next look tries again.
+                    failure = m_live->edit(QStringLiteral("#title"), QStringLiteral("color"), QStringLiteral("#e3204a"));
+                    edited = failure.isEmpty();
+                } else if (m_live->state() == LiveSession::State::failed) {
+                    failure = QStringLiteral("Live failed to start.");
+                }
+            });
+        }
+        QVERIFY2(edited, qPrintable(failure));
+        QCOMPARE(computed(QStringLiteral("#title"), QStringLiteral("color")), QStringLiteral("rgb(225, 29, 72)"));
+        QString token;
+        onPool([&] { token = m_live->edits().front().token; });
+        QCOMPARE(token, QStringLiteral("--brand"));
+    }
+
     // A Save clears what it wrote with a call posted to the session. If it runs while an undo or a redo waits on the page,
     // both stacks are empty by the time the answer comes; the step being undone is not on them, and comes back to nothing.
     void aClearThatRunsInsideAnUndoOrRedoIsSurvived()

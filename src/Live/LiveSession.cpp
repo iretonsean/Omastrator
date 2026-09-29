@@ -381,6 +381,7 @@ void LiveSession::stop()
     releaseServer(!framed);
     m_frame = {};
     m_pageEditing = false;
+    m_tokensScanned = false;
     if (m_state != State::off)
         setState(State::off);
 }
@@ -484,6 +485,8 @@ void LiveSession::rescanTokens()
     const QJsonObject scan = evaluate(QStringLiteral("window.__oma ? window.__oma.scan() : null"), &error).toObject();
     const auto theme = omarchyColors();
     m_tokens = TokenSet::fromScan(scan, theme);
+    // An empty answer means the overlay wasn't in the page yet.
+    m_tokensScanned = !scan.isEmpty();
     QJsonObject ui;
     for (const auto &[name, color] : theme) {
         if (name == QLatin1String("background") || name == QLatin1String("foreground") || name == QLatin1String("accent"))
@@ -572,6 +575,10 @@ QString LiveSession::applyEdit(const QString &selector, const QString &property,
         return {};
     }
     const QStringList classes = element["classes"].toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    // Live reports running once the tab is attached, a moment before the page's tokens are scanned. An edit that comes in
+    // between (a fast script, a slow machine) scans them now, so it snaps as it would a moment later.
+    if (!m_tokensScanned)
+        rescanTokens();
     TokenSet::Resolution resolution = m_tokens.resolve(property, value, classes);
     QJsonObject request{{"selector", selector}, {"property", resolution.property}, {"value", resolution.value},
                         {"removeClass", resolution.removeClass}, {"addClass", resolution.addClass}};

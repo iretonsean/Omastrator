@@ -262,6 +262,8 @@ private:
     QUrl m_url;
     QString m_project;
     TokenSet m_tokens;
+    // The page has been scanned for tokens since this session attached. Live is "running" a moment before that.
+    bool m_tokensScanned = false;
     QJsonArray m_selection;
     std::vector<LiveEdit> m_edits;
     // Bumped by stop(), so a start still running notices it was cancelled.
