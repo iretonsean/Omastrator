@@ -1,4 +1,5 @@
 #include "../Agent/FakeAgents.h"
+#include "WidgetCleanup.h"
 #include "../Cloud/FakeCloud.h"
 #include "Agent/AgentLauncher.h"
 #include "Document/PathOperations.h"
@@ -185,10 +186,7 @@ private slots:
 
     void cleanup()
     {
-        for (QWidget *widget : QApplication::topLevelWidgets()) {
-            if (qobject_cast<QDialog *>(widget) || widget->windowFlags().testFlag(Qt::Popup))
-                delete widget;
-        }
+        deleteTopLevelWidgets([](QWidget *widget) { return qobject_cast<QDialog *>(widget) || widget->windowFlags().testFlag(Qt::Popup); });
         QTest::qWait(20);
         m_cloud.reset();
         // Nothing secret, and no share link, is ever logged.

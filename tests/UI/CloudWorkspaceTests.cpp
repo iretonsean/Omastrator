@@ -1,4 +1,5 @@
 #include "../Cloud/FakeCloud.h"
+#include "WidgetCleanup.h"
 #include "Document/PathOperations.h"
 #include "IO/ProjectStore.h"
 #include "UI/CloudBrowser.h"
@@ -130,10 +131,7 @@ void CloudWorkspaceTests::init()
 
 void CloudWorkspaceTests::cleanup()
 {
-    for (QWidget *widget : QApplication::topLevelWidgets()) {
-        if (qobject_cast<QMessageBox *>(widget) || qobject_cast<QDialog *>(widget))
-            delete widget;
-    }
+    deleteTopLevelWidgets([](QWidget *widget) { return qobject_cast<QDialog *>(widget) != nullptr; });
     QTest::qWait(50);
     m_cloud.reset();
 }

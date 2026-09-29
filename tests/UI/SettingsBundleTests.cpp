@@ -1,4 +1,5 @@
 #include "../Cloud/FakeCloud.h"
+#include "WidgetCleanup.h"
 #include "TemporaryConfig.h"
 #include "UI/CloudBrowser.h"
 #include "UI/KeyboardShortcuts.h"
@@ -150,10 +151,7 @@ void SettingsBundleTests::cleanup()
     if (settingsFile.contains(QLatin1String("/.qttest/")) && QFileInfo::exists(settingsFile))
         QFile::setPermissions(settingsFile, QFile::ReadOwner | QFile::WriteOwner);
     SettingsConfirmDialog::setResponder({});
-    for (QWidget *widget : QApplication::topLevelWidgets()) {
-        if (qobject_cast<QDialog *>(widget))
-            delete widget;
-    }
+    deleteTopLevelWidgets([](QWidget *widget) { return qobject_cast<QDialog *>(widget) != nullptr; });
 }
 
 void SettingsBundleTests::fillSettings()

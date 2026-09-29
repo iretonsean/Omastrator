@@ -1,4 +1,5 @@
 #include "Document/PathOperations.h"
+#include "WidgetCleanup.h"
 #include "UI/CommandPalette.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "UI/SharePanels.h"
@@ -138,10 +139,7 @@ private slots:
 
     void cleanup()
     {
-        for (QWidget *widget : QApplication::topLevelWidgets()) {
-            if (widget->windowFlags().testFlag(Qt::Popup))
-                delete widget;
-        }
+        deleteTopLevelWidgets([](QWidget *widget) { return widget->windowFlags().testFlag(Qt::Popup); });
         QTest::qWait(20);
     }
 

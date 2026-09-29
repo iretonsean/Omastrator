@@ -136,6 +136,8 @@ private slots:
 
     void devCommandsFollowTheProject()
     {
+        if (QStandardPaths::findExecutable(QStringLiteral("npm")).isEmpty())
+            QSKIP("npm isn't installed, and this test detects npm projects");
         QString why;
         const QString root = m_directory.filePath(QStringLiteral("projects"));
         write(root + "/override/omastrator.json", "{\"dev\": \"make serve\", \"url\": \"http://localhost:4000/\"}");
