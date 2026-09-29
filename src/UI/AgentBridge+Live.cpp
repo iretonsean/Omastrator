@@ -1,6 +1,7 @@
 #include "Agent/AgentProtocol.h"
 #include "Agent/Setup.h"
 #include "Document/EditorSession.h"
+#include "Live/Counted.h"
 #include "Live/Registry.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
@@ -71,7 +72,7 @@ QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
         record(QStringLiteral("Live edits"), plan.done.join(QLatin1Char('\n')), plan.changes, project);
     // A Browser View's write-back takes every host's edits; the ones left for the agent stay with the window if it is on the project.
     if (framed)
-        LiveFrames::clearPending(project);
+        LiveFrames::clearPending(project, edits);
     if (!framed || (!m_live.project().isEmpty() && canonical(m_live.project()) == canonical(project)))
         m_live.setEdits(plan.unresolved);
     else
@@ -87,10 +88,12 @@ QString AgentBridge::liveWriteBack(QString *agentRequest, const QString &folder)
         if (!elements.contains(edit.element))
             elements.append(edit.element);
     const QString agentFailure = liveAsk(QString(), elements, agentRequest, folder.isEmpty() ? QString() : project);
-    if (!agentFailure.isEmpty())
-        m_liveMessage = QStringLiteral("%1 edits weren't certain enough to write directly, and the agent couldn't take them: %2")
-                            .arg(plan.unresolved.size())
-                            .arg(agentFailure);
+    if (!agentFailure.isEmpty()) {
+        const bool one = plan.unresolved.size() == 1;
+        m_liveMessage = QStringLiteral("%1 %2 certain enough to write directly, and the agent couldn't take %3: %4")
+                            .arg(counted(plan.unresolved.size(), QStringLiteral("edit")), one ? QStringLiteral("wasn't") : QStringLiteral("weren't"),
+                                 one ? QStringLiteral("it") : QStringLiteral("them"), agentFailure);
+    }
     emit liveReviewChanged();
     return agentFailure.isEmpty() ? QString() : m_liveMessage;
 }
@@ -132,8 +135,9 @@ QString AgentBridge::liveAsk(const QString &instruction, const QJsonArray &eleme
         && !m_pipeline.waitingFor.contains(work.requestId))
         m_pipeline.waitingFor << work.requestId;
     if (instruction.isEmpty()) {
+        // Only what the brief carried: an edit made since stays for the next Save.
         if (framed)
-            LiveFrames::clearPending(project);
+            LiveFrames::clearPending(project, brief.edits);
         if (inWindow)
             m_live.setEdits({});
     }

@@ -52,6 +52,12 @@ constexpr const char *fakeGh =
     "fi\n"
     "exit 2\n";
 
+// Names the default agent for a scope, and puts the fake omarchy's own default (sh) back after.
+struct DefaultAgent {
+    explicit DefaultAgent(const char *name) { qputenv("FAKE_AGENT", name); }
+    ~DefaultAgent() { qunsetenv("FAKE_AGENT"); }
+};
+
 const QByteArray secret = "s3cr3t-deploy-token-9876";
 const QByteArray style = "body { color: #111; }\n";
 
@@ -413,6 +419,132 @@ private slots:
         QCOMPARE(bridge.panelProject(), first);
         QVERIFY(bridge.deployProject().isEmpty());
         QVERIFY(bridge.historyPanel().isVisible());
+    }
+
+    void aFailedSaveSaysSaveFailedAndLeavesTheWrittenEditsForTheNextSave()
+    {
+        const QString site = repository(true);
+        const QUrl url(QStringLiteral("http://127.0.0.2:19/index.html"));
+        QVERIFY(ProjectRegistry::remember(url, site).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {url});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+        QSignalSpy notices(views, &BrowserViews::notice);
+
+        // The text edit is certain and is written; the colour has no rule of its own, so it goes to an agent.
+        LiveEdit colour = headline(QStringLiteral("red"));
+        colour.property = QStringLiteral("color");
+        colour.before = QStringLiteral("#111");
+        LiveFrames::hold(site, {headline(QStringLiteral("Goodbye")), colour});
+        const QString first = git(site, {"rev-parse", "HEAD"}).trimmed();
+
+        {
+            const DefaultAgent none("no-such-agent");
+            views->act(frames[0], BrowserViewHost::Action::save);
+        }
+        QVERIFY(!bridge.deployState().running);
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("failed"));
+        // It was a Save, so it says so, in the bar and in the message.
+        QCOMPARE(views->bar(frames[0]).deploy, QStringLiteral("Save failed"));
+        QVERIFY(views->bar(frames[0]).deployFailed);
+        QCOMPARE(notices.size(), 1);
+        const QString message = notices.first().first().toString();
+        QCOMPARE(message, bridge.deployState().message);
+        QVERIFY2(message.contains(QLatin1String("1 edit wasn't certain enough to write directly, and the agent couldn't take it:")), qPrintable(message));
+        QVERIFY2(message.contains(QLatin1String("1 change is written to index.html but not committed; the next Save or Deploy commits it.")), qPrintable(message));
+        // Nothing was rolled back and nothing half-saved was committed.
+        QVERIFY(read(site + "/index.html").contains("Goodbye"));
+        QCOMPARE(git(site, {"status", "--porcelain", "--untracked-files=no"}).trimmed(), QStringLiteral("M index.html"));
+        QCOMPARE(git(site, {"rev-parse", "HEAD"}).trimmed(), first);
+        QCOMPARE(bridge.unsavedFiles(), 1);
+        // The written edit is no longer pending; the one the agent didn't take is.
+        QCOMPARE(LiveFrames::pendingEdits(site).size(), size_t(1));
+        QCOMPARE(LiveFrames::pendingEdits(site).front().property, QStringLiteral("color"));
+
+        // The next Save has an agent. It commits the written text once, with the agent's change, and pushes.
+        QFile::remove(m_directory.filePath(QStringLiteral("prompt")));
+        QVERIFY(bridge.liveSave(site, true).isEmpty());
+        QTRY_VERIFY(prompt().contains(QLatin1String("(request ")));
+        const QString id = prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0);
+        QVERIFY(bridge.liveAgentDone(id, QStringLiteral("Made the title red")).isEmpty());
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("done"));
+        QCOMPARE(git(site, {"rev-list", "--count", first + "..HEAD"}).trimmed(), QStringLiteral("1"));
+        QCOMPARE(git(site, {"show", "HEAD:index.html"}).count("Goodbye"), 1);
+        QCOMPARE(read(site + "/index.html").count("Goodbye"), 1);
+        QVERIFY(git(site, {"status", "--porcelain", "--untracked-files=no"}).trimmed().isEmpty());
+        QCOMPARE(git(site + ".git", {"rev-parse", "main"}).trimmed(), git(site, {"rev-parse", "HEAD"}).trimmed());
+        QVERIFY(LiveFrames::pendingEdits(site).empty());
+        QCOMPARE(bridge.unsavedFiles(), 0);
+        int liveEdits = 0;
+        for (const WriteBack::Review &review : bridge.liveReviews()) {
+            QVERIFY(!review.commit.isEmpty());
+            liveEdits += review.title == QLatin1String("Live edits");
+        }
+        QCOMPARE(liveEdits, 1);
+    }
+
+    void theFailureMessageAgreesWithTheCountAndOnlyNamesWhatIsOnDisk()
+    {
+        const QString site = repository(true);
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        LiveEdit colour = headline(QStringLiteral("red"));
+        colour.property = QStringLiteral("color");
+        LiveEdit other = colour;
+        other.property = QStringLiteral("padding");
+        LiveFrames::hold(site, {colour, other});
+
+        const DefaultAgent none("no-such-agent");
+        const QString message = bridge.liveSave(site, true);
+        QVERIFY2(message.contains(QLatin1String("2 edits weren't certain enough to write directly, and the agent couldn't take them:")), qPrintable(message));
+        // Nothing was written, so there is nothing to say about the disk.
+        QVERIFY2(!message.contains(QLatin1String("not committed")), qPrintable(message));
+        QCOMPARE(bridge.deployState().message, message);
+        QCOMPARE(bridge.unsavedFiles(), 0);
+        LiveFrames::clearPending(site);
+    }
+
+    void theGitHubHintIsOnlyForProjectsThatCouldUseGitHub()
+    {
+        struct Gh {
+            QByteArray was = qgetenv("OMASTRATOR_GH");
+            Gh() { qputenv("OMASTRATOR_GH", "/nonexistent/gh"); }
+            ~Gh() { qputenv("OMASTRATOR_GH", was); }
+        } missing;
+        const auto panelFor = [&](const QString &site) {
+            ProjectWorkspace workspace;
+            ProjectWorkspaceView window(workspace);
+            AgentBridge &bridge = *window.agent();
+            bridge.githubAuth(true);
+            bridge.rememberProject(site);
+            bridge.showLivePanel();
+            auto *panel = window.findChild<LivePanel *>();
+            return panel ? shownText(panel) : QString();
+        };
+        const QString hint = QStringLiteral("install the gh CLI");
+
+        // No remote yet: History could go to GitHub, so the hint is useful.
+        QString text = panelFor(repository(false));
+        QVERIFY2(text.contains(QLatin1String("Review Changes")), qPrintable(text));
+        QVERIFY2(text.contains(hint), qPrintable(text));
+        // A remote that is on GitHub: the same.
+        const QString onGitHub = repository(false);
+        git(onGitHub, {"remote", "add", "origin", "https://github.com/tester/site.git"});
+        text = panelFor(onGitHub);
+        QVERIFY2(text.contains(hint), qPrintable(text));
+        // A remote somewhere else (here a local bare repository, as a self-hosted one would be): it is no use to them.
+        text = panelFor(repository(true));
+        QVERIFY2(text.contains(QLatin1String("Review Changes")), qPrintable(text));
+        QVERIFY2(!text.contains(hint), qPrintable(text));
     }
 
     void deployOnASiteThatIsntYoursSaysSoAndRunsNothing()

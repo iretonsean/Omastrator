@@ -316,7 +316,9 @@ void EditorCanvas::State::drawEditPage(QPainter &painter) const
     const QFontMetricsF metrics(font);
     for (const BrowserViewHost::EditBox &each : boxes.selection) {
         const QRectF rect = inView(each.rect);
+        // The previous pass's label pill left a brush behind; the box is an outline.
         painter.setPen(QPen(color, 2));
+        painter.setBrush(Qt::NoBrush);
         painter.drawRect(rect);
         // The label sits under the box, or inside its bottom edge where the frame ends.
         const QString label = each.label;

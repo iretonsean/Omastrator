@@ -19,6 +19,10 @@ kind: an unknown `kind` makes an older build refuse the whole file.
   - `QImage picture`: the last picture, at 1× the frame's size.
 - **The design width is the frame's width**, and the viewport height is its
   height. 1 pt is 1 CSS px. There's no separate field that could drift.
+  Both are whole px: the tool, the handles, Transform's W and H, a breakpoint
+  and Set as Design Width all round to whole px (`BrowserView::wholeSize`, in
+  `VectorDocument::resizeFrame` and where the tool draws), whatever the zoom.
+  The position may stay fractional.
 - **Breakpoints aren't stored.** They're read from the project, or are the
   defaults (section 7). Phase 5's Duplicate at Breakpoints reads the same list.
 - `LayoutItem::previewRule` on every object: `constraints` (the default) or

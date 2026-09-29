@@ -16,7 +16,7 @@ template <typename Widget> Widget &find(QWidget &root, const QString &name)
 struct Picker {
     std::optional<std::optional<QColor>> finished;
     ColorPickerSheet sheet;
-    explicit Picker(QColor start) : sheet(start, [this](std::optional<QColor> chosen) { finished = chosen; })
+    explicit Picker(QColor start, bool alpha = false) : sheet(start, [this](std::optional<QColor> chosen) { finished = chosen; }, nullptr, alpha)
     {
         sheet.show();
         if (!QTest::qWaitForWindowExposed(&sheet))
@@ -43,6 +43,7 @@ private slots:
     void channelsAndHexSetTheColour();
     void theFieldAndStripPickByPointer();
     void okAndCancelFinish();
+    void opacityIsAnOptionInTheSheet();
 };
 
 void ColorPickerSheetTests::hsbRoundTripsColours()
@@ -115,6 +116,33 @@ void ColorPickerSheetTests::okAndCancelFinish()
     Picker cancel(QColor(10, 20, 30));
     find<QPushButton>(cancel.sheet, "pickerCancel").click();
     QVERIFY(cancel.finished.has_value() && !cancel.finished.value());
+}
+
+void ColorPickerSheetTests::opacityIsAnOptionInTheSheet()
+{
+    // Without the option there is no field, and the colour is opaque whatever it started as.
+    {
+        Picker plain(QColor(10, 20, 30, 128));
+        QVERIFY(!plain.sheet.findChild<PickerField *>(QStringLiteral("alpha")));
+        QCOMPARE(plain.sheet.color(), QColor(10, 20, 30));
+    }
+    Picker picker(QColor(10, 20, 30, 128), true);
+    QCOMPARE(picker.field("alpha").text(), QStringLiteral("50"));
+    QSignalSpy changed(&picker.sheet, &ColorPickerSheet::colorChanged);
+    picker.type("alpha", QStringLiteral("25"));
+    QVERIFY(qAbs(picker.sheet.color().alphaF() - 0.25) < 0.001);
+    QCOMPARE(picker.sheet.color().rgb(), QColor(10, 20, 30).rgb());
+    QVERIFY(changed.size() >= 1);
+    // The arrows step one percent, and a typed overflow stops at 100.
+    QTest::keyClick(&picker.field("alpha"), Qt::Key_Up);
+    QCOMPARE(picker.field("alpha").text(), QStringLiteral("26"));
+    picker.type("alpha", QStringLiteral("250"));
+    QCOMPARE(picker.sheet.color().alpha(), 255);
+    picker.sheet.setAlphaPercent(40);
+    QCOMPARE(picker.field("alpha").text(), QStringLiteral("40"));
+    find<QPushButton>(picker.sheet, QStringLiteral("pickerOK")).click();
+    QVERIFY(picker.finished && *picker.finished);
+    QVERIFY(qAbs((*picker.finished)->alphaF() - 0.4) < 0.001);
 }
 
 QTEST_MAIN(ColorPickerSheetTests)

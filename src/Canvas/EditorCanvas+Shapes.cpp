@@ -85,8 +85,11 @@ void EditorCanvas::State::finishBrowserView()
 }
 
 // The Frame tool: a frame over the drag, nested in the innermost frame under the press, as Figma's are.
-void EditorCanvas::State::dragFrame(const QRectF &rect)
+void EditorCanvas::State::dragFrame(const QRectF &drawn)
 {
+    const bool web = session.tool() == Tool::browserView;
+    // A page lays out at whole CSS px, whatever the zoom the drag was made at.
+    const QRectF rect = web ? QRectF(drawn.topLeft(), BrowserView::wholeSize(drawn.size())) : drawn;
     if (!drag->interacting) {
         const VectorDocument &document = *session.document();
         std::optional<QUuid> host;
@@ -95,7 +98,6 @@ void EditorCanvas::State::dragFrame(const QRectF &rect)
                 && !document.isEffectivelyLocked(object.id) && object.path.painterPath().contains(drag->pressDocument))
                 host = object.id;
         }
-        const bool web = session.tool() == Tool::browserView;
         session.beginInteraction(web ? QStringLiteral("Draw Browser View") : QStringLiteral("Draw Frame"));
         VectorObject frame = VectorObject::frame(rect, document.uniqueName(web ? QStringLiteral("Browser View") : QStringLiteral("Frame")));
         if (web)

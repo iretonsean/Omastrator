@@ -5,48 +5,87 @@ here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
-### State (2026-09-29, later)
-- **Local `main` is 7 commits ahead of `origin/main` and not pushed:** it
-  waits on the author's OK. The last full check was 127/127, and the sweep
-  was clean. It holds:
-  - **the Off-axis app icon** (d851871): the patch minus the promo hunk. The
-    Chromium extension's icons are updated too. The README's hero is an app
-    screenshot, so it didn't change;
-  - **the size fixes** (`chore/size`): strip, `OMASTRATOR_BUILD_TESTS` (off
-    for installs), and `OMASTRATOR_LTO` (on for installs; the stripped
-    binary goes from 10.2 MB to 7.8 MB, -23%). Captures are pruned (older
-    than 30 days, keeping the newest 20), and Chromium's cache is capped at
-    64 MB. Agent logs (30) and setup backups (5) already had caps. The
-    report is quick-wins/reports/chore-size.md;
-  - **Browser View phase 2, Pages as Workspaces** (`feat/workspaces`), off
-    by default: View > Pages as Workspaces. docs/WORKSPACES.md §7 is the
-    as-built record.
-    - It went through a review, a fix round, a verification and two lead
-      fixes (reviews/feat-workspaces.md, verify-feat-workspaces.md).
-    - **The author's live check (not done):**
-      - do Super+Tab, `e+1` and swipes reach the `design:` workspaces;
-      - do the Lua dispatcher key names work, including the
-        `special:omastrator-spare` move;
-      - does a refused dispatch exit non-zero?
-- **The island: decided 2026-09-29.** The author keeps the interim rule
-  (the island shows only with Omastrator) and will revisit it after more
-  tester feedback. Don't re-raise it, and don't build on it.
-- **CI:** the run on d162240 is green.
+### Moving to another machine
+- **Private material** lives in the private repo
+  `github.com/iretonsean/omastrator-private`. It holds the briefs, the promo
+  and animation work, a copy of Claude's memory, and bundles of the old local
+  branches and the pre-rewrite backup. Its README has the setup steps.
+- **The unmerged phase 4 code** is the `feat/live-in-frame` branch on GitHub.
+
+### State (2026-09-29 ~11:15, session ended for a reboot into macOS)
+- **`main` is pushed** and CI is green (run 36593059112). It holds:
+  - the Off-axis icon and the size fixes;
+  - Browser View phase 2 (Pages as Workspaces, off by default);
+  - phase 3 (the frame);
+  - the no-Chromium test fix.
+- **Phase 4, Live inside the frame, is NOT merged.** It's on `feat/live-in-frame`
+  in ~/Projects/Omastrator-shortcuts, local only.
+  - It was reviewed twice (A and B), fixed, verified, then got a second fix
+    round (`lffix2`).
+  - Fix round 2 was committed before the shutdown:
+    - a frame no longer sticks on "Starting…" when it browses away mid-start;
+    - the island is exactly as on main (frames never touch deployProject,
+      m_lastProject, the island's write-back or live.deploy);
+    - flaky-test fixes;
+    - a frame's picture follows the page after a resize, and a stale one is
+      never squeezed.
+  - The branch may end with a `WIP:` commit. **Read the "Stopped for
+    shutdown" line** in quick-wins/reports/feat-live-in-frame.md for what's
+    unfinished.
+- **Still to do on phase 4 before merge (the author, 2026-09-29):**
+  1. **The picture stops refreshing once Live runs in a frame.** Edits and
+     Build It reach the DOM, but the canvas keeps the old picture, even
+     after Reload. The animation agent found it offscreen.
+  2. **Real responsive reflow, not stretching.** During a drag or a held
+     breakpoint, the reflowed page must reach the canvas, and a stale
+     picture is drawn at 1:1, top-left, clipped, never scaled. The author
+     was explicit that this is how the app must work.
+  3. **Tests on the drawn picture:** at 390 it shows the narrow layout,
+     with a Chromium test and a pure renderer test.
+  - Then run check and sweep, and the lead reviews the diff and merges.
+    **No more review agents** (see the pace note below).
+- **The pace (the author, 2026-09-29): "can we speed this up".** One
+  review, one fix round, then the lead merges. Run the next independent
+  work in parallel.
+- **The island:** the interim rule stays (decided 2026-09-29). Don't build
+  on it. Phase 4's "island step" isn't built: ask the author first.
+
+### The Browser View animation (ON HOLD: the author rejected the fast cut on 2026-09-29)
+- Everything is in `~/Projects/.omastrator-promo/media/animation/browser-view/`.
+  It never goes in the repo.
+  - `BRIEF.md` holds the author's interview answers and later decisions.
+  - `storyboard.html` is published at
+    https://claude.ai/artifact/6jhUBaQ9i25mT9rz1knhVx.
+  - `captures/` holds the real captures, and `capture.cpp` drives the real
+    window offscreen.
+- **The fast cut:** `omastrator-browser-view.mp4` was rendered before the
+  shutdown from `browser-view.html` (30 fps).
+  - Beat 3 shows no resize frames, because the captures showed the stretch
+    bug.
+- **Still to do:**
+  - after phase 4's reflow fix merges, recapture beats 3, 4 and 7;
+  - redo beat 1 on the real desktop, **using a Hyprland headless output**
+    (`hyprctl output create headless`) rather than the physical screen,
+    which is often on the Mac's input;
+  - render the final cut at 60 fps;
+  - draft `X-POST.md`.
+- **The live check of Pages as Workspaces** (does Super+Tab reach the
+  `design:` workspaces; do the Lua dispatches work) was attempted during
+  the beat-1 capture. See the animation agent's result in the storyboard's
+  notes. If it's not there, it still needs doing.
+- **Localhost** stays in the address bar until a production domain can be
+  tested.
 
 ### Next, in order
-1. **Browser View phase 3, the frame** (in progress). An Opus agent is
-   writing docs/BROWSER-VIEW.md on `feat/browser-view` in
-   ~/Projects/Omastrator-share-device, from
-   browser-view/PHASE3-DESIGN.md. Then Sonnet builds it, Opus reviews it,
-   there's a fix round and a verification, and it merges.
-2. **Phase 4, Live inside the frame.** Its last step, "remove Live mode
-   from the island", touches the island: ask the author before that step.
-3. **Phase 5**, then tick QUICK-WINS item 9 with each phase's commit.
-4. **Stop there.** MEDIUM-EFFORT.md is on hold. Effects waits on the author.
-- **A small follow-up, not queued:** the `.arg(x).arg(n)` pattern in page
-  naming (`EditorSession+Pages.cpp`, `VectorDocument+Pages.cpp`,
-  `DocumentCodec.cpp`) mangles names that contain `%1` or `%2`. Use
-  multi-arg `.arg`.
+1. Finish and merge phase 4 (the three items above).
+2. Recapture and render the final animation, and draft the X post.
+3. Phase 5: pinning design objects to page elements so they follow the
+   reflow, Duplicate at Breakpoints, and Clean Session. Then tick
+   QUICK-WINS item 9.
+4. Stop there. MEDIUM-EFFORT.md is on hold, and Effects waits on the
+   author.
+- A small follow-up: `.arg(x).arg(n)` in page naming mangles names that
+  contain `%1` or `%2`.
 
 ### Waiting on the author
 - **The history backup:** delete it when the author says so. Optionally, ask

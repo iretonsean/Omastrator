@@ -14,7 +14,9 @@
 #include <QTransform>
 #include <QUrl>
 #include <QUuid>
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -355,6 +357,8 @@ struct BrowserView {
     QPointF scroll;
     // The last picture at 1x the frame's size: view state kept in the file, refreshed silently.
     QImage picture;
+    // The size the page is laid out at: whole CSS px, at least 1 × 1.
+    static QSizeF wholeSize(const QSizeF &size) { return {std::max(1.0, std::round(size.width())), std::max(1.0, std::round(size.height()))}; }
     friend bool operator==(const BrowserView &, const BrowserView &) = default;
 };
 

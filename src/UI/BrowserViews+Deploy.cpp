@@ -97,7 +97,7 @@ void BrowserViews::fillDeploy(const QUuid &frame, Bar &bar) const
         return;
     }
     if (mine && state.stage == QLatin1String("failed")) {
-        bar.deploy = QStringLiteral("Deploy failed");
+        bar.deploy = state.deploy ? QStringLiteral("Deploy failed") : QStringLiteral("Save failed");
         bar.deployFailed = true;
         bar.deployTip = QStringLiteral("%1\nClick for details.").arg(state.message);
         return;

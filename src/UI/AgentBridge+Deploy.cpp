@@ -1,4 +1,5 @@
 #include "Agent/Setup.h"
+#include "Live/Counted.h"
 #include "UI/AgentBridge.h"
 #include "UI/LiveFrames.h"
 #include "UI/AgentSheets.h"
@@ -199,6 +200,7 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     m_deployState.running = true;
     m_deployState.folder = folder;
     m_deployState.fromFrame = request.fromFrame;
+    m_deployState.deploy = request.deploy;
     setStage(QStringLiteral("writing"), QStringLiteral("Writing…"));
     // The agent's write-backs already running for this project; one the write-back starts joins by itself.
     for (const auto &[id, work] : m_liveJobs)
@@ -211,9 +213,11 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     if (writeBack) {
         QString agentRequest;
         if (const QString failure = liveWriteBack(&agentRequest, fromIsland ? QString() : folder); !failure.isEmpty()) {
-            if (m_pipeline.active)
-                pipelineFailed(failure);
-            return failure;
+            if (!m_pipeline.active)
+                return failure;
+            // The run's message also says what is written but not committed.
+            pipelineFailed(failure);
+            return m_deployState.message;
         }
     }
     // The write-back waits on the page, so a quick agent may already have answered or stopped.
@@ -247,6 +251,7 @@ QString AgentBridge::startSave(const QString &folder, const QString &doneMessage
     m_deployState = DeployState{};
     m_deployState.running = true;
     m_deployState.folder = m_pipeline.folder;
+    m_deployState.deploy = false;
     commitAndShip();
     return {};
 }
@@ -292,12 +297,40 @@ void AgentBridge::commitAndShip()
     m_job.start({folder, head, git, m_pipeline.github, m_pipeline.deploy, m_pipeline.command});
 }
 
+QString AgentBridge::uncommittedNote(const QString &folder) const
+{
+    if (!WriteBack::isGitRepository(folder))
+        return {};
+    qsizetype records = 0;
+    QStringList files;
+    for (const WriteBack::Review &review : m_reviews) {
+        if (!review.commit.isEmpty() || canonical(review.folder) != folder)
+            continue;
+        ++records;
+        for (const WriteBack::FileChange &change : review.changes) {
+            const QString relative = QDir(folder).relativeFilePath(change.path);
+            if (!files.contains(relative))
+                files << relative;
+        }
+    }
+    if (records == 0)
+        return {};
+    const QString where = files.size() <= 3 ? files.join(QStringLiteral(", ")) : counted(files.size(), QStringLiteral("file"));
+    return records == 1 ? QStringLiteral("1 change is written to %1 but not committed; the next Save or Deploy commits it.").arg(where)
+                        : QStringLiteral("%1 changes are written to %2 but not committed; the next Save or Deploy commits them.").arg(records).arg(where);
+}
+
 void AgentBridge::pipelineFailed(const QString &line, const QString &log)
 {
     m_pipeline.active = false;
     m_deployState.running = false;
     m_deployState.stage = QStringLiteral("failed");
     m_deployState.message = line;
+    // Nothing is rolled back and nothing half-saved is committed: the written part stays for the next Save.
+    if (const QString note = uncommittedNote(m_pipeline.folder); !note.isEmpty()) {
+        const bool ended = line.endsWith(QLatin1Char('.')) || line.endsWith(QLatin1Char('!')) || line.endsWith(QLatin1Char('?'));
+        m_deployState.message = line + (ended ? QStringLiteral(" ") : QStringLiteral(". ")) + note;
+    }
     m_deployState.finishedAt = QDateTime::currentMSecsSinceEpoch();
     if (!log.isEmpty())
         m_deployState.log = log;

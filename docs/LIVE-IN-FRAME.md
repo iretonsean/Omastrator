@@ -215,7 +215,8 @@ existing floating panels and the frame's bar:
     edits, or write-backs that aren't deployed yet.
   - During a run the stage replaces it: "Writing…", then "Deploying…", then
     "Live at <host>" for 8 s (click to open it).
-  - A failure shows "Deploy failed", and a click opens Details.
+  - A failure shows "Deploy failed" (or "Save failed" when the run was a Save),
+    and a click opens Details.
   - The first-deploy sheet still asks once.
 - **The bar's menu** (also in Object ▸ Browser View, and Ctrl+K as "Browser
   View: …"):
@@ -552,9 +553,22 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     in this session (`m_deployedAt`; it is not read back from history). While
     it runs it says Writing…, Committing…, Creating repository…, Pushing…,
     Deploying…; a result is "Live at <host>" for 8 seconds (click opens it);
-    a failure stays as "Deploy failed" until the next attempt (click opens the
-    log). A running or finished deploy shows only on frames of its own
-    project (`DeployState::folder`).
+    a failure stays as "Deploy failed", or "Save failed" for a Save
+    (`DeployState::deploy`), until the next attempt (click opens the log). A
+    running or finished deploy shows only on frames of its own project
+    (`DeployState::folder`).
+  - **A failed Save keeps what it wrote (decided 2026-09-29).** Write-back
+    writes the certain edits and records them before the agent is asked for the
+    rest. If the run then fails (no agent, the agent's change can't be
+    written, the commit fails), nothing is rolled back and no half of the Save
+    is committed. The written part is already a Review Changes record with no
+    commit, and the next Save or Deploy commits every uncommitted record for
+    that folder in one commit (`commitAndShip`). Those edits left the pending
+    list when they were written, so they are not written twice. The failure
+    message says so (`AgentBridge::uncommittedNote`): "1 change is written to
+    index.html but not committed; the next Save or Deploy commits it." Tests:
+    `aFailedSaveSaysSaveFailedAndLeavesTheWrittenEditsForTheNextSave`,
+    `theFailureMessageAgreesWithTheCountAndOnlyNamesWhatIsOnDisk`.
   - The menu (bar menu and Object ▸ Browser View) has Deploy, Save, Review
     Changes, History and Stop Live. Stop Live keeps the frame's edits held
     for the project, as before.
@@ -623,7 +637,8 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     Ctrl+K), and its items follow the frame being edited even when the frame's
     object isn't selected.
   - **The element bar.** Custom… uses the app's `ColorPickerSheet` in a floating
-    panel (it has no alpha, so a picked colour is opaque). The box icon swaps
+    panel, with its opacity field on (`withAlpha`; the picker's other callers stay
+    opaque), so a translucent colour is written as `rgba(r, g, b, a)`. The box icon swaps
     the padding pair for four sides. The ⋯ menu holds margin (↔ ↕), per-corner
     radius and Keep Edits… (a site that isn't yours). The overlay now reports the
     four corner radii.
@@ -714,10 +729,23 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     and the two stale-picture tests now check all four corners of a
     2-px-per-CSS-px page, at zoom 1 and 2.
 
+## Clearing what was written or sent
+
+`LiveFrames::clearPending(folder, taken)` removes the edits a write-back or a
+Build It took, by identity (`LiveEdit` compares every field), from the held
+edits and from each frame's session (`LiveSession::removeEdits`, run on the
+pool's thread). An edit a session recorded after the caller read the list stays,
+published or not; it used to be wiped by `setEdits({})`. A frame's snapshot
+leaves out the edits of a clear that hasn't run yet, so the panel never shows
+them again in between. Callers: `liveWriteBack` (everything it read),
+`liveAsk` (the brief's edits) and Build It (the package's `pending`).
+`clearPending(folder)` alone clears what is pending now. Tests:
+`clearingWhatWasReadKeepsAnEditTheSessionHadNotPublished` (Chromium),
+`clearingWhatWasReadLeavesHeldEditsThatCameLater`,
+`removingEditsForgetsExactlyTheNamedOnes`.
+
 ## Follow-ups
 
-- Custom… in the element bar has no alpha since `ColorPickerSheet` replaced
-  `QColorDialog`; a picked colour is opaque.
 - Cross-origin undo in a mock-up: two mock-up origins in one session share the
   undo stack (the project doesn't move), so Ctrl+Z on site Y can undo an edit
   from site X by running its restore on Y's element with the same selector
@@ -726,10 +754,6 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
   (paused or closed), the swap keeps translating until the next non-dev
   navigation, and a deliberate trip to that localhost port meanwhile is saved
   as the production address.
-- An unpublished-edit race in `clearPending`: an edit the session made but
-  hadn't published when `clearPending` ran is wiped by `setEdits({})` without
-  being written. Build It's "only what it sent" has the same race
-  (`BrowserViews+Build.cpp`).
 - The token as the unit ("p-4", "radius-md") and the small arrow that lists the
   scale, in the bar's fields. The host's element state doesn't carry an edit's
   snapped token yet; it needs to.

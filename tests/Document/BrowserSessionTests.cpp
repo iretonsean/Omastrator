@@ -129,6 +129,47 @@ private slots:
         QCOMPARE(board.view().url, QUrl(QStringLiteral("http://localhost/b")));
     }
 
+    void everyWayToSizeABrowserViewLandsOnWholePixels()
+    {
+        // 1279.67 × 801.11 is what a drag at a fractional zoom gives; the page lays out at whole CSS px.
+        Board board;
+        const QRectF fractional(10.25, 20.5, 1279.67, 801.11);
+        board.session.setDesignBox(board.frame, fractional);
+        QCOMPARE(board.box(board.frame), QRectF(10.25, 20.5, 1280, 801));
+
+        // A breakpoint's preview shows the width that Set as Design Width then commits.
+        board.session.select({board.frame});
+        board.session.beginPreview(QStringLiteral("Preview Width"));
+        board.session.previewFrameBox(board.frame, QRectF(10.25, 20.5, 389.6, 700.4));
+        QCOMPARE(board.box(board.frame).size(), QSizeF(390, 700));
+        board.session.setPreviewAsDesignWidth();
+        QCOMPARE(board.box(board.frame).size(), QSizeF(390, 700));
+
+        // Transform's W and H, and the handles, scale the frame.
+        board.session.transformSelection(QTransform::fromScale(1279.67 / 390, 801.11 / 700), QStringLiteral("Scale"), true);
+        QCOMPARE(board.box(board.frame).size(), QSizeF(1280, 801));
+
+        // The tool's frame, and never smaller than a pixel.
+        const QUuid drawn = board.session.addBrowserView(QRectF(5.5, 6.5, 1279.67, 801.11), QUrl(QStringLiteral("http://localhost/b")));
+        QCOMPARE(board.box(drawn), QRectF(5.5, 6.5, 1280, 801));
+        board.session.setDesignBox(drawn, QRectF(0, 0, 1.2, 40.4));
+        QCOMPARE(board.box(drawn).size(), QSizeF(1, 40));
+    }
+
+    void aFrameThatIsNotABrowserViewKeepsItsFractionalSize()
+    {
+        Board board;
+        VectorDocument document = *board.session.document();
+        VectorObject plain = VectorObject::frame({0, 400, 100, 100}, QStringLiteral("Plain"));
+        const QUuid id = plain.id;
+        document.insert(plain, document.layers().front());
+        board.session.loadDocument(document);
+        board.session.select({id});
+        board.session.transformSelection(QTransform::fromScale(1.2767, 1.1111), QStringLiteral("Scale"), true);
+        QVERIFY(qAbs(board.box(id).width() - 127.67) < 0.001);
+        QVERIFY(qAbs(board.box(id).height() - 111.11) < 0.001);
+    }
+
     void framesThatAreNotBrowserViewsAreLeftAlone()
     {
         Board board;

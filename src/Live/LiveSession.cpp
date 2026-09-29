@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QTimer>
+#include <algorithm>
 
 namespace {
 QString json(const QJsonValue &value)
@@ -653,6 +654,17 @@ void LiveSession::clearEdits()
 void LiveSession::setEdits(std::vector<LiveEdit> edits)
 {
     m_edits = std::move(edits);
+    m_undo.clear();
+    m_redo.clear();
+    emit changed();
+}
+
+void LiveSession::removeEdits(const std::vector<LiveEdit> &edits)
+{
+    const auto taken = [&](const LiveEdit &each) { return std::find(edits.begin(), edits.end(), each) != edits.end(); };
+    if (std::erase_if(m_edits, taken) == 0)
+        return;
+    // The steps are about edits that are now written or sent, as removeEdit's are.
     m_undo.clear();
     m_redo.clear();
     emit changed();

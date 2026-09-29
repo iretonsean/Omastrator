@@ -1,6 +1,7 @@
 #include "Agent/Capture.h"
 #include "Anywhere/AnywhereSettings.h"
 #include "Anywhere/LiftDiff.h"
+#include "Live/Counted.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
 #include "UI/DesignController.h"
@@ -157,8 +158,8 @@ QString DesignController::applyLifted(const QString &key, const std::vector<QUui
         result["notes"] = QJsonArray::fromStringList(failed + notes);
     if (!requestId.isEmpty())
         result["requestId"] = requestId;
-    QString line = requestId.isEmpty() ? QStringLiteral("Applied %1 changes to the page and its code. Review changes shows the diff.").arg(done.size())
-                                       : QStringLiteral("Applied %1 changes to the page; the agent is writing the ones that weren't certain.").arg(done.size());
+    QString line = requestId.isEmpty() ? QStringLiteral("Applied %1 to the page and its code. Review changes shows the diff.").arg(counted(done.size(), QStringLiteral("change")))
+                                       : QStringLiteral("Applied %1 to the page; the agent is writing the ones that weren't certain.").arg(counted(done.size(), QStringLiteral("change")));
     if (!failed.isEmpty() || !notes.isEmpty())
         line += QLatin1Char(' ') + (failed + notes).join(QLatin1Char(' '));
     say(line);

@@ -3,6 +3,7 @@
 #include "UI/BrowserViews.h"
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <algorithm>
 #include <map>
 
 namespace {
@@ -16,6 +17,11 @@ std::map<QString, std::vector<LiveEdit>> &heldEdits()
 {
     static std::map<QString, std::vector<LiveEdit>> held;
     return held;
+}
+
+bool has(const std::vector<LiveEdit> &list, const LiveEdit &edit)
+{
+    return std::find(list.begin(), list.end(), edit) != list.end();
 }
 
 bool alive(const QPointer<BrowserPool> &pool)
@@ -132,10 +138,12 @@ void LiveFrames::publish(const QUuid &frame, const Snapshot &snapshot, LiveSessi
         const QUrl before = found->snapshot.serverUrl;
         found->snapshot = snapshot;
         // Edits that were cleared here are still on the session until its command runs; they mustn't come back meanwhile.
-        if (found->clearing > 0) {
-            found->snapshot.edits.clear();
-            found->snapshot.canUndo = false;
-            found->snapshot.canRedo = false;
+        for (const Frame::Clearing &clearing : std::as_const(found->clearing)) {
+            std::erase_if(found->snapshot.edits, [&](const LiveEdit &each) { return has(clearing.taken, each); });
+            if (clearing.dropsUndo) {
+                found->snapshot.canUndo = false;
+                found->snapshot.canRedo = false;
+            }
         }
         // The tab moves to the dev server, or back to the production page, before anyone reads the change.
         if (before != snapshot.serverUrl) {
@@ -259,28 +267,41 @@ std::vector<LiveEdit> LiveFrames::pendingEdits(const QString &folder)
 
 void LiveFrames::clearPending(const QString &folder)
 {
+    clearPending(folder, pendingEdits(folder));
+}
+
+void LiveFrames::clearPending(const QString &folder, const std::vector<LiveEdit> &taken)
+{
     const QString project = canonical(folder);
-    heldEdits().erase(project);
+    if (const auto kept = heldEdits().find(project); kept != heldEdits().end()) {
+        std::erase_if(kept->second, [&](const LiveEdit &each) { return has(taken, each); });
+        if (kept->second.empty())
+            heldEdits().erase(kept);
+    }
     for (LiveFrames *frames : std::as_const(instances())) {
         for (auto it = frames->m_frames.begin(); it != frames->m_frames.end(); ++it) {
             Snapshot &snapshot = it->snapshot;
             if (snapshot.mockup || snapshot.project.isEmpty() || canonical(snapshot.project) != project)
                 continue;
-            // The panel reads this at once; the session catches up on its own thread.
-            snapshot.edits.clear();
-            snapshot.canUndo = false;
-            snapshot.canRedo = false;
-            ++it->clearing;
+            // The panel reads this at once; the session catches up on its own thread, and only with these edits.
+            const size_t before = snapshot.edits.size();
+            std::erase_if(snapshot.edits, [&](const LiveEdit &each) { return has(taken, each); });
+            const bool removes = snapshot.edits.size() != before;
+            if (removes) {
+                snapshot.canUndo = false;
+                snapshot.canRedo = false;
+            }
+            it->clearing.push_back({taken, removes});
             const QUuid key = it.key();
-            frames->run(key, [](LiveSession &live) {
-                live.setEdits({});
+            frames->run(key, [taken](LiveSession &live) {
+                live.removeEdits(taken);
                 return QString();
             }, [owner = QPointer<LiveFrames>(frames), key](const QString &) {
                 if (!owner)
                     return;
                 const auto found = owner->m_frames.find(key);
-                if (found != owner->m_frames.end() && found->clearing > 0)
-                    --found->clearing;
+                if (found != owner->m_frames.end() && !found->clearing.empty())
+                    found->clearing.erase(found->clearing.begin());
             });
             emit frames->changed(it.key());
         }
