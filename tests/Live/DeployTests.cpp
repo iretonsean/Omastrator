@@ -1,4 +1,6 @@
 #include "Live/Deploy.h"
+#include <csignal>
+#include <unistd.h>
 #include "Live/DeployJob.h"
 #include "Live/History.h"
 #include "Live/WriteBack.h"
@@ -339,6 +341,27 @@ private slots:
         job.cancel();
         QCOMPARE(finished.size(), 1);
         QCOMPARE(job.failure(), QStringLiteral("Cancelled."));
+    }
+
+    // A finished step's process has id 0, and kill(-0) would signal this whole process group, ctest included.
+    void endingAJobAfterItsCommandFinishedSignalsNothing()
+    {
+        ::setpgid(0, 0);
+        static volatile sig_atomic_t terminated = 0;
+        struct sigaction catcher {}, previous {};
+        catcher.sa_handler = [](int) { terminated = 1; };
+        ::sigaction(SIGTERM, &catcher, &previous);
+        const QString folder = repository(false);
+        for (const char *command : {"true", "no-such-command-omastrator"}) {
+            auto *job = new DeployJob;
+            QSignalSpy finished(job, &DeployJob::finished);
+            job->start({folder, QString(), false, {}, true, {command, folder, "omastrator.json"}});
+            QVERIFY(finished.wait(30'000));
+            delete job;
+        }
+        QTest::qWait(200);
+        ::sigaction(SIGTERM, &previous, nullptr);
+        QVERIFY(!terminated);
     }
 
     void historyListsCommitsDeploysAndGitHubLinks()
