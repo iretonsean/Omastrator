@@ -1,4 +1,6 @@
 #include "IO/SketchImporter.h"
+#include "IO/VectorFileImporter.h"
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -286,6 +288,39 @@ private slots:
         QCOMPARE(document.allPages()[1].name, QString("Symbols"));
         QCOMPARE(document.pageOf(card->id), document.allPages()[1].id);
         QCOMPARE(document.pageOf(cardInstance->id), document.allPages()[0].id);
+    }
+
+    void duplicateAndBlankPageNamesAreRepaired()
+    {
+        const auto artboard = [](const QString &id, const QString &name) {
+            return QJsonObject{{"_class", "artboard"}, {"do_objectID", id}, {"name", name},
+                               {"frame", frameJson(0, 0, 100, 100)}, {"layers", QJsonArray{}}};
+        };
+        const VectorDocument document = SketchImporter::parse(sketchFile(
+            {}, {{"Home", QJsonArray{artboard("A", "One")}}, {"Home", QJsonArray{artboard("B", "Two")}}, {"", QJsonArray{artboard("C", "Three")}}}));
+        QCOMPARE(document.pageCount(), 3);
+        QCOMPARE(document.allPages()[0].name, QString("Home"));
+        QCOMPARE(document.allPages()[1].name, QString("Home 2"));
+        QCOMPARE(document.allPages()[2].name, QString("Page"));
+    }
+
+    void placingAPagedFileWarnsWithItsPageCount()
+    {
+        const auto artboard = [](const QString &id, const QString &name) {
+            return QJsonObject{{"_class", "artboard"}, {"do_objectID", id}, {"name", name},
+                               {"frame", frameJson(0, 0, 100, 100)}, {"layers", QJsonArray{}}};
+        };
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("App.sketch"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(sketchFile({}, {{"Home", QJsonArray{artboard("A", "One")}}, {"Settings", QJsonArray{artboard("B", "Two")}}, {"More", QJsonArray{artboard("C", "Three")}}}));
+        file.close();
+        QStringList warnings;
+        const VectorDocument document = VectorFileImporter::readFirstArtboard(path, &warnings);
+        QCOMPARE(document.pageCount(), 1);
+        QCOMPARE(warnings.size(), 1);
+        QVERIFY(warnings.front().contains(QStringLiteral("3 pages")));
     }
 
     void sketchPagesBecomePagesFromTheOrigin()

@@ -545,6 +545,8 @@ struct VectorDocument {
     QSizeF viewSize() const { return artboard(0).rect.size(); }
     // The layers of one page, bottom to top.
     std::vector<QUuid> layersOn(const QUuid &page) const;
+    // Blank page names become "Page N" and repeats "Name 2", in order: importers copy names from files that allow both.
+    void repairPageNames();
     // `base` if no page has it, else `base 2`, `base 3`...
     QString uniquePageName(const QString &base) const;
     // Fresh copies of these layers and everything under them, in document order, for Duplicate Page.

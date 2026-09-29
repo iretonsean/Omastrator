@@ -292,3 +292,69 @@ off, `exported: false`. Nothing else about the two changed; how they meet:
   before.
 - **Share** refuses a flagged active artboard; the active artboard is always
   on the current page, so nothing changed there.
+
+### After review (round 2)
+
+What the review changed, and what it left alone:
+
+- **A proposal stays pending across pages.** While an "AI: …" step is open,
+  `setCurrentPage`, Next and Previous Page, Go to Page and the Pages list do
+  nothing (the status bar flashes "not now"), and so does every page edit, so
+  the preview can't be committed onto the wrong page. `select` across pages
+  drops ids that are not on the shown page in that case.
+- **Selecting on another page shows it.** When every id given to `select` sits
+  on one other page, the view goes there first (Select Main Component,
+  Reveal, the agent). A mixed set keeps only the current page's ids.
+- **`aboutToChangePage`** is emitted before every change of the shown page
+  (switch, New, Duplicate, Delete of the shown page); the canvas finishes
+  inline text on it, so typing lands on the page it was typed on.
+- **Undo history:** `DocumentHistory::amend` refuses to fold an edit into a
+  step when the current page differs, so a held key can't absorb an edit made
+  on another page.
+- **Every page has a layer.** `ensurePages` adds "Layer 1" to a page with none
+  (a file, an importer or a delete could leave one), so `layers().front()` is
+  always safe. Importers repair blank and repeated page names
+  (`repairPageNames`: "Home", "Home 2", blank → "Page N").
+- **The codec** refuses a file newer than version 6; a one-page document still
+  writes version 5 with no `pages` key and no `page` tags.
+- **Text wrap** only reads blockers on the text's own page.
+- **Duplicate Page** copies the artboards the page shows (`artboardsOn`), so the
+  first page's copy has the document's own size and paper.
+- **Move to Page (selection)** puts art only into unlocked layers, counts what
+  actually moved, and flashes "Moved to …" only when something did.
+  **Move to Page (a whole layer)** is one step from a layer row's menu and the
+  agent's `move_objects` is objects only (layer ids are refused, and the reply
+  lists only the ids that moved). A page that loses its last layer gets a fresh
+  "Layer 1".
+- **Lock Document:** New, Duplicate, Rename, Delete, Reorder and both Move to
+  Page turn away with the lock notice and return nothing; the Pages list's "+",
+  rename, drag and menu entries are disabled; switching pages is looking, so it
+  still works.
+- **The current-page rule** now holds for the zoom field, the Artboard Size
+  dialog, Place and `placeImage` (they use the active artboard), the palette's
+  "empty artboard" check, and the design system's Components layer.
+  **The Components layer is per page:** masters sit to the right of the current
+  page's artboards; instances may be placed on any page.
+- **`render`** draws the page's first artboard whether the document has one
+  page or several. **`export` to PDF** replies with `sheets`; other formats
+  reply with `artboard`. A blank page name for `page rename` is an error.
+- **Export for Screens** maps a dot-only page or file name (`..`) to `_`, keeps
+  folder names distinct when two pages sanitize alike ("A/B", "A_B" →
+  `A_B`, `A_B 2`), and makes file names unique in a folder, so nothing is
+  overwritten or written outside the chosen folder.
+- **Placing a paged design file** warns with the page count.
+
+- **The Pages list** switches page on the arrow keys as well as on a press,
+  and F2 renames; both stop while the list is read-only.
+
+Left out, with reasons:
+
+- **The review's nits** (`hitTestAll` checking the page last or from a set built
+  once per call, `ScreenExport`'s id→page map, the agent's `"all"` page name and
+  a bad `page` id on a one-page document, the whitespace left by the PDF
+  importer's `xOffset`, and `align` with `page` having no test) are not done in
+  this round: they are not correctness bugs and the round was for the fixes and
+  should-fixes. The hit-test cost the review measured (1.3–1.5× with two or
+  more pages, on paths that were already quadratic) is still there.
+- **The "+" button** keeps its text glyph rather than a PanelIcon; its
+  accessible name and tooltip now read "New Page" like the menu.

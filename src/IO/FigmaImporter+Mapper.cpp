@@ -338,6 +338,7 @@ VectorDocument map(const Tree &tree, QStringList &warnings)
     Components::sync(document);
     if (paged) {
         document.pages = pageList;
+        document.repairPageNames();
         document.currentPage = pageList.front().id;
         document.artboards = boards;
         document.size = boards.front().rect.size();

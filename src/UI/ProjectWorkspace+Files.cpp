@@ -190,7 +190,7 @@ bool ProjectWorkspace::placeFile(const QString &path)
             session.moveObject(id, parent, -1);
         }
         session.select({groupID});
-        const QPointF middle(session.document()->size.width() / 2, session.document()->size.height() / 2);
+        const QPointF middle = session.document()->artboard(session.activeArtboard()).rect.center();
         const QPointF shift = middle - session.selectionBounds().center();
         session.transformSelection(QTransform::fromTranslate(shift.x(), shift.y()), QStringLiteral("Place"));
         session.endEdit();

@@ -1,6 +1,7 @@
 #include "UI/LayersPanel.h"
 #include "UI/NativeLayerList.h"
 #include "UI/PagesList.h"
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QSettings>
@@ -24,6 +25,8 @@ private slots:
     void scrollsAfterFiveRows();
     void foldsAndRemembersItsState();
     void sitsAtTheTopOfLayers();
+    void aLockedDocumentOrAProposalMakesItReadOnly();
+    void arrowKeysSwitchPagesAndF2Renames();
 };
 
 void PagesListTests::initTestCase()
@@ -219,3 +222,51 @@ void PagesListTests::sitsAtTheTopOfLayers()
 
 QTEST_MAIN(PagesListTests)
 #include "PagesListTests.moc"
+
+void PagesListTests::aLockedDocumentOrAProposalMakesItReadOnly()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(200, 100));
+    session.addPage();
+    PagesList list(session);
+    list.show();
+    QToolButton *add = list.findChild<QToolButton *>("newPage");
+    QVERIFY(add->isEnabled());
+    session.setDocumentLocked(true);
+    QVERIFY(!add->isEnabled());
+    QCOMPARE(list.rows().dragDropMode(), QAbstractItemView::NoDragDrop);
+    for (const char *name : {"newPage", "duplicatePage", "renamePage", "deletePage"}) {
+        std::unique_ptr<QMenu> menu(list.menuFor({}));
+        menu->setAttribute(Qt::WA_DeleteOnClose, false);
+        QVERIFY2(!menu->findChild<QAction *>(name)->isEnabled(), name);
+    }
+    // Switching pages is only looking, so it still works.
+    press(list, 0);
+    QCOMPARE(session.currentPage(), session.document()->allPages()[0].id);
+    session.setDocumentLocked(false);
+    QVERIFY(add->isEnabled());
+    session.beginInteraction(EditorSession::proposalPrefix() + QStringLiteral("Test"));
+    std::unique_ptr<QMenu> menu(list.menuFor({}));
+    menu->setAttribute(Qt::WA_DeleteOnClose, false);
+    QVERIFY(!menu->findChild<QAction *>("newPage")->isEnabled());
+    press(list, 1);
+    QCOMPARE(session.currentPage(), session.document()->allPages()[0].id);
+    session.cancelInteraction();
+}
+
+void PagesListTests::arrowKeysSwitchPagesAndF2Renames()
+{
+    EditorSession session;
+    session.createDocument(QSizeF(200, 100));
+    session.addPage();
+    PagesList list(session);
+    list.show();
+    press(list, 1);
+    const size_t steps = session.undoNames().size();
+    QTest::keyClick(list.rows().viewport(), Qt::Key_Up);
+    QTest::keyClick(&list.rows(), Qt::Key_Up);
+    QCOMPARE(session.currentPage(), session.document()->allPages()[0].id);
+    QCOMPARE(session.undoNames().size(), steps);
+    QTest::keyClick(&list.rows(), Qt::Key_F2);
+    QVERIFY(list.rows().findChild<QLineEdit *>());
+}

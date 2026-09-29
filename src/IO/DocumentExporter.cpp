@@ -84,7 +84,7 @@ VectorDocument exportedPage(const VectorDocument &document)
     return document.artboardDocument(index);
 }
 
-void writePdf(const VectorDocument &document, const QString &path)
+int writePdf(const VectorDocument &document, const QString &path)
 {
     // One PDF page per exported artboard, across every page in page then artboard order.
     std::vector<VectorDocument> sheets;
@@ -122,6 +122,7 @@ void writePdf(const VectorDocument &document, const QString &path)
         painter.end();
     }
     save(bytes, path);
+    return int(sheets.size());
 }
 
 void writePng(const VectorDocument &document, const QString &path, double scale, bool transparent)

@@ -181,7 +181,7 @@ void CommandPalette::gatherRest()
     ProjectWorkspace &workspace = m_menus.workspace();
     EditorSession &session = workspace.current().session;
     AgentBridge *agent = m_menus.agent();
-    const bool proposal = agent && agent->hasProposalIn(session);
+    const bool proposal = session.isProposalOpen() || (agent && agent->hasProposalIn(session));
     // The front session when it runs, not when the palette opened.
     const auto front = [&workspace]() -> EditorSession & { return workspace.current().session; };
     for (const Tool tool : allTools) {
@@ -223,16 +223,17 @@ void CommandPalette::gatherRest()
                                   [front, id] { return front().applyToken(id); }});
         }
         // Pages: go to one, and with a selection, send it there.
+        const bool sendable = selected && !document.locked;
         if (document.pageCount() > 1) {
             for (const Page &page : document.allPages()) {
                 const QUuid id = page.id;
                 const bool here = id == document.currentPageId();
                 m_commands.push_back({QStringLiteral("page:") + id.toString(QUuid::WithoutBraces), QStringLiteral("Go to Page: ") + page.name,
-                                      QStringLiteral("Pages"), QString(), QStringLiteral("page canvas switch"), !here, here, [front, id] {
+                                      QStringLiteral("Pages"), QString(), QStringLiteral("page canvas switch"), !here && !proposal, here, [front, id] {
                                           front().setCurrentPage(id);
                                           return QString();
                                       }});
-                if (!selected)
+                if (!sendable)
                     continue;
                 m_commands.push_back({QStringLiteral("moveToPage:") + id.toString(QUuid::WithoutBraces), QStringLiteral("Move to Page: ") + page.name,
                                       QStringLiteral("Pages"), QString(), QStringLiteral("page canvas send selection"), !here, false, [front, id] {
@@ -293,8 +294,11 @@ std::optional<CommandPalette::Command> CommandPalette::ask(const QString &reques
     if (!agent || request.isEmpty() || !session.hasDocument())
         return std::nullopt;
     const bool selected = session.hasSelection();
-    const bool empty = std::none_of(session.document()->objects.begin(), session.document()->objects.end(),
-                                    [](const VectorObject &object) { return object.kind != ObjectKind::layer; });
+    // Empty means this page: art on another page doesn't make Generate an edit.
+    const VectorDocument &document = *session.document();
+    const bool empty = std::none_of(document.objects.begin(), document.objects.end(), [&](const VectorObject &object) {
+        return object.kind != ObjectKind::layer && document.isOnCurrentPage(object.id);
+    });
     // Nothing selected and new art asked for, or nothing drawn yet: Generate; otherwise an edit, previewed.
     const bool generate = !selected && (empty || asksForNewArt(request));
     Command command;

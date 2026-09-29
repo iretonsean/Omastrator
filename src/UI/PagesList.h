@@ -21,6 +21,7 @@ public:
 private:
     void synchronize();
     void showMenu(const QPoint &at);
+    bool editable() const;
     QUuid pageOf(const QListWidgetItem *item) const;
     void beginRename(const QUuid &page);
 

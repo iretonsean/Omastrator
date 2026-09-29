@@ -40,6 +40,8 @@ QJsonObject AgentTools::page(const QJsonObject &params)
     }
     case 1: {
         const QString name = requiredString(params, QStringLiteral("name")).simplified();
+        if (name.isEmpty())
+            fail(QStringLiteral("“name” is empty: give the page a name."));
         current.renamePage(target, name);
         return answer(target);
     }
@@ -59,6 +61,9 @@ QJsonObject AgentTools::page(const QJsonObject &params)
             fail(QStringLiteral("“page” is required: the page the objects go to."));
         const std::vector<QUuid> objects = targets(params);
         for (const QUuid &id : objects) {
+            const VectorObject *found = document.find(id);
+            if (found && found->kind == ObjectKind::layer)
+                fail(QStringLiteral("%1 is a layer. move_objects moves objects; layers stay where they are.").arg(idString(id)));
             if (!document.isOnCurrentPage(id))
                 fail(QStringLiteral("%1 is on another page. Call page with action “show” for its page first.").arg(idString(id)));
         }
@@ -66,7 +71,15 @@ QJsonObject AgentTools::page(const QJsonObject &params)
             fail(QStringLiteral("Those objects are already on that page."));
         current.select(objects);
         current.moveSelectionToPage(target);
-        return answer(target, {{"moved", idArray(objects)}});
+        // What went, as the document now has it: a locked document or a proposal moves nothing.
+        std::vector<QUuid> moved;
+        for (const QUuid &id : objects) {
+            if (current.document()->pageOf(id) == target)
+                moved.push_back(id);
+        }
+        if (moved.empty())
+            fail(current.isDocumentLocked() ? EditorSession::lockedNotice() : QStringLiteral("Nothing moved."));
+        return answer(target, {{"moved", idArray(moved)}});
     }
     default:
         if (!named)

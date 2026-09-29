@@ -373,6 +373,55 @@ private slots:
         QVERIFY(host.editor.selection().empty());
     }
 
+    void pageToolReportsOnlyWhatMovedAndRefusesLayersAndBlankNames()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({200, 100});
+        const QUuid first = rectangle(host.editor, {10, 10, 30, 20});
+        const QUuid layer = *host.editor.document()->layerOf(first);
+        AgentTools tools(host);
+        tools.call(QStringLiteral("page"), {{"action", "add"}, {"name", "Mobile"}});
+        host.editor.setCurrentPage(host.editor.document()->allPages()[0].id);
+        QString message;
+        QCOMPARE(failure(tools, QStringLiteral("page"), {{"action", "move_objects"}, {"page", "Mobile"}, {"ids", QJsonArray{layer.toString()}}}, &message),
+                 int(AgentProtocol::invalidParams));
+        QCOMPARE(failure(tools, QStringLiteral("page"), {{"action", "rename"}, {"page", "Mobile"}, {"name", "  "}}, &message),
+                 int(AgentProtocol::invalidParams));
+        QVERIFY(message.contains(QStringLiteral("empty")));
+        QCOMPARE(host.editor.document()->allPages()[1].name, QStringLiteral("Mobile"));
+        // A locked document moves nothing and says so, rather than listing ids.
+        host.editor.setDocumentLocked(true);
+        QCOMPARE(failure(tools, QStringLiteral("page"), {{"action", "move_objects"}, {"page", "Mobile"}, {"ids", QJsonArray{first.toString()}}}, &message),
+                 int(AgentProtocol::documentLocked));
+        QVERIFY(message.contains(QStringLiteral("locked")));
+        QCOMPARE(host.editor.document()->pageOf(first), host.editor.document()->allPages()[0].id);
+        host.editor.setDocumentLocked(false);
+        const QJsonObject moved = tools.call(QStringLiteral("page"), {{"action", "move_objects"}, {"page", "Mobile"}, {"ids", QJsonArray{first.toString()}}});
+        QCOMPARE(moved["moved"].toArray().size(), 1);
+    }
+
+    void renderUsesThePagesFirstArtboardAndPdfExportSaysHowManySheets()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({200, 100});
+        rectangle(host.editor, {10, 10, 30, 20});
+        AgentTools tools(host);
+        QTemporaryDir directory;
+        // One page or several, render draws the page's first artboard.
+        const QString one = directory.filePath(QStringLiteral("one.png"));
+        tools.call(QStringLiteral("render"), {{"path", one}});
+        QCOMPARE(QImage(one).size(), QSize(200, 100));
+        tools.call(QStringLiteral("page"), {{"action", "add"}, {"name", "Mobile"}});
+        const QString both = directory.filePath(QStringLiteral("both.png"));
+        tools.call(QStringLiteral("render"), {{"path", both}});
+        QCOMPARE(QImage(both).size(), QSize(200, 100));
+        const QJsonObject pdf = tools.call(QStringLiteral("export"), {{"path", directory.filePath(QStringLiteral("all.pdf"))}});
+        QCOMPARE(pdf["sheets"].toInt(), 2);
+        const QJsonObject png = tools.call(QStringLiteral("export"), {{"path", directory.filePath(QStringLiteral("board.png"))}});
+        QVERIFY(png.contains(QStringLiteral("artboard")));
+        QVERIFY(!png.contains(QStringLiteral("sheets")));
+    }
+
     void renderWritesAPng()
     {
         FakeAgentHost host;

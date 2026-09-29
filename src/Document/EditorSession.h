@@ -139,9 +139,15 @@ public:
     void movePage(const QUuid &id, int index);
     // Keeps positions; the view stays and the selection empties.
     void moveSelectionToPage(const QUuid &id);
+    // Moves whole layers (or, for a selected object, its layer) with everything on them; one step.
+    void moveLayersToPage(const std::vector<QUuid> &layers, const QUuid &id);
     // Not undo steps: they commit an interaction, remember the page's view and restore the next one's.
+    // Both do nothing while an AI proposal is open, which only Enter or Esc settles.
     void setCurrentPage(const QUuid &id);
     void showPage(bool next);
+    // The name an AI proposal's interaction starts with.
+    static QString proposalPrefix() { return QStringLiteral("AI: "); }
+    bool isProposalOpen() const { return m_interaction && interactionName().startsWith(proposalPrefix()); }
 
     // Tools and default style ------------------------------------------------
     Tool tool() const { return m_tool; }
@@ -631,6 +637,8 @@ signals:
     void documentChanged();
     // A paste from another app left some things out.
     void pasteLeftOut(const QStringList &warnings);
+    // The page is about to change (a switch, a new or deleted page): inline text finishes on the page it was typed on.
+    void aboutToChangePage();
     // The page shown changed: a switch, a new or deleted page, or an undo across pages.
     void currentPageChanged(const QUuid &page);
     // Move to Page finished: the status line says where the objects went.
@@ -639,6 +647,7 @@ signals:
     void editRefused();
 
 private:
+    bool pageEditRefused();
     void notify(bool documentToo = true);
     void edit(const QString &name, const std::function<void(VectorDocument &)> &change);
     // The shared tail of paste(): renumbers ids, places the objects and selects them.

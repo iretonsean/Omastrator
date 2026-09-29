@@ -78,6 +78,22 @@ std::vector<QUuid> VectorDocument::layers() const
     return layersOn(currentPageId());
 }
 
+void VectorDocument::repairPageNames()
+{
+    for (size_t index = 0; index < pages.size(); ++index) {
+        QString name = pages[index].name.simplified();
+        if (name.isEmpty())
+            name = QStringLiteral("Page %1").arg(index + 1);
+        const QString base = name;
+        const auto taken = [&](const QString &candidate) {
+            return std::any_of(pages.begin(), pages.begin() + index, [&](const Page &other) { return other.name == candidate; });
+        };
+        for (int number = 2; taken(name); ++number)
+            name = QStringLiteral("%1 %2").arg(base).arg(number);
+        pages[index].name = name;
+    }
+}
+
 QString VectorDocument::uniquePageName(const QString &base) const
 {
     const std::vector<Page> all = allPages();
@@ -110,8 +126,14 @@ void VectorDocument::ensurePages()
     for (Artboard &board : artboards)
         board.page = resolvePage(board.page);
     currentPage = resolvePage(currentPage);
-    // Every page has an artboard.
+    // Every page has a layer and an artboard.
     for (const Page &page : pages) {
+        const bool hasLayer = std::any_of(objects.begin(), objects.end(), [&](const VectorObject &object) { return !object.parentID && object.page == page.id; });
+        if (!hasLayer) {
+            VectorObject layer = blank({1, 1}).objects.front();
+            layer.page = page.id;
+            objects.push_back(layer);
+        }
         const bool hasBoard = std::any_of(artboards.begin(), artboards.end(), [&](const Artboard &board) { return board.page == page.id; });
         if (!hasBoard) {
             Artboard board;

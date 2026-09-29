@@ -267,6 +267,26 @@ private slots:
         QVERIFY(!session.document()->isOnCurrentPage(a));
     }
 
+    void aLayerRowMovesItsWholeLayerToAnotherPage()
+    {
+        Window w;
+        EditorSession &session = w.session();
+        const QUuid a = box(session, 10);
+        const QUuid layer = *session.document()->layerOf(a);
+        const QUuid first = session.currentPage();
+        const QUuid second = session.addPage(QStringLiteral("Cover"));
+        session.setCurrentPage(first);
+        NativeLayerList &list = *w.view.findChild<NativeLayerList *>();
+        std::unique_ptr<QMenu> menu(ContextMenus::forLayerRow(&w.menus(), session, list, layer, nullptr));
+        QMenu *move = submenu(*menu, "layerMoveToPage");
+        QVERIFY(move);
+        const size_t steps = session.undoNames().size();
+        move->actions().first()->trigger();
+        QCOMPARE(session.undoNames().size(), steps + 1);
+        QCOMPARE(session.undoName(), QStringLiteral("Move to Page"));
+        QCOMPARE(session.document()->pageOf(a), second);
+    }
+
     void altClickingAnEyeHidesTheOthers()
     {
         Window w;

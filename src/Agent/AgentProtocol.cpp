@@ -18,12 +18,12 @@ constexpr const char *methodTable = R"json([
  "description": "The selected objects (and their descendants) as JSON, and the selection's bounds [x, y, width, height].",
  "inputSchema": {"type": "object", "properties": {}}},
 {"name": "render", "group": "read",
- "description": "Renders the artboard, or just the selection's bounds, to a PNG so you can look at it. Returns its path, width and height.",
+ "description": "Renders a page's first artboard (the current page's, unless `page` names another), or just the selection's bounds, to a PNG so you can look at it. Returns its path, width and height.",
  "inputSchema": {"type": "object", "properties": {
    "scale": {"type": "number", "exclusiveMinimum": 0, "description": "Pixels per point. Default 1."},
    "selectionOnly": {"type": "boolean", "description": "Crop to the selection's bounds. Default false."},
    "path": {"type": "string", "description": "Where to write the PNG. Default: a new temporary file."},
-   "page": {"type": "string", "description": "A page's id or name to render instead of the current one (its first artboard)."}}}},
+   "page": {"type": "string", "description": "A page's id or name to render instead of the current one."}}}},
 {"name": "insert_svg", "group": "edit",
  "description": "Imports SVG as editable paths, grouped, on top of the active layer, into the proposal. SVG user units are points. Returns the group's id.",
  "inputSchema": {"type": "object", "required": ["svg"], "properties": {
@@ -117,7 +117,7 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "properties": {
    "path": {"type": "string"}}}},
 {"name": "export", "group": "files",
- "description": "Exports the artboard as it shows now, proposal included. With several artboards it writes the first one that exports, and the reply's \"artboard\" names it; artboards set not to export are skipped.",
+ "description": "Exports the document as it shows now, proposal included. PDF writes one sheet per artboard that exports, across every page, and the reply's \"sheets\" counts them. PNG, JPEG and SVG write the current page's first artboard that exports, and the reply's \"artboard\" names it. Artboards set not to export are skipped.",
  "inputSchema": {"type": "object", "required": ["path"], "properties": {
    "path": {"type": "string"},
    "format": {"type": "string", "enum": ["pdf", "svg", "png", "jpeg"], "description": "Default: from the file name."},

@@ -144,6 +144,35 @@ private slots:
             QVERIFY(!excluded.contains(at));
     }
 
+    void wrapOnAnotherPageDoesNotAffectTheText()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        const QUuid layer = document.layers().front();
+        VectorObject area = areaObject(QStringLiteral("one two three four five six seven eight nine ten eleven twelve thirteen"),
+                                       QSizeF(200, 200));
+        document.insert(area, layer);
+        document.ensurePages();
+        const QUuid other = QUuid::createUuid();
+        document.pages.push_back({other, QStringLiteral("Page 2")});
+        VectorObject otherLayer;
+        otherLayer.kind = ObjectKind::layer;
+        otherLayer.name = QStringLiteral("Layer 2");
+        otherLayer.page = other;
+        document.objects.push_back(otherLayer);
+        VectorObject blocker;
+        blocker.kind = ObjectKind::path;
+        blocker.path = Shapes::rectangle(QRectF(60, 0, 60, 200));
+        blocker.textWrap = 8;
+        document.insert(blocker, otherLayer.id);
+        document.ensurePages();
+        document.reflowText();
+        const QRectF excluded(60 - 8, 0 - 8, 60 + 16, 200 + 16);
+        bool crosses = false;
+        for (const QPointF &at : glyphCentres(TextLayout(document.find(area.id)->text).outline()))
+            crosses = crosses || excluded.contains(at);
+        QVERIFY(crosses);
+    }
+
     void threadedOverflowContinuesInTheSecondBox()
     {
         VectorDocument document = VectorDocument::blank({400, 300});

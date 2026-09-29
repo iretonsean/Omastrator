@@ -338,6 +338,27 @@ private slots:
         QVERIFY(f.paths().empty());
     }
 
+    void switchingPagesFinishesTheTypeOnItsOwnPage()
+    {
+        Fixture f;
+        const QUuid first = f.session.currentPage();
+        f.session.selectTool(Tool::text);
+        f.click({100, 100});
+        QTest::keyClicks(&f.canvas, QStringLiteral("Hi"));
+        QVERIFY(f.canvas.isEditingText());
+        const QUuid second = f.session.addPage();
+        QVERIFY(!f.canvas.isEditingText());
+        QCOMPARE(f.session.currentPage(), second);
+        std::vector<QUuid> texts;
+        for (const VectorObject &object : f.session.document()->objects) {
+            if (object.kind == ObjectKind::text)
+                texts.push_back(object.id);
+        }
+        QCOMPARE(texts.size(), size_t(1));
+        QCOMPARE(f.session.document()->pageOf(texts.front()), first);
+        QCOMPARE(f.object(texts.front()).text.text, QStringLiteral("Hi"));
+    }
+
     void emptyTypeLeavesNothing()
     {
         Fixture f;

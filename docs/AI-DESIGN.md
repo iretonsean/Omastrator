@@ -119,7 +119,7 @@ UUID strings.
   `selection` and `activeLayer`. A one-page document has one page.
 - `selection_get {}`: the selected objects' JSON and their bounds.
 - `render {scale?=1, selectionOnly?=false, path?, page?}`: renders a PNG of the
-  current page (or `page`'s first artboard). It is written
+  first artboard of the current page (or of `page`), whatever the page count. It is written
   to `path`, or to a temporary file whose path is returned. This lets an agent
   see the artboard.
 
@@ -144,12 +144,14 @@ UUID strings.
 
 **Files**
 - `open {path}`, `save {path?}`, `export {path, format?, scale?, quality?,
-  transparent?}`. With several artboards, `export` writes the first one that
-  is set to export and names it in the reply (`artboard`); a board set not to
-  export is skipped, and if none exports the call fails. `document_get` lists
+  transparent?}`. A PDF holds every artboard that exports, across every page,
+  and the reply counts them (`sheets`). PNG, JPEG and SVG write the current
+  page's first artboard that is set to export and name it in the reply
+  (`artboard`). A board set not to export is skipped, and if none exports the
+  call fails. `document_get` lists
   each artboard with `exported`, so the agent can tell which one that will be.
-  `render` is a view, not an export: it draws the first artboard whether or
-  not it exports.
+  `render` is a view, not an export: it draws the page's first artboard whether
+  or not it exports.
 - `place {path}`
 
 **Results for the panels** (these are not document edits)

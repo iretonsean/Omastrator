@@ -331,6 +331,31 @@ private slots:
         QCOMPARE(w.session().currentPage(), first);
     }
 
+    void aLockOrAProposalGatesPageCommands()
+    {
+        Window w;
+        const QUuid first = w.session().currentPage();
+        w.session().addPage(QStringLiteral("Cover"));
+        w.box(30);
+        const QString go = QStringLiteral("page:") + first.toString(QUuid::WithoutBraces);
+        const QString move = QStringLiteral("moveToPage:") + first.toString(QUuid::WithoutBraces);
+        QVERIFY(w.command(go)->enabled);
+        QVERIFY(w.command(move)->enabled);
+        w.palette().close();
+        w.session().setDocumentLocked(true);
+        // Looking is still fine; moving art is an edit, so the command is not offered.
+        QVERIFY(w.command(go)->enabled);
+        QVERIFY(!w.command(move));
+        w.palette().close();
+        w.session().setDocumentLocked(false);
+        w.session().beginInteraction(EditorSession::proposalPrefix() + QStringLiteral("Test"));
+        w.palette().close();
+        QVERIFY(!w.command(go)->enabled);
+        w.palette().close();
+        w.session().cancelInteraction();
+        QVERIFY(w.command(go)->enabled);
+    }
+
     void anEmptyArtboardGenerates()
     {
         Window w;

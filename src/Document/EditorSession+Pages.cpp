@@ -18,6 +18,17 @@ VectorObject freshLayer(const QUuid &page)
 }
 }
 
+// A page operation turned away: the lock, or an AI proposal that only Enter or Esc may settle.
+bool EditorSession::pageEditRefused()
+{
+    if (refuseWhenLocked())
+        return true;
+    if (!isProposalOpen())
+        return false;
+    notify(false);
+    return true;
+}
+
 QUuid EditorSession::currentPage() const
 {
     return m_document ? m_document->currentPageId() : QUuid();
@@ -70,8 +81,9 @@ bool EditorSession::enterPage()
 
 QUuid EditorSession::addPage(const QString &name)
 {
-    if (!m_document)
+    if (!m_document || pageEditRefused())
         return {};
+    emit aboutToChangePage();
     rememberPageView();
     Page page;
     page.id = QUuid::createUuid();
@@ -99,8 +111,9 @@ QUuid EditorSession::addPage(const QString &name)
 
 QUuid EditorSession::duplicatePage(const QUuid &id)
 {
-    if (!m_document || m_document->pageIndex(id) < 0)
+    if (!m_document || m_document->pageIndex(id) < 0 || pageEditRefused())
         return {};
+    emit aboutToChangePage();
     rememberPageView();
     const QUuid copyId = QUuid::createUuid();
     edit(QStringLiteral("Duplicate Page"), [&](VectorDocument &document) {
@@ -116,9 +129,8 @@ QUuid EditorSession::duplicatePage(const QUuid &id)
         }
         document.objects.insert(document.objects.end(), objects.begin(), objects.end());
         std::vector<Artboard> boards;
-        for (const Artboard &board : document.artboards) {
-            if (document.resolvePage(board.page) != id)
-                continue;
+        // artboardsOn applies the document's own size and paper to the first page's first board.
+        for (const Artboard &board : document.artboardsOn(id)) {
             boards.push_back(board);
             boards.back().id = QUuid::createUuid();
             boards.back().page = copyId;
@@ -141,7 +153,7 @@ QUuid EditorSession::duplicatePage(const QUuid &id)
 
 void EditorSession::renamePage(const QUuid &id, const QString &name)
 {
-    if (!m_document || m_document->pageIndex(id) < 0)
+    if (!m_document || m_document->pageIndex(id) < 0 || pageEditRefused())
         return;
     const QString wanted = trimmedName(name);
     if (wanted.isEmpty())
@@ -163,10 +175,12 @@ void EditorSession::renamePage(const QUuid &id, const QString &name)
 
 bool EditorSession::deletePage(const QUuid &id)
 {
-    if (!m_document || m_document->pageCount() < 2 || m_document->pageIndex(id) < 0)
+    if (!m_document || m_document->pageCount() < 2 || m_document->pageIndex(id) < 0 || pageEditRefused())
         return false;
-    rememberPageView();
     const bool wasCurrent = m_document->currentPageId() == id;
+    if (wasCurrent)
+        emit aboutToChangePage();
+    rememberPageView();
     edit(QStringLiteral("Delete Page"), [&](VectorDocument &document) {
         document.remove(document.layersOn(id));
         std::erase_if(document.artboards, [&](const Artboard &board) { return document.resolvePage(board.page) == id; });
@@ -193,7 +207,7 @@ bool EditorSession::deletePage(const QUuid &id)
 
 void EditorSession::movePage(const QUuid &id, int index)
 {
-    if (!m_document || m_document->pageCount() < 2)
+    if (!m_document || m_document->pageCount() < 2 || pageEditRefused())
         return;
     const int from = m_document->pageIndex(id);
     const int to = std::clamp(index, 0, m_document->pageCount() - 1);
@@ -208,9 +222,10 @@ void EditorSession::movePage(const QUuid &id, int index)
 
 void EditorSession::moveSelectionToPage(const QUuid &id)
 {
-    if (!m_document || m_selection.empty() || m_document->pageIndex(id) < 0 || id == m_document->currentPageId())
+    if (!m_document || m_selection.empty() || m_document->pageIndex(id) < 0 || id == m_document->currentPageId() || pageEditRefused())
         return;
     const std::vector<QUuid> selected = selectionInOrder();
+    int moved = 0;
     edit(QStringLiteral("Move to Page"), [&](VectorDocument &document) {
         // Layers can't be selected, so it's always objects: each goes to the target page's layer
         // named like its own, else that page's top open one, else a new "Layer 1".
@@ -233,7 +248,8 @@ void EditorSession::moveSelectionToPage(const QUuid &id)
             std::optional<QUuid> open;
             for (const QUuid &layer : document.layersOn(id)) {
                 const VectorObject *candidate = document.find(layer);
-                if (candidate->name == wanted && !target)
+                // Only an unlocked layer takes art, even when a locked one has the same name.
+                if (!candidate->isLocked && candidate->name == wanted && !target)
                     target = layer;
                 if (!candidate->isLocked)
                     open = layer;
@@ -247,16 +263,58 @@ void EditorSession::moveSelectionToPage(const QUuid &id)
                 document.appendLayer(layer);
             }
             document.move(object, *target, -1);
+            ++moved;
         }
         m_selection.clear();
     });
-    emit movedToPage(m_document->allPages()[size_t(m_document->pageIndex(id))].name);
+    if (moved > 0)
+        emit movedToPage(m_document->allPages()[size_t(m_document->pageIndex(id))].name);
+}
+
+void EditorSession::moveLayersToPage(const std::vector<QUuid> &layers, const QUuid &id)
+{
+    if (!m_document || m_document->pageIndex(id) < 0 || pageEditRefused())
+        return;
+    const QUuid target = m_document->resolvePage(id);
+    std::vector<QUuid> going;
+    for (const QUuid &layer : layers) {
+        const VectorObject *found = m_document->find(layer);
+        if (found && found->kind == ObjectKind::layer && !found->parentID && m_document->resolvePage(found->page) != target
+            && std::find(going.begin(), going.end(), layer) == going.end())
+            going.push_back(layer);
+    }
+    if (going.empty())
+        return;
+    edit(QStringLiteral("Move to Page"), [&](VectorDocument &document) {
+        document.ensurePages();
+        for (const QUuid &layer : going) {
+            const QUuid from = document.resolvePage(document.find(layer)->page);
+            document.find(layer)->page = target;
+            // A page never stays without a layer.
+            if (document.layersOn(from).empty()) {
+                VectorObject empty = freshLayer(from);
+                empty.name = QStringLiteral("Layer 1");
+                document.appendLayer(empty);
+            }
+        }
+        if (m_activeLayer && std::find(going.begin(), going.end(), *m_activeLayer) != going.end())
+            m_activeLayer.reset();
+        // Anything selected went with its layer.
+        m_selection.clear();
+    });
+    emit movedToPage(m_document->allPages()[size_t(m_document->pageIndex(target))].name);
 }
 
 void EditorSession::setCurrentPage(const QUuid &id)
 {
     if (!m_document || m_document->pageIndex(id) < 0 || id == m_document->currentPageId())
         return;
+    // A proposal stays pending: Enter or Esc settles it, not a click on another page.
+    if (isProposalOpen()) {
+        notify(false);
+        return;
+    }
+    emit aboutToChangePage();
     if (m_interaction)
         commitInteraction();
     rememberPageView();

@@ -155,8 +155,9 @@ QUuid EditorSession::placeImage(const QImage &image, const QString &name, std::o
     object.name = name;
     QSizeF size = image.size();
     // Larger than the artboard: fit it, as Place does.
-    const double scale = std::min({1.0, m_document->size.width() / size.width(), m_document->size.height() / size.height()});
-    const QPointF middle = center.value_or(QPointF(m_document->size.width() / 2, m_document->size.height() / 2));
+    const QRectF board = m_document->artboard(activeArtboard()).rect;
+    const double scale = std::min({1.0, board.width() / size.width(), board.height() / size.height()});
+    const QPointF middle = center.value_or(board.center());
     object.transform = QTransform::fromScale(scale, scale)
         * QTransform::fromTranslate(middle.x() - size.width() * scale / 2, middle.y() - size.height() * scale / 2);
     return addObject(object, QStringLiteral("Place"));

@@ -4,6 +4,8 @@
 #include "Rendering/VectorRenderer.h"
 #include <QDir>
 #include <QImageWriter>
+#include <QSet>
+#include <map>
 #include <cmath>
 
 namespace {
@@ -13,7 +15,22 @@ QString sanitize(const QString &name)
     for (const QChar bad : QStringLiteral("/\\:*?\"<>|"))
         safe.replace(bad, QChar('_'));
     safe = safe.trimmed();
-    return safe.isEmpty() ? QStringLiteral("Untitled") : safe;
+    if (safe.isEmpty())
+        return QStringLiteral("Untitled");
+    // "." and ".." are directories, not names: a page called ".." would write outside the folder.
+    if (safe.count(QChar('.')) == safe.size())
+        return QStringLiteral("_");
+    return safe;
+}
+
+// `name`, or `name 2`, `name 3`... when `taken` has it (compared without case, as some disks do).
+QString distinct(const QString &name, QSet<QString> &taken)
+{
+    QString candidate = name;
+    for (int number = 2; taken.contains(candidate.toLower()); ++number)
+        candidate = QStringLiteral("%1 %2").arg(name).arg(number);
+    taken.insert(candidate.toLower());
+    return candidate;
 }
 
 bool isVectorFormat(const QString &format)
@@ -33,9 +50,14 @@ std::vector<Subject> subjects(const VectorDocument &document, const std::vector<
 {
     std::vector<Subject> result;
     const std::vector<Page> pages = document.allPages();
-    const auto folderOf = [&](const QUuid &page) {
-        return pages.size() > 1 ? sanitize(pages[size_t(document.pageIndex(page))].name) : QString();
-    };
+    // Two pages whose names sanitise alike ("A/B", "A_B") still get folders of their own.
+    QSet<QString> takenFolders;
+    std::map<QUuid, QString> folders;
+    if (pages.size() > 1) {
+        for (const Page &page : pages)
+            folders[page.id] = distinct(sanitize(page.name), takenFolders);
+    }
+    const auto folderOf = [&](const QUuid &page) { return pages.size() > 1 ? folders[document.resolvePage(page)] : QString(); };
     for (const QUuid &id : artboardIds) {
         for (const Page &page : pages) {
             VectorDocument shown = document;
@@ -57,6 +79,14 @@ std::vector<Subject> subjects(const VectorDocument &document, const std::vector<
         VectorDocument shown = document;
         shown.currentPage = page;
         result.push_back({sanitize(object->name), folderOf(page), shown.croppedTo({id})});
+    }
+    // Files sharing a folder and a name would overwrite each other.
+    QSet<QString> takenFiles;
+    for (Subject &item : result) {
+        const QString base = item.name;
+        for (int number = 2; takenFiles.contains((item.folder + QLatin1Char('/') + item.name).toLower()); ++number)
+            item.name = QStringLiteral("%1 %2").arg(base).arg(number);
+        takenFiles.insert((item.folder + QLatin1Char('/') + item.name).toLower());
     }
     return result;
 }

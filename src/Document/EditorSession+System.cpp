@@ -325,9 +325,12 @@ QUuid EditorSession::placeFromLibrary(const std::vector<VectorObject> &objects, 
     edit(QStringLiteral("Place Component"), [&](VectorDocument &document) {
         // Library components keep their ids, so a second placement finds the first.
         std::optional<QUuid> layer;
-        double right = document.size.width() + 80;
-        for (const QUuid &existing : Components::masters(document))
-            right = std::max(right, document.bounds(existing).right() + 40);
+        // The Components layer is per page: masters sit to the right of this page's artboards.
+        double right = document.artboardBounds().right() + 80;
+        for (const QUuid &existing : Components::masters(document)) {
+            if (document.isOnCurrentPage(existing))
+                right = std::max(right, document.bounds(existing).right() + 40);
+        }
         for (size_t index = 0; index < objects.size(); ++index) {
             const VectorObject &root = objects[index];
             if (root.parentID && std::any_of(objects.begin(), objects.end(), [&](const VectorObject &o) { return o.id == *root.parentID; }))
@@ -369,7 +372,7 @@ QUuid EditorSession::placeFromLibrary(const std::vector<VectorObject> &objects, 
             return;
         const VectorObject *main = document.find(*master);
         const QRectF bounds = document.bounds(*master);
-        const QPointF at = center.value_or(QPointF(document.size.width() / 2, document.size.height() / 2));
+        const QPointF at = center.value_or(document.artboard(activeArtboard()).rect.center());
         VectorObject instance;
         instance.kind = ObjectKind::group;
         instance.name = main->name;

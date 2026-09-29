@@ -17,8 +17,8 @@ PagesList::PagesList(EditorSession &session, QWidget *parent)
     layout()->setContentsMargins(12, 8, 12, 8);
     m_add->setObjectName(QStringLiteral("newPage"));
     m_add->setText(QStringLiteral("+"));
-    m_add->setAccessibleName(QStringLiteral("New page"));
-    m_add->setToolTip(QStringLiteral("New page"));
+    m_add->setAccessibleName(QStringLiteral("New Page"));
+    m_add->setToolTip(QStringLiteral("New Page"));
     m_add->setAutoRaise(true);
     m_add->setFixedSize(24, 24);
     trailing->addWidget(m_add);
@@ -32,7 +32,7 @@ PagesList::PagesList(EditorSession &session, QWidget *parent)
     m_rows->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_rows->setDragDropMode(QAbstractItemView::InternalMove);
     m_rows->setDefaultDropAction(Qt::MoveAction);
-    m_rows->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_rows->setEditTriggers(QAbstractItemView::EditKeyPressed);
     m_rows->setContextMenuPolicy(Qt::CustomContextMenu);
     body->addWidget(m_rows);
 
@@ -41,7 +41,15 @@ PagesList::PagesList(EditorSession &session, QWidget *parent)
         if (!m_syncing && (QApplication::mouseButtons() & Qt::LeftButton))
             m_session.setCurrentPage(pageOf(item));
     });
-    connect(m_rows, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) { beginRename(pageOf(item)); });
+    // The arrow keys switch too; a refused switch (a proposal) puts the row back on the next sync.
+    connect(m_rows, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *item) {
+        if (!m_syncing && item)
+            m_session.setCurrentPage(pageOf(item));
+    });
+    connect(m_rows, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
+        if (editable())
+            beginRename(pageOf(item));
+    });
     connect(m_rows, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
         if (!m_syncing)
             m_session.renamePage(pageOf(item), item->text());
@@ -64,6 +72,11 @@ PagesList::PagesList(EditorSession &session, QWidget *parent)
     synchronize();
 }
 
+bool PagesList::editable() const
+{
+    return m_session.document() && !m_session.isDocumentLocked() && !m_session.isProposalOpen();
+}
+
 QUuid PagesList::pageOf(const QListWidgetItem *item) const
 {
     return item ? item->data(idRole).toUuid() : QUuid();
@@ -73,9 +86,11 @@ void PagesList::synchronize()
 {
     const std::optional<VectorDocument> &document = m_session.document();
     setVisible(document.has_value());
-    m_add->setEnabled(document.has_value());
+    m_add->setEnabled(editable());
     if (!document)
         return;
+    // A locked document or a pending proposal keeps the list read-only: no reorder, no rename.
+    m_rows->setDragDropMode(editable() ? QAbstractItemView::InternalMove : QAbstractItemView::NoDragDrop);
     const std::vector<Page> pages = document->allPages();
     const QUuid current = document->currentPageId();
     const QSignalBlocker blocker(m_rows);
@@ -90,11 +105,11 @@ void PagesList::synchronize()
             auto *item = new QListWidgetItem(page.name, m_rows);
             item->setData(idRole, page.id);
             item->setSizeHint(QSize(0, rowHeight));
-            item->setFlags(item->flags() | Qt::ItemIsEditable);
         }
     }
     for (int index = 0; index < int(pages.size()); ++index) {
         QListWidgetItem *item = m_rows->item(index);
+        item->setFlags(editable() ? item->flags() | Qt::ItemIsEditable : item->flags() & ~Qt::ItemFlags(Qt::ItemIsEditable));
         if (item->text() != pages[size_t(index)].name)
             item->setText(pages[size_t(index)].name);
         item->setToolTip(pages[size_t(index)].name);
@@ -123,14 +138,20 @@ QMenu *PagesList::menuFor(const QUuid &page)
     const QUuid target = page.isNull() ? m_session.currentPage() : page;
     auto *menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
-    menu->addAction(QStringLiteral("New Page"), this, [this] { m_session.addPage(); })->setObjectName(QStringLiteral("newPage"));
-    menu->addAction(QStringLiteral("Duplicate Page"), this, [this, target] { m_session.duplicatePage(target); })
-        ->setObjectName(QStringLiteral("duplicatePage"));
-    menu->addAction(QStringLiteral("Rename…"), this, [this, target] { beginRename(target); })->setObjectName(QStringLiteral("renamePage"));
+    const bool open = editable();
+    QAction *add = menu->addAction(QStringLiteral("New Page"), this, [this] { m_session.addPage(); });
+    add->setObjectName(QStringLiteral("newPage"));
+    add->setEnabled(open);
+    QAction *duplicate = menu->addAction(QStringLiteral("Duplicate Page"), this, [this, target] { m_session.duplicatePage(target); });
+    duplicate->setObjectName(QStringLiteral("duplicatePage"));
+    duplicate->setEnabled(open);
+    QAction *rename = menu->addAction(QStringLiteral("Rename…"), this, [this, target] { beginRename(target); });
+    rename->setObjectName(QStringLiteral("renamePage"));
+    rename->setEnabled(open);
     menu->addSeparator();
     QAction *remove = menu->addAction(QStringLiteral("Delete Page"), this, [this, target] { m_session.deletePage(target); });
     remove->setObjectName(QStringLiteral("deletePage"));
-    remove->setEnabled(m_session.document() && m_session.document()->pageCount() > 1);
+    remove->setEnabled(open && m_session.document()->pageCount() > 1);
     return menu;
 }
 

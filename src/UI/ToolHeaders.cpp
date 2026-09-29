@@ -232,7 +232,7 @@ NavigationToolHeader::NavigationToolHeader(EditorSession &session, QWidget *pare
               return;
           // The session has no zoom setter: viewport, then signal.
           m_session.viewport.setZoom(std::clamp(percent / 100, CanvasViewport::minimumZoom, CanvasViewport::maximumZoom),
-                                     m_session.viewport.center(), m_session.document()->size);
+                                     m_session.viewport.center(), m_session.document()->viewSize());
           emit m_session.changed();
       }, this))
 {

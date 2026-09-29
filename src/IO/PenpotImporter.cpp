@@ -171,6 +171,7 @@ public:
         }
         if (paged) {
             document.pages = pageList;
+            document.repairPageNames();
             document.currentPage = pageList.front().id;
             document.artboards = std::move(finalArtboards);
             document.size = document.artboards.front().rect.size();

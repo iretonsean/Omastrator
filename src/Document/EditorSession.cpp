@@ -247,6 +247,14 @@ void EditorSession::select(const std::vector<QUuid> &ids)
             if (object && object->kind != ObjectKind::layer && std::find(kept.begin(), kept.end(), id) == kept.end())
                 kept.push_back(id);
         }
+        // Ids all on one other page take the view there; a mixed or refused set keeps only this page's.
+        if (!kept.empty() && m_document->pageCount() > 1) {
+            const QUuid first = m_document->pageOf(kept.front());
+            if (first != m_document->currentPageId()
+                && std::all_of(kept.begin(), kept.end(), [&](const QUuid &id) { return m_document->pageOf(id) == first; }))
+                setCurrentPage(first);
+            std::erase_if(kept, [&](const QUuid &id) { return !m_document->isOnCurrentPage(id); });
+        }
     }
     if (kept == m_selection)
         return;

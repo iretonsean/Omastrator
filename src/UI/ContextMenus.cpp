@@ -275,6 +275,13 @@ QMenu *ContextMenus::forLayerRow(Menus *menus, EditorSession &session, NativeLay
         for (const char *name : {"group", "ungroup", "makeClippingMask", "releaseClippingMask"})
             share(menu, menus, name);
         addMoveToPage(menu, session);
+    } else if (session.document()->pageCount() > 1) {
+        // A whole layer goes with everything in it, as one step.
+        QMenu *move = submenu(menu, QStringLiteral("layerMoveToPage"), QStringLiteral("Move to Page"));
+        for (const Page &page : session.document()->allPages()) {
+            if (page.id != session.document()->resolvePage(object->page))
+                local(move, QStringLiteral("moveToPage"), page.name, [&session, row, id = page.id] { session.moveLayersToPage({row}, id); });
+        }
     }
     if (object->isContainer() && !session.document()->children(row).empty())
         local(menu, QStringLiteral("layerSelectChildren"), QStringLiteral("Select Children"), [&session, row] {

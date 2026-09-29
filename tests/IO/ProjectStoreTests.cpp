@@ -2,6 +2,7 @@
 #include "Document/PathOperations.h"
 #include "IO/ProjectStore.h"
 #include <QFile>
+#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -196,6 +197,23 @@ private slots:
         QCOMPARE(DocumentCodec::encode(twoPages())["version"].toInt(), 6);
     }
 
+    void aFileNewerThanPagesIsRefusedAndAnOldOneReencodesWithoutPageKeys()
+    {
+        QJsonObject newer = DocumentCodec::encode(twoPages());
+        newer["version"] = DocumentCodec::pagesVersion + 1;
+        bool refused = false;
+        try {
+            DocumentCodec::decode(newer);
+        } catch (const CodecError &) {
+            refused = true;
+        }
+        QVERIFY(refused);
+        const QJsonObject plain = DocumentCodec::encode(DocumentCodec::decode(DocumentCodec::encode(sample())));
+        QCOMPARE(plain["version"].toInt(), 5);
+        QVERIFY(!plain.contains(QStringLiteral("pages")));
+        QVERIFY(!QJsonDocument(plain).toJson().contains("\"page\""));
+    }
+
     void aVersion5FileLoadsAsOnePage()
     {
         const VectorDocument read = DocumentCodec::decode(DocumentCodec::encode(sample()));
@@ -226,7 +244,8 @@ private slots:
         const VectorDocument read = DocumentCodec::decode(json);
         const QUuid first = read.pages.front().id;
         QCOMPARE(read.layersOn(first).size(), size_t(2));
-        QCOMPARE(read.layersOn(second).size(), size_t(0));
+        // The page the objects left is not left without a layer.
+        QCOMPARE(read.layersOn(second).size(), size_t(1));
         QCOMPARE(read.guides.back().page, first);
     }
 

@@ -36,6 +36,8 @@ EditorCanvas::EditorCanvas(EditorSession &session, QWidget *parent)
         m_state->documentChanged();
         update();
     });
+    // Typing ends on the page it began on, before the switch or the undo step that follows.
+    connect(&m_session, &EditorSession::aboutToChangePage, this, [this] { m_state->finishText(); });
     // A page switch is no document change, but everything the canvas built belongs to the old page.
     connect(&m_session, &EditorSession::currentPageChanged, this, [this] {
         m_state->finishText();
