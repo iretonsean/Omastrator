@@ -225,12 +225,15 @@ existing floating panels and the frame's bar:
     Original, Export CSS…, Before and After to Desk, Hand to Agent… and This Is
     My Site….
 - **Review Changes and History** open the existing Live panel (with the changes
-  shown) and Live History panel. They follow `AgentBridge::deployProject()`,
-  which becomes the selected Browser View's project while it runs Live, else
-  Live's window's, else the last one used.
+  shown) and Live History panel. They follow `AgentBridge::panelProject()`:
+  the frame they were opened for (kept until both panels close), else the
+  selected Browser View that runs Live on one of the user's sites, else
+  `deployProject()`. `deployProject()` itself is the island's and is as on
+  `main`.
 - **Deploy and Save** are the bridge's existing pipeline, given the frame's folder
   (`DeployRequest::folder`), writing back `pendingEdits(folder)`.
-- The status stream's `live` key stays the window's, so the island is unchanged.
+- The status stream's `live` key stays the window's, so the island is unchanged;
+  a Browser View's deploy (`DeployRequest::fromFrame`) doesn't show in `live.deploy`.
 
 ## 5. "Build it"
 
@@ -345,7 +348,7 @@ Review named "Build it: <frame name>".
   - window and frame edits on one project reach one commit in a bare
     repository;
   - held edits deploy after a reset;
-  - `deployProject` follows the selected frame.
+  - `panelProject` follows the selected frame and `deployProject` doesn't.
 - **`BuildItTests`:**
   - the package holds only the frame's children, the screenshot, the URLs, the
     width and `selectors.json`;
@@ -388,12 +391,12 @@ action) and the status stream's `live` key. The step would:
 
 - make `startLive` create a Browser View on the front page and call
   `LiveFrames::start(frame)`;
-- have `live` report the frame session of `deployProject()`;
+- have `live` report the frame session (of the selected frame's project, which is `panelProject()`'s, not `deployProject()`'s);
 - delete the window path, `BrowserViews::setLiveOpen`, and the pool's
   `closeAll(true)`.
 
-Deploy, Changes and History on the island already go through
-`deployProject()` and `pendingEdits(folder)`.
+Deploy on the island goes through `deployProject()` and the window's edits;
+Changes and History go through `panelProject()` and `pendingEdits(folder)`.
 
 ## Decided by the lead (the author can reverse these)
 
@@ -443,9 +446,10 @@ Deploy, Changes and History on the island already go through
     (`AgentBridge::pendingEdits`). Write-back, Ask and Deploy read them all and
     clear all three. Edits left for the agent go back to the window if it is on
     the project, else are held; the Ask that follows takes them.
-  - `deployProject()` is the selected Browser View's project while its Live
-    runs on the user's own site, else the window's, else the last one. The
-    status stream's `live` key stays the window's.
+  - The island's project, `deployProject()`, is as on `main`: the window's
+    project if it has one, else the last one the window or the island used
+    (`m_lastProject`). Frames never touch it. A frame's project reaches the
+    panels through `panelProject()` and the frame's own folder.
   - The agent's brief for a project that is only in a frame has no screenshot
     (the window's session takes those) and carries the frame's address.
 
@@ -554,10 +558,10 @@ Deploy, Changes and History on the island already go through
   - The menu (bar menu and Object ▸ Browser View) has Deploy, Save, Review
     Changes, History and Stop Live. Stop Live keeps the frame's edits held
     for the project, as before.
-  - Review Changes and History select the frame and point the bridge at its
-    project (`AgentBridge::useProject`, which sets what `deployProject()` falls
-    back to). A window Live running on another project still wins there;
-    that is the island's behaviour and is left alone.
+  - Review Changes and History select the frame and open the panels for its
+    project (`showLivePanel(true, folder)`, `showHistoryPanel(folder)`), which
+    keep it through `panelProject()` until both are closed. (The first version
+    moved the island's project with `useProject`; fix round 2 removed it.)
   - Frame edits and the window's edits on one project are written and
     committed together as one commit: `pendingEdits` already merges them.
 
@@ -582,10 +586,9 @@ Deploy, Changes and History on the island already go through
   - Reloading the tab after a build is left to the dev server's own reload.
 
 - **Fix round (review A and B).**
-  - **The island is as before.** `deployProject()` lets the Live window's project
-    win while its Live is running, then the selected Browser View, then
-    `m_lastProject`. `liveDeploy` from the island writes back only what the
-    window edited. Every frame action passes its folder explicitly.
+  - **The island is as before.** (Superseded by fix round 2 below: the first
+    version let the selected frame decide `deployProject()`.) Every frame
+    action passes its folder explicitly.
   - **Dev servers never block the pool.** `serveProject` continues from
     `DevServers::acquire`'s callback. The remaining `callAndWait` paths count
     their nesting, and a session deleted from inside one waits (`deleteWhenIdle`).
@@ -625,11 +628,53 @@ Deploy, Changes and History on the island already go through
     radius and Keep Edits… (a site that isn't yours). The overlay now reports the
     four corner radii.
   - **Not observable from a test:** B3 (a frame failing while the window is
-    running) and the window's project winning `deployProject()` (both need a
-    Live window and a frame at once in CI).
+    running), which needs a Live window and a frame at once in CI.
+
+- **Fix round 2.**
+  - **A start that ends mid-way ends.** Letting go of the dev server while it
+    starts drops its answer, so `frameProject` now ends the start itself
+    (`m_serving` false, back to `running` or on to the next server) instead of
+    leaving "Starting the project…" for ever. A page the frame goes to during a
+    start is looked at too (`Page.loadEventFired` while serving), so a
+    redirect or a link to another site ends the start at once.
+  - **The island exactly as on `main`.** `deployProject()` is the window's
+    project if non-empty, else `m_lastProject`. Only the island's and the
+    window's deploys set `m_lastProject`; a frame's (`fromFrame`) never do.
+    `liveWriteBack` with no folder (the island's and the design controller's)
+    writes `m_live.edits()` and clears only the window's; frames always pass
+    their folder and get `pendingEdits(folder)`. `live.deploy` in the status
+    stream is idle for a deploy a frame started; the frame's bar and the panels
+    read `deployState()` directly. The panels follow `panelProject()` (the
+    project of the frame that opened them, else the selected frame's, else
+    `deployProject()`), and their Deploy passes `fromFrame` when that isn't the
+    island's project. Tests: `theIslandsDeployWritesBackOnlyTheWindowsEditsAndKeepsAFramesHeldOnes`
+    (Chromium), `aFramesDeployIsNotTheIslandsAndLeavesItsProjectAlone`,
+    `theIslandsDeployWritesBackOnlyWhatTheWindowEditedNotAFramesHeldEdits`.
+  - **Small.** The handed-off edits of a closing document are held through
+    `qApp`'s context, so they survive the document. `m_targetOrigin` is the
+    origin of the frame's document address, passed in `Target::url` at start
+    (a frame with no web address falls back to the first web page it shows).
+  - **Flaky tests.** The registry file is reset in `init()`, pending edits are
+    cleared per project folder in `cleanup()` (`clearPending("")` clears
+    nothing), the paused-frame test waits for the close, and the "stopping is
+    quick" test waits on a condition instead of the wall clock.
 
 ## Follow-ups
 
+- Custom… in the element bar has no alpha since `ColorPickerSheet` replaced
+  `QColorDialog`; a picked colour is opaque.
+- Cross-origin undo in a mock-up: two mock-up origins in one session share the
+  undo stack (the project doesn't move), so Ctrl+Z on site Y can undo an edit
+  from site X by running its restore on Y's element with the same selector
+  (`undoStep`). It changes only the page shown, never code.
+- The retired dev swap can linger after Stop Live: if the tab has no events then
+  (paused or closed), the swap keeps translating until the next non-dev
+  navigation, and a deliberate trip to that localhost port meanwhile is saved
+  as the production address.
+- An unpublished-edit race in `clearPending`: an edit the session made but
+  hadn't published when `clearPending` ran is wiped by `setEdits({})` without
+  being written. Build It's "only what it sent" has the same race
+  (`BrowserViews+Build.cpp`).
 - The token as the unit ("p-4", "radius-md") and the small arrow that lists the
   scale, in the bar's fields. The host's element state doesn't carry an edit's
   snapped token yet; it needs to.
