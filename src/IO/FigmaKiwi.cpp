@@ -199,8 +199,10 @@ QVariant decodeArray(ByteReader &reader, const Schema &schema, const QString &ty
     const quint32 length = reader.readVarUint();
     if (typeName == QLatin1String("byte"))
         return reader.readBytes(length);
-    // Nearly every element takes a byte; the empty struct doesn't, so the value budget covers it.
-    if (qsizetype(length) > reader.remaining() && schema.find(typeName) == nullptr)
+    // Every element takes at least a byte except a struct with no fields; the value budget covers that one.
+    const Definition *element = schema.find(typeName);
+    const bool costsNothing = element && element->kind == DefinitionKind::Struct && element->fields.empty();
+    if (qsizetype(length) > reader.remaining() && !costsNothing)
         throw KiwiError("Kiwi array is longer than the data.");
     reader.spendValues(length);
     QVariantList list;

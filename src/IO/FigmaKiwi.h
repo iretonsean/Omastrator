@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <QByteArray>
 #include <QString>
 #include <QVariant>
@@ -19,7 +20,8 @@ struct KiwiError : std::runtime_error {
 // Reads Kiwi's primitives from a byte buffer; throws KiwiError past the end.
 class ByteReader {
 public:
-    explicit ByteReader(const QByteArray &bytes) : bytes(bytes), valuesLeft(qint64(bytes.size()) * 8 + 1024) {}
+    // Also a fixed ceiling: a 256 MB inflated message could otherwise claim billions of empty values.
+    explicit ByteReader(const QByteArray &bytes) : bytes(bytes), valuesLeft(std::min<qint64>(qint64(bytes.size()) * 8 + 1024, 32'000'000)) {}
     bool atEnd() const { return pos >= bytes.size(); }
     qsizetype remaining() const { return bytes.size() - pos; }
     quint8 readByte();
