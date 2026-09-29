@@ -31,8 +31,16 @@ public:
         // Live runs the page from the project's dev server; `devTip` is its address and command.
         bool dev = false;
         QString devTip;
+        // Deploy, for a frame running Live on the user's own site: the button's word, the stage while it runs, or its
+        // result for a few seconds. Empty when there is nothing to deploy.
+        QString deploy;
+        bool deployBusy = false;
+        bool deployFailed = false;
+        QString deployTip;
     };
-    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite };
+    // `deployButton` is the bar's pill (it opens Details after a failure and the site after a deploy); `deploy` and
+    // `save` always start one. The rest are the bar menu's, for the frame's project.
+    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, deployButton, deploy, save, reviewChanges, history, stopLive };
     virtual Bar bar(const QUuid &frame) const;
     virtual void act(const QUuid &frame, Action action);
 

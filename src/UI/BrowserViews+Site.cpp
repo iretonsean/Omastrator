@@ -71,10 +71,13 @@ void BrowserViews::setFolderChooser(FolderChooser chooser)
 void BrowserViews::extendBarMenu(const QUuid &frame, QMenu *menu)
 {
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
-    if (!object || !object->browser || object->browser->url.isEmpty() || owned(frame))
+    if (!object || !object->browser || object->browser->url.isEmpty())
         return;
     menu->addSeparator();
-    addSiteActions(frame, menu);
+    if (owned(frame))
+        addProjectActions(frame, menu);
+    else
+        addSiteActions(frame, menu);
 }
 
 void BrowserViews::addSiteActions(const QUuid &frame, QMenu *menu)

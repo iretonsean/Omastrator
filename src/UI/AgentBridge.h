@@ -202,7 +202,8 @@ public:
     // Starts it in the background; returns why it couldn't, or empty. With nothing answered yet on a first deploy
     // (or a GitHub repository to offer), `needsAnswer` is set and nothing starts: the Deploy sheet asks.
     QString liveDeploy(const DeployRequest &request, bool *needsAnswer = nullptr);
-    QString liveSave();
+    // `folder` is the project to save; empty is deployProject().
+    QString liveSave(const QString &folder = QString());
     // What the Deploy sheet asks for the project.
     struct DeployQuestion {
         QString folder;
@@ -220,6 +221,8 @@ public:
     QString liveDeployed(const QString &requestId, const QString &url, const QString &command, const QString &error);
     // The project Deploy, Save and History act on.
     QString deployProject();
+    // A Browser View's project becomes the one Review Changes and History show when no Live is running on it.
+    void useProject(const QString &folder);
     struct DeployState {
         // idle, writing, committing, github, pushing, deploying, done, failed.
         QString stage = QStringLiteral("idle");
@@ -229,6 +232,11 @@ public:
         bool running = false;
         // A command the agent used, to offer "Remember this command".
         QString suggested;
+        // The project it ran for, and when it stopped (ms since the epoch; 0 while it runs), so a frame's bar shows its own.
+        QString folder;
+        qint64 finishedAt = 0;
+        // The run deployed (a save doesn't), and it went through.
+        bool deployed = false;
     };
     const DeployState &deployState() const { return m_deployState; }
     QString rememberSuggested();

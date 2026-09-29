@@ -120,6 +120,13 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
         x += 3 * buttonSize + 6;
         double right = layout.bar.right() - 2;
         const BrowserViewHost::Bar state = browserHost->bar(object.id);
+        if (!state.deploy.isEmpty()) {
+            const double width = std::min(metrics.horizontalAdvance(state.deploy) + 18, 170.0);
+            if (right - x - width > 140) {
+                layout.deploy = QRectF(right - width, top + 4, width, barHeight - 8);
+                right -= width + 4;
+            }
+        }
         if (state.notYours) {
             const double width = metrics.horizontalAdvance(QStringLiteral("Not your site")) + 14;
             if (right - x - width > 140) {
@@ -198,6 +205,18 @@ void EditorCanvas::State::drawBrowserBars(QPainter &painter) const
         painter.drawText(layout.address.adjusted(8, 0, -6, 0), Qt::AlignLeft | Qt::AlignVCenter,
                          metrics.elidedText(shown, Qt::ElideMiddle, layout.address.width() - 14));
         drawWidthButtons(painter, layout);
+        if (!layout.deploy.isNull()) {
+            const bool hovered = hover && layout.deploy.contains(*hover) && !state.deployBusy;
+            const QColor colour = state.deployFailed ? QColor(0xd9, 0x53, 0x4f) : accent();
+            painter.setPen(QPen(colour, 1));
+            // The idle button is the accent's fill; a stage or a result is only its outline.
+            const bool idle = !state.deployBusy && !state.deployFailed && state.deploy == QLatin1String("Deploy");
+            painter.setBrush(idle ? colour.lighter(hovered ? 115 : 100) : Qt::NoBrush);
+            painter.drawRoundedRect(layout.deploy, 6, 6);
+            painter.setPen(idle ? palette.color(QPalette::HighlightedText) : colour);
+            painter.drawText(layout.deploy, Qt::AlignCenter, metrics.elidedText(state.deploy, Qt::ElideRight, layout.deploy.width() - 10));
+            painter.setBrush(Qt::NoBrush);
+        }
         if (!layout.tag.isNull()) {
             painter.setPen(QPen(quiet, 1));
             painter.setBrush(Qt::NoBrush);
@@ -238,6 +257,8 @@ QString EditorCanvas::State::browserBarTip(QPointF view) const
             return QStringLiteral("Forward");
         if (layout.reload.contains(view))
             return browserHost->bar(layout.frame).loading ? QStringLiteral("Stop") : QStringLiteral("Reload");
+        if (layout.deploy.contains(view))
+            return browserHost->bar(layout.frame).deployTip;
         if (layout.tag.contains(view))
             return QStringLiteral("Not your site: changes stay on this machine. Click if it is.");
         if (layout.dev.contains(view))
@@ -267,6 +288,9 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
             browserHost->act(layout.frame, BrowserViewHost::Action::forward);
         } else if (layout.reload.contains(view)) {
             browserHost->act(layout.frame, browserHost->bar(layout.frame).loading ? BrowserViewHost::Action::stop : BrowserViewHost::Action::reload);
+        } else if (layout.deploy.contains(view)) {
+            session.select({layout.frame});
+            browserHost->act(layout.frame, BrowserViewHost::Action::deployButton);
         } else if (layout.tag.contains(view)) {
             browserHost->act(layout.frame, BrowserViewHost::Action::thisIsMySite);
         } else if (layout.editPage.contains(view)) {

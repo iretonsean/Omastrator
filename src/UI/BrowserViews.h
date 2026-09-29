@@ -16,6 +16,7 @@
 
 class EditorCanvas;
 class QMenu;
+class AgentBridge;
 struct VectorObject;
 class EditorSession;
 
@@ -55,6 +56,9 @@ public:
     void dismissSignIn() override;
     bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params) override;
     void extendBarMenu(const QUuid &frame, QMenu *menu) override;
+    // The window's bridge, which Deploy, Save, Review Changes and History go through (BrowserViews+Deploy.cpp). Set by
+    // the menus when the session's canvas is in front.
+    void setAgent(AgentBridge *agent);
     QList<int> breakpoints(const QUuid &frame) const override;
     QString beginEditPage(const QUuid &frame) override;
     void endEditPage(const QUuid &frame) override;
@@ -212,6 +216,11 @@ private:
     // The bar menu's items for a site that isn't the user's, and This Is My Site… (BrowserViews+Site.cpp).
     void addSiteActions(const QUuid &frame, QMenu *menu);
     void chooseMySite(const QUuid &frame);
+    // The frame's own-site project, or empty (BrowserViews+Deploy.cpp).
+    QString projectOf(const QUuid &frame) const;
+    void fillDeploy(const QUuid &frame, Bar &bar) const;
+    void runProjectAction(const QUuid &frame, Action action);
+    void addProjectActions(const QUuid &frame, QMenu *menu);
     void call(const Entry &entry, const QString &method, const QJsonObject &params = {});
     QUuid frameOf(const QUuid &key) const;
     void note(const QUuid &frame, State state);
@@ -228,6 +237,9 @@ private:
         QUrl production;
     };
     QHash<QUuid, DevSwap> m_swaps;
+    QPointer<AgentBridge> m_agent;
+    // When each project last deployed, from the bridge's state (ms since the epoch).
+    QHash<QString, qint64> m_deployedAt;
     // Each own site's breakpoints, by origin, read again on every load.
     QHash<QString, QList<int>> m_breakpoints;
     QPointer<BrowserPool> m_connectedPool;

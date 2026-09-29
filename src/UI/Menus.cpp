@@ -4,6 +4,7 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
+#include "UI/BrowserViews.h"
 #include "UI/CommandPalette.h"
 #include "UI/ContextMenus.h"
 #include "UI/ElementBarActions.h"
@@ -349,6 +350,22 @@ void Menus::buildObject(QMenuBar &bar)
     add(browserView, QStringLiteral("browserViewDesignWidth"), QStringLiteral("Set as Design Width"), QKeySequence(),
         [this] { session().setPreviewAsDesignWidth(); });
     browserView->addSeparator();
+    // The frame's own-site project through the same pipeline as the Live window (BrowserViews+Deploy.cpp).
+    const struct {
+        const char *name;
+        const char *title;
+        BrowserViewHost::Action action;
+    } projectActions[] = {{"browserViewDeploy", "Deploy", BrowserViewHost::Action::deploy},
+                          {"browserViewSave", "Save", BrowserViewHost::Action::save},
+                          {"browserViewReviewChanges", "Review Changes", BrowserViewHost::Action::reviewChanges},
+                          {"browserViewHistory", "History", BrowserViewHost::Action::history},
+                          {"browserViewStopLive", "Stop Live", BrowserViewHost::Action::stopLive}};
+    for (const auto &each : projectActions)
+        add(browserView, QString::fromLatin1(each.name), QString::fromLatin1(each.title), QKeySequence(), [this, browserFrame, action = each.action] {
+            if (const auto frame = browserFrame())
+                m_canvas->browserViewHost()->act(*frame, action);
+        });
+    browserView->addSeparator();
     add(browserView, QStringLiteral("browserViewReload"), QStringLiteral("Reload"), QKeySequence(), [this, browserFrame] {
         if (const auto frame = browserFrame())
             m_canvas->browserViewHost()->act(*frame, BrowserViewHost::Action::reload);
@@ -653,6 +670,7 @@ void Menus::watchFront(EditorCanvas *canvas)
             TaskBarActions::attach(*this, m_agent, *m_canvas);
         if (!m_canvas->findChild<ElementBar *>())
             ElementBarActions::attach(m_agent, *m_canvas);
+        BrowserViews::of(session())->setAgent(m_agent);
         m_canvasWatch = connect(m_canvas, &EditorCanvas::textEditingChanged, this, &Menus::synchronize);
         // Undo in Edit Page is Live's own, so its wording follows the page's edits.
         m_pageWatch = connect(m_canvas, &EditorCanvas::editPageHostChanged, this, &Menus::synchronize);

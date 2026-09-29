@@ -54,6 +54,7 @@ BrowserViewHost::Bar BrowserViews::bar(const QUuid &frame) const
             bar.devTip = snapshot.serverCommand.isEmpty() ? snapshot.serverUrl.toString()
                                                           : QStringLiteral("%1\n%2").arg(snapshot.serverUrl.toString(), snapshot.serverCommand);
     }
+    fillDeploy(frame, bar);
     return bar;
 }
 
@@ -115,6 +116,10 @@ void BrowserViews::act(const QUuid &frame, Action action)
         chooseMySite(frame);
         return;
     }
+    if (action >= Action::deployButton) {
+        runProjectAction(frame, action);
+        return;
+    }
     const auto found = m_entries.constFind(frame);
     if (found == m_entries.constEnd() || found->state != State::live)
         return;
@@ -127,7 +132,7 @@ void BrowserViews::act(const QUuid &frame, Action action)
     case Action::stop:
         BrowserViews::pool()->call(key, QStringLiteral("Page.stopLoading"), {});
         break;
-    case Action::thisIsMySite:
+    default:
         break;
     case Action::back:
     case Action::forward:

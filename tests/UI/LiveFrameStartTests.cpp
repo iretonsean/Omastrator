@@ -259,7 +259,9 @@ private slots:
         QCOMPARE(asked, production.url());
         QCOMPARE(ProjectRegistry::folderFor(production.url()).value_or(QString()), folder);
         QVERIFY(!host->bar(hosted.frame).notYours);
-        QVERIFY(offered().isEmpty());
+        // Now it is the project's menu, not the other people's-site one.
+        QVERIFY(!offered().contains(QStringLiteral("This Is My Site…")) && !offered().contains(QStringLiteral("Show Original")));
+        QVERIFY(offered().contains(QStringLiteral("Deploy")) && offered().contains(QStringLiteral("History")));
     }
 };
 

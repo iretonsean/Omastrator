@@ -532,3 +532,31 @@ Deploy, Changes and History on the island already go through
     `BrowserViewHost::extendBarMenu`): Keep Edits…, Edit Sets ▸ (checkable),
     Show Original, Export CSS…, This Is My Site…. Before and After to Desk and
     Hand to Agent… for frames come with commit 7.
+
+- **Commit 6 (Deploy, Save, Review Changes and History from the frame).**
+  - Every frame action goes through the window's `AgentBridge`, the one
+    pipeline the Live window uses, given the frame's project
+    (`liveDeploy`/`liveSave` take a `folder`). `BrowserViews::setAgent` is
+    called from `Menus::watchFront`. No frame code runs its own git or deploy.
+  - A frame's project is its Live session's project while Live runs on it,
+    otherwise the registry's folder for its address. A frame that isn't the
+    user's own has no project: Deploy says "This page isn't one of your
+    sites, so there's no code to deploy." and nothing runs.
+  - The bar's Deploy pill (far right, hidden when the bar is narrow) shows
+    only when there is something to send: pending or held edits for the
+    project, or a write-back newer than the project's last successful deploy
+    in this session (`m_deployedAt`; it is not read back from history). While
+    it runs it says Writing…, Committing…, Creating repository…, Pushing…,
+    Deploying…; a result is "Live at <host>" for 8 seconds (click opens it);
+    a failure stays as "Deploy failed" until the next attempt (click opens the
+    log). A running or finished deploy shows only on frames of its own
+    project (`DeployState::folder`).
+  - The menu (bar menu and Object ▸ Browser View) has Deploy, Save, Review
+    Changes, History and Stop Live. Stop Live keeps the frame's edits held
+    for the project, as before.
+  - Review Changes and History select the frame and point the bridge at its
+    project (`AgentBridge::useProject`, which sets what `deployProject()` falls
+    back to). A window Live running on another project still wins there;
+    that is the island's behaviour and is left alone.
+  - Frame edits and the window's edits on one project are written and
+    committed together as one commit: `pendingEdits` already merges them.

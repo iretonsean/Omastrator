@@ -65,6 +65,7 @@ void AgentBridge::wireDeploy()
             m_deployState.message = message;
         } else if (deploy) {
             m_deployState.url = m_job.url();
+            m_deployState.deployed = true;
             m_deployState.stage = QStringLiteral("done");
             m_deployState.message = m_job.url().isEmpty() ? QStringLiteral("Deployed with %1").arg(m_pipeline.command.viaAgent() ? QStringLiteral("your agent") : m_pipeline.command.command)
                                                           : QStringLiteral("Live at %1").arg(m_job.url());
@@ -77,6 +78,7 @@ void AgentBridge::wireDeploy()
                                                                           : QStringLiteral("Saved. Not pushed: %1").arg(m_job.pushNote());
             m_deployState.message = message;
         }
+        m_deployState.finishedAt = QDateTime::currentMSecsSinceEpoch();
         emit liveReviewChanged();
     });
 }
@@ -87,6 +89,12 @@ QString AgentBridge::deployProject()
     if (const QString framed = LiveFrames::selectedProject(session()); !framed.isEmpty())
         return framed;
     return m_live.project().isEmpty() ? m_lastProject : canonical(m_live.project());
+}
+
+void AgentBridge::useProject(const QString &folder)
+{
+    if (!folder.isEmpty() && QFileInfo(folder).isDir())
+        m_lastProject = canonical(folder);
 }
 
 std::vector<LiveEdit> AgentBridge::pendingEdits(const QString &folder) const
@@ -173,6 +181,7 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
                           question.github.isEmpty() ? QString() : request.github.value_or(QString()).trimmed(), {}, {}, {}};
     m_deployState = DeployState{};
     m_deployState.running = true;
+    m_deployState.folder = folder;
     setStage(QStringLiteral("writing"), QStringLiteral("Writing…"));
     // The agent's write-backs already running for this project; one the write-back starts joins by itself.
     for (const auto &[id, work] : m_liveJobs)
@@ -196,14 +205,15 @@ QString AgentBridge::liveDeploy(const DeployRequest &request, bool *needsAnswer)
     return {};
 }
 
-QString AgentBridge::liveSave()
+QString AgentBridge::liveSave(const QString &folder)
 {
     DeployRequest request;
     request.deploy = false;
+    request.folder = folder;
     bool needsAnswer = false;
     const QString failure = liveDeploy(request, &needsAnswer);
     if (needsAnswer)
-        QMetaObject::invokeMethod(this, [this] { AgentSheets::deploy(*this, &m_window, QString(), false); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this, folder] { AgentSheets::deploy(*this, &m_window, folder, false); }, Qt::QueuedConnection);
     return failure;
 }
 
@@ -214,6 +224,7 @@ QString AgentBridge::startSave(const QString &folder, const QString &doneMessage
     m_pipeline = Pipeline{true, canonical(folder), false, {}, {}, {}, {}, doneMessage};
     m_deployState = DeployState{};
     m_deployState.running = true;
+    m_deployState.folder = m_pipeline.folder;
     commitAndShip();
     return {};
 }
@@ -265,6 +276,7 @@ void AgentBridge::pipelineFailed(const QString &line, const QString &log)
     m_deployState.running = false;
     m_deployState.stage = QStringLiteral("failed");
     m_deployState.message = line;
+    m_deployState.finishedAt = QDateTime::currentMSecsSinceEpoch();
     if (!log.isEmpty())
         m_deployState.log = log;
     emit liveReviewChanged();
