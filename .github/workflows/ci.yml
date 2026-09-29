@@ -48,3 +48,39 @@ jobs:
 
       - name: Test
         run: runuser -u builder -- env HOME=/home/builder ctest --test-dir build --output-on-failure --timeout 300
+
+  # Qt 6.4 is the minimum CMakeLists.txt asks for, and Arch always has the newest Qt, so this
+  # job builds and tests on Ubuntu 24.04's Qt 6.4.2. Same shape as the Arch job above.
+  build-and-test-qt-6-4:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+      options: --init
+    steps:
+      # The Arch job's packages under Ubuntu's names; qt6-declarative-dev brings Qt Qml for the overlay tests.
+      - name: Install build and test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config git jq ca-certificates fonts-dejavu-core \
+            qt6-base-dev qt6-declarative-dev zlib1g-dev libzstd-dev
+          useradd -m builder
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Hand the workspace to the build user
+        run: |
+          chown -R builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- env HOME=/home/builder git config --global user.name CI
+          runuser -u builder -- env HOME=/home/builder git config --global user.email ci@example.invalid
+
+      - name: Configure
+        run: runuser -u builder -- env HOME=/home/builder cmake -S . -B build -DOMASTRATOR_WERROR=ON
+
+      - name: Build
+        run: runuser -u builder -- env HOME=/home/builder cmake --build build -j"$(nproc)"
+
+      - name: Test
+        run: runuser -u builder -- env HOME=/home/builder ctest --test-dir build --output-on-failure --timeout 300
