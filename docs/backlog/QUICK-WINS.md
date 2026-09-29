@@ -15,7 +15,7 @@ commit and date, for example `[x] … (a1b2c3d, 2026-09-29)`, then commit this
 file with the work. Don't delete finished items.
 
 - [ ] 1. Text stroke inside/outside (check first)
-- [ ] 2. Non-printing / non-exporting artboards
+- [x] 2. Non-printing / non-exporting artboards (a711523, 2026-09-28)
 - [ ] 3. Editable document presets
 - [ ] 4. Frame presets
 - [ ] 5. Per-side padding fields in auto layout
