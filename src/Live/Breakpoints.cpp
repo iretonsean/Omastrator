@@ -37,8 +37,11 @@ QString Breakpoints::scanScript()
     return QStringLiteral(R"JS((() => {
   const media = [];
   const vars = {};
+  // A huge stylesheet must not send megabytes over the protocol on every load.
+  const most = 2000;
   const walk = (rules, depth) => {
     for (const rule of rules) {
+      if (media.length >= most) return;
       if (rule.media && rule.media.mediaText !== undefined && rule.cssRules) media.push(rule.media.mediaText);
       else if (rule.conditionText !== undefined && rule.type === 4) media.push(rule.conditionText);
       if (rule.style && /^(:root|:host|html)\b/.test(rule.selectorText || "")) {

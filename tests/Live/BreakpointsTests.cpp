@@ -1,6 +1,10 @@
 #include "Live/Breakpoints.h"
 #include <QJsonArray>
 #include <QTest>
+#ifdef OMASTRATOR_HAVE_QML
+#include <QJSEngine>
+#include <QJsonDocument>
+#endif
 
 // Which widths the breakpoint buttons offer (docs/BROWSER-VIEW.md, section 7): the scan's answer turned into widths.
 namespace {
@@ -79,6 +83,26 @@ private slots:
         const QString script = Breakpoints::scanScript();
         QVERIFY(script.contains(QLatin1String("--breakpoint-")));
         QVERIFY(script.contains(QLatin1String("JSON.stringify")));
+    }
+
+    void theScanScriptStopsAtTwoThousandQueries()
+    {
+#ifndef OMASTRATOR_HAVE_QML
+        QSKIP("Qt Qml isn't installed");
+#else
+        // A page whose one stylesheet holds 5000 media rules.
+        QJSEngine engine;
+        engine.evaluate(QStringLiteral(R"JS(
+            const rules = [];
+            for (let i = 0; i < 5000; ++i) rules.push({ media: { mediaText: "(min-width: 700px)" }, cssRules: [] });
+            var document = { styleSheets: [{ cssRules: rules }], documentElement: {} };
+            var getComputedStyle = () => ({ fontSize: "16px" });
+        )JS"));
+        const QJSValue answer = engine.evaluate(Breakpoints::scanScript());
+        QVERIFY2(answer.isString(), qPrintable(answer.toString()));
+        const QJsonObject scanned = QJsonDocument::fromJson(answer.toString().toUtf8()).object();
+        QCOMPARE(scanned["media"].toArray().size(), 2000);
+#endif
     }
 };
 
