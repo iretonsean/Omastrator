@@ -145,6 +145,8 @@ void BrowserViews::addSiteActions(const QUuid &frame, QMenu *menu)
     });
 
     menu->addSeparator();
+    addBuildActions(frame, menu);
+    menu->addSeparator();
     QAction *mine = menu->addAction(QStringLiteral("This Is My Site…"));
     connect(mine, &QAction::triggered, menu, [this, frame] { chooseMySite(frame); });
 }

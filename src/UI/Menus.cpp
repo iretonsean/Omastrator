@@ -359,6 +359,9 @@ void Menus::buildObject(QMenuBar &bar)
                           {"browserViewSave", "Save", BrowserViewHost::Action::save},
                           {"browserViewReviewChanges", "Review Changes", BrowserViewHost::Action::reviewChanges},
                           {"browserViewHistory", "History", BrowserViewHost::Action::history},
+                          {"browserViewBuildIt", "Build It", BrowserViewHost::Action::buildIt},
+                          {"browserViewBuildItWithNote", "Build It with a Note…", BrowserViewHost::Action::buildItWithNote},
+                          {"browserViewStopBuild", "Stop Build", BrowserViewHost::Action::stopBuild},
                           {"browserViewStopLive", "Stop Live", BrowserViewHost::Action::stopLive}};
     for (const auto &each : projectActions)
         add(browserView, QString::fromLatin1(each.name), QString::fromLatin1(each.title), QKeySequence(), [this, browserFrame, action = each.action] {

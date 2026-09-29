@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QPainter>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSaveFile>
@@ -65,6 +66,9 @@ QString AgentBridge::handOff(const HandOff &given, QString *requestIdOut)
     const bool art = given.art && hasArt(*given.art);
     if (!art && given.picture.isEmpty() && given.screenshot.isEmpty() && given.edits.empty())
         return QStringLiteral("There's nothing to hand over yet. Draw, lift or edit something first.");
+    if (!given.frame.isNull() && m_waiting)
+        return QStringLiteral("The agent is still working on %1.")
+            .arg(m_builds.contains(m_waiting->requestId) ? QStringLiteral("“%1”").arg(m_builds.value(m_waiting->requestId).title) : QStringLiteral("another change"));
     QString error;
     const QString agent = AgentLauncher::defaultAgent(&error);
     if (agent.isEmpty())
@@ -83,6 +87,9 @@ QString AgentBridge::handOff(const HandOff &given, QString *requestIdOut)
     brief.screenshot = given.screenshot;
     brief.original = given.original;
     brief.command = Setup::shellQuote(QCoreApplication::applicationFilePath());
+    brief.breakpoints = given.breakpoints;
+    brief.production = given.production;
+    brief.pending = given.pending;
     auto failed = [&](const QString &message) {
         work.cleanup();
         return message;
@@ -91,12 +98,26 @@ QString AgentBridge::handOff(const HandOff &given, QString *requestIdOut)
         brief.png = package.filePath(QStringLiteral("mockup.png"));
         brief.svg = package.filePath(QStringLiteral("mockup.svg"));
         try {
-            DocumentExporter::writePng(*given.art, brief.png, 2);
+            if (given.backdrop.isNull()) {
+                DocumentExporter::writePng(*given.art, brief.png, 2);
+            } else {
+                // The art drawn over the page it is a design for.
+                const QImage over = DocumentExporter::renderPage(*given.art, 2, true);
+                QImage picture(over.size(), QImage::Format_ARGB32_Premultiplied);
+                picture.fill(Qt::white);
+                QPainter painter(&picture);
+                painter.setRenderHint(QPainter::SmoothPixmapTransform);
+                painter.drawImage(QRect(QPoint(), over.size()), given.backdrop);
+                painter.drawImage(QPoint(), over);
+                painter.end();
+                if (!picture.save(brief.png))
+                    throw FileError(QStringLiteral("Couldn't write %1.").arg(brief.png));
+            }
             SvgExporter::write(*given.art, brief.svg);
         } catch (const FileError &failure) {
             return failed(QStringLiteral("Couldn't write the mockup: %1").arg(failure.message()));
         }
-        const QJsonArray selectors = liftedSelectors(*given.art);
+        const QJsonArray selectors = given.selectors.isEmpty() ? liftedSelectors(*given.art) : given.selectors;
         if (!selectors.isEmpty()) {
             brief.selectors = package.filePath(QStringLiteral("selectors.json"));
             if (const QString failure = writeText(brief.selectors, QString::fromUtf8(QJsonDocument(selectors).toJson(QJsonDocument::Indented)));
@@ -120,6 +141,10 @@ QString AgentBridge::handOff(const HandOff &given, QString *requestIdOut)
         return failed(error);
     m_liveJobs[work.requestId] = work;
     m_lastProject = project;
+    if (!given.frame.isNull()) {
+        m_builds[work.requestId] = {given.frame, given.title};
+        m_built.remove(given.frame);
+    }
     m_waiting = Waiting{work.requestId, Task::live, agent};
     m_liveMessage.clear();
     m_liveLog.clear();
@@ -189,4 +214,20 @@ QString AgentBridge::siteAction(const QString &action, const QJsonObject &params
     if (action == QLatin1String("handoff"))
         return m_design->handOffPage(params, result);
     return QStringLiteral("There is no action “%1” for a site that isn't yours.").arg(action);
+}
+
+QUuid AgentBridge::buildingFrame() const
+{
+    return m_waiting && m_builds.contains(m_waiting->requestId) ? m_builds.value(m_waiting->requestId).frame : QUuid();
+}
+
+QString AgentBridge::buildingAgent() const
+{
+    return m_waiting && m_builds.contains(m_waiting->requestId) ? displayName(m_waiting->agent) : QString();
+}
+
+void AgentBridge::clearBuilt(const QUuid &frame)
+{
+    if (m_built.remove(frame))
+        emit liveReviewChanged();
 }

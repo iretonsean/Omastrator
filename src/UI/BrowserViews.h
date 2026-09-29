@@ -77,6 +77,9 @@ public:
     // cancels). Tests set it; an empty function puts the dialog back.
     using FolderChooser = std::function<QString(const QUrl &page)>;
     static void setFolderChooser(FolderChooser chooser);
+    // Answers Build It with a Note…'s question in place of its dialog (empty cancels). Tests set it.
+    using NoteChooser = std::function<QString()>;
+    static void setNoteChooser(NoteChooser chooser);
     // Whether the strip has been answered on this machine; tests clear it.
     static bool signInAnswered();
     static void setSignInAnswered(bool answered);
@@ -221,6 +224,12 @@ private:
     void fillDeploy(const QUuid &frame, Bar &bar) const;
     void runProjectAction(const QUuid &frame, Action action);
     void addProjectActions(const QUuid &frame, QMenu *menu);
+    // Build It (BrowserViews+Build.cpp): the bar's button, its actions, and the package handed to the agent.
+    void fillBuild(const QUuid &frame, Bar &bar) const;
+    void runBuildAction(const QUuid &frame, Action action);
+    QString startBuild(const QUuid &frame, const QString &folder, const QString &note);
+    void addBuildActions(const QUuid &frame, QMenu *menu);
+    bool hasDesign(const QUuid &frame) const;
     void call(const Entry &entry, const QString &method, const QJsonObject &params = {});
     QUuid frameOf(const QUuid &key) const;
     void note(const QUuid &frame, State state);

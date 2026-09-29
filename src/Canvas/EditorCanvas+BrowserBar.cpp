@@ -127,6 +127,13 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
                 right -= width + 4;
             }
         }
+        if (!state.build.isEmpty()) {
+            const double width = std::min(metrics.horizontalAdvance(state.build) + 18 + (state.buildBusy ? 12 : 0), 190.0);
+            if (right - x - width > 140) {
+                layout.build = QRectF(right - width, top + 4, width, barHeight - 8);
+                right -= width + 4;
+            }
+        }
         if (state.notYours) {
             const double width = metrics.horizontalAdvance(QStringLiteral("Not your site")) + 14;
             if (right - x - width > 140) {
@@ -217,6 +224,23 @@ void EditorCanvas::State::drawBrowserBars(QPainter &painter) const
             painter.drawText(layout.deploy, Qt::AlignCenter, metrics.elidedText(state.deploy, Qt::ElideRight, layout.deploy.width() - 10));
             painter.setBrush(Qt::NoBrush);
         }
+        if (!layout.build.isNull()) {
+            const bool hovered = hover && layout.build.contains(*hover);
+            painter.setPen(QPen(accent(), 1));
+            painter.setBrush(hovered ? QBrush(QColor(accent().red(), accent().green(), accent().blue(), 40)) : Qt::NoBrush);
+            painter.drawRoundedRect(layout.build, 6, 6);
+            QRectF label = layout.build;
+            if (state.buildBusy) {
+                // The tray light's dot, so it is plain that something is working.
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(accent());
+                painter.drawEllipse(QPointF(label.left() + 11, label.center().y()), 3, 3);
+                label.adjust(12, 0, 0, 0);
+            }
+            painter.setPen(accent());
+            painter.setBrush(Qt::NoBrush);
+            painter.drawText(label, Qt::AlignCenter, metrics.elidedText(state.build, Qt::ElideRight, label.width() - 10));
+        }
         if (!layout.tag.isNull()) {
             painter.setPen(QPen(quiet, 1));
             painter.setBrush(Qt::NoBrush);
@@ -259,6 +283,8 @@ QString EditorCanvas::State::browserBarTip(QPointF view) const
             return browserHost->bar(layout.frame).loading ? QStringLiteral("Stop") : QStringLiteral("Reload");
         if (layout.deploy.contains(view))
             return browserHost->bar(layout.frame).deployTip;
+        if (layout.build.contains(view))
+            return browserHost->bar(layout.frame).buildTip;
         if (layout.tag.contains(view))
             return QStringLiteral("Not your site: changes stay on this machine. Click if it is.");
         if (layout.dev.contains(view))
@@ -291,6 +317,9 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
         } else if (layout.deploy.contains(view)) {
             session.select({layout.frame});
             browserHost->act(layout.frame, BrowserViewHost::Action::deployButton);
+        } else if (layout.build.contains(view)) {
+            session.select({layout.frame});
+            browserHost->act(layout.frame, BrowserViewHost::Action::buildButton);
         } else if (layout.tag.contains(view)) {
             browserHost->act(layout.frame, BrowserViewHost::Action::thisIsMySite);
         } else if (layout.editPage.contains(view)) {

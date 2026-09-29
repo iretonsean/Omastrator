@@ -47,6 +47,10 @@ void BrowserViews::setAgent(AgentBridge *agent)
     if (!agent)
         return;
     // The stage and the result show on the bar; the result goes away by itself, so it repaints once more then.
+    connect(agent, &AgentBridge::waitingChanged, this, [this] {
+        for (auto it = m_entries.constBegin(); it != m_entries.constEnd(); ++it)
+            scheduleRepaint(it.key());
+    });
     connect(agent, &AgentBridge::liveReviewChanged, this, [this] {
         const AgentBridge::DeployState &state = m_agent->deployState();
         if (state.deployed && !state.running && state.finishedAt > 0)
@@ -195,6 +199,8 @@ void BrowserViews::addProjectActions(const QUuid &frame, QMenu *menu)
     item(QStringLiteral("Save"), Action::save, haveProject && !busy);
     item(QStringLiteral("Review Changes"), Action::reviewChanges, haveProject);
     item(QStringLiteral("History"), Action::history, haveProject);
+    menu->addSeparator();
+    addBuildActions(frame, menu);
     menu->addSeparator();
     item(QStringLiteral("Stop Live"), Action::stopLive, LiveFrames::of(m_session)->active(frame));
 }

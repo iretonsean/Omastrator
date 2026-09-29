@@ -12,6 +12,9 @@
 #include "Live/LiveSession.h"
 #include "Live/WriteBack.h"
 #include "UI/FloatingPanel.h"
+#include <QHash>
+#include <QImage>
+#include <QJsonArray>
 #include <QObject>
 #include <QDateTime>
 #include <QPointer>
@@ -165,10 +168,25 @@ public:
         // A site's edits, kept or not, and its origin.
         std::vector<EditSets::Edit> edits;
         QString origin;
+        // Build It (docs/LIVE-IN-FRAME.md, section 5): the Browser View this is built from. Its review is named `title`;
+        // `backdrop` is the page under the art in mockup.png; `selectors`, `breakpoints` and `production` say where each shape
+        // sits, the widths the site has, and the address the dev server stands in for; `pending` are the frame's edits.
+        QUuid frame;
+        QString title;
+        QImage backdrop;
+        QJsonArray selectors;
+        QString breakpoints;
+        QString production;
+        std::vector<LiveEdit> pending;
     };
     // Packages it (render, SVG, lifted selectors, the edits as CSS) and runs the agent headlessly in a worktree of
     // `folder`; its change lands as a review. Returns why it couldn't start, or empty.
     QString handOff(const HandOff &handOff, QString *requestId = nullptr);
+    // The Browser View a Build It is running for, or null; and when one finished (ms since the epoch), until the next action.
+    QUuid buildingFrame() const;
+    QString buildingAgent() const;
+    qint64 builtAt(const QUuid &frame) const { return m_built.value(frame, 0); }
+    void clearBuilt(const QUuid &frame);
     // A site that isn't yours (docs/ANYWHERE.md): keep, toggle, remove and export its edit sets, Before and After, and
     // Hand to Agent. `params` holds the set's `name`, `on`, a `path` to export to, the agent's `folder`.
     QString siteAction(const QString &action, const QJsonObject &params, QJsonObject &result);
@@ -324,6 +342,13 @@ private:
     // The project last opened in Live, which Deploy, Save and History keep acting on after Live stops.
     QString m_lastProject;
     std::map<QString, AgentWork> m_liveJobs;
+    // Build Its by request id, and when each frame's last one finished.
+    struct Build {
+        QUuid frame;
+        QString title;
+    };
+    QHash<QString, Build> m_builds;
+    QHash<QUuid, qint64> m_built;
     QString m_liveMessage;
     QString m_liveLog;
     void wireDeploy();

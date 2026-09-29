@@ -560,3 +560,21 @@ Deploy, Changes and History on the island already go through
     that is the island's behaviour and is left alone.
   - Frame edits and the window's edits on one project are written and
     committed together as one commit: `pendingEdits` already merges them.
+
+- **Commit 7 (Build it).**
+  - Build It is the same `AgentBridge::handOff` the Live window uses, with a `frame`, a `title` and the frame's own package
+    fields; nothing new runs an agent. `BrowserViews+Build.cpp` builds the package, `AgentWork::handoffPrompt` says the
+    breakpoints, the production address the dev server stands in for, and the frame's pending edits.
+  - The art is only the frame's visible children, copied into a blank document and moved so the frame's corner is the
+    origin (page CSS px). `mockup.png` is that art at 2× over the page picture; `mockup.svg` is the same art.
+    `selectors.json` has each direct child and each lifted shape with its box, the frame's scroll added.
+  - The page picture is `Page.captureScreenshot` through the pool, asynchronously, when the tab is live at the design
+    width. Otherwise it is the frame's last picture, so a paused or narrower tab still builds.
+  - The frame's pending edits go in the package and are cleared once the agent has started, so the one review holds both.
+  - One agent at a time (`m_waiting`): a second Build It says "The agent is still working on <what>." Its review is
+    named "Build it: <frame name>". A finished build shows "Built. Review changes" until the next Deploy, Save, Review
+    Changes or History action, or a click on it; the click opens the review.
+  - On a site that isn't yours the same items open the Hand to Agent sheet for the folder (nothing is remembered).
+    Build It with a Note… asks one line first; an empty note cancels.
+  - Not built: Before and After to Desk from a frame. Hand to Agent from a frame is Build It.
+  - Reloading the tab after a build is left to the dev server's own reload.

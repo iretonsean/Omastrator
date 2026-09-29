@@ -213,7 +213,7 @@ struct EditorCanvas::State {
     // A Browser View's address bar and sign-in strip (EditorCanvas+BrowserBar.cpp), laid out in view pixels.
     struct BrowserBarLayout {
         QUuid frame;
-        QRectF bar, back, forward, reload, name, address, tag, dev, deploy, editPage;
+        QRectF bar, back, forward, reload, name, address, tag, dev, deploy, build, editPage;
         // The breakpoint buttons and the width each previews, ascending; the design width is among them.
         std::vector<std::pair<QRectF, int>> widths;
         int designWidth = 0;

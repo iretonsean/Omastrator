@@ -453,6 +453,7 @@ void AgentBridge::stopLiveJob(const QString &requestId)
     AgentRun *run = found->second;
     AgentWork work = job->second;
     m_liveJobs.erase(job);
+    m_builds.remove(requestId);
     m_runs.erase(found);
     // The agent may still be writing in the worktree until it has stopped.
     connect(run, &AgentRun::finished, run, [work]() mutable { work.cleanup(); });

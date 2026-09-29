@@ -178,11 +178,15 @@ QString AgentBridge::liveAgentDone(const QString &id, const QString &summary)
         error = failure;
         m_liveMessage = failure;
     } else {
-        record(QStringLiteral("Agent"), summary.isEmpty() ? QStringLiteral("The agent's change") : summary, changes, work.project, id);
+        const Build build = m_builds.value(id);
+        if (!build.frame.isNull())
+            m_built[build.frame] = QDateTime::currentMSecsSinceEpoch();
+        record(build.title.isEmpty() ? QStringLiteral("Agent") : build.title, summary.isEmpty() ? QStringLiteral("The agent's change") : summary, changes, work.project, id);
         m_liveMessage.clear();
     }
     work.cleanup();
     m_liveJobs.erase(job);
+    m_builds.remove(id);
     emit liveReviewChanged();
     if (m_pipeline.active && m_pipeline.waitingFor.removeAll(id) > 0) {
         if (!error.isEmpty())

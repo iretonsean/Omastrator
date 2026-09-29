@@ -37,10 +37,17 @@ public:
         bool deployBusy = false;
         bool deployFailed = false;
         QString deployTip;
+        // Build It, for a frame with design on it: "Build It", "Building with <agent>…" while it works (a click stops it),
+        // or "Built. Review changes" until the next action. Empty when there is nothing to build.
+        QString build;
+        bool buildBusy = false;
+        bool buildDone = false;
+        QString buildTip;
     };
     // `deployButton` is the bar's pill (it opens Details after a failure and the site after a deploy); `deploy` and
-    // `save` always start one. The rest are the bar menu's, for the frame's project.
-    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, deployButton, deploy, save, reviewChanges, history, stopLive };
+    // `save` always start one. The rest are the bar menu's, for the frame's project; `buildButton` is the bar's Build It pill (it starts a
+    // build, stops one, or opens the review of a finished one).
+    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, deployButton, deploy, save, reviewChanges, history, stopLive, buildButton, buildIt, buildItWithNote, stopBuild };
     virtual Bar bar(const QUuid &frame) const;
     virtual void act(const QUuid &frame, Action action);
 
