@@ -18,7 +18,7 @@ file with the work. Don't delete finished items.
 - [x] 2. Non-printing / non-exporting artboards (a711523, 2026-09-28)
 - [ ] 3. Editable document presets
 - [ ] 4. Frame presets
-- [ ] 5. Per-side padding fields in auto layout
+- [x] 5. Per-side padding fields in auto layout (b63e6d1, 2026-09-28)
 - [ ] 6. Lock Document (read-only mode)
 - [ ] 7. Settings that travel
 - [ ] 8. Canvas size limit (check and document)
