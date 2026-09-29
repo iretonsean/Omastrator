@@ -1,192 +1,123 @@
-# Handoff (2026-09-28)
+# Handoff (2026-09-28, late)
 
 For the next session after a context clear. **Start with "Next session starts
-here" just below.**
+here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
-**State at 2026-09-28 ~09:50:** everything is merged into `main` and pushed.
-That covers the whole stack (the design-mode Esc fix, the Graphite look,
-frames and auto layout, Inspect inside windows) plus today's four branches:
-resizing artboards on the canvas, the shortcuts pass, Send to a device, and
-the dense Properties panel.
+### State (2026-09-29 ~00:30)
+- `main` is pushed and clean. The last full check was 122/122, and the
+  sweep was clean.
+- **The history was rewritten on 2026-09-28** (the author's call: promos
+  don't belong in the repo). `media/promo` is gone from every commit, and a
+  fresh clone is 8.7 MB. Only `main` and `claude/sponsorship-links` exist on
+  GitHub.
+  - The old history is kept in a local backup,
+    `~/Projects/.omastrator-history-backup-2026-09-28.git`. It holds promo
+    material, so never push it.
+  - The local branch `old-main-before-rewrite` is no longer needed. Delete
+    it with `git branch -D`.
+  - Other clones need `git fetch && git reset --hard origin/main`.
+- **Done today, all merged:**
+  - the five branches: PDF, AI and EPS import; Figma; Sketch, Penpot and
+    others; alpha installs; audit leftovers;
+  - the review fixes;
+  - QUICK-WINS items 1–8 (ticked with commit ids);
+  - Browser View **phase 1, Pages**;
+  - the bugs found along the way: the CI build and tests, undo that stopped
+    recording after a scrub, Deploy signalling its own process group, the
+    width-tool index, and tests that freed dialogs twice;
+  - from the alpha tester's feedback:
+    - **setup safety:** backups, `--restore`, a key-clash check, `--no-keys`,
+      a reset key that works inside any submap, and a checked reload that
+      restores the backup if the user's keys go;
+    - **the design-mode bar sticks to its window;**
+    - **the island shows only with Omastrator.** This is interim; the author
+      may scrap it or rethink it.
+- **CI:** the last run failed only on DeviceShareTests' use-after-free,
+  which is now fixed (1dfb30b). The next run should be the first green one.
+  Check `gh run list`.
 
-### Audit leftovers (2026-09-28, `fix/audit-leftovers`, not yet merged)
-
-Two loose ends from the design-mode Esc audit mentioned just above:
-
-1. **The tray light's tooltip was wrong for an overlay proposal.** It always
-   said "Enter keeps it, Esc discards it" when a result was ready
-   (`shell/omastrator.ai/TrayLight.qml`), but that's only true for an
-   app-window proposal (`ContentView`/`AgentPanels` bind those keys
-   directly). Design mode's Ask proposal is answered with the floating bar's
-   own Keep and Discard chips — never the keyboard, by design, so the
-   proposal card stays visible and clickable even after design mode ends
-   (`shell/omastrator.island/Overlay.qml`'s own comment says so). The
-   island's own activity line already got this right
-   (`Island.qml`'s `designLine`, "… is on the overlay: Keep or Discard it in
-   the bar"); the tray light didn't share that logic. Fixed by adding
-   `readyTooltip(status)` to `OverlayLogic.js` (checks `design.proposal`
-   before the flat `proposal` field) and having `TrayLight.qml` call it;
-   covered in `ShellPluginTests`.
-2. **Design mode without setup's keys: two states the first audit missed,
-   now fixed** (Opus review, 2026-09-28). The parts that held:
-   `Island::holdDesignKeys()` checks `Setup::designKeysLoaded()` before
-   telling Hyprland to hold the `omastrator-design` submap, so an unloaded
-   key file never straps Hyprland into a submap with nothing bound in it;
-   nothing in the overlay takes `WlrKeyboardFocus.Exclusive`; the proposal
-   card's Keep and Discard are mouse-reachable whatever design mode's state;
-   `omastrator reset` tears down every piece of state on whichever monitor
-   is focused (`resetIsTheEscapeHatchWithoutHyprlandKeysAndAcrossMonitors`
-   in `tests/UI/DesignModeUiTests.cpp`). What broke:
-   - **Esc under Point or Inspect, with no keys loaded.** The overlay has no
-     keyboard for a non-drawing tool and the island never takes it, so Esc
-     went to the app under the pointer while the island said "Esc leaves".
-     Super+Alt+Escape doesn't exist in that state either: it lives in the
-     same key file, so it exists only after `omastrator setup --apply`. The
-     design status now carries `keysLoaded` (`DesignMode::status`), and
-     `OverlayLogic.designOnLine` makes the island say "click the island's
-     Leave (or run `omastrator reset`) to leave" when it's false (a drawing
-     tool keeps "Esc leaves": the overlay takes the keyboard there, though
-     on-demand focus may need a first click, unverified on a live Hyprland).
-     The only exits without keys are the island's Leave and `omastrator
-     reset` in a terminal.
-   - **A drawing tool's overlay covered the Omarchy bar.** The input mask
-     was the whole monitor minus the island hole, which starts below
-     `reservedTop`, so clicks on the bar's workspaces, clock and tray light
-     started a shape. `Overlay.qml`'s mask now subtracts the `reservedTop`
-     strip too (a bar at the bottom or a side isn't handled: the status
-     carries only `reservedTop`). Both are pinned in `ShellPluginTests`.
-
-### Promo material stays out of the repo
-
-The author keeps every promo (brief, source, renders, video) outside this repo,
-and the history was rewritten on 2026-09-28 to remove the older `media/promo/`
-work. Don't add promo material here.
-
-### Checklist for the next session (written 2026-09-28 ~15:00)
-
-Nothing is building or running. Every agent finished and committed, and
-their panes are closed. Their session IDs are in
-`~/Projects/.omastrator-briefs/SESSIONS.md`. Work top to bottom:
-
-1. **DONE (2026-09-28): merged the five finished branches into `main`.**
-   Each got an Opus review, a Sonnet fix branch (`fix/review-pdf`,
-   `-figma`, `-open`, `-installs`) and an Opus check of the fixes; the
-   reviews and reports are in `~/Projects/.omastrator-briefs/`. Decisions
-   at the merge: one `src/IO/ZipReader` (Figma's structure plus
-   import-open's name handling, with size, ratio and total caps);
-   `VectorFileImporter` is the single dispatch for every layered format
-   (Open, Place, drag-and-drop, the agent's place tool); dropping a
-   .sketch/.penpot/.fig opens it in a tab; `VectorDocument::insert` is
-   now linear for paint-order appends, so PDF budgets are 100k form runs
-   and 250k objects; `sweep.sh` ignores a stock hostname. The release
-   workflows are written but have never run (see docs/RELEASING.md).
-   The original notes:
-   - `feat/import-pdf`: an in-tree PDF reader, .ai files, and EPS/PS
-     through Ghostscript (docs/import/pdf.md);
-   - `feat/import-figma`: Paste from Figma, Import from Figma Link…, and
-     .fig files (docs/import/figma.md);
-   - `feat/import-open`: Sketch, Penpot v3, Inkscape layers and .svgz,
-     HEIC/AVIF, placing PSD flattened, and Excalidraw (docs/import/*.md);
-   - `feat/alpha-installs`: the AUR PKGBUILDs, the release workflow,
-     docs/RELEASING.md, and the `/tmp` LiveReviewTests leak;
-   - `fix/audit-leftovers`: the tray tooltip and the escape-hatch audit.
-
-   Expect small conflicts in Open/Place, the file filters and
-   drag-and-drop. Two copies of `src/IO/ZipReader` should become one. Then
-   add the new formats to the README's Files list, run `scripts/check.sh`
-   (builds under `flock ~/.cache/omastrator-build.lock`, `-j2`), and
-   **ask the author before pushing**. Remove the merged worktrees
-   afterwards.
-2. **The quick-win queue:** `docs/backlog/QUICK-WINS.md`, nine items, ending
-   with Browser View and canvas workspaces. **Tick each item off in that
-   file as it merges.** Coding goes to Sonnet agents at high effort; review
-   and thinking go to Opus 5.5 agents at medium effort (see "Agents and
-   models" in that file). Medium and high effort work is in
-   `docs/backlog/MEDIUM-EFFORT.md` and `docs/backlog/HIGH-EFFORT.md`.
-3. **Effects** (docs/EFFECTS.md): **the author hasn't reviewed the design
-   yet.** Ask before building. It's built in phases on `feat/effects` after
-   the merge.
-4. **Browser View and canvas workspaces:** now item 9 of the quick-win queue (above).
-5. **Then stop.** `docs/backlog/MEDIUM-EFFORT.md` is **on hold**: it's noted for later, and the author will say when to start it.
-6. **The author's own steps:**
-   - publish to the AUR and cut the first tagged release, per
-     docs/RELEASING.md;
-   - supply real Figma files, pastes and links, and real .ai files, to
-     check the importers;
-   - the desktop checks under "Waiting on the author".
-7. **Housekeeping:**
-   - `llama-fim`, `opencode-serve` and the seanireton.com Vite server were
-     stopped (not disabled) to free RAM for builds. They come back at the
-     next login, or with `systemctl --user start llama-fim opencode-serve`.
-   - The rendering test left two runtime-only Hyprland rules for classes
-     `omaspike*`, which go at the next config reload.
+### Next, in order
+1. **Size fixes:** `~/Projects/.omastrator-briefs/SIZE-FIXES.md`. Strip the
+   release binary, add `OMASTRATOR_BUILD_TESTS` (off for installs), try LTO,
+   and cap captures, logs, backups and the Browser View Chromium cache. It's
+   approved; start it on a branch off `main`.
+2. **Browser View phase 2: canvas workspaces** (docs/BROWSER-FRAMES.md, build
+   order item 2), then phases 3–5. Tick QUICK-WINS item 9 only when all five
+   phases are merged, and record each phase's commit beside it.
+3. **Stop there.** MEDIUM-EFFORT.md is on hold. Effects waits for the
+   author's review of docs/EFFECTS.md.
 
 ### Waiting on the author
+- **The island:** keep it, scrap it, or change what it does. The interim
+  rule is in docs/ANYWHERE.md.
+- **The "Off-axis" app icon** was never merged. It's saved as a patch in
+  `~/Projects/.omastrator-promo/`. Merge it or drop it?
+- **The history backup:** delete it when the author says so. Optionally, ask
+  GitHub for a cached-views purge so the old commits stop resolving.
+- **Reply to the alpha tester (@Madmasx on X):** setup's fixes are pushed.
+  Ask for their Hyprland version, Lua or conf config, and
+  `hyprctl binds -j` if keys die again. The cause wasn't reproduced; the
+  leading theory is a latched submap (docs/OS-SUITE.md).
+- **Installed build:** `~/.local` still runs the build from 2026-09-28
+  10:09, before all of today's work. Reinstall with
+  `scripts/install-local.sh` and restart the daemon only with the author's OK
+  (it closes their window).
+- **Their own steps:** publish to the AUR and cut the first release
+  (docs/RELEASING.md); supply real Figma, .ai and PDF files to check the
+  importers against.
+- **Try on the desktop:** Pages, Lock Document, frame presets, per-side
+  padding, settings export and import, the sticky bar, and the island rule.
+- **Parked:** the frame-resize default for paths (don't raise it), and the
+  Inspect sluggishness (at the Mac, with `scripts/profile-design-mode.sh`).
 
-- **Installed and live (2026-09-28 10:10):** main is installed in ~/.local,
-  and the daemon and Chromium were restarted with the author's OK.
-  - The extension is now version 1.1 (background-3.js). It listens for
-    `runtime.onStartup`, because without that Chromium never woke its worker
-    at launch, so the link to Omastrator waited for a click on the toolbar
-    button.
-  - Bump the manifest `version` whenever the worker changes: Chromium kept
-    the old registration while it stayed at 1.0.
-- **Try on the desktop:**
-  - the dense panel (docs/PANELS.md);
-  - Shift+A after clicking in Layers, and Esc and Tab;
-  - resizing an artboard with the Select tool;
-  - a real Send to a Device to the iPhone (docs/SHARE.md);
-  - Inspect reading a Chromium tab and a Qt app.
-- **Parked indefinitely:** the frame-resize default for paths. Don't raise
-  it.
-- **Parked until the author is at the Mac:** the Inspect sluggishness, with
-  `scripts/profile-design-mode.sh`.
+### Backlog written today (not scheduled)
+- docs/backlog/GIT-NATIVE.md: readable files, a file CLI, an agent skill,
+  and linked libraries. The ideas come from Elyx.
+- docs/backlog/BACKGROUND-WORK.md: heavy work off the UI thread.
+- docs/backlog/INTERACTIVE-BEHAVIORS.md: behaviours that break the fourth
+  wall.
+- QUICK-WINS.md "Backlog, not queued": refresh the README screenshots.
+- Small follow-ups that are noted but not queued:
+  - QSettings lives under "Unknown Organization" because the app never sets
+    an organization name (fixing it needs a migration);
+  - Share and Send to Device render PNG at a fixed 2x;
+  - Setup.cpp is over 700 lines (`runCli` could move to `Setup+Cli.cpp`).
 
-### Queued: easy installs for alpha testers
+### How the work runs (keep doing this)
+- **Agents, in Herdr panes:**
+  - Sonnet 5.5 (`--model claude-sonnet-5-5 --effort high`) codes.
+  - Opus 5.5 (`--effort medium`) reviews every branch before merge, and
+    checks each fix round.
+  - The `sonnet` alias is pinned to 5.5 in ~/.claude/settings.json.
+- **Briefs, reports and reviews:** `~/Projects/.omastrator-briefs/`.
+  - `quick-wins/SHARED.md` holds the rules every coding agent reads, and
+    `REVIEW-ITEM.md` and `VERIFY-FIXES.md` are the review briefs.
+  - Reports go in `quick-wins/reports/` and reviews in `reviews/`.
+- **Builds:**
+  - Always go through `omastrator-build-slot`, at `-j3`, with at most two
+    builds at once.
+  - `check.sh build 3` must print CHECK OK and `sweep.sh` must print SWEEP OK
+    before a merge.
+  - Never put a build folder under /tmp or the scratchpad: both are RAM.
+- **Never:**
+  - start a Hyprland (only `--verify-config`);
+  - touch the running daemon or the user's desktop;
+  - let tests reach the real HOME or XDG folders;
+  - add promo material;
+  - push without the author's OK.
+- **Merging:** chain the steps with `&&` so a conflict stops everything that
+  follows. One bad merge was committed with its conflict markers and had to
+  be reset.
+- **Worktrees in use:**
+  - `~/Projects/Omastrator-main` holds `main`.
+  - `~/Projects/Omastrator-shortcuts` and `-share-device` are reusable slots,
+    each with a warm `build/`.
+  - `~/Projects/Omastrator` (the main checkout) is on the old
+    `feat/inspect-inside`; leave it alone.
 
-The README's Install (alpha) section promises these:
-
-1. An AUR package, `omastrator-git`: a PKGBUILD with cmake, a Release build
-   and `-j$(nproc)`, depending on qt6-base (optdepends: qt6-declarative,
-   rclone, python-gobject for AT-SPI).
-2. A GitHub Actions workflow that builds x86_64 and aarch64 on a tag and
-   attaches tarballs to GitHub Releases, plus an `omastrator-bin` AUR package
-   that installs them.
-3. After install, `omastrator setup` stays the single step that wires the
-   shell, the keys, the menu and the extension.
-
-**Update 2026-09-28: built on `feat/alpha-installs`, not yet published.**
-`omastrator-git` and `omastrator-bin` PKGBUILDs (with `.install` files),
-`.github/workflows/release.yml` and `ci.yml`, and
-`scripts/update-bin-pkgbuild.sh` are all written and, where they can be
-without a real release to test against, tested locally (`makepkg` for
-`omastrator-git` built and packaged cleanly on this aarch64 machine). See
-[docs/RELEASING.md](RELEASING.md) for the author's remaining steps (tag, wait
-for the workflow, run the update script, push to the two AUR repositories)
-and the design decisions, including one open item: the aarch64 release job's
-Arch Linux ARM container image is a community one, unverified since no
-GitHub Actions run has happened yet.
-
-### Memory hygiene (the machine has 15 GB and /tmp is in RAM)
-
-- Test runs leave `/tmp/LiveReviewTests-*` folders of about 143 MB each. The
-  author's machine ran out of memory on 2026-09-28 partly because of them.
-  **Fixed on `feat/alpha-installs`:** `LiveReviewTests` now asserts its
-  `QTemporaryDir` actually removed itself in `cleanupTestCase` (it always
-  should on a clean run; this catches it if it silently doesn't), and its
-  headless Chromium runs with a capped disk/media cache so a leaked profile
-  is smaller. Neither of those can save a folder from an out-of-memory kill,
-  which is likely what actually happened — the real backstop is
-  `scripts/clean-tmp.sh` (new), which removes any `<TestBinary>-XXXXXX`
-  folder over an hour old; `scripts/check.sh` runs it before every build.
-  Grepped every other test for temp paths it doesn't clean up: none found,
-  they all already use `QTemporaryDir`.
-- Old Claude scratch folders were moved to
-  `~/.local/share/claude-scratch-archive/2026-09-28/`.
-- Build with at most -j2 and one build at a time
-  (`flock ~/.cache/omastrator-build.lock …`).
+## Earlier notes (history)
 
 ### Branch-by-branch notes from today (the detail)
 
