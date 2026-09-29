@@ -40,6 +40,11 @@ is one case among many.
 
 - A pill centred at the top of the focused monitor, under the bar. It follows
   the focused monitor.
+- **Interim, pending a rethink of the island:** it shows only while an
+  Omastrator window is focused, and stays while design mode is on, dictation is
+  listening or a proposal or result waits. `omastrator island show always`
+  (or Preferences) shows it everywhere. The tray light is always there. See
+  ANYWHERE.md.
 - **Three states:**
   - *resting*: small, shows the mode glyph
   - *expanded*: the mode's tools
