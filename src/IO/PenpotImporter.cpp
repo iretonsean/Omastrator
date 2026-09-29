@@ -148,6 +148,9 @@ public:
             if (!masterObject || !masterObject->component) {
                 warnings << QStringLiteral("A component instance's original component wasn't found in this file; it stayed a plain group.");
                 object->instance.reset();
+            } else if (!(frameByObject.value(pending.object) == frameByObject.value(master))) {
+                warnings << QStringLiteral("Some component copies were resized or rotated from their main component; they stayed plain groups.");
+                object->instance.reset();
             } else {
                 object->instance->master = master;
                 recordOverrides(pending.object, master);
@@ -179,6 +182,18 @@ private:
     QSet<QString> built;
     int depth = 0;
     bool warnedRepeat = false;
+    bool warnedDepth = false;
+    // A copy is rebuilt from its main at the main's size and angle, so one that differs stays a plain group.
+    struct Frame {
+        QSizeF size;
+        double rotation = 0;
+        bool operator==(const Frame &other) const
+        {
+            return qFuzzyCompare(size.width() + 1, other.size.width() + 1) && qFuzzyCompare(size.height() + 1, other.size.height() + 1)
+                && qFuzzyCompare(rotation + 1, other.rotation + 1);
+        }
+    };
+    QHash<QUuid, Frame> frameByObject;
 
     // What a copy changed from its main component, by layer name path. Layers the
     // main doesn't have, or geometry changes, can't be kept: the copy is rebuilt from the main.
@@ -212,13 +227,19 @@ private:
                 info.overrides[key] = change;
         }
         if (lost)
-            warnings << QStringLiteral("Some component copies had layers or sizes that differ from their main component; they follow the main component.");
+            warnings << QStringLiteral("Some component copies had layers that differ from their main component; they follow the main component.");
     }
 
     bool claim(const QString &shapeID)
     {
-        if (shapeID == zeroID || depth >= maximumDepth)
+        if (shapeID == zeroID)
             return false;
+        if (depth >= maximumDepth) {
+            if (!warnedDepth)
+                warnings << QStringLiteral("Some shapes were nested too deeply and were left out.");
+            warnedDepth = true;
+            return false;
+        }
         if (!shapeID.isEmpty() && built.contains(shapeID)) {
             if (!warnedRepeat)
                 warnings << QStringLiteral("Some shapes listed themselves or appeared twice; each was imported once.");
@@ -289,7 +310,7 @@ private:
         QRectF looseBounds;
         for (int i = 0; i < topLevel.size(); ++i) {
             const QJsonObject shape = shapes.value(topLevel[i]);
-            if (shape.isEmpty())
+            if (shape.isEmpty() || !claim(topLevel[i]))
                 continue;
             if (shape.value(QStringLiteral("type")).toString() == QLatin1String("frame")) {
                 ++frameCount;
@@ -300,8 +321,7 @@ private:
                 const QRectF rect = shapeRect(shape);
                 looseBounds = looseBounds.isNull() ? rect : looseBounds.united(rect);
             }
-            if (claim(topLevel[i]))
-                buildItem(shape, shapes, layerID);
+            buildItem(shape, shapes, layerID);
         }
         if (!looseBounds.isNull() || frameCount == 0) {
             Artboard board;
@@ -370,6 +390,8 @@ private:
         const QString componentID = shape.value(QStringLiteral("componentId")).toString();
         // Children are absolute page coordinates, so a component's frame is just its top-left corner.
         const QTransform placement = QTransform::fromTranslate(shapeRect(shape).x(), shapeRect(shape).y());
+        if (isMain || !componentID.isEmpty())
+            frameByObject[object.id] = {shapeRect(shape).size(), shape.value(QStringLiteral("rotation")).toDouble(0)};
         if (isMain) {
             ComponentInfo info;
             info.set = object.name;

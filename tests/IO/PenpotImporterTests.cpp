@@ -452,6 +452,63 @@ private slots:
         QCOMPARE(kids.front()->transform.map(QPointF(0, 0)).x() - children(document, card->id).front()->transform.map(QPointF(0, 0)).x(), 200.0);
     }
 
+    // Copies are rebuilt from the main at its size and angle, so a resized or rotated one stays a plain group.
+    void resizedOrRotatedCopyStaysAPlainGroupWithAWarning()
+    {
+        for (const bool rotate : {false, true}) {
+            const QString componentID = newID(), mainID = newID(), copyID = newID(), copyKidID = newID();
+            QJsonObject main = baseShape(mainID, "frame", 0, 0, 80, 40);
+            main["name"] = "Card";
+            main["componentRoot"] = true;
+            main["mainInstance"] = true;
+            main["componentId"] = componentID;
+            main["shapes"] = QJsonArray();
+            QJsonObject copy = baseShape(copyID, "frame", 200, 100, rotate ? 80 : 160, 40);
+            copy["name"] = "Card Copy";
+            copy["componentRoot"] = true;
+            copy["componentId"] = componentID;
+            copy["shapeRef"] = mainID;
+            copy["shapes"] = QJsonArray{copyKidID};
+            if (rotate)
+                copy["rotation"] = 30;
+            QJsonObject kid = baseShape(copyKidID, "rect", 210, 105, 20, 10);
+            kid["name"] = "Kid";
+            kid["parentId"] = copyID;
+            QStringList warnings;
+            const VectorDocument document = PenpotImporter::parse(penpotFile({main, copy, kid}, {mainID, copyID}), &warnings);
+            const VectorObject *copied = named(document, QStringLiteral("Card Copy"));
+            QVERIFY(copied);
+            QVERIFY(!copied->instance.has_value());
+            QVERIFY(named(document, QStringLiteral("Kid")));
+            QVERIFY(!warnings.filter(QStringLiteral("resized or rotated")).isEmpty());
+        }
+    }
+
+    void aTopLevelFrameListedTwiceIsOneArtboard()
+    {
+        const QString a = newID();
+        QJsonObject frame = baseShape(a, "frame", 0, 0, 50, 50);
+        frame["shapes"] = QJsonArray();
+        const VectorDocument document = PenpotImporter::parse(penpotFile({frame}, {a, a}));
+        QCOMPARE(document.artboards.size(), size_t(1));
+    }
+
+    void shapesNestedPastTheDepthCapWarn()
+    {
+        QList<QJsonObject> shapes;
+        QStringList ids;
+        for (int i = 0; i < 300; ++i)
+            ids << newID();
+        for (int i = 0; i < 300; ++i) {
+            QJsonObject group = baseShape(ids[i], "group", 0, 0, 10, 10);
+            group["shapes"] = i + 1 < 300 ? QJsonArray{ids[i + 1]} : QJsonArray();
+            shapes << group;
+        }
+        QStringList warnings;
+        PenpotImporter::parse(penpotFile(shapes, {ids.first()}), &warnings);
+        QVERIFY(!warnings.filter(QStringLiteral("nested too deeply")).isEmpty());
+    }
+
     void aFrameThatListsItselfDoesNotRecurseForever()
     {
         const QString a = newID(), b = newID();

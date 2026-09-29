@@ -185,27 +185,28 @@ private slots:
         QVERIFY(reader.read(QStringLiteral("document.json")).isEmpty());
     }
 
+#ifdef OMASTRATOR_HAVE_ZLIB
+    // The entry inflates fine and the claim is under every cap, so only the ratio check can refuse it.
     void refusesADeflateEntryWithAnImpossibleRatio()
     {
-        // Central directory claims 200 MB from a few bytes of deflate.
-        QByteArray zip = buildZip({{QStringLiteral("a.bin"), QByteArray(64, 'x'), false}});
+        QByteArray zip = buildZip({{QStringLiteral("a.bin"), QByteArray(100 * 1024, '\0'), true}});
         const qsizetype central = zip.indexOf(QByteArrayLiteral("PK\x01\x02"));
         QVERIFY(central > 0);
-        zip[central + 10] = 8;
-        const quint32 claim = 200u * 1024 * 1024;
+        const quint32 claim = 4u * 1024 * 1024;
         for (int i = 0; i < 4; ++i)
             zip[central + 24 + i] = char((claim >> (8 * i)) & 0xff);
         ZipReader reader(zip);
         QVERIFY(reader.isValid());
         QVERIFY(reader.read(QStringLiteral("a.bin")).isEmpty());
     }
+#endif
 
     void refusesAStoredEntryWhoseSizesDisagree()
     {
         QByteArray zip = buildZip({{QStringLiteral("a.bin"), QByteArray(64, 'x'), false}});
         const qsizetype central = zip.indexOf(QByteArrayLiteral("PK\x01\x02"));
-        zip[central + 24] = char(0x7f);
-        zip[central + 27] = char(0x7f);
+        // 65 instead of 64: under every cap, wrong only against the compressed size.
+        zip[central + 24] = char(65);
         ZipReader reader(zip);
         QVERIFY(reader.isValid());
         QVERIFY(reader.read(QStringLiteral("a.bin")).isEmpty());
