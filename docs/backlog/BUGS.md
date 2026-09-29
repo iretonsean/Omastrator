@@ -26,7 +26,7 @@ lasting fix is one of these:
   `qt6-base-dev`);
 - raising the minimum in AGENTS.md and in `find_package(Qt6 6.4 …)`.
 
-## 2. [x] A failed Save says "Deploy failed" in the frame's bar (2026-09-29)
+## 2. [x] A failed Save says "Deploy failed" in the frame's bar (bb40590, 2026-09-29)
 
 **Confirmed in code and on screen.** Choose Save (not Deploy) from a
 Browser View's bar menu. When the save fails, the bar's pill says
@@ -47,7 +47,7 @@ Browser View's bar menu. When the save fails, the bar's pill says
 4. The pill says "Deploy failed". Its tooltip says "1 edits weren't
    certain enough to write directly, and the agent couldn't take them: …".
 
-## 3. [x] A failed Save leaves the certain edits written but not committed (2026-09-29)
+## 3. [x] A failed Save leaves the certain edits written but not committed (bb40590, 2026-09-29)
 
 **Seen once. Check whether it's intended.** In the case in item 2, the text
 edit was written to `index.html`, but the save failed before the commit. So:
@@ -64,7 +64,7 @@ Decide one of these:
 Also check that a later Save, once an agent is available, doesn't write the
 text edit twice.
 
-## 4. [x] Two messages that don't fit (2026-09-29)
+## 4. [x] Two messages that don't fit (bb40590, 2026-09-29)
 
 **Confirmed, minor.**
 - The failure message in item 2 says "1 edits"
@@ -76,7 +76,7 @@ text edit twice.
   GitHub (`src/UI/LivePanel.cpp:234`). Consider showing it only when the
   project has no remote, or when its remote is on GitHub.
 
-## 5. [x] A Browser View drawn at a fractional zoom gets a fractional design width (2026-09-29)
+## 5. [x] A Browser View drawn at a fractional zoom gets a fractional design width (441ff82, 2026-09-29)
 
 **Confirmed.** At the default zoom, a Browser View drawn with the tool came
 out 1279.67 × 801.11 (the Transform section shows it). "The design width is
@@ -88,7 +88,7 @@ and the real width disagree.
 Suggested fix: round a Browser View's width and height to whole CSS px when
 the tool (and a resize) commits them.
 
-## 6. [x] Edit Page fills every selection box after the first with solid blue (2026-09-29)
+## 6. [x] Edit Page fills every selection box after the first with solid blue (2fce8e6, 2026-09-29)
 
 **Confirmed, with the fix tested.** In Edit Page, Shift-click a second
 element. Its selection box is drawn filled with the accent colour, and the
