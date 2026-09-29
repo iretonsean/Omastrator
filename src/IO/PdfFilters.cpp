@@ -1,31 +1,79 @@
 #include "IO/PdfFilters.h"
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
+#ifdef OMASTRATOR_HAVE_ZLIB
+#include <zlib.h>
+#endif
 
 using Pdf::Dict;
 using Pdf::Object;
 
 namespace PdfFilters {
 
-QByteArray inflate(const QByteArray &data)
+namespace {
+QString tooLargeWarning()
+{
+    return QStringLiteral("A stream was too large to decode in full; the rest was left out.");
+}
+QString damagedWarning()
+{
+    return QStringLiteral("A compressed stream was damaged or cut short; what could be read was kept.");
+}
+}
+
+QByteArray inflate(const QByteArray &data, QStringList *warnings)
 {
     if (data.isEmpty())
         return {};
-    // qUncompress expects a big-endian uncompressed-size hint before a zlib
-    // stream, which a raw FlateDecode stream already is. A wrong hint only
-    // costs qUncompress a retry with a doubled buffer, so any guess works.
-    QByteArray framed;
-    framed.reserve(data.size() + 4);
-    const quint32 hint = quint32(std::clamp<qint64>(qint64(data.size()) * 4, 1024, 128 * 1024 * 1024));
-    framed.append(char((hint >> 24) & 0xff));
-    framed.append(char((hint >> 16) & 0xff));
-    framed.append(char((hint >> 8) & 0xff));
-    framed.append(char(hint & 0xff));
-    framed.append(data);
-    return qUncompress(framed);
+#ifdef OMASTRATOR_HAVE_ZLIB
+    z_stream stream{};
+    if (inflateInit(&stream) != Z_OK)
+        return {};
+    QByteArray out;
+    stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(data.constData()));
+    stream.avail_in = uInt(std::min<qsizetype>(data.size(), std::numeric_limits<uInt>::max()));
+    constexpr qsizetype chunk = 256 * 1024;
+    int result = Z_OK;
+    while (result != Z_STREAM_END) {
+        if (out.size() >= maximumDecodedSize) {
+            if (warnings)
+                *warnings << tooLargeWarning();
+            break;
+        }
+        const qsizetype used = out.size();
+        out.resize(used + chunk);
+        stream.next_out = reinterpret_cast<Bytef *>(out.data() + used);
+        stream.avail_out = uInt(chunk);
+        result = inflate(&stream, Z_NO_FLUSH);
+        out.resize(used + chunk - qsizetype(stream.avail_out));
+        if (result == Z_STREAM_END)
+            break;
+        // Z_BUF_ERROR with no input left is a truncated stream; a data error
+        // (bad checksum, corrupt block) keeps the good prefix too.
+        if (result != Z_OK && !(result == Z_BUF_ERROR && stream.avail_in > 0)) {
+            if (warnings)
+                *warnings << damagedWarning();
+            break;
+        }
+        if (stream.avail_in == 0 && stream.avail_out != 0) {
+            if (warnings)
+                *warnings << damagedWarning();
+            break;
+        }
+    }
+    inflateEnd(&stream);
+    if (out.size() > maximumDecodedSize)
+        out.truncate(maximumDecodedSize);
+    return out;
+#else
+    if (warnings)
+        *warnings << QStringLiteral("A compressed stream was left out because this build has no zlib.");
+    return {};
+#endif
 }
 
-QByteArray decodeLZW(const QByteArray &data, int earlyChange)
+QByteArray decodeLZW(const QByteArray &data, int earlyChange, QStringList *warnings)
 {
     QByteArray out;
     std::vector<QByteArray> dictionary(4096);
@@ -73,6 +121,11 @@ QByteArray decodeLZW(const QByteArray &data, int earlyChange)
         else
             break; // a corrupt or truncated stream
         out += sequence;
+        if (out.size() >= maximumDecodedSize) {
+            if (warnings)
+                *warnings << tooLargeWarning();
+            break;
+        }
         if (previousCode >= 0 && nextCode < 4096) {
             dictionary[nextCode] = previousSequence + sequence.left(1);
             ++nextCode;
@@ -149,11 +202,16 @@ QByteArray decodeAscii85(const QByteArray &data)
     return out;
 }
 
-QByteArray decodeRunLength(const QByteArray &data)
+QByteArray decodeRunLength(const QByteArray &data, QStringList *warnings)
 {
     QByteArray out;
     qsizetype i = 0;
     while (i < data.size()) {
+        if (out.size() >= maximumDecodedSize) {
+            if (warnings)
+                *warnings << tooLargeWarning();
+            break;
+        }
         const uchar length = uchar(data[i++]);
         if (length == 128)
             break; // EOD
@@ -175,13 +233,16 @@ QByteArray applyPredictor(const QByteArray &data, int predictor, int colors, int
 {
     if (predictor <= 1)
         return data;
-    colors = std::max(1, colors);
-    bitsPerComponent = std::max(1, bitsPerComponent);
-    columns = std::max(1, columns);
+    // 64-bit so hostile /Colors, /BitsPerComponent and /Columns can't overflow into a small row.
+    colors = std::clamp(colors, 1, 256);
+    bitsPerComponent = std::clamp(bitsPerComponent, 1, 32);
+    columns = std::clamp(columns, 1, 1 << 28);
     const int bytesPerPixel = std::max(1, (colors * bitsPerComponent + 7) / 8);
-    const int rowBytes = (colors * bitsPerComponent * columns + 7) / 8;
-    if (rowBytes <= 0)
-        return data;
+    const qint64 rowBytes64 = (qint64(colors) * bitsPerComponent * columns + 7) / 8;
+    // A row that can't fit in the data yields nothing; don't allocate a previous-row buffer for it.
+    if (rowBytes64 + 1 > data.size())
+        return predictor == 2 ? data : QByteArray();
+    const int rowBytes = int(rowBytes64);
 
     if (predictor == 2) {
         // TIFF predictor 2 (horizontal differencing); only meaningful byte-aligned.
@@ -272,18 +333,18 @@ Decoded decodeStream(const Dict &dict, const QByteArray &rawBytes, const std::fu
         const Dict parmDict = parmObject.isDictionary() ? parmObject.toDict() : Dict();
 
         if (name == "FlateDecode" || name == "Fl") {
-            result.bytes = inflate(result.bytes);
+            result.bytes = inflate(result.bytes, &result.warnings);
             result.bytes = predictorPass(result.bytes, parmDict, resolve);
         } else if (name == "LZWDecode" || name == "LZW") {
             const int early = resolve(parmDict.value(QStringLiteral("EarlyChange"))).toInt(1);
-            result.bytes = decodeLZW(result.bytes, early);
+            result.bytes = decodeLZW(result.bytes, early, &result.warnings);
             result.bytes = predictorPass(result.bytes, parmDict, resolve);
         } else if (name == "ASCIIHexDecode" || name == "AHx") {
             result.bytes = decodeAsciiHex(result.bytes);
         } else if (name == "ASCII85Decode" || name == "A85") {
             result.bytes = decodeAscii85(result.bytes);
         } else if (name == "RunLengthDecode" || name == "RL") {
-            result.bytes = decodeRunLength(result.bytes);
+            result.bytes = decodeRunLength(result.bytes, &result.warnings);
         } else if (name == "DCTDecode" || name == "DCT" || name == "JPXDecode" || name == "CCITTFaxDecode" || name == "CCF") {
             result.imageFilter = name;
             return result; // left encoded for the image decoder

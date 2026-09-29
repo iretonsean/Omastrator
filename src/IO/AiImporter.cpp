@@ -8,16 +8,18 @@
 namespace {
 thread_local QStringList lastWarningList;
 
-// Illustrator can save a PDF-compatible .ai with the artwork left out of the
-// PDF content entirely (kept only in its own private data instead). That
-// shows up here as a document with no paint at all.
-bool isEmptyOfArt(const VectorDocument &document)
+// Illustrator can save a PDF-compatible .ai without the PDF content. The file
+// then holds one placeholder page that draws Illustrator's own notice ("This is
+// an Adobe Illustrator File that was saved without PDF Content. …") as text,
+// so an empty page is no sign of it: a real .ai can have an empty artboard.
+bool isPlaceholderPage(const VectorDocument &document)
 {
+    QString text;
     for (const VectorObject &object : document.objects) {
-        if (object.kind == ObjectKind::path || object.kind == ObjectKind::text || object.kind == ObjectKind::image)
-            return false;
+        if (object.kind == ObjectKind::text)
+            text += object.text.text + QLatin1Char(' ');
     }
-    return true;
+    return text.simplified().contains(QLatin1String("saved without PDF Content"), Qt::CaseInsensitive);
 }
 }
 
@@ -39,7 +41,7 @@ VectorDocument parse(const QByteArray &data, QStringList *warnings)
     VectorDocument result;
     if (data.startsWith("%PDF-")) {
         result = PdfImporter::parse(data, &localWarnings);
-        if (isEmptyOfArt(result)) {
+        if (isPlaceholderPage(result)) {
             throw FileError(QStringLiteral("This Illustrator file was saved without PDF content. In Illustrator, turn on "
                                             "“Create PDF Compatible File” in Illustrator Options and save again."));
         }

@@ -22,9 +22,26 @@ QList<int> toIntList(const Document &document, const Object &object)
     return out;
 }
 
-QList<PsNode> parsePsBlock(Lexer &lexer)
+// A type 4 program nests a handful of levels; the PostScript calculator's stack is 100 deep by spec.
+constexpr int maximumPsDepth = 32;
+constexpr int maximumPsStack = 100;
+constexpr int maximumFunctionDepth = 8;
+constexpr int maximumFunctionNodes = 512; // fan-out ([6 0 R 6 0 R …] at every level) is exponential without a total
+
+long toLong(double v)
+{
+    return std::isfinite(v) ? long(std::clamp(v, -2e9, 2e9)) : 0;
+}
+int toInt(double v)
+{
+    return int(toLong(v));
+}
+
+QList<PsNode> parsePsBlock(Lexer &lexer, int depth = 0)
 {
     QList<PsNode> nodes;
+    if (depth > maximumPsDepth)
+        return nodes;
     while (true) {
         const Token token = lexer.next();
         if (token.kind == TokenKind::end)
@@ -34,7 +51,7 @@ QList<PsNode> parsePsBlock(Lexer &lexer)
         if (token.kind == TokenKind::keyword && token.bytes == "{") {
             PsNode node;
             node.kind = PsNode::block;
-            node.children = parsePsBlock(lexer);
+            node.children = parsePsBlock(lexer, depth + 1);
             nodes.append(node);
         } else if (token.kind == TokenKind::number) {
             PsNode node;
@@ -60,7 +77,10 @@ void applyPsOperator(const QByteArray &op, QList<double> &stack)
         stack.removeLast();
         return value;
     };
-    const auto push = [&](double value) { stack.append(value); };
+    const auto push = [&](double value) {
+        if (stack.size() < maximumPsStack)
+            stack.append(value);
+    };
 
     if (op == "add") {
         const double b = pop(), a = pop();
@@ -75,10 +95,10 @@ void applyPsOperator(const QByteArray &op, QList<double> &stack)
         const double b = pop(), a = pop();
         push(b != 0 ? a / b : 0);
     } else if (op == "idiv") {
-        const long b = long(pop()), a = long(pop());
+        const long b = toLong(pop()), a = toLong(pop());
         push(b != 0 ? double(a / b) : 0);
     } else if (op == "mod") {
-        const long b = long(pop()), a = long(pop());
+        const long b = toLong(pop()), a = toLong(pop());
         push(b != 0 ? double(a % b) : 0);
     } else if (op == "neg") {
         push(-pop());
@@ -115,7 +135,7 @@ void applyPsOperator(const QByteArray &op, QList<double> &stack)
     } else if (op == "truncate") {
         push(std::trunc(pop()));
     } else if (op == "cvi") {
-        push(double(long(pop())));
+        push(double(toLong(pop())));
     } else if (op == "cvr") {
         // no-op: our stack is already real-valued
     } else if (op == "dup") {
@@ -129,17 +149,17 @@ void applyPsOperator(const QByteArray &op, QList<double> &stack)
         push(b);
         push(a);
     } else if (op == "copy") {
-        const int n = int(pop());
-        if (n > 0 && n <= stack.size()) {
+        const int n = toInt(pop());
+        if (n > 0 && n <= stack.size() && stack.size() + n <= maximumPsStack) {
             const QList<double> tail = stack.mid(stack.size() - n);
             stack.append(tail);
         }
     } else if (op == "index") {
-        const int n = int(pop());
+        const int n = toInt(pop());
         push(n >= 0 && n < stack.size() ? stack[stack.size() - 1 - n] : 0);
     } else if (op == "roll") {
-        const int j = int(pop());
-        const int n = int(pop());
+        const int j = toInt(pop());
+        const int n = toInt(pop());
         if (n > 0 && n <= stack.size()) {
             QList<double> part = stack.mid(stack.size() - n);
             const int shift = ((j % n) + n) % n;
@@ -166,19 +186,19 @@ void applyPsOperator(const QByteArray &op, QList<double> &stack)
         const double b = pop(), a = pop();
         push(a <= b ? 1 : 0);
     } else if (op == "and") {
-        const long b = long(pop()), a = long(pop());
+        const long b = toLong(pop()), a = toLong(pop());
         push(double(a & b));
     } else if (op == "or") {
-        const long b = long(pop()), a = long(pop());
+        const long b = toLong(pop()), a = toLong(pop());
         push(double(a | b));
     } else if (op == "xor") {
-        const long b = long(pop()), a = long(pop());
+        const long b = toLong(pop()), a = toLong(pop());
         push(double(a ^ b));
     } else if (op == "not") {
         push(pop() == 0 ? 1 : 0);
     } else if (op == "bitshift") {
-        const long shift = long(pop()), a = long(pop());
-        push(double(shift >= 0 ? (a << shift) : (a >> (-shift))));
+        const long shift = toLong(pop()), a = toLong(pop());
+        push(double(shift >= 0 ? (a << std::min(shift, 62L)) : (a >> std::min(-shift, 62L))));
     } else if (op == "true") {
         push(1);
     } else if (op == "false") {
@@ -192,7 +212,8 @@ void execPs(const QList<PsNode> &program, QList<double> &stack)
     for (qsizetype i = 0; i < program.size(); ++i) {
         const PsNode &node = program[i];
         if (node.kind == PsNode::number) {
-            stack.append(node.value);
+            if (stack.size() < maximumPsStack)
+                stack.append(node.value);
         } else if (node.kind == PsNode::op) {
             if (node.name == "if") {
                 const bool condition = !stack.isEmpty() && stack.takeLast() != 0;
@@ -233,7 +254,7 @@ double Function::sampleValue(const QList<int> &coords, int outputIndex) const
 QList<double> Function::evaluateSampled(const QList<double> &input) const
 {
     const int m = m_size.size();
-    if (m == 0 || m_outputs <= 0)
+    if (m == 0 || m > 8 || m_outputs <= 0)
         return {};
     QList<int> lowCorner(m);
     QList<double> fraction(m);
@@ -333,12 +354,20 @@ QList<double> Function::evaluate(QList<double> input) const
 
 Function Function::load(const Document &document, const Object &functionObject)
 {
+    int budget = maximumFunctionNodes;
+    return loadAt(document, functionObject, 0, budget);
+}
+
+Function Function::loadAt(const Document &document, const Object &functionObject, int depth, int &budget)
+{
     Function function;
+    if (depth > maximumFunctionDepth || --budget < 0)
+        return function; // invalid; the caller falls back to an identity tint
     const Object resolved = document.resolve(functionObject);
     if (resolved.isArray()) {
         function.m_type = 5;
         for (const Object &item : resolved.toArray())
-            function.m_subFunctions.push_back(load(document, item));
+            function.m_subFunctions.push_back(loadAt(document, item, depth + 1, budget));
         return function;
     }
     if (!resolved.isDictionary())
@@ -355,7 +384,21 @@ Function Function::load(const Document &document, const Object &functionObject)
         function.m_bitsPerSample = int(document.resolve(dict.value(QStringLiteral("BitsPerSample"))).toInt(8));
         function.m_encode = toDoubleList(document, dict.value(QStringLiteral("Encode")));
         function.m_decode = toDoubleList(document, dict.value(QStringLiteral("Decode")));
-        function.m_outputs = std::max(1, int(function.m_range.size() / 2));
+        function.m_outputs = std::clamp(int(function.m_range.size() / 2), 1, 64);
+        {
+            static const QList<int> validBits{1, 2, 4, 8, 12, 16, 24, 32};
+            qint64 total = 1;
+            bool sane = function.m_size.size() <= 8 && validBits.contains(function.m_bitsPerSample);
+            for (int i = 0; sane && i < function.m_size.size(); ++i) {
+                sane = function.m_size[i] >= 1 && function.m_size[i] <= (1 << 20);
+                total *= std::clamp(function.m_size[i], 1, 1 << 20);
+                sane = sane && total <= (1 << 28);
+            }
+            if (!sane) {
+                function.m_type = -1; // a sampled table this odd is corrupt; treat it as no function
+                break;
+            }
+        }
         if (resolved.isStream())
             function.m_samples = document.streamData(resolved).bytes;
         break;
@@ -370,7 +413,7 @@ Function Function::load(const Document &document, const Object &functionObject)
         break;
     case 3:
         for (const Object &sub : document.resolve(dict.value(QStringLiteral("Functions"))).toArray())
-            function.m_subFunctions.push_back(load(document, sub));
+            function.m_subFunctions.push_back(loadAt(document, sub, depth + 1, budget));
         function.m_bounds = toDoubleList(document, dict.value(QStringLiteral("Bounds")));
         function.m_stitchEncode = toDoubleList(document, dict.value(QStringLiteral("Encode")));
         break;
