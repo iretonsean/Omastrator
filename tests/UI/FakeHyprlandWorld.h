@@ -29,6 +29,12 @@ public:
     const QStringList &history() const { return m_history; }
     void clearHistory() { m_history.clear(); }
     QList<Window> &windows() { return m_windows; }
+    // The user changes workspace (Super+Tab, a swipe): the app hears of it from the event stream.
+    void go(const QString &workspace)
+    {
+        m_active = workspace;
+        publish();
+    }
     // The editor: mapped on the focused workspace like any window.
     QString addEditor(QWidget &editor)
     {

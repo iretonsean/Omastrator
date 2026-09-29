@@ -44,12 +44,17 @@ PageWorkspaces::PageWorkspaces(ProjectWorkspace &workspace, QWidget &editor) : Q
     m_placeTimer.setSingleShot(true);
     m_placeTimer.setInterval(50);
     connect(&m_placeTimer, &QTimer::timeout, this, &PageWorkspaces::place);
+    m_arriveTimer.setSingleShot(true);
+    m_arriveTimer.setInterval(50);
+    connect(&m_arriveTimer, &QTimer::timeout, this, &PageWorkspaces::arrived);
     connect(&m_workspace, &ProjectWorkspace::changed, this, &PageWorkspaces::schedule);
     connect(&m_events, &HyprlandEvents::closed, this, &PageWorkspaces::hyprlandLeft);
     connect(&m_events, &HyprlandEvents::event, this, [this](const HyprlandEvents::Event &event) {
         using Kind = HyprlandEvents::Event::Kind;
         if (event.kind == Kind::openWindow || event.kind == Kind::closeWindow || event.kind == Kind::moveWindow)
             placeSoon();
+        else if (event.kind == Kind::workspace)
+            workspaceEntered(event.workspaceName);
     });
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this] {
         m_lost = false;
@@ -218,7 +223,8 @@ void PageWorkspaces::watch(const std::shared_ptr<ProjectTab> &tab)
     connect(session, &EditorSession::currentPageChanged, this, [this, id](const QUuid &page) {
         // Going to a page whose stand-in was closed reclaims it.
         m_declined.remove(declineKey(id, page));
-        m_followNext = followsFocus();
+        // A page the user walked to is already on screen: nothing follows them, focus is handled on arrival.
+        m_followNext = !m_fromHyprland && followsFocus();
         schedule();
     });
 }
@@ -372,7 +378,7 @@ void PageWorkspaces::reconcile()
             m_renamed.insert(old.name, same->name);
     }
     m_claims = next;
-    m_followNext = m_followNext || followsFocus();
+    m_followNext = m_followNext || (!m_fromHyprland && followsFocus());
     if (m_claims.empty())
         m_declined.clear();
     place();

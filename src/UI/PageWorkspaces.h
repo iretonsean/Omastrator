@@ -67,6 +67,8 @@ private:
     QString documentLabel(const ProjectTab &tab, const std::vector<Claim> &kept);
     void place();
     void placeSoon();
+    void workspaceEntered(const QString &name);
+    void arrived();
     void createStandIn(const QString &workspace);
     void dropStandIn(StandIn &standIn);
     void standInClosed(PageStandIn *widget);
@@ -101,6 +103,10 @@ private:
     int m_retries = 0;
     QTimer m_reconcileTimer;
     QTimer m_placeTimer;
+    // Workspace events within 50 ms act once, on the last.
+    QTimer m_arriveTimer;
+    QString m_arrivedAt;
+    bool m_fromHyprland = false;
     HyprlandEvents m_events;
     std::function<bool()> m_focusProbe;
 };
