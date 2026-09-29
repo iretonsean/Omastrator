@@ -136,14 +136,44 @@ private slots:
             if (auto *box = popover->findChild<QCheckBox *>(QStringLiteral("openType:") + QLatin1String(feature.tag)))
                 QCOMPARE(box->isEnabled(), supported.contains(QLatin1String(feature.tag)));
         }
-        QVERIFY(popover->findChild<QCheckBox *>("openType:liga")->isChecked());
+        // Standard ligatures read as on until the text says otherwise, whether the font has them or not; the last of
+        // the twenty sets is there and follows the font too.
+        auto *liga = popover->findChild<QCheckBox *>("openType:liga");
+        QVERIFY(liga);
+        QVERIFY(liga->isChecked());
         auto *ss20 = popover->findChild<QToolButton *>("openType:ss20");
+        QVERIFY(ss20);
         QCOMPARE(ss20->isEnabled(), supported.contains(QStringLiteral("ss20")));
-        // Turning a feature off is one named step, whatever the font has.
-        popover->findChild<QCheckBox *>("openType:liga")->click();
-        QCOMPARE(session.document()->find(id)->text.features.at(QStringLiteral("liga")), 0);
+        const auto features = [&] { return session.document()->find(id)->text.features; };
+        // A box the font lacks is dimmed, so clicking it changes nothing.
+        const QString before = session.undoName();
+        for (const FontFeatures::Feature &feature : FontFeatures::offered()) {
+            auto *box = popover->findChild<QCheckBox *>(QStringLiteral("openType:") + QLatin1String(feature.tag));
+            if (box && !box->isEnabled())
+                box->click();
+        }
+        QVERIFY(features().empty());
+        QCOMPARE(session.undoName(), before);
+        // Whichever of the listed features this font has, the first one flips from its default in one named step.
+        QCheckBox *box = nullptr;
+        const FontFeatures::Feature *chosen = nullptr;
+        for (const FontFeatures::Feature &feature : FontFeatures::offered()) {
+            auto *candidate = popover->findChild<QCheckBox *>(QStringLiteral("openType:") + QLatin1String(feature.tag));
+            if (candidate && candidate->isEnabled()) {
+                box = candidate;
+                chosen = &feature;
+                break;
+            }
+        }
+        if (!box)
+            QSKIP("The default font has none of the features the popover lists.");
+        const QString tag = QLatin1String(chosen->tag);
+        QCOMPARE(box->isChecked(), chosen->onByDefault);
+        box->click();
+        QCOMPARE(features().count(tag), size_t(1));
+        QCOMPARE(features().at(tag), chosen->onByDefault ? 0 : 1);
         QCOMPARE(session.undoName(), QStringLiteral("OpenType Features"));
-        QVERIFY(!popover->findChild<QCheckBox *>("openType:liga")->isChecked());
+        QCOMPARE(box->isChecked(), !chosen->onByDefault);
         popover->close();
     }
 
