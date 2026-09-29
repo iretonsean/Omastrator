@@ -214,6 +214,16 @@ the user's other entries.
   link and which were deployed where. Restore brings a version's files back
   as a new commit and offers Deploy; Discard after a deploy is a new commit
   that reverts those files, with Deploy offered again.
+- **Inside a Browser View frame.** The same Live runs in a Browser View
+  (LIVE-IN-FRAME.md): Edit Page picks the frame's page elements on the canvas,
+  the element bar edits them, the tab can show the project's dev server while
+  the document keeps the production address, and Deploy, Save, Review Changes,
+  History and Build It are in the frame's bar and menu. They go through the
+  window's one `AgentBridge` pipeline, so a frame's edits and the window's are
+  written and committed together. **Build It** hands the frame's design
+  children, the page picture, the breakpoints and the frame's pending edits to
+  the default agent in a worktree, and the change waits as a review named
+  "Build it: <frame name>".
 - **Guardrails.**
   - Live editing of any site works in the browser as a mock-up.
   - Write-back is only offered when the page maps to a registered local
