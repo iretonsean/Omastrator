@@ -20,6 +20,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QProcess>
+#include <QLocalServer>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -326,12 +327,16 @@ private slots:
             ~Restore()
             {
                 qputenv("OMASTRATOR_HYPRCTL", before);
+                qunsetenv("OMASTRATOR_HYPRLAND_EVENTS");
                 PageWorkspaces::forgetReachability();
             }
         } restore;
         QTemporaryDir directory;
         FakeHyprctl ctl(directory.path());
         qputenv("OMASTRATOR_HYPRCTL", ctl.path().toUtf8());
+        QLocalServer events;
+        QVERIFY(events.listen(directory.filePath(QStringLiteral("events.sock"))));
+        qputenv("OMASTRATOR_HYPRLAND_EVENTS", events.fullServerName().toUtf8());
         PageWorkspaces::forgetReachability();
         {
             App app;

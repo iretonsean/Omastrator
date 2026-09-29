@@ -3,6 +3,7 @@
 #include "TemporaryConfig.h"
 #include "UI/ProjectWorkspaceView.h"
 #include <QDir>
+#include <QLocalServer>
 #include <QGuiApplication>
 #include <QSettings>
 #include <QStandardPaths>
@@ -22,9 +23,12 @@ QString ws(const QString &document, const QString &page)
 struct Rig {
     explicit Rig(bool onHyprland = true)
     {
-        if (onHyprland)
+        if (onHyprland) {
             qputenv("OMASTRATOR_HYPRCTL", ctl.path().toUtf8());
-        else
+            QLocalServer::removeServer(dir.filePath(QStringLiteral("events.sock")));
+            events.listen(dir.filePath(QStringLiteral("events.sock")));
+            qputenv("OMASTRATOR_HYPRLAND_EVENTS", events.fullServerName().toUtf8());
+        } else
             qunsetenv("OMASTRATOR_HYPRCTL");
         PageWorkspaces::forgetReachability();
         workspace.createDocument(QSizeF(100, 100));
@@ -33,7 +37,11 @@ struct Rig {
         world.addEditor(*view);
         view->pageWorkspaces()->setFocusProbe([this] { return focus; });
     }
-    ~Rig() { QSettings().remove(QStringLiteral("view/pageWorkspaces")); }
+    ~Rig()
+    {
+        QSettings().remove(QStringLiteral("view/pageWorkspaces"));
+        qunsetenv("OMASTRATOR_HYPRLAND_EVENTS");
+    }
 
     EditorSession &session() { return workspace.current().session; }
     PageWorkspaces &pages() { return *view->pageWorkspaces(); }
@@ -45,6 +53,8 @@ struct Rig {
     // Whether an Omastrator window has focus: stand-ins are made, and the editor takes the user along, only then.
     bool focus = true;
     QTemporaryDir dir;
+    // Something for the event stream to connect to; it never says anything.
+    QLocalServer events;
     FakeHyprctl ctl{dir.path()};
     FakeHyprlandWorld world{ctl};
     ProjectWorkspace workspace;
@@ -80,6 +90,7 @@ private slots:
     void aSwitchAskedWithFocusButPlacedWithoutItLeavesTheUserAlone();
     void noStandInIsShownWhileNoWindowOfOursHasFocus();
     void everyWorkspaceKeepsItsIdAcrossTenSwaps();
+    void withoutAnEventStreamItClaimsNothingAndSaysSoOnce();
     void aStandInDoesNotKeepTheAppAlive();
     void aRefusedMoveStopsItAndSaysSoOnce();
     void hyprlangAndLuaDispatchStrings();
@@ -565,6 +576,23 @@ void PageWorkspacesTests::everyWorkspaceKeepsItsIdAcrossTenSwaps()
     for (const QString &name : rig.world.deleted())
         QVERIFY2(!name.startsWith(prefix), qPrintable(name));
     QCOMPARE(rig.world.on(QStringLiteral("special:omastrator-spare")).size(), 1);
+}
+
+void PageWorkspacesTests::withoutAnEventStreamItClaimsNothingAndSaysSoOnce()
+{
+    Rig rig;
+    qunsetenv("OMASTRATOR_HYPRLAND_EVENTS");
+    rig.toggle();
+    rig.session().addPage();
+    rig.world.settle();
+    QVERIFY(rig.pages().claimedNames().isEmpty());
+    QCOMPARE(rig.pages().standInCount(), 0);
+    QVERIFY(rig.world.history().isEmpty());
+    QVERIFY(WorkspaceClaims::read().isEmpty());
+    QCOMPARE(rig.workspace.cloudStatusText().count(QStringLiteral("Pages as Workspaces needs Hyprland.")), 1);
+    rig.session().addPage();
+    rig.world.settle();
+    QCOMPARE(rig.workspace.cloudStatusText().count(QStringLiteral("Pages as Workspaces needs Hyprland.")), 1);
 }
 
 void PageWorkspacesTests::aStandInDoesNotKeepTheAppAlive()

@@ -375,6 +375,17 @@ void PageWorkspaces::reconcile()
     if (!wasClaiming && next.empty())
         return;
     if (!wasClaiming) {
+        // Without the event stream a workspace the user walks to would never be noticed: claim nothing.
+        const QString failure = m_events.start();
+        if (!failure.isEmpty()) {
+            qCDebug(lcApp).noquote() << "Pages as Workspaces: no event stream:" << failure;
+            m_lost = true;
+            if (!m_unreachableNoticed) {
+                m_unreachableNoticed = true;
+                notify(QStringLiteral("Pages as Workspaces needs Hyprland."));
+            }
+            return;
+        }
         QString error;
         const QJsonValue current = Hyprland::query(QStringLiteral("activeworkspace"), &error);
         m_returnName = current.toObject()["name"].toString();
