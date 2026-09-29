@@ -165,6 +165,25 @@ QDialog *ObjectDialogs::renameArtboard(EditorSession &session, int index, QWidge
     return dialog;
 }
 
+QDialog *ObjectDialogs::renamePage(EditorSession &session, const QUuid &page, QWidget *window)
+{
+    QFormLayout *form = nullptr;
+    QDialog *dialog = sheet(window, QStringLiteral("renamePageDialog"), QStringLiteral("Rename Page"), form);
+    QString current;
+    if (session.document()) {
+        for (const Page &each : session.document()->allPages()) {
+            if (each.id == page)
+                current = each.name;
+        }
+    }
+    auto *name = new QLineEdit(current, dialog);
+    name->setObjectName(QStringLiteral("pageName"));
+    name->selectAll();
+    form->addRow(QStringLiteral("Name:"), name);
+    finish(dialog, form, [&session, page, name] { session.renamePage(page, name->text()); });
+    return dialog;
+}
+
 QDialog *ObjectDialogs::preferences(QWidget *window)
 {
     QFormLayout *form = nullptr;

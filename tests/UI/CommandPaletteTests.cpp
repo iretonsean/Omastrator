@@ -300,6 +300,37 @@ private slots:
         QVERIFY(!CommandPalette::asksForNewArt(QStringLiteral("align everything to the left")));
     }
 
+    void pagesAreCommands()
+    {
+        Window w;
+        // One page: the menu's entries, but no one to go to.
+        QCOMPARE(w.command(QStringLiteral("action:newPage"))->title, QStringLiteral("New Page"));
+        QCOMPARE(w.command(QStringLiteral("action:newPage"))->where, QStringLiteral("Object ▸ Pages"));
+        QCOMPARE(w.command(QStringLiteral("action:nextPage"))->shortcut, key(Qt::ALT | Qt::Key_PageDown));
+        QVERIFY(!w.command(QStringLiteral("action:deletePage"))->enabled);
+        for (const char *name : {"duplicatePage", "renamePage", "deletePage", "nextPage", "previousPage"})
+            QVERIFY2(w.command(QStringLiteral("action:") + QString::fromLatin1(name)), name);
+        QVERIFY(w.ids(QStringLiteral("go to page")).isEmpty() || !w.ids(QStringLiteral("go to page")).first().startsWith("page:"));
+        const QUuid first = w.session().currentPage();
+        w.palette().close();
+        w.session().addPage(QStringLiteral("Cover"));
+        w.box(30);
+        // Two pages: Go to Page for each, Move to Page for the other with a selection; "page" and "canvas" find them.
+        const auto go = w.command(QStringLiteral("page:") + first.toString(QUuid::WithoutBraces));
+        QVERIFY(go);
+        QCOMPARE(go->title, QStringLiteral("Go to Page: Page 1"));
+        QVERIFY(go->enabled);
+        QVERIFY(!w.command(QStringLiteral("page:") + w.session().currentPage().toString(QUuid::WithoutBraces))->enabled);
+        QVERIFY(w.ids(QStringLiteral("go to cover")).contains(QStringLiteral("page:") + w.session().currentPage().toString(QUuid::WithoutBraces)));
+        QVERIFY(w.ids(QStringLiteral("canvas"), 100).contains(QStringLiteral("page:") + first.toString(QUuid::WithoutBraces)));
+        const auto move = w.command(QStringLiteral("moveToPage:") + first.toString(QUuid::WithoutBraces));
+        QVERIFY(move);
+        QCOMPARE(move->title, QStringLiteral("Move to Page: Page 1"));
+        QVERIFY(!w.command(QStringLiteral("moveToPage:") + w.session().currentPage().toString(QUuid::WithoutBraces))->enabled);
+        QVERIFY(go->run().isEmpty());
+        QCOMPARE(w.session().currentPage(), first);
+    }
+
     void anEmptyArtboardGenerates()
     {
         Window w;

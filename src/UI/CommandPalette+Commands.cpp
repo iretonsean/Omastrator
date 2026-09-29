@@ -45,6 +45,12 @@ QString keywordsFor(const QString &name)
 {
     static const QHash<QString, QString> words{
         {"artboardSize", "document setup canvas dimensions width height"},
+        {"newPage", "page canvas add"},
+        {"duplicatePage", "page canvas copy"},
+        {"renamePage", "page canvas name"},
+        {"deletePage", "page canvas remove"},
+        {"nextPage", "page canvas switch"},
+        {"previousPage", "page canvas switch back"},
         {"showGrid", "grid"},
         {"snapToGrid", "snapping grid"},
         {"outline", "outline mode wireframe preview"},
@@ -153,7 +159,8 @@ void CommandPalette::gatherContext()
             }
             const QString name = entry->objectName();
             const QString id = QStringLiteral("action:") + name;
-            if (name.isEmpty() || entry->isSeparator() || known.contains(id) || name == QLatin1String("askAI") || name == QLatin1String("selectLayer"))
+            if (name.isEmpty() || entry->isSeparator() || known.contains(id) || name == QLatin1String("askAI") || name == QLatin1String("selectLayer")
+                || name == QLatin1String("moveToPage"))
                 continue;
             known.insert(id);
             const QString title = name.startsWith(QLatin1String("contextAlign")) ? QStringLiteral("Align ") + plain(entry->text()) : plain(entry->text());
@@ -214,6 +221,25 @@ void CommandPalette::gatherRest()
                                   QStringLiteral("Design System · %1").arg(token.displayValue(document.tokenMode)), QString(),
                                   QStringLiteral("token design system ") + title(token.kind).toLower(), selected, false,
                                   [front, id] { return front().applyToken(id); }});
+        }
+        // Pages: go to one, and with a selection, send it there.
+        if (document.pageCount() > 1) {
+            for (const Page &page : document.allPages()) {
+                const QUuid id = page.id;
+                const bool here = id == document.currentPageId();
+                m_commands.push_back({QStringLiteral("page:") + id.toString(QUuid::WithoutBraces), QStringLiteral("Go to Page: ") + page.name,
+                                      QStringLiteral("Pages"), QString(), QStringLiteral("page canvas switch"), !here, here, [front, id] {
+                                          front().setCurrentPage(id);
+                                          return QString();
+                                      }});
+                if (!selected)
+                    continue;
+                m_commands.push_back({QStringLiteral("moveToPage:") + id.toString(QUuid::WithoutBraces), QStringLiteral("Move to Page: ") + page.name,
+                                      QStringLiteral("Pages"), QString(), QStringLiteral("page canvas send selection"), !here, false, [front, id] {
+                                          front().moveSelectionToPage(id);
+                                          return QString();
+                                      }});
+            }
         }
         QStringList sets;
         for (const QUuid &master : Components::masters(document)) {

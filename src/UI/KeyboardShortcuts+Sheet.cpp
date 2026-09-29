@@ -151,7 +151,8 @@ KeyboardShortcutsSheet::KeyboardShortcutsSheet(std::function<void()> close, QWid
                                          "Numeric fields use Up and Down, with Shift for larger steps. The shortcut editor itself always "
                                          "uses Return to save and Esc to cancel when not recording."), list));
     rows->addWidget(words(QStringLiteral("Fixed keys: Enter goes into the selected group or frame, or edits selected type; Shift+Enter goes out to the parent; "
-                                         "Tab and Shift+Tab walk the siblings; Esc lets go. Figma's second keys ride beside these menu entries: "
+                                         "Tab and Shift+Tab walk the siblings; Esc lets go. Shift+PageDown and Shift+PageUp show the next and previous artboard; "
+                                         "Alt+PageDown and Alt+PageUp the next and previous page. Figma's second keys ride beside these menu entries: "
                                          "Ctrl+Shift+L (Lock), Ctrl+Shift+H (Hide), Ctrl+Alt+M (Make Clipping Mask), Shift+0 (Actual Size), "
                                          "Alt+1 (Layers), Ctrl+/ (Command Palette). Figma's K and O and Shift+P are second names for Scale, Ellipse and Pencil."), list));
     rows->addWidget(words(QStringLiteral("Shift constrains shapes to squares, circles and 45° angles, and adds to a selection. "

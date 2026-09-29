@@ -31,6 +31,7 @@ private slots:
     void everyMenuKeyHasOneDefinition();
     void entriesNeedADocument();
     void undoAndRedoNameTheirSteps();
+    void pageEntriesFollowTheDocument();
     void groupingFollowsTheSession();
     void viewTogglesAreChecked();
     void windowTogglesThePanels();
@@ -72,7 +73,8 @@ void MenusTests::everyMenuKeyHasOneDefinition()
         // Function keys are no chord: F7 stays unremappable, and so do the artboard page keys.
         if (chord.key.size() != 1) {
             QVERIFY2(entry->objectName() == QString("showLayers") || entry->objectName() == QString("nextArtboard")
-                         || entry->objectName() == QString("previousArtboard"),
+                         || entry->objectName() == QString("previousArtboard") || entry->objectName() == QString("nextPage")
+                         || entry->objectName() == QString("previousPage"),
                      qPrintable(entry->objectName()));
             continue;
         }
@@ -113,6 +115,44 @@ void MenusTests::entriesNeedADocument()
     menus.action("deselect")->trigger();
     QVERIFY(!workspace.current().session.hasSelection());
     QVERIFY(!menus.action("deselect")->isEnabled());
+}
+
+void MenusTests::pageEntriesFollowTheDocument()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    QVERIFY(!menus.action("pagesMenu")->isEnabled());
+    workspace.createDocument(QSizeF(200, 200));
+    EditorSession &session = workspace.current().session;
+    for (const char *name : {"pagesMenu", "newPage", "duplicatePage", "renamePage"})
+        QVERIFY2(menus.action(QString::fromLatin1(name))->isEnabled(), name);
+    // One page: nothing to delete, walk or move to.
+    for (const char *name : {"deletePage", "nextPage", "previousPage", "moveToPageMenu"})
+        QVERIFY2(!menus.action(QString::fromLatin1(name))->isEnabled(), name);
+    QCOMPARE(menus.action("nextPage")->shortcut(), QKeySequence(Qt::ALT | Qt::Key_PageDown));
+    QCOMPARE(menus.action("previousPage")->shortcut(), QKeySequence(Qt::ALT | Qt::Key_PageUp));
+    const QUuid first = session.currentPage();
+    menus.action("newPage")->trigger();
+    QCOMPARE(session.document()->pageCount(), 2);
+    QCOMPARE(session.undoName(), QString("New Page"));
+    QVERIFY(menus.action("deletePage")->isEnabled() && menus.action("nextPage")->isEnabled());
+    // Move to Page waits for a selection.
+    QVERIFY(!menus.action("moveToPageMenu")->isEnabled());
+    box(session, 10);
+    QVERIFY(menus.action("moveToPageMenu")->isEnabled());
+    QMenu *move = menus.action("moveToPageMenu")->menu();
+    QMetaObject::invokeMethod(move, "aboutToShow");
+    QCOMPARE(move->actions().size(), 1);
+    QCOMPARE(move->actions().first()->text(), QString("Page 1"));
+    menus.action("nextPage")->trigger();
+    QCOMPARE(session.currentPage(), first);
+    menus.action("previousPage")->trigger();
+    QCOMPARE(session.document()->pageIndex(session.currentPage()), 1);
+    menus.action("deletePage")->trigger();
+    QCOMPARE(session.document()->pageCount(), 1);
+    QCOMPARE(session.undoName(), QString("Delete Page"));
+    QVERIFY(!menus.action("deletePage")->isEnabled());
 }
 
 void MenusTests::undoAndRedoNameTheirSteps()

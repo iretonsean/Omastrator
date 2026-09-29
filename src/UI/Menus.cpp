@@ -374,6 +374,7 @@ void Menus::buildObject(QMenuBar &bar)
         [this] { session().showArtboard(true); });
     add(artboards, QStringLiteral("previousArtboard"), QStringLiteral("Previous Artboard"), QKeySequence(Qt::SHIFT | Qt::Key_PageUp),
         [this] { session().showArtboard(false); });
+    buildPages(object);
     add(object, QStringLiteral("collectForExport"), QStringLiteral("Collect for Export"), QKeySequence(),
         [this] { session().collectForExport(session().selection()); });
     QMenu *type = bar.addMenu(QStringLiteral("&Type"));

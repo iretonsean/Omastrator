@@ -91,6 +91,14 @@ void Menus::synchronize()
     action(QStringLiteral("deleteArtboard"))->setEnabled(editing && drawn && artboards > 1);
     for (const char *name : {"nextArtboard", "previousArtboard"})
         action(QString::fromLatin1(name))->setEnabled(drawn && artboards > 1);
+    const int pages = drawn ? s.document()->pageCount() : 1;
+    action(QStringLiteral("pagesMenu"))->setEnabled(drawn);
+    for (const char *name : {"newPage", "duplicatePage", "renamePage"})
+        action(QString::fromLatin1(name))->setEnabled(editing && drawn);
+    action(QStringLiteral("deletePage"))->setEnabled(editing && drawn && pages > 1);
+    for (const char *name : {"nextPage", "previousPage"})
+        action(QString::fromLatin1(name))->setEnabled(drawn && pages > 1);
+    action(QStringLiteral("moveToPageMenu"))->setEnabled(editing && selected && pages > 1);
     action(QStringLiteral("collectForExport"))->setEnabled(editing && selected);
     action(QStringLiteral("exportForScreens"))->setEnabled(drawn);
     action(QStringLiteral("createOutlines"))->setEnabled(editing && drawn && selectionHas(s, ObjectKind::text));

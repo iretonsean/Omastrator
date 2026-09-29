@@ -14,6 +14,10 @@ namespace ContextMenus {
 QMenu *forCanvas(Menus &menus, EditorSession &session, EditorCanvas &canvas, const QList<QUuid> &underPointer, QWidget *parent);
 // A Layers row's menu; without `menus` (no window) the menu bar's entries are left out.
 QMenu *forLayerRow(Menus *menus, EditorSession &session, NativeLayerList &list, const QUuid &row, QWidget *parent);
+// One entry per other page, each moving the selection there; nothing with fewer than two pages.
+void fillMoveToPage(QMenu *menu, EditorSession &session);
+// A "Move to Page" submenu for the selection, when there are two or more pages.
+void addMoveToPage(QMenu *menu, EditorSession &session);
 // The six align entries, for two or more objects; the task bar's Align menu too.
 void addAlign(QMenu *menu, EditorSession &session);
 // Unite, Minus Front, Intersect, Exclude and Make Compound Path, when the selection can combine.

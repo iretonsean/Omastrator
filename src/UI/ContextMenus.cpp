@@ -169,6 +169,7 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
     QMenu *arrange = submenu(menu, QStringLiteral("contextArrange"), QStringLiteral("Arrange"));
     for (const char *name : {"bringToFront", "bringForward", "sendBackward", "sendToBack"})
         share(arrange, &menus, name);
+    addMoveToPage(menu, session);
     QMenu *transform = submenu(menu, QStringLiteral("contextTransform"), QStringLiteral("Transform"));
     for (const char *name : {"transformAgain", "flipHorizontal", "flipVertical", "moveDialog", "rotateDialog", "reflectDialog", "scaleDialog"})
         share(transform, &menus, name);
@@ -190,6 +191,26 @@ QMenu *ContextMenus::forCanvas(Menus &menus, EditorSession &session, EditorCanva
         share(menu, &menus, name);
     dropEmpty(menu);
     return menu;
+}
+
+void ContextMenus::fillMoveToPage(QMenu *menu, EditorSession &session)
+{
+    menu->clear();
+    if (!session.document() || session.document()->pageCount() < 2)
+        return;
+    for (const Page &page : session.document()->allPages()) {
+        if (page.id == session.currentPage())
+            continue;
+        local(menu, QStringLiteral("moveToPage"), page.name, [&session, id = page.id] { session.moveSelectionToPage(id); });
+    }
+}
+
+void ContextMenus::addMoveToPage(QMenu *menu, EditorSession &session)
+{
+    if (!session.hasSelection() || !session.document() || session.document()->pageCount() < 2)
+        return;
+    QMenu *move = submenu(menu, QStringLiteral("contextMoveToPage"), QStringLiteral("Move to Page"));
+    fillMoveToPage(move, session);
 }
 
 void ContextMenus::addAlign(QMenu *menu, EditorSession &session)
@@ -253,6 +274,7 @@ QMenu *ContextMenus::forLayerRow(Menus *menus, EditorSession &session, NativeLay
     if (!layer) {
         for (const char *name : {"group", "ungroup", "makeClippingMask", "releaseClippingMask"})
             share(menu, menus, name);
+        addMoveToPage(menu, session);
     }
     if (object->isContainer() && !session.document()->children(row).empty())
         local(menu, QStringLiteral("layerSelectChildren"), QStringLiteral("Select Children"), [&session, row] {

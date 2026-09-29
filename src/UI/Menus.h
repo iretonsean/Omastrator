@@ -44,6 +44,7 @@ private:
     void buildFile(QMenuBar &bar);
     void buildEdit(QMenuBar &bar);
     void buildObject(QMenuBar &bar);
+    void buildPages(QMenu *object);
     void buildSelect(QMenuBar &bar);
     void buildTypeKeys(QMenu &type);
     void buildViewAndWindow(QMenuBar &bar);

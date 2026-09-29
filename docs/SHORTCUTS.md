@@ -42,7 +42,7 @@ Illustrator's key wins wherever the app already had it.
 | C | Comment | Scissors | no comments in the app |
 | S | Slice | Scale | Scale also answers Figma's K |
 | A | Frame | Direct Selection | Frame is F |
-| N / Shift+N | Next / previous frame | Pencil | Shift+PageDown / PageUp move between artboards |
+| N / Shift+N | Next / previous frame | Pencil | Shift+PageDown / PageUp move between artboards; Alt+PageDown / PageUp between pages |
 | Ctrl+D | Duplicate | Transform Again | Duplicate is Ctrl+Alt+D (or Alt+drag) |
 | Ctrl+R | Rename | Rulers | rename from the Layers panel (double-click) |
 | Ctrl+0 | Zoom to 100 % | Fit Artboard in Window | Shift+0 |
