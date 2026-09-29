@@ -333,17 +333,28 @@ std::optional<QUuid> VectorDocument::hitTest(QPointF point, double tolerance) co
 
 int VectorDocument::subtreeEnd(int index) const
 {
-    // Objects are kept with each subtree contiguous after its root.
-    const QUuid root = objects[size_t(index)].id;
+    // Each subtree is contiguous after its root, so an object is inside exactly when its parent is on the open chain.
+    std::vector<QUuid> chain{objects[size_t(index)].id};
     int end = index + 1;
-    while (end < int(objects.size()) && isAncestor(root, objects[size_t(end)].id))
-        ++end;
+    for (; end < int(objects.size()); ++end) {
+        const std::optional<QUuid> &parent = objects[size_t(end)].parentID;
+        while (!chain.empty() && !(parent && *parent == chain.back()))
+            chain.pop_back();
+        if (chain.empty())
+            break;
+        chain.push_back(objects[size_t(end)].id);
+    }
     return end;
 }
 
 void VectorDocument::insert(VectorObject object, const QUuid &parent, std::optional<QUuid> above)
 {
     object.parentID = parent;
+    // Painting in order: the parent's subtree already runs to the end, so skip the lookups.
+    if (!above && !objects.empty() && (objects.back().id == parent || objects.back().parentID == parent)) {
+        objects.push_back(std::move(object));
+        return;
+    }
     int at = -1;
     if (above) {
         const int index = indexOf(*above);
@@ -351,7 +362,10 @@ void VectorDocument::insert(VectorObject object, const QUuid &parent, std::optio
             at = subtreeEnd(index);
     }
     if (at < 0) {
-        const int parentIndex = indexOf(parent);
+        // Newest first: whatever is being painted into was opened recently.
+        int parentIndex = int(objects.size()) - 1;
+        while (parentIndex >= 0 && objects[size_t(parentIndex)].id != parent)
+            --parentIndex;
         at = parentIndex < 0 ? int(objects.size()) : subtreeEnd(parentIndex);
     }
     objects.insert(objects.begin() + at, std::move(object));

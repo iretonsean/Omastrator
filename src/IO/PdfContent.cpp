@@ -7,6 +7,10 @@
 namespace Pdf {
 
 namespace {
+// VectorDocument::insert is linear now, so these bound memory and time, not a slow insert.
+constexpr size_t maximumImportedObjects = 250'000;
+constexpr int maximumFormRuns = 100'000;
+
 Qt::PenCapStyle capFromInt(int value)
 {
     switch (value) {
@@ -113,7 +117,6 @@ void Interpreter::runContent(const QByteArray &content, const Dict &resources)
     QList<Object> operands;
 
     constexpr qint64 maximumOperators = 20'000'000;
-    constexpr size_t maximumObjects = 50'000;
     constexpr int maximumOperands = 1024;
     constexpr qsizetype maximumSavedStates = 1000;
     while (!m_tooComplex) {
@@ -159,8 +162,7 @@ void Interpreter::runContent(const QByteArray &content, const Dict &resources)
         }
         lexer.next();
         const QByteArray &op = peeked.bytes;
-        // VectorDocument::insert is linear, so the object count bounds import time as much as memory.
-        if (++m_operatorCount > maximumOperators || m_target.objects.size() > maximumObjects) {
+        if (++m_operatorCount > maximumOperators || m_target.objects.size() > maximumImportedObjects) {
             m_tooComplex = true;
             warnOnce(QStringLiteral("too-complex"), QStringLiteral("The file was too complex; some artwork was left out."));
             break;
@@ -432,7 +434,7 @@ void Interpreter::runForm(const Object &formObject, const Dict &callerResources)
     }
     if (m_tooComplex)
         return;
-    if (++m_formRuns > 1'000 || m_target.objects.size() > 50'000) {
+    if (++m_formRuns > maximumFormRuns || m_target.objects.size() > maximumImportedObjects) {
         m_tooComplex = true;
         warnOnce(QStringLiteral("too-complex"), QStringLiteral("The file was too complex; some artwork was left out."));
         return;

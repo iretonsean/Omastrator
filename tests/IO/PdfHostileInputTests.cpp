@@ -274,6 +274,20 @@ private slots:
         QVERIFY(!outcome.threw);
         QVERIFY(outcome.elapsedMs < timeLimitMs);
         QVERIFY(hasWarning(outcome, QStringLiteral("too complex")));
+        qInfo() << "form fan-out:" << outcome.elapsedMs << "ms," << outcome.document.objects.size() << "objects";
+    }
+
+    void flatFloodOfTinyPathsHitsTheObjectCap()
+    {
+        // 300k tiny paths in one stream: far past the object cap, and insert must stay linear to get there.
+        const QByteArray content = QByteArray("0 0 1 1 re f ").repeated(300'000);
+        const Outcome outcome = importPdf(pageWithContent(content));
+        QVERIFY(!outcome.threw);
+        QVERIFY(outcome.elapsedMs < timeLimitMs);
+        QVERIFY(hasWarning(outcome, QStringLiteral("too complex")));
+        QVERIFY(pathCount(outcome.document) > 1000);
+        QVERIFY(pathCount(outcome.document) < 300'000);
+        qInfo() << "flat flood:" << outcome.elapsedMs << "ms," << pathCount(outcome.document) << "paths";
     }
 
     void hugeImageDimensionsAreRefused()
