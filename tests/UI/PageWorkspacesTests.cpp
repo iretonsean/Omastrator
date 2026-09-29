@@ -71,6 +71,7 @@ private slots:
     void aNumberedReturnWorkspaceComesBackByNumberEvenAfterItWasDeleted();
     void theEditorGoesBackToItsOwnWorkspaceAndTheUsersWindowsToTheFocusedOne();
     void saveAsRenamesAndSameNamesGetSuffixes();
+    void aPercentSignInANameIsNotAPlaceholder();
     void longNamesThatClashGetSuffixesAndForeignOnesToo();
     void closingTheDocumentGivesItsWorkspacesBack();
     void hidingTheWindowGivesBackAndQuittingToo();
@@ -369,6 +370,27 @@ void PageWorkspacesTests::saveAsRenamesAndSameNamesGetSuffixes()
     QCOMPARE(rig.pages().nameOf(secondTab, otherPage), ws(QStringLiteral("flyer"), QStringLiteral("Page 1")));
     QVERIFY(!rig.world.exists(ws(QStringLiteral("poster (2)"), QStringLiteral("Page 1"))));
     QVERIFY(rig.editorWorkspace().startsWith(ws(QStringLiteral("flyer"), QString())));
+}
+
+void PageWorkspacesTests::aPercentSignInANameIsNotAPlaceholder()
+{
+    Rig rig;
+    QTemporaryDir one, two;
+    rig.session().addPage();
+    rig.session().renamePage(rig.page(0), QStringLiteral("A%2"));
+    // The comma is dropped from a name, so these two clash without the session renaming either.
+    rig.session().renamePage(rig.page(1), QStringLiteral("A%2,"));
+    QVERIFY(rig.workspace.saveTo(*rig.workspace.tabs().front(), one.filePath(QStringLiteral("sale%2.omai"))));
+    rig.workspace.createDocument(QSizeF(50, 50));
+    rig.session().addPage();
+    QVERIFY(rig.workspace.saveTo(*rig.workspace.tabs().back(), two.filePath(QStringLiteral("sale%2.omai"))));
+    rig.toggle();
+    rig.world.settle();
+    const QUuid firstTab = rig.workspace.tabs().front()->id, secondTab = rig.workspace.tabs().back()->id;
+    const auto &pages = rig.workspace.tabs().front()->session.document()->allPages();
+    QCOMPARE(rig.pages().nameOf(firstTab, pages[0].id), ws(QStringLiteral("sale%2"), QStringLiteral("A%2")));
+    QCOMPARE(rig.pages().nameOf(firstTab, pages[1].id), ws(QStringLiteral("sale%2"), QStringLiteral("A%2 (2)")));
+    QCOMPARE(rig.pages().nameOf(secondTab, rig.workspace.tabs().back()->session.document()->allPages().front().id), ws(QStringLiteral("sale%2 (2)"), QStringLiteral("Page 1")));
 }
 
 void PageWorkspacesTests::longNamesThatClashGetSuffixesAndForeignOnesToo()

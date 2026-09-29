@@ -257,7 +257,7 @@ QString PageWorkspaces::documentLabel(const ProjectTab &tab, const std::vector<C
     }
     QString candidate = plain;
     for (int number = 2; taken(candidate); ++number)
-        candidate = QStringLiteral("%1 (%2)").arg(plain).arg(number);
+        candidate = QStringLiteral("%1 (%2)").arg(plain, QString::number(number));
     return candidate;
 }
 
@@ -310,7 +310,7 @@ std::vector<PageWorkspaces::Claim> PageWorkspaces::wants(bool active, const QSet
                 return used.contains(p) || (foreign.contains(full(p)) && full(p) != existing);
             };
             for (int number = 2; clashes(candidate); ++number)
-                candidate = QStringLiteral("%1 (%2)").arg(part).arg(number);
+                candidate = QStringLiteral("%1 (%2)").arg(part, QString::number(number));
             used << candidate;
             result.push_back({tab->id, page.id, full(candidate), document, page.name});
         }
