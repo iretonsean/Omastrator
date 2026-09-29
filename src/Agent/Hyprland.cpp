@@ -20,11 +20,11 @@ QString program()
     return qEnvironmentVariable("OMASTRATOR_HYPRCTL");
 }
 
-QByteArray runProgram(const QString &path, const QStringList &args, QString *error)
+QByteArray runProgram(const QString &path, const QStringList &args, QString *error, int timeoutMs = 3000)
 {
     QProcess process;
     process.start(path, args);
-    if (!process.waitForStarted(3000) || !process.waitForFinished(3000)) {
+    if (!process.waitForStarted(timeoutMs) || !process.waitForFinished(timeoutMs)) {
         process.kill();
         process.waitForFinished(500);
         if (error)
@@ -169,9 +169,9 @@ QString reload()
     QString error;
     const QString overridden = program();
     if (overridden.isEmpty())
-        askSocket("reload", &error);
+        askSocket("reload config-only", &error);
     else
-        runProgram(overridden, {QStringLiteral("reload")}, &error);
+        runProgram(overridden, {QStringLiteral("reload"), QStringLiteral("config-only")}, &error, 10'000);
     return error;
 }
 

@@ -261,8 +261,10 @@ bool submapDefined(const Environment &environment, const QString &submap)
     const QString name = lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf");
     const QByteArray keys = readFile(QDir(environment.omastratorConfig()).filePath(name)).value_or(QByteArray());
     const QByteArray hypr = readFile(QDir(environment.hyprDirectory()).filePath(name)).value_or(QByteArray());
-    const QByteArray defined = lua ? "\nsubmap(\"" + submap.toUtf8() + "\", function()" : "submap = " + submap.toUtf8() + "\n";
-    return keys.contains(defined) && hypr.contains("omastrator/" + name.toUtf8());
+    // The Lua key file has defined its submaps two ways (`submap(` now, `hl.define_submap(` before), and both still load.
+    const QByteArray quoted = "(\"" + submap.toUtf8() + "\"";
+    const bool defined = lua ? keys.contains("\nsubmap" + quoted) || keys.contains("define_submap" + quoted) : keys.contains("submap = " + submap.toUtf8() + "\n");
+    return defined && hasSourceLine(hypr, hyprFormat(environment));
 }
 
 bool designKeysLoaded(const Environment &environment)
@@ -337,10 +339,10 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
     const QByteArray source = sourceBlock(format);
     // With no keys file there is nothing for the line to load.
     if (!noKeys && withSource) {
-        if (!config || !config->contains(source.trimmed()))
+        if (!config || !hasSourceLine(*config, format))
             plan.push_back({QStringLiteral("source"), QStringLiteral("Load the island's keys from your Hyprland config"), hypr, config,
                             config.value_or(QByteArray()) + source});
-    } else if (!noKeys && (!config || !config->contains(source.trimmed()))) {
+    } else if (!noKeys && (!config || !hasSourceLine(*config, format))) {
         notes->append(QStringLiteral("To use the island's keys, add this to %1 (or run `omastrator setup --apply`):%2")
                           .arg(hypr, QString::fromUtf8(source).chopped(1)));
     }
@@ -460,7 +462,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                "key you already use: it skips that key and says so.\n\n"
                "  --yes           Accept every change without asking.\n"
                "  --apply         Also add the line that loads the keys to your Hyprland config, then\n"
-               "                  check your own keys still work; if one doesn't, restore the backup.\n"
+               "                  reload Hyprland (before and after) and check your own keys and ours are all\n"
+               "                  bound; if one of yours is gone, restore the backup and check again.\n"
                "  --no-keys       Install without any global keys: the app, menu and plugins only.\n"
                "  --dry-run       Show what would change; change nothing.\n"
                "  --remove        Take out exactly what setup added.\n"
@@ -587,11 +590,9 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         out << "\nBacked up to " << backupFolder << ".\n";
     }
 
-    // What Hyprland binds now (Super+1, Super+Return and the rest), to check it still does once the keys are loaded.
-    std::optional<QSet<QString>> bindsBefore;
-    if (!removing && !dryRun && (std::find(accepted.begin(), accepted.end(), QStringLiteral("keys")) != accepted.end()
-                                 || std::find(accepted.begin(), accepted.end(), QStringLiteral("source")) != accepted.end()))
-        bindsBefore = liveUserBinds();
+    const bool accepts = !removing && !dryRun;
+    const auto has = [&](const char *key) { return std::find(accepted.begin(), accepted.end(), QLatin1String(key)) != accepted.end(); };
+    const KeyCheck keyCheck = accepts ? startKeyCheck(environment, has("keys"), has("source"), skippedKeys, out) : KeyCheck();
 
     bool reloadShell = false;
     for (const QString &key : accepted) {
@@ -689,23 +690,20 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             writeFile(environment.record(), record.toJson());
         }
     }
-    if (bindsBefore) {
-        const QStringList lost = lostBinds(*bindsBefore);
-        if (!lost.isEmpty()) {
-            err << "\nAfter the change, Hyprland no longer has these keys: " << lost.mid(0, 8).join(QStringLiteral(", "))
-                << (lost.size() > 8 ? QStringLiteral(" and %1 more").arg(lost.size() - 8) : QString()) << ".\n"
-                << "Setup is putting every file back as it was. Anything Omastrator's key file logged is in " << environment.setupLog() << ".\n";
-            err.flush();
-            const int restored = runRestore(environment, backupName, true, false, in, out, err);
-            Hyprland::reload();
-            out << (restored == 0 ? "Your keys are back. Omastrator's keys were not installed.\n" : "The restore didn't finish: run `omastrator setup --restore " + backupName + "`.\n");
+    QString problem;
+    if (keyCheck.active) {
+        const KeyOutcome outcome = finishKeyCheck(keyCheck, environment, backupName, in, out, err, &problem);
+        if (outcome == KeyOutcome::restored)
             return 1;
-        }
     }
     if (reloadShell && !dryRun)
         reloadOmarchyShell(&notes);
     for (const QString &note : notes)
         out << '\n' << note << '\n';
+    if (!problem.isEmpty()) {
+        err << '\n' << problem << ". " << applied << (applied == 1 ? " step" : " steps") << " applied; the backup is kept: omastrator setup --restore " << backupName << '\n';
+        return 1;
+    }
     out << '\n' << (removing ? "Removed." : "Set up.") << ' ' << applied << (applied == 1 ? " step" : " steps") << (dryRun ? " would be applied.\n" : " applied.\n");
     if (!accepted.empty())
         out << "To put every file back as it was: omastrator setup --restore " << backupName << '\n';

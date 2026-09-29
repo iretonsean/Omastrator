@@ -171,7 +171,12 @@ static QString designLua(const DesignKeys &keys, const QStringList &skip)
                "-- Omastrator in the background: the overlays, the Desk and the agent socket, no window until asked.\n"
                "attempt(\"hyprland.start\", hl.on, \"hyprland.start\", function()\n"
                "  hl.exec_cmd(omastrator .. \" --daemon\")\n"
-               "end)\n").arg(keys.design);
+               "end)\n"
+               "\n"
+               "loading = false\n"
+               "if #failures > 0 then\n"
+               "  notify(\"Omastrator: \" .. #failures .. \" of its keys didn't load (details in ~/.local/state/omastrator/setup.log). First: \" .. failures[1])\n"
+               "end\n").arg(keys.design);
     return text;
 }
 
@@ -187,19 +192,28 @@ QByteArray hyprlandLua(const QString &command, const DesignKeys &keys, const QSt
         "\n"
         "local omastrator = %1\n"
         "\n"
-        "-- A failure in this file is written to ~/.local/state/omastrator/setup.log and shown as a\n"
-        "-- notification. It never stops the lines after it or the user's own config.\n"
+        "-- A failure in this file is written to ~/.local/state/omastrator/setup.log and shown as one\n"
+        "-- notification once the file has loaded. It never stops the lines after it or the user's own config.\n"
+        "local failures, loading = {}, true\n"
+        "\n"
+        "local function notify(message)\n"
+        "  pcall(hl.notification.create, { text = message, timeout = 10000 })\n"
+        "end\n"
+        "\n"
         "local function report(what, err)\n"
         "  local message = \"Omastrator: \" .. what .. \": \" .. tostring(err)\n"
         "  pcall(function()\n"
         "    local state = os.getenv(\"XDG_STATE_HOME\") or ((os.getenv(\"HOME\") or \"\") .. \"/.local/state\")\n"
-        "    local log = io.open(state .. \"/omastrator/setup.log\", \"a\")\n"
+        "    local path = state .. \"/omastrator/setup.log\"\n"
+        "    local log = io.open(path, \"a\")\n"
+        "    -- Every reload appends, so start over once it is large.\n"
+        "    if log and log:seek(\"end\") > 65536 then log:close(); log = io.open(path, \"w\") end\n"
         "    if log then\n"
         "      log:write(os.date(\"%Y-%m-%d %H:%M:%S \"), message, \"\\n\")\n"
         "      log:close()\n"
         "    end\n"
         "  end)\n"
-        "  pcall(hl.notification.create, { text = message, timeout = 10000 })\n"
+        "  if loading then failures[#failures + 1] = message else notify(message) end\n"
         "end\n"
         "\n"
         "local function attempt(what, fn, ...)\n"
@@ -344,8 +358,9 @@ QByteArray hyprlandConf(const QString &command, const DesignKeys &keys, const QS
         text += QStringLiteral("bindd = %1, Omastrator: the Desk, exec, %2 desk toggle\n").arg(confKey(keys.desk), shellQuote(command));
     if (!skipping(skip, QStringLiteral("SUPER + ALT + Escape")))
         // The u flag (submap universal) keeps the hatch working inside a submap; it closes the submap itself.
+        // Both binds carry the description, so a check of Hyprland's binds can tell they are ours.
         text += QStringLiteral("binddu = SUPER ALT, escape, Omastrator: reset, exec, %1 reset\n"
-                               "bindu = SUPER ALT, escape, submap, reset\n").arg(shellQuote(command));
+                               "binddu = SUPER ALT, escape, Omastrator: reset, submap, reset\n").arg(shellQuote(command));
     text += QStringLiteral("\nsubmap = omastrator-design\n"
                            "bind = , escape, exec, %2off\n"
                            "bind = , escape, submap, reset\n"
@@ -363,7 +378,10 @@ QByteArray sourceBlock(HyprFormat format)
 {
     if (format == HyprFormat::lua)
         return "\n-- Omastrator's island keys (added by `omastrator setup --apply`).\n"
-               "pcall(dofile, (os.getenv(\"XDG_CONFIG_HOME\") or (os.getenv(\"HOME\") .. \"/.config\")) .. \"/omastrator/hyprland.lua\")\n";
+               "do\n"
+               "  local ok, err = pcall(dofile, (os.getenv(\"XDG_CONFIG_HOME\") or (os.getenv(\"HOME\") .. \"/.config\")) .. \"/omastrator/hyprland.lua\")\n"
+               "  if not ok then pcall(hl.notification.create, { text = \"Omastrator: its key file didn't load: \" .. tostring(err), timeout = 10000 }) end\n"
+               "end\n";
     return "\n# Omastrator's island keys (added by `omastrator setup --apply`).\n"
            "source = ~/.config/omastrator/hyprland.conf\n";
 }

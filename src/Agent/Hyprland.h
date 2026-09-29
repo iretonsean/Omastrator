@@ -59,7 +59,7 @@ QJsonValue query(const QString &what, QString *error = nullptr);
 // Runs a dispatcher: `lua` on Omarchy 4's Lua config (through `hyprctl eval`), else `legacy` (`hyprctl dispatch …`).
 // Returns why it failed, or empty.
 QString dispatch(const QString &lua, const QString &legacy);
-// Asks Hyprland to reload its config. Returns why it failed, or empty.
+// Asks Hyprland to reload its config only (`reload config-only`: monitors and runtime state stay). Returns why it failed, or empty.
 QString reload();
 // True when ~/.config/hypr/hyprland.lua exists, as setup decides.
 bool usesLua();

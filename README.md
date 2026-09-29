@@ -544,9 +544,11 @@ omastrator setup
   installs with no global keys at all; reach design mode from the Omarchy menu
   or with `omastrator design on`.
 - **If a key ever gets stuck:** Super+Alt+Escape gives the keyboard back from
-  inside any Omastrator mode. After `--apply`, setup checks that your own keys
-  (Super+number, Super+Enter, …) still work, and puts your files back by itself
-  if one doesn't. Anything wrong in Omastrator's key file is logged in
+  inside any Omastrator mode. After `--apply`, setup reloads Hyprland (once before, to see what your keys
+  are, and once after) and checks that your own keys (Super+number, Super+Enter,
+  …) and Omastrator's are all bound. If one of yours is gone it puts your files
+  back by itself and checks again; if the reload fails or a key is missing it
+  says so plainly and keeps the backup, and never reports success. Anything wrong in Omastrator's key file is logged in
   `~/.local/state/omastrator/setup.log`.
 
 Coming, to make installing quicker (the PKGBUILDs are tested locally, the

@@ -173,9 +173,43 @@ std::optional<Backup> findBackup(const Environment &environment, const QString &
 // What --restore would change: each file that differs from the backup's copy.
 std::vector<Change> restorePlan(const Environment &environment, const Backup &backup, QString *error);
 // The keys Hyprland has bound in its default submap that aren't Omastrator's ("Super+1", "Super+Return"); nullopt when it can't be asked.
+// "Omastrator's" is one rule everywhere (see LiveBind in Setup+Keys.cpp): a bind saying so, or any bind on a combo one of those uses.
 std::optional<QSet<QString>> liveUserBinds();
-// Reloads Hyprland's config and returns those of `before` that are gone from the default submap (for `waitMs` it looks again before saying so).
-QStringList lostBinds(const QSet<QString> &before, int waitMs = 2000);
+// What Hyprland has now compared with what was expected. Asks again for `waitMs` before calling a key lost or missing.
+struct BindCheck {
+    // False when Hyprland didn't answer: nothing else is known.
+    bool answered = false;
+    // Of `before`, the user's keys that are gone ("Super+1").
+    QStringList lost;
+    // Of `ownKeys` (normalised), Omastrator's keys that aren't bound ("Super+Alt+V").
+    QStringList missing;
+};
+BindCheck checkBinds(const QSet<QString> &before, const QStringList &ownKeys, int waitMs = 2000);
+
+// Whether `config` (the user's Hyprland config) already has the line that loads Omastrator's key file, in this version's form or an older one.
+bool hasSourceLine(const QByteArray &config, HyprFormat format);
+// The check around the writes of a setup that loads Omastrator's keys into Hyprland (docs/OS-SUITE.md, "Reload check").
+struct KeyCheck {
+    bool active = false;
+    // The user's binds after a reload with nothing of ours changed; nullopt when that reload or the question failed.
+    std::optional<QSet<QString>> before;
+    // Omastrator's own global keys the key file should bind, normalised.
+    QStringList ownKeys;
+};
+// Called before anything is written. Active only when the keys or the source step was accepted, our file will be sourced, and Hyprland answers.
+// Reloads once, so runtime-only binds (an autostart script's `hyprctl keyword bind`) are already gone from the baseline.
+KeyCheck startKeyCheck(const Environment &environment, bool keysAccepted, bool sourceAccepted, const QStringList &skippedKeys, QTextStream &out);
+enum class KeyOutcome {
+    // Reloaded, and every key the user had and every key of Omastrator's is there (or there was nothing to check).
+    fine,
+    // Files kept, but Hyprland isn't using them or a key is missing; `summary` says what to tell after "N steps applied".
+    problem,
+    // The user's keys were gone, so setup put every file back and said what happened.
+    restored,
+};
+// Called after the writes: reloads, checks, and puts the backup back if the user's keys are gone. Never says a key is back without looking.
+KeyOutcome finishKeyCheck(const KeyCheck &check, const Environment &environment, const QString &backupName, QTextStream &in, QTextStream &out, QTextStream &err,
+                          QString *summary);
 // Tells the shell to rescan its plugins and reload; adds a note when it isn't running.
 void reloadOmarchyShell(QStringList *notes);
 int runListBackups(const Environment &environment, QTextStream &out);

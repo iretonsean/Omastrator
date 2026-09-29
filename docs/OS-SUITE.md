@@ -460,12 +460,17 @@ Choices the spec left open, made while building it, in build order.
   (dictation), the design and Desk keys and Super+Alt+Escape. The keys inside
   Omastrator's own submaps only exist while one is active. A key counts as
   taken when a live bind (`hyprctl binds -j`) or a bind in `~/.config/hypr`
-  or Omarchy's defaults uses it outside a submap; Omastrator's own binds don't
-  count, which keeps a second run quiet: Lua Hyprland reports every bind as
-  `__lua` with a numeric arg, so ours are told apart by their "Omastrator…"
-  description, and a release bind (which the dictation key has, described
-  "Omastrator: dictate (release)") counts as ours when the press bind on the
-  same combo is. Without a live Hyprland, the config files are read: Lua
+  or Omarchy's defaults uses it outside a submap. **One rule says which binds
+  are ours, and every check uses it** (`LiveBind` in `Setup+Keys.cpp`): a bind
+  is ours when its own text says so (a description starting "Omastrator", or
+  an argument naming omastrator), or when it is in the default submap on the
+  same combo as one that does. Lua Hyprland reports every bind as `__lua` with
+  a numeric arg, so a release bind or a hatch's second half has no text of
+  its own, and key files from before this rule wrote some with none (the
+  dictation release, `SUPER + ALT + V`). Binds inside our own submaps
+  (`Escape`, `T`) never vouch for a default-submap bind, and a mouse bind is
+  never ours by combo. That keeps a second run, and an upgrade from the
+  previous key file, quiet. Without a live Hyprland, the config files are read: Lua
   `hl.bind`, Omarchy's `o.bind` and `o.bind_toggle` (never `unbind`), and
   hyprlang `bind*` lines, whose `$variables` are collected from every file
   first, since Hyprland shares them across `source`d files. Skipped keys are written to the
@@ -493,15 +498,42 @@ Choices the spec left open, made while building it, in build order.
     while a mode was on, and the Super+Alt+Escape hatch was itself a global
     bind, dead in exactly that state.
   What the key file does now: the reset key is `submap_universal` (hyprlang
-  `bindu`), so it works inside any submap, and it closes the submap itself
-  before asking `omastrator reset`. Every bind, submap body and dispatch runs
-  protected; a failure is a line in `~/.local/state/omastrator/setup.log` and
-  a Hyprland notification, and never stops the rest of the file. Leaving a
-  mode closes the submap before it runs the island command, so a failing
-  command can't leave a mode's keys held. After `--apply` (when Hyprland
-  answers), setup reloads Hyprland and reads `hyprctl binds -j` again; if any
-  bind the user had in the default submap (Super+1, Super+Return, …) is gone,
-  it restores the backup by itself, reloads, and says which keys were lost.
+  `binddu`, both of its binds described "Omastrator: reset"), so it works
+  inside any submap, and it closes the submap itself before asking
+  `omastrator reset`. Every bind, submap body and dispatch runs protected; a
+  failure is a line in `~/.local/state/omastrator/setup.log` (trimmed once it
+  passes 64 KB) and, once the file has finished loading, one Hyprland
+  notification listing how many keys failed. The line that loads the file
+  reports its own failure the same way, and setup recognises the older forms
+  of that line and of the key file, so an upgrade rewrites them rather than
+  adding a second copy. Leaving a mode closes the submap before it runs the
+  island command, so a failing command can't leave a mode's keys held.
+- **Reload check** (`Setup+Reload.cpp`). Nothing here ever says a key is back
+  or working without looking. It runs when the keys or the source step are
+  accepted, Hyprland loads our file (or will, once the source line is added)
+  and Hyprland answers `hyprctl binds -j`:
+  1. Before anything is written, setup reloads Hyprland (`reload
+     config-only`, so monitors and runtime state stay) and reads the user's
+     default-submap binds. This is the baseline: binds an autostart script
+     added at run time (`hyprctl keyword bind`) are gone after any reload, so
+     they are not ours to lose. The catch is that this reload also activates
+     an edit of the user's own that Hyprland had not loaded yet; the output
+     says the reload happens, and `hyprctl configerrors` is named when
+     something is missing.
+  2. After the writes it reloads again and asks again, for up to two seconds.
+     If the reload fails, or Hyprland doesn't answer afterwards, that is
+     reported and setup exits 1 with the files and the backup kept (never
+     "Set up."). If keys of the user's are gone, setup restores every file
+     from the backup, reloads, and **checks again**: it says "Your keys are
+     back" only if they are; otherwise it says which are still missing with
+     every file as it was, that Omastrator's files therefore aren't the cause,
+     keeps the backup and exits 1. If all of the user's keys are there but some
+     of Omastrator's own aren't bound, the files are kept and setup exits 1
+     naming them.
+  3. Setup doesn't reload when it isn't running under Hyprland, when
+     `--no-keys` was given, or when nothing about the keys changed (a re-run
+     with `--apply` that finds everything in place changes and reloads
+     nothing).
 - **Asking.** Each step is shown (plugin files by name, everything else as a
   unified diff) and asked about; `--yes` accepts all, `--dry-run` changes
   nothing, and a closed input answers no. Setup never installs packages: it

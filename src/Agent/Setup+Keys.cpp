@@ -9,6 +9,7 @@
 #include <QStandardPaths>
 #include <QThread>
 #include <map>
+#include <vector>
 
 namespace {
 constexpr int shiftBit = 1, ctrlBit = 4, altBit = 8, superBit = 64;
@@ -56,31 +57,61 @@ bool isOurs(const QString &description, const QString &arg)
     return description.startsWith(QLatin1String("Omastrator"), Qt::CaseInsensitive) || arg.contains(QLatin1String("omastrator"), Qt::CaseInsensitive);
 }
 
-void addLive(QSet<QString> *taken)
+// A bind Hyprland has now, in the default submap or another.
+struct LiveBind {
+    QString combo;
+    bool release = false;
+    bool mouse = false;
+    bool defaultSubmap = true;
+    // The one rule for "whose is this bind" (taken keys, the lost-keys check, the own-keys check): its own text says Omastrator,
+    // or any bind on the same combo in the default submap does. Lua Hyprland reports every bind as "__lua" with a number, so a
+    // release bind, or a hatch's second bind, has no text of its own; and key files older than this rule wrote some without any.
+    bool ours = false;
+};
+
+std::optional<std::vector<LiveBind>> liveBinds()
 {
     const QJsonValue binds = Hyprland::query(QStringLiteral("binds"));
-    const auto comboOfBind = [](const QJsonObject &bind) {
-        return comboOf(bind["modmask"].toInt() & (shiftBit | ctrlBit | altBit | superBit), bind["key"].toString());
-    };
-    // Lua Hyprland reports every bind as "__lua", so a release bind has no text to say it is ours.
-    // The press bind on the same combo does, and that is enough (this also covers key files written before it had a description).
-    QSet<QString> ours;
+    if (!binds.isArray())
+        return std::nullopt;
+    std::vector<LiveBind> all;
+    QSet<QString> ourCombos;
     for (const QJsonValue &value : binds.toArray()) {
         const QJsonObject bind = value.toObject();
-        if (isOurs(bind["description"].toString(), bind["arg"].toString()))
-            ours.insert(comboOfBind(bind));
+        LiveBind live;
+        live.combo = comboOf(bind["modmask"].toInt() & (shiftBit | ctrlBit | altBit | superBit), bind["key"].toString());
+        live.release = bind["release"].toBool();
+        live.mouse = bind["mouse"].toBool();
+        live.defaultSubmap = bind["submap"].toString().isEmpty();
+        live.ours = isOurs(bind["description"].toString(), bind["arg"].toString());
+        // Our own submaps bind plain keys (Escape, T): only the default submap's combos can vouch for a bind.
+        if (live.ours && live.defaultSubmap && !live.mouse)
+            ourCombos.insert(live.combo);
+        all.push_back(live);
     }
-    for (const QJsonValue &value : binds.toArray()) {
-        const QJsonObject bind = value.toObject();
+    for (LiveBind &live : all)
+        live.ours = live.ours || (live.defaultSubmap && !live.mouse && ourCombos.contains(live.combo));
+    return all;
+}
+
+// What the user has bound in the default submap, "Super+1" or "Super+Alt+V (release)".
+QSet<QString> userKeys(const std::vector<LiveBind> &binds)
+{
+    QSet<QString> keys;
+    for (const LiveBind &bind : binds) {
+        if (bind.defaultSubmap && !bind.ours && !bind.combo.isEmpty())
+            keys.insert(Setup::displayCombo(bind.combo) + (bind.release ? QStringLiteral(" (release)") : QString()));
+    }
+    return keys;
+}
+
+void addLive(QSet<QString> *taken)
+{
+    const auto binds = liveBinds();
+    for (const LiveBind &bind : binds.value_or(std::vector<LiveBind>())) {
         // Keys inside the user's own submaps and mouse binds can't be the ones setup takes.
-        if (!bind["submap"].toString().isEmpty() || bind["mouse"].toBool())
-            continue;
-        if (isOurs(bind["description"].toString(), bind["arg"].toString()))
-            continue;
-        const QString combo = comboOfBind(bind);
-        if (combo.isEmpty() || (bind["release"].toBool() && ours.contains(combo)))
-            continue;
-        taken->insert(combo);
+        if (bind.defaultSubmap && !bind.mouse && !bind.ours && !bind.combo.isEmpty())
+            taken->insert(bind.combo);
     }
 }
 
@@ -267,44 +298,43 @@ KeyChoice chooseKeys(const Environment &environment)
     }
     return choice;
 }
+
 std::optional<QSet<QString>> liveUserBinds()
 {
-    const QJsonValue binds = Hyprland::query(QStringLiteral("binds"));
-    if (!binds.isArray())
+    const auto binds = liveBinds();
+    if (!binds)
         return std::nullopt;
-    QSet<QString> keys;
-    for (const QJsonValue &value : binds.toArray()) {
-        const QJsonObject bind = value.toObject();
-        if (!bind["submap"].toString().isEmpty() || isOurs(bind["description"].toString(), bind["arg"].toString()))
-            continue;
-        const QString combo = comboOf(bind["modmask"].toInt() & (shiftBit | ctrlBit | altBit | superBit), bind["key"].toString());
-        if (!combo.isEmpty())
-            keys.insert(displayCombo(combo) + (bind["release"].toBool() ? QStringLiteral(" (release)") : QString()));
-    }
-    return keys;
+    return userKeys(*binds);
 }
 
-QStringList lostBinds(const QSet<QString> &before, int waitMs)
+BindCheck checkBinds(const QSet<QString> &before, const QStringList &ownKeys, int waitMs)
 {
-    if (before.isEmpty())
-        return {};
-    Hyprland::reload();
-    QStringList lost;
+    BindCheck check;
     // Hyprland answers the reload before every bind is back, so look again for a moment before calling one lost.
     for (int waited = 0;; waited += 200) {
-        lost.clear();
-        const std::optional<QSet<QString>> now = liveUserBinds();
+        check = {};
+        const auto now = liveBinds();
         if (!now)
-            return {};
+            return check;
+        check.answered = true;
+        const QSet<QString> user = userKeys(*now);
+        QSet<QString> bound;
+        for (const LiveBind &bind : *now)
+            bound.insert(bind.combo);
         for (const QString &key : before) {
-            if (!now->contains(key))
-                lost << key;
+            if (!user.contains(key))
+                check.lost << key;
         }
-        if (lost.isEmpty() || waited >= waitMs)
+        for (const QString &key : ownKeys) {
+            if (!bound.contains(key))
+                check.missing << displayCombo(key);
+        }
+        if ((check.lost.isEmpty() && check.missing.isEmpty()) || waited >= waitMs)
             break;
         QThread::msleep(200);
     }
-    lost.sort();
-    return lost;
+    check.lost.sort();
+    check.missing.sort();
+    return check;
 }
 }
