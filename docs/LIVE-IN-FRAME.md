@@ -565,8 +565,9 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     commit, and the next Save or Deploy commits every uncommitted record for
     that folder in one commit (`commitAndShip`). Those edits left the pending
     list when they were written, so they are not written twice. The failure
-    message says so (`AgentBridge::uncommittedNote`): "1 change is written to
-    index.html but not committed; the next Save or Deploy commits it." Tests:
+    message says so (`AgentBridge::uncommittedNote`): "index.html is written but
+    not committed; the next Save or Deploy commits it." It names files, not edits
+    or records: one write-back record can hold many edits. Tests:
     `aFailedSaveSaysSaveFailedAndLeavesTheWrittenEditsForTheNextSave`,
     `theFailureMessageAgreesWithTheCountAndOnlyNamesWhatIsOnDisk`.
   - The menu (bar menu and Object ▸ Browser View) has Deploy, Save, Review
@@ -754,6 +755,13 @@ them again in between. Callers: `liveWriteBack` (everything it read),
   (paused or closed), the swap keeps translating until the next non-dev
   navigation, and a deliberate trip to that localhost port meanwhile is saved
   as the production address.
+- A resumed frame's page reports `document.hasFocus()` as true, because the resume
+  turns focus emulation on to show the page (see "The stale picture, found"). An
+  element that has focus (an autofocused field, say) then shows its `:focus`
+  styles and caret in the picture, though the user hasn't clicked into the page.
+  The pause turns emulation off again, but a frame that stays on screen keeps it.
+  Showing the page without claiming focus needs another way to keep Chromium
+  from hiding it.
 - The token as the unit ("p-4", "radius-md") and the small arrow that lists the
   scale, in the bar's fields. The host's element state doesn't carry an edit's
   snapped token yet; it needs to.

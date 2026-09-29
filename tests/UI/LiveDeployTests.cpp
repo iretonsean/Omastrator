@@ -457,7 +457,7 @@ private slots:
         const QString message = notices.first().first().toString();
         QCOMPARE(message, bridge.deployState().message);
         QVERIFY2(message.contains(QLatin1String("1 edit wasn't certain enough to write directly, and the agent couldn't take it:")), qPrintable(message));
-        QVERIFY2(message.contains(QLatin1String("1 change is written to index.html but not committed; the next Save or Deploy commits it.")), qPrintable(message));
+        QVERIFY2(message.contains(QLatin1String("index.html is written but not committed; the next Save or Deploy commits it.")), qPrintable(message));
         // Nothing was rolled back and nothing half-saved was committed.
         QVERIFY(read(site + "/index.html").contains("Goodbye"));
         QCOMPARE(git(site, {"status", "--porcelain", "--untracked-files=no"}).trimmed(), QStringLiteral("M index.html"));

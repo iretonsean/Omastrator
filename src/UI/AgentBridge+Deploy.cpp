@@ -301,23 +301,25 @@ QString AgentBridge::uncommittedNote(const QString &folder) const
 {
     if (!WriteBack::isGitRepository(folder))
         return {};
-    qsizetype records = 0;
+    // Files, not records: one write-back record can hold many edits, and the person cares which files are on disk.
     QStringList files;
     for (const WriteBack::Review &review : m_reviews) {
         if (!review.commit.isEmpty() || canonical(review.folder) != folder)
             continue;
-        ++records;
         for (const WriteBack::FileChange &change : review.changes) {
             const QString relative = QDir(folder).relativeFilePath(change.path);
             if (!files.contains(relative))
                 files << relative;
         }
     }
-    if (records == 0)
+    if (files.isEmpty())
         return {};
-    const QString where = files.size() <= 3 ? files.join(QStringLiteral(", ")) : counted(files.size(), QStringLiteral("file"));
-    return records == 1 ? QStringLiteral("1 change is written to %1 but not committed; the next Save or Deploy commits it.").arg(where)
-                        : QStringLiteral("%1 changes are written to %2 but not committed; the next Save or Deploy commits them.").arg(records).arg(where);
+    if (files.size() == 1)
+        return QStringLiteral("%1 is written but not committed; the next Save or Deploy commits it.").arg(files.front());
+    const QString which = files.size() == 2 ? files.join(QStringLiteral(" and "))
+                        : files.size() == 3 ? QStringLiteral("%1, %2 and %3").arg(files[0], files[1], files[2])
+                                            : counted(files.size(), QStringLiteral("file"));
+    return QStringLiteral("%1 are written but not committed; the next Save or Deploy commits them.").arg(which);
 }
 
 void AgentBridge::pipelineFailed(const QString &line, const QString &log)
