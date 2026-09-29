@@ -303,6 +303,18 @@ with the program". This is what it did, and what it does now.
   window can move or leave without the pointer doing anything
   (`DesignMode::watchDesktop`, every 500 ms at most).
 
+### A waiting proposal doesn't depend on the bar's home
+
+Keep and Discard sit on the floating bar, and the bar hides while its home
+window is off screen. So a proposal (or an agent being waited on) that the bar
+can't show gets its own small card at the bottom of the design monitor,
+without the bar's home rule: the overlay shows it whenever the bar isn't up
+(`proposalCard` in `Overlay.qml`), and its clicks join the input mask. The
+island is not used for this: it is hidden with other apps, and a card at the
+screen the user was designing on is where they look. Tested in
+`DesignModeUiTests` (the proposal stays in the status with the bar hidden) and
+`ShellPluginTests` (the card's condition).
+
 ### The island shows only with Omastrator (interim)
 
 Alpha testers didn't want the island on screen everywhere. Until the island's
@@ -312,9 +324,15 @@ UX is rethought (scrap it, or change what it does), this is the default,
 - The island shows while an Omastrator window is focused (Hyprland's active
   window class is `io.github.iretonsean.Omastrator`), and is hidden otherwise.
 - It is a way out, so it stays while design mode is on, while dictation is
-  listening (or showing what it heard) and while a proposal or result waits
+  listening, transcribing or showing what it heard, while an agent is being
+  waited on (Stop is on the island), while Live is starting or running or a
+  deploy is running (Stop Live, Changes and Deploy are island-only, and Live's
+  browser is not an Omastrator window), and while a proposal or result waits
   for Keep or Discard (`OverlayLogic.islandShown`, tested in a JavaScript
   engine). The tray light is always there as the entry.
+- The focused class is read from the Wayland app id (`toplevel.wayland.appId`)
+  first, since Hyprland's own record is only filled after a refresh, then from
+  Hyprland's record, refreshed on every focus change for XWayland windows.
 - **To show it always**: Preferences, "Show the island on every window", or
   `omastrator island show always` (`with-app` goes back). It is kept as `show`
   in `~/.config/omastrator/island-visibility.json`, and the status stream carries

@@ -314,11 +314,18 @@ Item {
     }
   }
 
-  // The focused window's class, for showing the island only with Omastrator (Logic.islandShown).
+  // The focused window's class, for showing the island only with Omastrator (Logic.islandShown). The Wayland
+  // app id is live for every window; Hyprland's own record is only filled by refreshToplevels (XWayland's fallback).
   readonly property string activeClass: {
     var toplevel = Hyprland.activeToplevel
+    var appId = toplevel && toplevel.wayland ? toplevel.wayland.appId : ""
+    if (appId) return String(appId)
     var ipc = toplevel ? toplevel.lastIpcObject : null
     return ipc && ipc["class"] ? String(ipc["class"]) : ""
+  }
+  Connections {
+    target: Hyprland
+    function onActiveToplevelChanged() { Hyprland.refreshToplevels() }
   }
   readonly property bool islandShown: Logic.islandShown(status.status, activeClass)
 

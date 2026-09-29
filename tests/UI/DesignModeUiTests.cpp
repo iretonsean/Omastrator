@@ -640,6 +640,15 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(app.status().contains("proposal"), 20000);
         QTRY_COMPARE_WITH_TIMEOUT(app.status()["proposal"].toObject()["title"].toString(), QStringLiteral("AI: Mock-up"), 20000);
         QCOMPARE(app.bridge().designTarget(), &overlay);
+        // The home window leaves the screen: the bar hides with it, but the proposal stays in the status with the
+        // design monitor, so the overlay's own Keep and Discard card has somewhere to show and can answer it.
+        app.desktop->clients[0].workspace = 3;
+        app.design().mode().refresh();
+        QVERIFY(!app.status().contains("bar"));
+        QVERIFY(app.status().contains("proposal"));
+        QVERIFY(!app.status()["monitor"].toString().isEmpty());
+        app.desktop->clients[0].workspace = 1;
+        app.design().mode().refresh();
         // Nothing else draws on the overlay until it's kept or discarded.
         app.call(QStringLiteral("draw"), {{"tool", "line"}, {"points", QJsonArray{QJsonArray{110, 60}, QJsonArray{120, 70}}}}, &error);
         QVERIFY(error.contains(QLatin1String("proposal")));

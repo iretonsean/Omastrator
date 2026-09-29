@@ -107,6 +107,15 @@ private slots:
         // The island's window shows through the visibility rule, so it can't drift from what the tests check.
         QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Logic.islandShown(status.status, activeClass)")));
         QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("visible: root.islandShown && ")));
+        // The focused class comes from the Wayland app id first (Hyprland's record is empty until refreshed), and a
+        // focus change refreshes that record for the XWayland fallback.
+        const QString islandQml = read(QStringLiteral("omastrator.island/Island.qml"));
+        const qsizetype classAt = islandQml.indexOf(QStringLiteral("readonly property string activeClass"));
+        QVERIFY(classAt >= 0);
+        const QString classRule = islandQml.mid(classAt, islandQml.indexOf(QStringLiteral("readonly property bool islandShown"), classAt) - classAt);
+        QVERIFY(classRule.contains(QStringLiteral("toplevel.wayland.appId")));
+        QVERIFY(classRule.indexOf(QStringLiteral("toplevel.wayland.appId")) < classRule.indexOf(QStringLiteral("lastIpcObject")));
+        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("function onActiveToplevelChanged() { Hyprland.refreshToplevels() }")));
         QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Overlay { status: status; islandWidth: root.pillWidth; islandHeight: root.pillHeight }")));
         const QString window = block(overlay, QStringLiteral("PanelWindow"));
         QVERIFY(window.contains(QStringLiteral("WlrLayershell.layer: WlrLayer.Overlay")));
@@ -125,6 +134,11 @@ private slots:
         QVERIFY(mask.contains(QStringLiteral("Region { x: 0; y: 0; width: window.width; height: window.place.reservedTop || 0; intersection: Intersection.Subtract }")));
         // A proposal left waiting keeps its Keep and Discard reachable, with or without design mode.
         QVERIFY(mask.contains(QStringLiteral("Region { item: proposalCard.visible ? proposalCard : null }")));
+        // Keep and Discard take over from the bar whenever it isn't up (its home window off screen, a drawing tool,
+        // onboarding), on the design monitor, so a waiting proposal never depends on where the home window is.
+        QVERIFY(overlay.contains(QStringLiteral("visible: (root.proposal !== null || !!root.design.waiting) && !barCard.visible && root.proposalScreen === window.modelData.name")));
+        QVERIFY(overlay.contains(QStringLiteral("onClicked: root.run([\"design\", \"keep\"])")));
+        QVERIFY(overlay.contains(QStringLiteral("onClicked: root.run([\"design\", \"discard\"])")));
         // The keyboard stays with the apps unless something is being typed.
         QVERIFY(window.contains(QStringLiteral("WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None")));
         QVERIFY(!overlay.contains(QStringLiteral("WlrKeyboardFocus.Exclusive")));
@@ -235,8 +249,27 @@ private slots:
         kept = quiet;
         kept["dictation"] = "listening";
         QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        kept["dictation"] = "transcribing";
+        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
         kept["dictation"] = "heard";
         QVERIFY(call("islandShown", {kept, "foot"}).toBool());
+        // Waiting on an agent (Stop is on the island), and Live editing in the browser (its tools are island-only).
+        kept = quiet;
+        kept["waiting"] = "Claude";
+        QVERIFY(call("islandShown", {kept, "chromium"}).toBool());
+        kept = quiet;
+        kept["waiting"] = "";
+        QVERIFY(!call("islandShown", {kept, "chromium"}).toBool());
+        for (const char *state : {"running", "starting"}) {
+            kept = quiet;
+            kept["live"] = QVariantMap{{"state", state}};
+            QVERIFY2(call("islandShown", {kept, "chromium"}).toBool(), state);
+        }
+        kept = quiet;
+        kept["live"] = QVariantMap{{"state", "off"}, {"deploy", QVariantMap{{"running", false}}}};
+        QVERIFY(!call("islandShown", {kept, "chromium"}).toBool());
+        kept["live"] = QVariantMap{{"state", "off"}, {"deploy", QVariantMap{{"running", true}}}};
+        QVERIFY(call("islandShown", {kept, "chromium"}).toBool());
         kept = quiet;
         kept["ready"] = true;
         QVERIFY(call("islandShown", {kept, "foot"}).toBool());
