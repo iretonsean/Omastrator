@@ -224,7 +224,7 @@ private:
                                              // The panel is owned by `shared`, so it can't own it back.
                                              if (auto kept = weak.lock())
                                                  kept->apply({property}, colorText(picked), false);
-                                         });
+                                         }, true);
             });
         });
         m_shared->syncers.push_back([shared, well, property] {

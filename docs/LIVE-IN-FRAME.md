@@ -637,7 +637,8 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     Ctrl+K), and its items follow the frame being edited even when the frame's
     object isn't selected.
   - **The element bar.** Custom… uses the app's `ColorPickerSheet` in a floating
-    panel (it has no alpha, so a picked colour is opaque). The box icon swaps
+    panel, with its opacity field on (`withAlpha`; the picker's other callers stay
+    opaque), so a translucent colour is written as `rgba(r, g, b, a)`. The box icon swaps
     the padding pair for four sides. The ⋯ menu holds margin (↔ ↕), per-corner
     radius and Keep Edits… (a site that isn't yours). The overlay now reports the
     four corner radii.
@@ -708,8 +709,6 @@ them again in between. Callers: `liveWriteBack` (everything it read),
 
 ## Follow-ups
 
-- Custom… in the element bar has no alpha since `ColorPickerSheet` replaced
-  `QColorDialog`; a picked colour is opaque.
 - Cross-origin undo in a mock-up: two mock-up origins in one session share the
   undo stack (the project doesn't move), so Ctrl+Z on site Y can undo an edit
   from site X by running its restore on Y's element with the same selector

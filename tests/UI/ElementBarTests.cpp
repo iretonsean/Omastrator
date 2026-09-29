@@ -374,6 +374,32 @@ private slots:
         QCOMPARE(rig.host.edits[0].value, QStringLiteral("#ff0000"));
     }
 
+    void customColourCanBeTranslucent()
+    {
+        Rig rig;
+        QVERIFY(rig.canvas.enterEditPage(rig.frame));
+        rig.pick({element("#a", {60, 40, 200, 80}, styles("8px"))});
+        auto *well = rig.bar->findChild<QToolButton *>("element:color");
+        QVERIFY(well && well->menu());
+        emit well->menu()->aboutToShow();
+        for (QAction *action : well->menu()->actions())
+            if (action->objectName() == QLatin1String("elementCustomColor"))
+                action->trigger();
+        ColorPickerSheet *sheet = nullptr;
+        QTRY_VERIFY((sheet = [] {
+            for (QWidget *widget : QApplication::topLevelWidgets())
+                if (widget->objectName() == QLatin1String("colorPickerPanel") && widget->isVisible())
+                    return widget->findChild<ColorPickerSheet *>();
+            return static_cast<ColorPickerSheet *>(nullptr);
+        }()));
+        QVERIFY(sheet->findChild<PickerField *>("alpha"));
+        sheet->setHSB(PickerHSB::from(QColor(255, 0, 0)));
+        sheet->setAlphaPercent(50);
+        sheet->findChild<QPushButton *>("pickerOK")->click();
+        QCOMPARE(rig.host.edits.size(), 1);
+        QCOMPARE(rig.host.edits[0].value, QStringLiteral("rgba(255, 0, 0, 0.5)"));
+    }
+
     void theBoxShowsPaddingForEachSideAndBack()
     {
         Rig rig;

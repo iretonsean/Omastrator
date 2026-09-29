@@ -45,14 +45,16 @@ void add(const QColor &color);
 class ColorPickerSheet : public QWidget {
     Q_OBJECT
 public:
-    // `finish` gets the colour on OK, nothing on Cancel.
-    ColorPickerSheet(const QColor &initial, std::function<void(std::optional<QColor>)> finish, QWidget *parent = nullptr);
-    QColor color() const { return m_hsb.color(); }
+    // `finish` gets the colour on OK, nothing on Cancel. `withAlpha` adds an opacity field (0 to 100%); without it the
+    // colour is always opaque.
+    ColorPickerSheet(const QColor &initial, std::function<void(std::optional<QColor>)> finish, QWidget *parent = nullptr, bool withAlpha = false);
+    QColor color() const;
     const PickerHSB &hsb() const { return m_hsb; }
     void setHSB(const PickerHSB &hsb);
+    void setAlphaPercent(int percent);
 
     // Shows a picker in `panel`, applying the colour on OK.
-    static void showIn(FloatingPanel &panel, const QString &title, const QColor &initial, std::function<void(QColor)> apply);
+    static void showIn(FloatingPanel &panel, const QString &title, const QColor &initial, std::function<void(QColor)> apply, bool withAlpha = false);
 
 signals:
     void colorChanged(const QColor &color);
@@ -69,6 +71,8 @@ private:
 
     const QColor m_original;
     PickerHSB m_hsb;
+    int m_alphaPercent = 100;
+    PickerField *m_alpha = nullptr;
     QWidget *const m_field;
     QWidget *const m_hue;
     QWidget *const m_preview;
