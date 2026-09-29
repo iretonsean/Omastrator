@@ -37,6 +37,8 @@ public:
     // $XDG_DATA_HOME/omastrator/browser.
     static QString defaultProfile();
 
+    // The command line start() gives Chromium for `profile`, before the URL. Non-headless windows cap the disk cache.
+    static QStringList chromiumArguments(const Options &options, const QString &profile);
     // Starts the browser and connects to it. Returns why it failed, or empty.
     QString start(const Options &options);
     void stop();

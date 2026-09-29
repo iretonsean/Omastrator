@@ -50,6 +50,25 @@ QString Browser::defaultProfile()
     return QDir(data).filePath(QStringLiteral("omastrator/browser"));
 }
 
+QStringList Browser::chromiumArguments(const Options &options, const QString &profile)
+{
+    // Port 0 is a random free port, and DevTools answers on localhost only.
+    QStringList arguments{QStringLiteral("--user-data-dir=") + profile, QStringLiteral("--remote-debugging-port=0"),
+                          QStringLiteral("--remote-debugging-address=127.0.0.1")};
+    if (!options.program.isEmpty())
+        return arguments;
+    arguments << QStringLiteral("--no-first-run") << QStringLiteral("--no-default-browser-check") << QStringLiteral("--disable-sync");
+    if (options.headless)
+        // Headless is tests (docs/OS-SUITE.md): keep the profile small, since it usually lives in a QTemporaryDir.
+        arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800") << QStringLiteral("--disk-cache-size=1")
+                  << QStringLiteral("--media-cache-size=1") << QStringLiteral("--disable-gpu-shader-disk-cache");
+    else
+        // The profile lives for good under ~/.local/share/omastrator/browser (docs/BROWSER-FRAMES.md): 64 MB of cache, no more.
+        arguments << QStringLiteral("--disk-cache-size=67108864") << QStringLiteral("--media-cache-size=67108864");
+    arguments << options.extraArguments;
+    return arguments;
+}
+
 bool Browser::isRunning() const
 {
     return m_process.state() == QProcess::Running && m_cdp.isOpen();
@@ -66,20 +85,10 @@ QString Browser::start(const Options &options)
     QDir().mkpath(m_profile);
     const QString portFile = QDir(m_profile).filePath(QStringLiteral("DevToolsActivePort"));
     QFile::remove(portFile);
-    // Port 0 is a random free port, and DevTools answers on localhost only.
-    QStringList arguments{QStringLiteral("--user-data-dir=") + m_profile, QStringLiteral("--remote-debugging-port=0"),
-                          QStringLiteral("--remote-debugging-address=127.0.0.1")};
-    if (electron) {
-        arguments = options.programArguments + arguments;
-    } else {
-        arguments << QStringLiteral("--no-first-run") << QStringLiteral("--no-default-browser-check") << QStringLiteral("--disable-sync");
-        if (options.headless)
-            // Headless is tests (docs/OS-SUITE.md): keep the profile small, since it usually lives in a QTemporaryDir.
-            arguments << QStringLiteral("--headless=new") << QStringLiteral("--window-size=1280,800") << QStringLiteral("--disk-cache-size=1")
-                      << QStringLiteral("--media-cache-size=1") << QStringLiteral("--disable-gpu-shader-disk-cache");
-        arguments << options.extraArguments;
+    QStringList arguments = electron ? options.programArguments : QStringList();
+    arguments << chromiumArguments(options, m_profile);
+    if (!electron)
         arguments << (options.app.isValid() ? QStringLiteral("--app=") + options.app.toString() : QStringLiteral("about:blank"));
-    }
     m_draining = false;
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
     m_process.setStandardOutputFile(QProcess::nullDevice());

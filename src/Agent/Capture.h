@@ -1,5 +1,6 @@
 #pragma once
 #include <QColor>
+#include <QDateTime>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -30,6 +31,9 @@ QString themeDirectory();
 QString themeName(const QString &directory);
 // Where screenshots are kept: $XDG_DATA_HOME/omastrator/captures.
 QString capturesDirectory();
+// Startup housekeeping: removes the folder's PNGs older than 30 days, always keeping the newest 20.
+// Only regular .png files directly in the folder are ever touched. Returns how many it removed.
+int pruneCaptures(const QString &folder = capturesDirectory(), const QDateTime &now = QDateTime::currentDateTime());
 // SVG text from wl-paste's types, or empty with `error` set.
 QString clipboardSvg(QString *error);
 

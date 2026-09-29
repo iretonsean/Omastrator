@@ -323,6 +323,57 @@ private slots:
         QVERIFY(again.groups().empty());
         QSettings().remove(QStringLiteral("testSwatches"));
     }
+
+    void oldCapturesArePrunedButTheNewestTwentyStay()
+    {
+        const QString folder = m_directory.filePath(QStringLiteral("prune/captures"));
+        QDir().mkpath(folder);
+        const QDateTime now = QDateTime::currentDateTime();
+        auto make = [&](const QString &name, int daysOld) {
+            QFile file(QDir(folder).filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("x");
+            // Closed first: the flush on close would otherwise reset the time.
+            file.close();
+            QVERIFY(file.open(QIODevice::ReadWrite));
+            QVERIFY(file.setFileTime(now.addDays(-daysOld), QFileDevice::FileModificationTime));
+            file.close();
+        };
+        // Twenty-five old ones (40 to 64 days), five recent, and things that aren't captures.
+        for (int index = 0; index < 25; ++index)
+            make(QStringLiteral("old-%1.png").arg(index), 40 + index);
+        for (int index = 0; index < 5; ++index)
+            make(QStringLiteral("new-%1.png").arg(index), index);
+        make(QStringLiteral("notes.txt"), 90);
+        QVERIFY(QDir(folder).mkdir(QStringLiteral("sub.png")));
+        QVERIFY(QFile::link(m_directory.filePath(QStringLiteral("region.png")), QDir(folder).filePath(QStringLiteral("link.png"))));
+        // The newest twenty are the 5 recent and the 15 youngest old ones; the other ten go.
+        QCOMPARE(Capture::pruneCaptures(folder, now), 10);
+        QCOMPARE(QDir(folder).entryList({QStringLiteral("*.png")}, QDir::Files | QDir::NoSymLinks).size(), 20);
+        QVERIFY(QFile::exists(QDir(folder).filePath(QStringLiteral("old-14.png"))));
+        QVERIFY(!QFile::exists(QDir(folder).filePath(QStringLiteral("old-15.png"))));
+        QVERIFY(QFile::exists(QDir(folder).filePath(QStringLiteral("notes.txt"))));
+        QVERIFY(QFileInfo(QDir(folder).filePath(QStringLiteral("sub.png"))).isDir());
+        QVERIFY(QFileInfo(QDir(folder).filePath(QStringLiteral("link.png"))).isSymLink());
+        QVERIFY(QFile::exists(m_directory.filePath(QStringLiteral("region.png"))));
+        // Whatever the age, the newest twenty stay.
+        QCOMPARE(Capture::pruneCaptures(folder, now.addDays(400)), 0);
+        QCOMPARE(QDir(folder).entryList({QStringLiteral("*.png")}, QDir::Files | QDir::NoSymLinks).size(), 20);
+    }
+
+    void aRecentCaptureIsNeverPrunedAndAMissingFolderIsFine()
+    {
+        const QString folder = m_directory.filePath(QStringLiteral("prune-recent"));
+        QDir().mkpath(folder);
+        const QDateTime now = QDateTime::currentDateTime();
+        for (int index = 0; index < 30; ++index) {
+            QFile file(QDir(folder).filePath(QStringLiteral("c-%1.png").arg(index)));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.setFileTime(now.addDays(-index), QFileDevice::FileModificationTime));
+        }
+        QCOMPARE(Capture::pruneCaptures(folder, now), 0);
+        QCOMPARE(Capture::pruneCaptures(m_directory.filePath(QStringLiteral("missing/captures")), now), 0);
+    }
 };
 
 QTEST_GUILESS_MAIN(CaptureTests)

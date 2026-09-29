@@ -83,6 +83,18 @@ a tag, publishes a release or pushes to the AUR.
 5. Commit as yourself there, not as the repo's `noreply` address — the AUR
    wants a real contact.
 
+## Keeping the install small
+
+Installs (`scripts/install-local.sh`, `omastrator-git`, and `release.yml`'s shipped
+binary) configure with `-DOMASTRATOR_BUILD_TESTS=OFF -DOMASTRATOR_LTO=ON` and install
+with `--strip`. Measured on the author's machine (GCC 16, Release, `omastrator`
+alone stripped): 10,188,672 bytes without LTO and 7,829,072 with it (23% smaller),
+with a Release build taking 3m45s and 3m21s at `-j3` (no slower: the LTO link
+adds under a minute). `release.yml` builds the tests in a second tree
+(`build-tests`, no LTO) so a tag still runs the whole suite on both architectures.
+The developer default stays tests ON and LTO OFF; `scripts/check.sh` builds Debug
+with tests. `omastrator-bin` just unpacks the release tarball, so it needs no flags.
+
 ## Local testing
 
 `packaging/aur/omastrator-git/` and `packaging/aur/omastrator-bin/` are

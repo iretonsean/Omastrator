@@ -525,15 +525,24 @@ For now it installs from source. On Omarchy (Arch):
 sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative
 git clone https://github.com/iretonsean/Omastrator.git
 cd Omastrator
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
+    -DOMASTRATOR_BUILD_TESTS=OFF -DOMASTRATOR_LTO=ON
 cmake --build build -j"$(nproc)"
-cmake --install build
+cmake --install build --strip
 omastrator setup
 ```
 
 - **How long it takes:** a first build compiles the whole app. On a typical
   8–16 core machine with 16 GB of RAM or more, that's a few minutes;
   rebuilds after a `git pull` only compile what changed.
+- **How big it is, and what it keeps:** the installed app is about 8 MB (the
+  binary, built with link-time optimisation and stripped, plus the shell
+  plugins and icons). It keeps its own files under `~/.local/share/omastrator`
+  and `~/.local/state/omastrator`, and none of them grow without limit:
+  screenshots older than 30 days are removed at startup (the newest 20 always
+  stay), agent run logs keep the newest 30, setup backups the newest 5, and
+  the browser Omastrator opens for Browser View keeps at most 64 MB of cache.
+  Your documents are never touched.
 - **Low on RAM:** each compile job can take about 1 GB, so on a machine with
   16 GB or less, use `-j2` or `-j3` instead of `-j"$(nproc)"`.
 - **`omastrator setup`** shows every change it would make (the island and tray
@@ -584,6 +593,8 @@ build/omastrator
 ```
 
 - `scripts/check.sh` builds with warnings as errors and runs every test.
+- `OMASTRATOR_BUILD_TESTS` (default ON) and `OMASTRATOR_LTO` (default OFF)
+  are CMake options; installs turn tests off and LTO on.
 - `scripts/install-local.sh` installs a Release build into ~/.local.
 - If you have Docker, `scripts/dev.sh build|test|run` does the same in an
   Ubuntu 24.04 container.

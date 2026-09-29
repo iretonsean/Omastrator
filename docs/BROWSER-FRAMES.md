@@ -148,6 +148,13 @@ The test ruled out the first choice, and the author approved this instead:
   - **Limit:** extension pop-ups, such as a password manager's, open as
     their own windows, so they don't appear inside a streamed frame. Sync's
     autofill works.
+- **Disk use is capped.** The profile lives for good in
+  `~/.local/share/omastrator/browser`, so `Browser::chromiumArguments` starts
+  Chromium with `--disk-cache-size=67108864` and `--media-cache-size=67108864`
+  (64 MB each; Chromium treats them as limits it trims to, not exact sizes).
+  Browser View must go through that function so it keeps the cap; the
+  headless runs tests use keep their 1-byte caches. The profile's cookies and
+  logins are never trimmed.
 - **Clean Session** stays a per-frame switch, now a separate, empty
   headless profile.
 - **The user's own browser** stays reachable. "Open in My Chromium" sends

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Release build installed to ~/.local; with --shell, also sync the shell plugins and restart
+# Release build (no tests, LTO, stripped) installed to ~/.local; with --shell, also sync the shell plugins and restart
 # omarchy-shell once, then print any Omastrator errors from its log.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local" >/dev/null &&
-    cmake --build build-release -j2 >build-release/build.log 2>&1 && cmake --install build-release >/dev/null ||
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
+    -DOMASTRATOR_BUILD_TESTS=OFF -DOMASTRATOR_LTO=ON >/dev/null &&
+    cmake --build build-release -j2 >build-release/build.log 2>&1 && cmake --install build-release --strip >/dev/null ||
     { tail -20 build-release/build.log; echo "INSTALL FAIL"; exit 1; }
 echo "installed $(date +%H:%M)"
 if [[ ${1:-} == --shell ]]; then
