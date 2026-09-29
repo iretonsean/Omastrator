@@ -113,6 +113,13 @@ Only some of the document state is undoable:
     it's on another page, or the window is hidden. The screencast stops, and
     `Page.setWebLifecycleState frozen` saves CPU. The frame shows its last
     picture.
+  - **Resume:** `Page.setWebLifecycleState active`, then
+    `Emulation.setFocusEmulationEnabled true`. Chromium hides the page when
+    it freezes it and doesn't show it again when it becomes active, and a
+    hidden page paints no more screencast frames, so without this the frame
+    kept the picture it had when it came back. Focus emulation shows the
+    page. The pause turns it off before the freeze, because a page that
+    emulates focus stays visible and doesn't freeze.
   - **Close:** the frame is deleted, undone away, or its document closes.
     Undo or redo that brings a frame back opens a new tab at its URL. The
     back and forward stack is lost.
@@ -387,7 +394,13 @@ The tests:
 - **No Chromium** (`OMASTRATOR_CHROMIUM=/nonexistent`): the frame draws its
   picture and the message, and editing, saving and exporting work.
 - **`VectorRendererTests`:** an export draws `browser->picture` under the
-  frame's clip.
+  frame's clip. A live picture of the frame's size fills it (at 390 wide,
+  every corner of the phone layout lands on the frame's). A stale one, in a
+  box larger or smaller than the page it shows, is drawn 1:1 from the top
+  left and clipped, at zoom 1 and 2.
+- **`LiveFramePictureTests`** (UI, Chromium): after a pause and resume (the
+  frame's page shown and back), a change in the page reaches what the canvas
+  draws, twice over. The dev-server half is in docs/LIVE-IN-FRAME.md.
 - **`WorkspaceClaimsTests`** (or a new `ResetTests`): `runReset` kills a pid
   from `browser-view.json` only when its cmdline names the profile. The test
   uses a fake long-running script.

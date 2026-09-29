@@ -677,6 +677,43 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     `aStalePictureInAWiderBoxKeepsItsSizeAndTopLeftCorner`,
     `aPictureThatShowsTheFramesSizeFillsItWhateverItsDensity`.
 
+- **The stale picture, found (phase 4 picture work).** The report: once Live
+  ran in a frame, edits and Build It reached the DOM, but the canvas kept the
+  old picture, even after Reload. Neither Live nor the dev server caused it.
+  The cause was a frame that had been paused before:
+  - **What pausing does:** `pause()` sends `Page.setWebLifecycleState frozen`,
+    and Chromium hides the page when it freezes it. `active` unfreezes it but
+    leaves it hidden, and a hidden page paints no screencast frames (one on
+    start, then none). Chromium 152 shows this with no Omastrator code in
+    between: after `active`, `document.visibilityState` stays `hidden`.
+  - **Why the report saw it after Edit Page:** its session added a page and
+    undid it (a pause and resume) before the resize and Edit Page. The session
+    that couldn't reproduce it never paused its frame.
+  - **The fix:** resuming also sends `Emulation.setFocusEmulationEnabled
+    true`, which shows the page. The pause turns it off before freezing,
+    because a page that emulates focus stays visible and its scripts keep
+    running while "frozen".
+  - **What was driven:** the animation's capture program (the real window,
+    offscreen), without and with the fix. Without it, the picture stayed the
+    same through the resize drag, the radius scrub, Build It, Reload and
+    Deploy. With it, every step reached the picture, including the agent's
+    change after Reload. The same program without the page step followed
+    every step before the fix.
+  - **Also checked:** the dev-server path (a registered production address,
+    so `LiveFrames` calls `DevServers::acquire`, and the dev command is
+    Python's static server). There the picture follows the move to the
+    server, a text edit, a style edit, a stylesheet the agent wrote (a hot
+    reload stand-in), Reload and a resize to 390, and keeps following after
+    all of them.
+  - **Tests:** `LiveFramePictureTests` (Chromium):
+    `aFramesPictureFollowsThePageAfterItWasPaused`, and
+    `aFramesPictureFollowsThePageOnItsDevServer`, which pauses the frame
+    before and during Live and checks each step by the pixels the canvas
+    draws. Both fail with the resume's focus emulation removed.
+    `VectorRendererTests`: `atAPhonesWidthTheFrameDrawsThePhoneLayoutWhole`,
+    and the two stale-picture tests now check all four corners of a
+    2-px-per-CSS-px page, at zoom 1 and 2.
+
 ## Follow-ups
 
 - Custom… in the element bar has no alpha since `ColorPickerSheet` replaced
