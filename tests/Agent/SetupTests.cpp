@@ -1,3 +1,4 @@
+#include "Agent/Hyprland.h"
 #include "Agent/Setup.h"
 #include "SetupKeyFixtures.h"
 #include <QCoreApplication>
@@ -123,7 +124,9 @@ QJsonArray readArray(const QString &path)
 // `hyprctl` for the tests, the test binary itself in a mode of its own: `-j binds` answers binds.json, and `reload` recomputes it the
 // way a Hyprland reload does: the user's config binds (user.json), plus Omastrator's key file when the config sources it. Runtime-only binds are gone.
 // Knobs, all files in the fake's folder: vanish.json (combos of user binds our loaded file kills), stuck.json (user binds a pending edit
-// kills from the second reload on), drop-own.json (combos of ours Hyprland doesn't bind), reload-fails, dead-after-reload (no answer once reloaded).
+// kills from the first reload on: whatever reloads first loads it), later.json (user binds something else kills from the third reload on),
+// drop-own.json (combos of ours Hyprland doesn't bind), reload-fails (fails from the reload numbered in the file, default 1),
+// dead-after-reload (no answer once reloaded).
 int fakeHyprctl(const QString &dir, const QStringList &args)
 {
     const auto file = [&](const char *name) { return QDir(dir).filePath(QLatin1String(name)); };
@@ -133,7 +136,7 @@ int fakeHyprctl(const QString &dir, const QStringList &args)
         QFile calls(file("calls.log"));
         if (calls.open(QIODevice::Append))
             calls.write("reload\n");
-        if (QFileInfo::exists(file("reload-fails"))) {
+        if (QFileInfo::exists(file("reload-fails")) && counter() >= qMax(1, read(file("reload-fails")).toInt())) {
             fputs("reload failed: the fake says no\n", stderr);
             return 1;
         }
@@ -163,8 +166,9 @@ int fakeHyprctl(const QString &dir, const QStringList &args)
                 binds.append(bind);
             binds = without(binds, readArray(file("vanish.json")));
         }
-        if (counter() >= 2)
-            binds = without(binds, readArray(file("stuck.json")));
+        binds = without(binds, readArray(file("stuck.json")));
+        if (counter() >= 3)
+            binds = without(binds, readArray(file("later.json")));
         if (sourced) {
             QJsonArray kept;
             for (const QJsonValue &bind : binds) {
@@ -182,6 +186,24 @@ int fakeHyprctl(const QString &dir, const QStringList &args)
     if (QFileInfo::exists(file("dead-after-reload")) && counter() >= 2)
         return 1;
     fwrite(read(file("binds.json")).constData(), 1, read(file("binds.json")).size(), stdout);
+    return 0;
+}
+
+// `Hyprland` for the tests: only `--verify-config -c PATH`. Says the config is fine unless verify-fails holds what it should complain about.
+int fakeHyprland(const QString &dir, const QStringList &args)
+{
+    const auto file = [&](const char *name) { return QDir(dir).filePath(QLatin1String(name)); };
+    QFile log(file("verify.log"));
+    if (log.open(QIODevice::Append))
+        log.write((args.value(2) + QLatin1Char('\n')).toUtf8());
+    if (args.value(0) != QLatin1String("--verify-config") || args.value(1) != QLatin1String("-c"))
+        return 2;
+    fputs("DEBUG ]: User-specified config location\n\n\n======== Config parsing result:\n\n", stdout);
+    if (QFileInfo::exists(file("verify-fails"))) {
+        fwrite(read(file("verify-fails")).constData(), 1, read(file("verify-fails")).size(), stdout);
+        return 1;
+    }
+    fputs("config ok\n", stdout);
     return 0;
 }
 }
@@ -271,6 +293,9 @@ private slots:
               "#!/bin/sh\nexec \"" + QCoreApplication::applicationFilePath().toUtf8() + "\" --fake-hyprctl \"" + m_fake.path().toUtf8() + "\" \"$@\"\n");
         QFile::setPermissions(m_fake.filePath(QStringLiteral("hyprctl")), QFile::permissions(m_fake.filePath(QStringLiteral("hyprctl"))) | QFile::ExeOwner);
         qputenv("OMASTRATOR_HYPRCTL", m_fake.filePath(QStringLiteral("hyprctl")).toUtf8());
+        write(m_fake.filePath(QStringLiteral("Hyprland")),
+              "#!/bin/sh\nexec \"" + QCoreApplication::applicationFilePath().toUtf8() + "\" --fake-hyprland \"" + m_fake.path().toUtf8() + "\" \"$@\"\n");
+        QFile::setPermissions(m_fake.filePath(QStringLiteral("Hyprland")), QFile::permissions(m_fake.filePath(QStringLiteral("Hyprland"))) | QFile::ExeOwner);
         qputenv("OMASTRATOR_SHELL_DIR", OMASTRATOR_SOURCE_DIR "/shell");
         qputenv("OMARCHY_PATH", m_home.filePath(QStringLiteral("omarchy")).toUtf8());
         // Nothing here may touch the running shell.
@@ -286,7 +311,8 @@ private slots:
         QDir(m_state.path()).removeRecursively();
         QDir().mkpath(m_state.path());
         liveBinds({});
-        for (const char *name : {"calls.log", "reloads", "vanish.json", "stuck.json", "drop-own.json", "reload-fails", "dead-after-reload"})
+        qputenv("OMASTRATOR_HYPRLAND", m_fake.filePath(QStringLiteral("Hyprland")).toUtf8());
+        for (const char *name : {"calls.log", "reloads", "vanish.json", "stuck.json", "later.json", "drop-own.json", "reload-fails", "dead-after-reload", "verify-fails", "verify.log"})
             QFile::remove(m_fake.filePath(QLatin1String(name)));
         write(config(QStringLiteral("omarchy/shell.json")), userShellJson);
         write(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc")), userMenu);
@@ -1046,8 +1072,9 @@ private slots:
     void aRestoreThatDoesNotBringTheKeysBackSaysSo()
     {
         liveBinds({bind(64, QStringLiteral("1")), bind(64, QStringLiteral("Q"))});
-        // A pending edit of the user's own, which the second reload activates: the keys are gone with or without Omastrator's file.
-        fakeKnob("stuck.json", {bind(64, QStringLiteral("1"))});
+        // Our file loads and takes Super+1; then, before the reload after the restore, something else of theirs takes it too.
+        fakeKnob("vanish.json", {bind(64, QStringLiteral("1"))});
+        fakeKnob("later.json", {bind(64, QStringLiteral("1"))});
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 1);
         QVERIFY2(out.contains(QLatin1String("no longer has these keys: Super+1")), qPrintable(out));
@@ -1057,6 +1084,92 @@ private slots:
         QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), userHypr);
         QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
         QCOMPARE(backupNames().size(), 2);
+        QCOMPARE(reloads(), 3);
+    }
+
+    void aPendingEditTheBaselineReloadLoadsIsNotBlamedOnUs()
+    {
+        liveBinds({bind(64, QStringLiteral("1")), bind(64, QStringLiteral("Q"))});
+        // An edit of theirs that Hyprland hadn't loaded: the first reload, the baseline, takes Super+1 with or without Omastrator.
+        fakeKnob("stuck.json", {bind(64, QStringLiteral("1"))});
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(!out.contains(QLatin1String("no longer has")) && out.contains(QLatin1String("Set up.")), qPrintable(out));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
+        QCOMPARE(reloads(), 2);
+    }
+
+    void aConfigWithErrorsStopsSetupBeforeAnyReloadOrWrite()
+    {
+        liveBinds({bind(64, QStringLiteral("1")), bind(64, QStringLiteral("Q"))});
+        // The user's edit that isn't loaded yet is broken: a reload would drop their keys for Hyprland's emergency ones.
+        write(m_fake.filePath(QStringLiteral("verify-fails")), "hyprland.lua:12: attempt to call a nil value (global 'oops')\n");
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 1);
+        QVERIFY2(out.contains(QLatin1String("attempt to call a nil value (global 'oops')")) && out.contains(QLatin1String("hyprctl configerrors")), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("Nothing was changed")) && !out.contains(QLatin1String("Set up.")) && !out.contains(QLatin1String("Your own keys")), qPrintable(out));
+        QCOMPARE(reloads(), 0);
+        QCOMPARE(QString::fromUtf8(read(m_fake.filePath(QStringLiteral("verify.log")))).trimmed(), config(QStringLiteral("hypr/hyprland.lua")));
+        QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), userHypr);
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator"))));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island"))));
+        QVERIFY(backupNames().isEmpty());
+        // --no-keys never reloads, so it is still available.
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply"), QStringLiteral("--no-keys")}, QString(), &out), 0);
+        QCOMPARE(reloads(), 0);
+    }
+
+    void aBaselineReloadThatFailsStopsSetupBeforeAnyWrite()
+    {
+        liveBinds({bind(64, QStringLiteral("1"))});
+        fakeKnob("reload-fails");
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 1);
+        QVERIFY2(out.contains(QLatin1String("didn't reload")) && out.contains(QLatin1String("reload failed: the fake says no")), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("Nothing was changed")) && out.contains(QLatin1String("hyprctl configerrors")), qPrintable(out));
+        QVERIFY2(!out.contains(QLatin1String("Set up.")) && !out.contains(QLatin1String("Your own keys")), qPrintable(out));
+        QCOMPARE(reloads(), 1);
+        QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), userHypr);
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator"))));
+        QVERIFY(backupNames().isEmpty());
+    }
+
+    void aHyprlandThatStaysSilentAfterTheBaselineReloadStopsSetup()
+    {
+        liveBinds({bind(64, QStringLiteral("1"))});
+        write(m_fake.filePath(QStringLiteral("dead-after-reload")), "");
+        // Silent from the first reload on: the baseline can't be read.
+        write(m_fake.filePath(QStringLiteral("reloads")), "1");
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 1);
+        QVERIFY2(out.contains(QLatin1String("didn't answer")) && out.contains(QLatin1String("Nothing was changed")), qPrintable(out));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator"))));
+        QVERIFY(backupNames().isEmpty());
+    }
+
+    void hyprlandsOwnCheckerIsReadRight()
+    {
+        if (QStandardPaths::findExecutable(QStringLiteral("Hyprland")).isEmpty())
+            QSKIP("Hyprland isn't installed, so its config checker can't run.");
+        qunsetenv("OMASTRATOR_HYPRLAND");
+        const QString good = m_home.filePath(QStringLiteral("good.lua")), bad = m_home.filePath(QStringLiteral("bad.lua"));
+        write(good, "hl.bind('SUPER + 1', hl.dsp.exec_cmd('true'))\n");
+        write(bad, "this is not lua (\n");
+        const Hyprland::ConfigCheck fine = Hyprland::verifyConfig(good), broken = Hyprland::verifyConfig(bad);
+        QVERIFY(fine.available && fine.ok && fine.errors.isEmpty());
+        QVERIFY(broken.available && !broken.ok);
+        QVERIFY2(broken.errors.contains(QLatin1String("syntax error")) && !broken.errors.contains(QLatin1String("DEBUG")), qPrintable(broken.errors));
+    }
+
+    void withoutHyprlandsProgramTheReloadCheckIsSkipped()
+    {
+        liveBinds({bind(64, QStringLiteral("1"))});
+        qputenv("OMASTRATOR_HYPRLAND", m_fake.filePath(QStringLiteral("no-such-hyprland")).toUtf8());
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("won't reload Hyprland")) && out.contains(QLatin1String("Set up.")), qPrintable(out));
+        QCOMPARE(reloads(), 0);
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
     }
 
     void setupKeepsItsFilesWhenTheUsersBindsStay()
@@ -1079,7 +1192,8 @@ private slots:
     void aReloadThatFailsIsNotReportedAsSuccess()
     {
         liveBinds({bind(64, QStringLiteral("1"))});
-        fakeKnob("reload-fails");
+        // The baseline works; the reload after the writes doesn't.
+        write(m_fake.filePath(QStringLiteral("reload-fails")), "2");
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 1);
         QVERIFY2(out.contains(QLatin1String("didn't reload")) && out.contains(QLatin1String("reload failed: the fake says no")), qPrintable(out));
@@ -1232,6 +1346,12 @@ private slots:
 
 int main(int argc, char *argv[])
 {
+    if (argc > 2 && QByteArray(argv[1]) == "--fake-hyprland") {
+        QStringList args;
+        for (int i = 3; i < argc; ++i)
+            args << QString::fromLocal8Bit(argv[i]);
+        return fakeHyprland(QString::fromLocal8Bit(argv[2]), args);
+    }
     if (argc > 2 && QByteArray(argv[1]) == "--fake-hyprctl") {
         QStringList args;
         for (int i = 3; i < argc; ++i)

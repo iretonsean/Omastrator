@@ -25,7 +25,7 @@ bool hasSourceLine(const QByteArray &config, HyprFormat format)
     return config.contains("source = ~/.config/omastrator/hyprland.conf");
 }
 
-KeyCheck startKeyCheck(const Environment &environment, bool keysAccepted, bool sourceAccepted, const QStringList &skippedKeys, QTextStream &out)
+KeyCheck startKeyCheck(const Environment &environment, bool keysAccepted, bool sourceAccepted, const QStringList &skippedKeys, QTextStream &out, QTextStream &err)
 {
     KeyCheck check;
     if (!keysAccepted && !sourceAccepted)
@@ -38,6 +38,22 @@ KeyCheck startKeyCheck(const Environment &environment, bool keysAccepted, bool s
     // Not running (a TTY, a chroot): the keys load at the next start.
     if (!Hyprland::query(QStringLiteral("binds")).isArray())
         return check;
+
+    // A reload loads the whole config again: an unloaded error in it would swap the user's keys for Hyprland's emergency ones before setup wrote a thing.
+    const QString configPath = hyprlandConfigPath(environment);
+    const Hyprland::ConfigCheck verdict = Hyprland::verifyConfig(configPath);
+    if (!verdict.available) {
+        out << "\nHyprland's own program isn't here to check your config with, so setup won't reload Hyprland or check your keys.\n"
+               "Omastrator's keys load at the next reload (`hyprctl reload`) or login.\n";
+        return check;
+    }
+    if (!verdict.ok) {
+        err << "\nHyprland says your config has errors it hasn't loaded yet (" << configPath << "):\n" << verdict.errors << "\n\n"
+            << "Nothing was changed, and Hyprland wasn't reloaded: a reload would load those errors, and your keys with them. Fix them and run setup again,\n"
+            << "or run `omastrator setup --no-keys` to install without keys. `hyprctl configerrors` lists what the running Hyprland already couldn't load.\n";
+        check.stopped = true;
+        return check;
+    }
     check.active = true;
 
     QStringList skipped;
@@ -50,10 +66,17 @@ KeyCheck startKeyCheck(const Environment &environment, bool keysAccepted, bool s
 
     out << "\nReloading Hyprland's config once before anything is written, to see which keys it has when nothing of Omastrator's has changed.\n";
     out.flush();
-    if (const QString error = Hyprland::reload(); error.isEmpty())
-        check.before = liveUserBinds();
-    else
-        out << "That reload failed (" << error << "), so your keys can't be compared before and after.\n";
+    const QString error = Hyprland::reload();
+    const std::optional<QSet<QString>> before = error.isEmpty() ? liveUserBinds() : std::nullopt;
+    if (!before) {
+        err << "\n" << (error.isEmpty() ? QStringLiteral("Hyprland reloaded but didn't answer afterwards") : QStringLiteral("Hyprland didn't reload its config (%1)").arg(error))
+            << ", so setup can't tell which keys are yours before it changes anything.\n"
+            << "Nothing was changed. `hyprctl configerrors` may say why; fix that and run setup again, or run `omastrator setup --no-keys` to install without keys.\n";
+        check.active = false;
+        check.stopped = true;
+        return check;
+    }
+    check.before = *before;
     return check;
 }
 
@@ -70,7 +93,7 @@ KeyOutcome finishKeyCheck(const KeyCheck &check, const Environment &environment,
         *summary = QStringLiteral("Hyprland was not reloaded, so the new keys are not active yet");
         return KeyOutcome::problem;
     }
-    const BindCheck now = checkBinds(check.before.value_or(QSet<QString>()), check.ownKeys);
+    const BindCheck now = checkBinds(check.before, check.ownKeys);
     if (!now.answered) {
         err << "\nHyprland reloaded but then didn't answer, so setup can't tell whether your keys are all there. Nothing was put back.\n"
             << "Look with `hyprctl binds`; if keys are missing, run: omastrator setup --restore " << backupName << '\n';
@@ -87,7 +110,7 @@ KeyOutcome finishKeyCheck(const KeyCheck &check, const Environment &environment,
         }
         // Hyprland doesn't reread the files a Lua config loads, so the reload after a restore can bring back other trouble too: look again.
         const QString error = Hyprland::reload();
-        const BindCheck again = error.isEmpty() ? checkBinds(check.before.value_or(QSet<QString>()), {}) : BindCheck();
+        const BindCheck again = error.isEmpty() ? checkBinds(check.before, {}) : BindCheck();
         if (!error.isEmpty())
             err << "Setup put its files back, but Hyprland didn't reload (" << error << "). Run `hyprctl reload`, then check your keys.\n";
         else if (!again.answered)
@@ -107,8 +130,6 @@ KeyOutcome finishKeyCheck(const KeyCheck &check, const Environment &environment,
         *summary = QStringLiteral("Hyprland didn't bind %1 of Omastrator's keys").arg(now.missing.size());
         return KeyOutcome::problem;
     }
-    if (!check.before)
-        out << "\nSetup couldn't read your keys before the change, so it could only check Omastrator's own; they are all bound.\n";
     return KeyOutcome::fine;
 }
 }

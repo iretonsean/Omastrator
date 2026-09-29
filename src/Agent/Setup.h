@@ -191,14 +191,18 @@ bool hasSourceLine(const QByteArray &config, HyprFormat format);
 // The check around the writes of a setup that loads Omastrator's keys into Hyprland (docs/OS-SUITE.md, "Reload check").
 struct KeyCheck {
     bool active = false;
-    // The user's binds after a reload with nothing of ours changed; nullopt when that reload or the question failed.
-    std::optional<QSet<QString>> before;
+    // Setup must stop before writing anything (already told): their config has errors, or the baseline couldn't be taken.
+    bool stopped = false;
+    // The user's binds after a reload with nothing of ours changed.
+    QSet<QString> before;
     // Omastrator's own global keys the key file should bind, normalised.
     QStringList ownKeys;
 };
-// Called before anything is written. Active only when the keys or the source step was accepted, our file will be sourced, and Hyprland answers.
+// Called before anything is written. Active only when the keys or the source step was accepted, our file will be sourced, Hyprland answers and
+// Hyprland's own program is there to check the user's config first (`Hyprland --verify-config`); without it the reload check is skipped.
+// A config with errors, or a baseline reload that fails, stops setup before anything (the backup too) is written: `stopped`, with the reason on `err`.
 // Reloads once, so runtime-only binds (an autostart script's `hyprctl keyword bind`) are already gone from the baseline.
-KeyCheck startKeyCheck(const Environment &environment, bool keysAccepted, bool sourceAccepted, const QStringList &skippedKeys, QTextStream &out);
+KeyCheck startKeyCheck(const Environment &environment, bool keysAccepted, bool sourceAccepted, const QStringList &skippedKeys, QTextStream &out, QTextStream &err);
 enum class KeyOutcome {
     // Reloaded, and every key the user had and every key of Omastrator's is there (or there was nothing to check).
     fine,

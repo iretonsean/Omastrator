@@ -512,14 +512,23 @@ Choices the spec left open, made while building it, in build order.
   or working without looking. It runs when the keys or the source step are
   accepted, Hyprland loads our file (or will, once the source line is added)
   and Hyprland answers `hyprctl binds -j`:
-  1. Before anything is written, setup reloads Hyprland (`reload
-     config-only`, so monitors and runtime state stay) and reads the user's
-     default-submap binds. This is the baseline: binds an autostart script
-     added at run time (`hyprctl keyword bind`) are gone after any reload, so
-     they are not ours to lose. The catch is that this reload also activates
-     an edit of the user's own that Hyprland had not loaded yet; the output
-     says the reload happens, and `hyprctl configerrors` is named when
-     something is missing.
+  1. Before anything is written (the backup included), setup asks Hyprland's
+     own program to check the user's config: `Hyprland --verify-config -c
+     <their hyprland.lua or .conf>`, which starts no compositor. A reload loads
+     the whole config again, so an edit of theirs that Hyprland hadn't loaded
+     yet, and that is broken, would send Lua Hyprland to its emergency config
+     (three keys) before setup wrote a thing. If the check reports errors,
+     setup prints them, changes and reloads nothing, names `hyprctl
+     configerrors` and exits 1 (`--no-keys` still installs without keys). When
+     there is no `Hyprland` program to ask, setup says so and skips the whole
+     reload check rather than guess; the keys load at the next reload or login.
+     Then setup reloads (`reload config-only`, so monitors and runtime state
+     stay) and reads the user's default-submap binds. This is the baseline:
+     binds an autostart script added at run time (`hyprctl keyword bind`) are
+     gone after any reload, so they are not ours to lose, and a valid pending
+     edit of theirs is already in it, so it isn't blamed on us. If that reload
+     fails, or Hyprland doesn't answer after it, there is no baseline: setup
+     stops before writing anything, exits 1 and names `hyprctl configerrors`.
   2. After the writes it reloads again and asks again, for up to two seconds.
      If the reload fails, or Hyprland doesn't answer afterwards, that is
      reported and setup exits 1 with the files and the backup kept (never

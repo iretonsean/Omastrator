@@ -572,6 +572,12 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         accepted.push_back(key);
     }
 
+    const bool accepts = !removing && !dryRun;
+    const auto has = [&](const char *key) { return std::find(accepted.begin(), accepted.end(), QLatin1String(key)) != accepted.end(); };
+    const KeyCheck keyCheck = accepts ? startKeyCheck(environment, has("keys"), has("source"), skippedKeys, out, err) : KeyCheck();
+    if (keyCheck.stopped)
+        return 1;
+
     if (!accepted.empty()) {
         // Every file the accepted steps write, and setup's own record: copied before the first one is touched.
         QStringList paths{environment.record()};
@@ -589,10 +595,6 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         pruneBackups(environment, {backupName});
         out << "\nBacked up to " << backupFolder << ".\n";
     }
-
-    const bool accepts = !removing && !dryRun;
-    const auto has = [&](const char *key) { return std::find(accepted.begin(), accepted.end(), QLatin1String(key)) != accepted.end(); };
-    const KeyCheck keyCheck = accepts ? startKeyCheck(environment, has("keys"), has("source"), skippedKeys, out) : KeyCheck();
 
     bool reloadShell = false;
     for (const QString &key : accepted) {

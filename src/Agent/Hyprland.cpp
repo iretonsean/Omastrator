@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QProcess>
+#include <QStandardPaths>
 #include <algorithm>
 
 namespace {
@@ -173,6 +174,37 @@ QString reload()
     else
         runProgram(overridden, {QStringLiteral("reload"), QStringLiteral("config-only")}, &error, 10'000);
     return error;
+}
+
+ConfigCheck verifyConfig(const QString &path)
+{
+    ConfigCheck check;
+    const QString overridden = qEnvironmentVariable("OMASTRATOR_HYPRLAND");
+    const QString binary = overridden.isEmpty() ? QStandardPaths::findExecutable(QStringLiteral("Hyprland")) : overridden;
+    if (binary.isEmpty() || !QFileInfo(binary).isExecutable())
+        return check;
+    QProcess process;
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start(binary, {QStringLiteral("--verify-config"), QStringLiteral("-c"), path});
+    if (!process.waitForStarted(5000))
+        return check;
+    check.available = true;
+    if (!process.waitForFinished(30'000)) {
+        process.kill();
+        process.waitForFinished(500);
+        check.errors = QStringLiteral("Hyprland's config checker didn't finish.");
+        return check;
+    }
+    QString text = QString::fromUtf8(process.readAll());
+    // Its debug lines come first; the verdict follows this heading.
+    const QString heading = QStringLiteral("Config parsing result:");
+    if (const qsizetype at = text.lastIndexOf(heading); at >= 0)
+        text = text.mid(at + heading.size());
+    text = text.trimmed();
+    check.ok = process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+    if (!check.ok)
+        check.errors = text.isEmpty() ? QStringLiteral("Hyprland's config checker failed without saying why.") : text;
+    return check;
 }
 
 QString dispatch(const QString &lua, const QString &legacy)
