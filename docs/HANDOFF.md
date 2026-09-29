@@ -5,71 +5,50 @@ here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
-### State (2026-09-29 ~00:30)
-- `main` is pushed and clean. The last full check was 122/122, and the
-  sweep was clean.
-- **The history was rewritten on 2026-09-28** (the author's call: promos
-  don't belong in the repo). `media/promo` is gone from every commit, and a
-  fresh clone is 8.7 MB. Only `main` and `claude/sponsorship-links` exist on
-  GitHub.
-  - The old history is kept in a local backup,
-    `~/Projects/.omastrator-history-backup-2026-09-28.git`. It holds promo
-    material, so never push it.
-  - Other clones need `git fetch && git reset --hard origin/main`.
-- **Done today, all merged:**
-  - the five branches: PDF, AI and EPS import; Figma; Sketch, Penpot and
-    others; alpha installs; audit leftovers;
-  - the review fixes;
-  - QUICK-WINS items 1–8 (ticked with commit ids);
-  - Browser View **phase 1, Pages**;
-  - the bugs found along the way: the CI build and tests, undo that stopped
-    recording after a scrub, Deploy signalling its own process group, the
-    width-tool index, and tests that freed dialogs twice;
-  - from the alpha tester's feedback:
-    - **setup safety:** backups, `--restore`, a key-clash check, `--no-keys`,
-      a reset key that works inside any submap, and a checked reload that
-      restores the backup if the user's keys go;
-    - **the design-mode bar sticks to its window;**
-    - **the island shows only with Omastrator.** This is interim; the author
-      may scrap it or rethink it.
-- **CI:** the last run failed only on DeviceShareTests' use-after-free,
-  which is now fixed (1dfb30b). The next run should be the first green one.
-  Check `gh run list`.
+### State (2026-09-29, later)
+- **Local `main` is 7 commits ahead of `origin/main` and not pushed:** it
+  waits on the author's OK. The last full check was 127/127, and the sweep
+  was clean. It holds:
+  - **the Off-axis app icon** (d851871): the patch minus the promo hunk. The
+    Chromium extension's icons are updated too. The README's hero is an app
+    screenshot, so it didn't change;
+  - **the size fixes** (`chore/size`): strip, `OMASTRATOR_BUILD_TESTS` (off
+    for installs), and `OMASTRATOR_LTO` (on for installs; the stripped
+    binary goes from 10.2 MB to 7.8 MB, -23%). Captures are pruned (older
+    than 30 days, keeping the newest 20), and Chromium's cache is capped at
+    64 MB. Agent logs (30) and setup backups (5) already had caps. The
+    report is quick-wins/reports/chore-size.md;
+  - **Browser View phase 2, Pages as Workspaces** (`feat/workspaces`), off
+    by default: View > Pages as Workspaces. docs/WORKSPACES.md §7 is the
+    as-built record.
+    - It went through a review, a fix round, a verification and two lead
+      fixes (reviews/feat-workspaces.md, verify-feat-workspaces.md).
+    - **The author's live check (not done):**
+      - do Super+Tab, `e+1` and swipes reach the `design:` workspaces;
+      - do the Lua dispatcher key names work, including the
+        `special:omastrator-spare` move;
+      - does a refused dispatch exit non-zero?
+- **The island: decided 2026-09-29.** The author keeps the interim rule
+  (the island shows only with Omastrator) and will revisit it after more
+  tester feedback. Don't re-raise it, and don't build on it.
+- **CI:** the run on d162240 is green.
 
 ### Next, in order
-0. **Merge the "Off-axis" app icon** (the author, 2026-09-29). It was never
-   merged. It's saved as a patch at
-   `~/Projects/.omastrator-promo/0001-New-app-icon-the-island-s-pill-one-pen-stroke-a-sele.patch`.
-   - Take only the icon: `packaging/icons/app-icon.svg`, the regenerated
-     PNG sizes, and the CMake lines that install the SVG as the scalable icon.
-   - Nothing from the promo comes into the repo: the patch also edits
-     `media/promo/promo-v3.html`. Leave that hunk out (for example with
-     `git apply --exclude='media/*'`).
-   - The patch was made on the old history, so apply it by hand or with
-     `git apply --3way` onto the current main.
-   - The design: an ink tile, a saffron pill top-left, a paper pen stroke
-     through the centre, and a cobalt open-square point bottom-right. The
-     palette is ink #14151D, paper #F1ECE2, saffron #F2A93B and cobalt
-     #3D5AFE.
-   - Check that the Chromium extension's icons and the README's hero still
-     match, and update them if they use the old mark.
-   - It's a small branch: Sonnet builds it, Opus reviews it, and the
-     author's OK is needed before push.
-1. **Size fixes:** `~/Projects/.omastrator-briefs/SIZE-FIXES.md`. Strip the
-   release binary, add `OMASTRATOR_BUILD_TESTS` (off for installs), try LTO,
-   and cap captures, logs, backups and the Browser View Chromium cache. It's
-   approved; start it on a branch off `main`.
-2. **Browser View phase 2: canvas workspaces** (docs/BROWSER-FRAMES.md, build
-   order item 2), then phases 3–5. Tick QUICK-WINS item 9 only when all five
-   phases are merged, and record each phase's commit beside it.
-3. **Stop there.** MEDIUM-EFFORT.md is on hold. Effects waits for the
-   author's review of docs/EFFECTS.md.
+1. **Browser View phase 3, the frame** (in progress). An Opus agent is
+   writing docs/BROWSER-VIEW.md on `feat/browser-view` in
+   ~/Projects/Omastrator-share-device, from
+   browser-view/PHASE3-DESIGN.md. Then Sonnet builds it, Opus reviews it,
+   there's a fix round and a verification, and it merges.
+2. **Phase 4, Live inside the frame.** Its last step, "remove Live mode
+   from the island", touches the island: ask the author before that step.
+3. **Phase 5**, then tick QUICK-WINS item 9 with each phase's commit.
+4. **Stop there.** MEDIUM-EFFORT.md is on hold. Effects waits on the author.
+- **A small follow-up, not queued:** the `.arg(x).arg(n)` pattern in page
+  naming (`EditorSession+Pages.cpp`, `VectorDocument+Pages.cpp`,
+  `DocumentCodec.cpp`) mangles names that contain `%1` or `%2`. Use
+  multi-arg `.arg`.
 
 ### Waiting on the author
-- **The island:** the author wants to rethink it with the next session (keep
-  it, scrap it, or change what it does). The interim rule is in
-  docs/ANYWHERE.md. Raise it early, and don't build anything on the island
-  until the author decides.
 - **The history backup:** delete it when the author says so. Optionally, ask
   GitHub for a cached-views purge so the old commits stop resolving.
 - **The alpha tester (@Madmasx):** the author replied, and the tester liked
