@@ -50,6 +50,17 @@ private slots:
         QVERIFY(board.session.isModified());
     }
 
+    void aPageThatIsNotAWebPageIsNeverWrittenBack()
+    {
+        Board board;
+        // A failed load reports chrome-error://, and a file could name anything.
+        for (const char *url : {"chrome-error://chromewebdata/", "file:///etc/passwd", "javascript:1", "about:blank", ""})
+            board.session.setBrowserLocation(board.frame, QUrl(QString::fromLatin1(url)), {0, 9});
+        QCOMPARE(board.view().url, QUrl(QStringLiteral("http://localhost/a")));
+        QCOMPARE(board.view().scroll, QPointF());
+        QVERIFY(!board.session.isModified());
+    }
+
     void scrollingAloneAsksNothing()
     {
         Board board;

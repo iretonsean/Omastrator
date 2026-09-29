@@ -1,9 +1,10 @@
 #include "Document/EditorSession.h"
+#include "Document/BrowserAddress.h"
 
 void EditorSession::setBrowserLocation(const QUuid &frame, const QUrl &url, QPointF scroll)
 {
     VectorObject *object = m_document ? m_document->find(frame) : nullptr;
-    if (!object || !object->browser)
+    if (!object || !object->browser || !BrowserAddress::allowed(url))
         return;
     const QUrl before = object->browser->url;
     if (before == url && object->browser->scroll == scroll)

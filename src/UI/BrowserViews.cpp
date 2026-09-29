@@ -1,5 +1,6 @@
 #include "UI/BrowserViews.h"
 #include "Canvas/EditorCanvas.h"
+#include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
 #include <QCoreApplication>
 #include <QEvent>
@@ -426,7 +427,7 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
             pause(frame, entry);
         return;
     }
-    if (url.isEmpty())
+    if (!BrowserAddress::allowed(url))
         return;
     if (entry.state == State::failed)
         return;

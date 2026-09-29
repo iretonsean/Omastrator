@@ -1,4 +1,5 @@
 #include "Document/DocumentCodec.h"
+#include "Document/BrowserAddress.h"
 #include <QBuffer>
 #include <QByteArray>
 #include <QJsonValue>
@@ -651,7 +652,7 @@ VectorObject decodeObject(const QJsonObject &json)
         const QJsonObject read = json["browserView"].toObject();
         BrowserView view;
         view.url = QUrl(read["url"].toString(), QUrl::StrictMode);
-        if (!view.url.isValid())
+        if (!BrowserAddress::allowed(view.url))
             view.url = QUrl();
         const QJsonArray scroll = read["scroll"].toArray();
         if (scroll.size() == 2)

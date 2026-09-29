@@ -1,4 +1,5 @@
 #include "UI/Menus.h"
+#include "Document/BrowserAddress.h"
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
@@ -324,8 +325,11 @@ void Menus::buildObject(QMenuBar &bar)
             QApplication::clipboard()->setText(session().document()->find(*frame)->browser->url.toString());
     });
     add(browserView, QStringLiteral("browserViewOpen"), QStringLiteral("Open in My Chromium"), QKeySequence(), [this, browserFrame] {
-        if (const auto frame = browserFrame())
-            QDesktopServices::openUrl(session().document()->find(*frame)->browser->url);
+        if (const auto frame = browserFrame()) {
+            const QUrl url = session().document()->find(*frame)->browser->url;
+            if (BrowserAddress::allowed(url))
+                QDesktopServices::openUrl(url);
+        }
     });
     add(browserView, QStringLiteral("browserViewDesignWidth"), QStringLiteral("Set as Design Width"), QKeySequence(),
         [this] { session().setPreviewAsDesignWidth(); });

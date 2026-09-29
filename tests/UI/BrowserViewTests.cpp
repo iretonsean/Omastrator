@@ -6,6 +6,8 @@
 #include "UI/BrowserViews.h"
 #include <QEventLoop>
 #include <QJsonArray>
+#include <QHostAddress>
+#include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
 #include <memory>
@@ -352,6 +354,26 @@ private slots:
         const QPointF centre = rig.canvas.documentToView().map(QPointF(320, 340));
         QVERIFY(rig.red(rig.canvas.grab().toImage().copy(QRect(centre.toPoint() - QPoint(5, 5), QSize(10, 20)))));
         QVERIFY(!BrowserViews::pool()->isRunning());
+    }
+
+    void aFailedLoadKeepsTheAddressThatWasTyped()
+    {
+        NEEDS_CHROMIUM;
+        quint16 port = 0;
+        {
+            QTcpServer taken;
+            QVERIFY(taken.listen(QHostAddress::LocalHost));
+            port = taken.serverPort();
+        }
+        const QUrl typed(QStringLiteral("http://127.0.0.1:%1/down").arg(port));
+        Rig rig(typed);
+        const size_t steps = rig.session.undoNames().size();
+        // Chromium shows its own error page for it and reports chrome-error://chromewebdata/.
+        QTRY_VERIFY_WITH_TIMEOUT(!rig.views()->picture(rig.frame).isNull(), patience);
+        QTest::qWait(500);
+        QCOMPARE(rig.browser().url, typed);
+        QCOMPARE(rig.session.undoNames().size(), steps);
+        QVERIFY(!rig.session.isModified());
     }
 
     void aFrameWithoutAnAddressSaysSo()

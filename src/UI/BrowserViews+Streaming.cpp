@@ -1,4 +1,5 @@
 #include "Canvas/EditorCanvas.h"
+#include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
 #include "UI/BrowserViews.h"
 #include <QJsonObject>
@@ -83,8 +84,10 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
         if (!page["parentId"].toString().isEmpty())
             return;
         entry.mainFrame = page["id"].toString();
-        const QUrl url(page["url"].toString());
-        if (url.isEmpty() || url.toString() == QLatin1String("about:blank"))
+        // A failed load reports chrome-error:// and keeps the address that was tried apart; that one is the page.
+        const QString unreachable = page["unreachableUrl"].toString();
+        const QUrl url(unreachable.isEmpty() ? page["url"].toString() : unreachable);
+        if (!BrowserAddress::allowed(url))
             return;
         const VectorObject *object = m_session.document()->find(frame);
         // The address the user gave stays as it was typed when the page merely confirmed it.

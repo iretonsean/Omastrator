@@ -162,6 +162,35 @@ private slots:
         const VectorDocument back = DocumentCodec::decode(json);
         QVERIFY(back.find(fixture.frame)->browser->url.isEmpty());
     }
+
+    void onlyHttpAndHttpsPagesAreRead_data()
+    {
+        QTest::addColumn<QString>("url");
+        for (const char *url : {"file:///home/someone/.ssh/config", "FILE:///etc/passwd", "javascript:alert(1)", "data:text/html,hi",
+                                "chrome://settings", "view-source:https://example.com/", "about:srcdoc", "https:///nohost", "ftp://example.com/"})
+            QTest::newRow(url) << QString::fromLatin1(url);
+    }
+
+    void onlyHttpAndHttpsPagesAreRead()
+    {
+        QFETCH(QString, url);
+        Fixture fixture;
+        // The file's own frame and a paste (decodeObjects, which the clipboard and the agent's update_object read through).
+        QJsonObject object = DocumentCodec::encode(*fixture.document.find(fixture.frame));
+        object["browserView"] = QJsonObject{{"url", url}};
+        QVERIFY(DocumentCodec::decodeObject(object).browser->url.isEmpty());
+        const auto pasted = DocumentCodec::decodeObjects(QJsonArray{object});
+        QCOMPARE(pasted.size(), size_t(1));
+        QVERIFY(pasted.front().browser->url.isEmpty());
+    }
+
+    void anUpperCaseSchemeOfAWebPageStays()
+    {
+        Fixture fixture;
+        QJsonObject object = DocumentCodec::encode(*fixture.document.find(fixture.frame));
+        object["browserView"] = QJsonObject{{"url", "HTTPS://example.com/a"}};
+        QVERIFY(!DocumentCodec::decodeObject(object).browser->url.isEmpty());
+    }
 };
 
 QTEST_MAIN(DocumentCodecTests)

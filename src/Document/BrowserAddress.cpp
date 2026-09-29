@@ -8,6 +8,12 @@ bool local(const QString &host)
 }
 }
 
+bool BrowserAddress::allowed(const QUrl &url)
+{
+    const QString kind = url.scheme().toLower();
+    return url.isValid() && !url.host().isEmpty() && (kind == QLatin1String("http") || kind == QLatin1String("https"));
+}
+
 std::optional<QUrl> BrowserAddress::parse(const QString &typed)
 {
     const QString text = typed.trimmed();
@@ -23,8 +29,7 @@ std::optional<QUrl> BrowserAddress::parse(const QString &typed)
         const QString host = text.section(QRegularExpression(QStringLiteral("[/:?#]")), 0, 0).toLower();
         url = QUrl(QStringLiteral("%1://%2").arg(local(host) ? "http" : "https", text), QUrl::StrictMode);
     }
-    const QString kind = url.scheme().toLower();
-    if (!url.isValid() || url.host().isEmpty() || (kind != QLatin1String("http") && kind != QLatin1String("https")))
+    if (!allowed(url))
         return std::nullopt;
     return url;
 }
