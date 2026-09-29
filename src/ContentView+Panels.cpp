@@ -5,6 +5,7 @@
 #include "UI/AgentBridge.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ProjectWorkspace.h"
+#include <algorithm>
 #include <QAbstractButton>
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
@@ -155,9 +156,22 @@ bool ContentView::panelKey(QWidget *focus, QKeyEvent *event)
     return copy->isAccepted();
 }
 
+namespace {
+bool opensInTab(const QString &path)
+{
+    return QFileInfo(path).suffix().compare(QLatin1String(ProjectStore::extension), Qt::CaseInsensitive) == 0 || VectorFileImporter::isDesignFile(path);
+}
+}
+
 bool ContentView::acceptsDrop(const QMimeData &data) const
 {
-    return m_workspace && !m_workspace->isManaging() && !hasProposal() && !droppedFiles(data).isEmpty();
+    if (!m_workspace || m_workspace->isManaging() || hasProposal())
+        return false;
+    const QStringList files = droppedFiles(data);
+    // A locked tab takes only what opens in a tab of its own: placing would edit it.
+    if (m_session.hasDocument() && m_session.isDocumentLocked())
+        return std::any_of(files.cbegin(), files.cend(), [](const QString &path) { return opensInTab(path); });
+    return !files.isEmpty();
 }
 
 bool ContentView::hasProposal() const
@@ -199,13 +213,12 @@ void ContentView::dropEvent(QDropEvent *event)
     event->setDropAction(Qt::CopyAction);
     event->accept();
     // Read first: an open may replace this editor.
-    const QString native = QLatin1String(ProjectStore::extension);
     const bool drawn = m_session.hasDocument();
     const QPointer<ProjectWorkspace> workspace = m_workspace;
     for (const QString &path : droppedFiles(*event->mimeData())) {
         if (!workspace)
             return;
-        if (!drawn || QFileInfo(path).suffix().compare(native, Qt::CaseInsensitive) == 0 || VectorFileImporter::isDesignFile(path))
+        if (!drawn || opensInTab(path))
             workspace->openFile(path);
         else
             workspace->placeFile(path);

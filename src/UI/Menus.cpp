@@ -99,6 +99,9 @@ void Menus::buildFile(QMenuBar &bar)
     add(file, QStringLiteral("save"), QStringLiteral("Save"), QKeySequence(Qt::CTRL | Qt::Key_S), [this] { m_workspace.save(m_workspace.current().id); });
     add(file, QStringLiteral("saveAs"), QStringLiteral("Save As…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S),
         [this] { m_workspace.save(m_workspace.current().id, true); });
+    // Ctrl+K is the command palette, so the lock takes Figma's Lock key (Ctrl+Shift+L) with Alt held: the heavier lock.
+    add(file, QStringLiteral("lockDocument"), QStringLiteral("Lock Document"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_L),
+        [this] { session().setDocumentLocked(!session().isDocumentLocked()); });
     file->addSeparator();
     add(file, QStringLiteral("place"), QStringLiteral("Place…"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), [this] { m_workspace.place(); });
     add(file, QStringLiteral("importFigmaLink"), QStringLiteral("Import from Figma Link…"), QKeySequence(), [this] { m_workspace.importFigmaLink(); });

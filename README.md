@@ -82,6 +82,13 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   1080 × 1080), which Show Hidden Presets brings back. Saved presets list first
   and live in `~/.config/omastrator/presets.json`. The built-ins can be hidden
   but never deleted or renamed.
+- Frame presets, as in Figma. While the Frame tool (F) is active, Properties ▸
+  Frame lists sizes by group (Phone, Tablet, Desktop, Social, Paper) and a click
+  drops a frame of that size, named for the preset, in the middle of the view:
+  "iPhone 16" makes a 393 × 852 frame. With one frame selected, the ⋯ saves its
+  size as your own preset (a Saved group); right-click a row to rename or delete
+  a saved one or hide a built-in, and Show Hidden Presets brings those back. They
+  share `presets.json` with the document presets, in a `frames` section.
 - The rail's tools sit in slots that share a button when more than one lives
   together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
   Paint, Navigate): a corner triangle marks a group, right-click or a long
@@ -157,6 +164,8 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   them. Copy Properties and Paste Properties (Ctrl+Alt+C, Ctrl+Alt+V) move a
   whole appearance between objects; the eyedropper's Alt-click gives the
   selection's style to what you click.
+- File ▸ Lock Document (Ctrl+Alt+Shift+L) makes a file read-only, saved in the
+  `.omai`; you can still select, inspect, measure, export and share it.
 - Layers and groups with visibility, locking and drag-to-reorder, clipping masks,
   opacity masks (Object ▸ Opacity Mask: the top object's luminance masks the
   rest, with Clip and Invert Mask) and compound paths.

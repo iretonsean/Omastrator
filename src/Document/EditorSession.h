@@ -79,6 +79,19 @@ public:
     void setArtboardSize(QSizeF size);
     void setArtboardBackground(const QColor &color);
 
+    // Lock Document (EditorSession+Lock.cpp) ----------------------------------
+    // A locked document refuses every edit, undo and redo, whichever door it comes in by:
+    // selecting, inspecting, measuring, exporting and sharing go on. The flag is saved in the
+    // file, changes no undo step, and marks the document unsaved.
+    bool isDocumentLocked() const { return m_document && m_document->locked; }
+    void setDocumentLocked(bool locked);
+    // What the status line says when an edit is refused.
+    static QString lockedNotice();
+    // The one gate for edits: true (and `editRefused()`) when the document is locked. Every
+    // edit entry point asks it; so does anything that starts editing outside the session, as
+    // the canvas's inline type does.
+    bool refuseWhenLocked();
+
     // Artboards (EditorSession+Artboards.cpp) ---------------------------------
     // The Artboard tool, the list, next/previous and select() all set this.
     int activeArtboard() const;
@@ -271,7 +284,10 @@ public:
     // Object ▸ Frame Selection (Ctrl+Alt+G): the selection inside a new frame its size.
     void frameSelection();
     // The Frame tool: a frame over `rect`, inside the innermost frame that holds it. Selected.
-    QUuid addFrame(const QRectF &rect);
+    // A preset gives its `name`, kept as is unless an object already has it.
+    QUuid addFrame(const QRectF &rect, const QString &name = {});
+    // Where a frame of `size` lands when picked from a list: centred in the view, else on the active artboard, on whole points.
+    QRectF framePlacement(QSizeF size) const;
     // Shift+A (docs/AUTO-LAYOUT.md): a selected frame without auto layout gets it, its direction, gap and
     // padding read from where its children are; anything else goes into a new auto-layout frame that hugs it.
     void addAutoLayout();
@@ -619,6 +635,8 @@ signals:
     void currentPageChanged(const QUuid &page);
     // Move to Page finished: the status line says where the objects went.
     void movedToPage(const QString &pageName);
+    // An edit met a locked document and did nothing.
+    void editRefused();
 
 private:
     void notify(bool documentToo = true);
@@ -679,6 +697,9 @@ private:
     // Per page, not saved. `m_shownPage` is the page these fields describe.
     std::map<QUuid, PageView> m_pageViews;
     QUuid m_shownPage;
+    // Nesting of beginEdit calls, and which of those levels a lock turned away: their endEdit does nothing.
+    int m_editDepth = 0;
+    std::vector<int> m_refusedEditDepths;
     mutable int m_pasteCount = 0;
     // When the last coalescing text step ran.
     qint64 m_lastTextStep = 0;

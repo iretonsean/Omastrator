@@ -104,6 +104,7 @@ Illustrator's key wins wherever the app already had it.
 | Delete, Backspace | Delete | same | same, from a plain button too |
 | Ctrl+Shift+E | Export | Export PNG is Ctrl+Alt+E | Export for Screens is Ctrl+Shift+E |
 | Ctrl+K, Ctrl+/ | Actions menu | Ctrl+K, Ctrl+/ | same |
+| Ctrl+Alt+Shift+L | Lock / Unlock Document | none | File ▸ Lock Document (see below) |
 
 ### Arrange and layout
 
@@ -147,6 +148,24 @@ Illustrator's key wins wherever the app already had it.
 | Ctrl+B, I, U | Bold, italic, underline | none | not built as keys: styles are picked in the Character section |
 | Ctrl+Alt+L, T, R, J | Align text | none | not built as keys: alignment is in the Paragraph section |
 | Alt+Shift+, / . | Line height | Alt+Up / Alt+Down | Illustrator's keys stay |
+
+## Lock Document
+
+File ▸ Lock Document makes the file read-only until it is unlocked. Its key is
+Ctrl+Alt+Shift+L, and it is also in the Ctrl+K palette, like every menu
+command. Ctrl+K itself is the command palette, so it can't be the key. Figma's Ctrl+Shift+L locks the *selection*, so the whole
+document is the same key with Alt held: a heavier lock on the same finger
+pattern, and it sits with Share's Ctrl+Alt+Shift+S. It is remappable like any
+menu key.
+
+While locked, `EditorSession` turns away every edit at one gate
+(`edit`, `beginEdit`, `beginInteraction`, undo and redo, and type edits) with
+one status line, so new operations are covered without their own check. The
+agent's edits fail with error `-32004` and a message that says to ask the user
+to unlock. Selecting, inspecting, measuring, saving, exporting and sharing
+still work. The lock is saved in the `.omai` (`"locked": true`, absent when
+unlocked) and the tab shows a lock. Locking is not an undo step, but it marks
+the file unsaved.
 
 ## The fixed keys
 

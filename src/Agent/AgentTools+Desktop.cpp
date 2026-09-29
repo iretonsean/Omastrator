@@ -24,9 +24,17 @@ QColor colorParam(const QJsonObject &params, const QString &key)
 }
 }
 
-EditorSession &AgentTools::idleSession()
+void AgentTools::requireUnlocked(const EditorSession &session)
+{
+    if (session.isDocumentLocked())
+        throw Error(AgentProtocol::documentLocked, QStringLiteral("The document is locked, so it can't be changed. Ask the user to unlock it (File ▸ Unlock Document)."));
+}
+
+EditorSession &AgentTools::idleSession(bool forEdit)
 {
     EditorSession &current = session();
+    if (forEdit)
+        requireUnlocked(current);
     if (hasProposal() && m_session == &current)
         throw Error(AgentProtocol::busy, QStringLiteral("An AI proposal is waiting. Press Enter to keep it or Esc to discard it first."));
     if (current.isInteracting())
@@ -36,6 +44,7 @@ EditorSession &AgentTools::idleSession()
 
 void AgentTools::commit(EditorSession &target, const QString &name, const VectorDocument &document, const std::vector<QUuid> &selection)
 {
+    requireUnlocked(target);
     target.beginInteraction(name);
     target.previewDocument(document, selection);
     target.commitInteraction();
@@ -288,7 +297,8 @@ QJsonObject AgentTools::command(const QJsonObject &params)
     else if (name == QLatin1String("actualSize"))
         current.actualSize();
     else {
-        EditorSession &editing = idleSession();
+        const bool selectsOnly = name == QLatin1String("selectAll") || name == QLatin1String("deselect");
+        EditorSession &editing = idleSession(!selectsOnly);
         const bool needsSelection = !QStringList{"undo", "redo", "selectAll", "deselect"}.contains(name);
         if (needsSelection && !editing.hasSelection())
             throw Error(AgentProtocol::invalidParams, QStringLiteral("Nothing is selected. Select something first."));

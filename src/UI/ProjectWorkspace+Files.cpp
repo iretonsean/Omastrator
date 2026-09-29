@@ -161,6 +161,10 @@ bool ProjectWorkspace::placeFile(const QString &path)
     EditorSession &session = current().session;
     if (!session.hasDocument())
         return false;
+    if (session.isDocumentLocked()) {
+        setNotice(EditorSession::lockedNotice());
+        return false;
+    }
     const QString name = QFileInfo(path).fileName();
     QStringList warnings;
     try {

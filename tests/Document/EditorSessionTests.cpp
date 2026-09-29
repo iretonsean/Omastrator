@@ -424,6 +424,123 @@ private slots:
         QVERIFY(!session.document()->find(second));
         QCOMPARE(session.document()->find(first)->name, QStringLiteral("Rectangle"));
     }
+
+    void lockedDocumentRefusesEveryEdit()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid first = rectangle(session, {10, 10, 50, 40});
+        const QUuid second = rectangle(session, {80, 10, 50, 40});
+        session.setDocumentLocked(true);
+        const VectorDocument before = *session.document();
+        const QString undoName = session.undoName();
+        QSignalSpy refused(&session, &EditorSession::editRefused);
+        // Whole-step edits, open-and-close edits, drags, undo and redo.
+        rectangle(session, {0, 0, 5, 5});
+        session.rename(first, QStringLiteral("Renamed"));
+        session.select({first});
+        session.deleteSelection();
+        session.beginEdit(QStringLiteral("Scrub"));
+        session.rename(first, QStringLiteral("Scrubbed"));
+        session.endEdit();
+        session.beginInteraction(QStringLiteral("Move"));
+        QVERIFY(!session.isInteracting());
+        session.undo();
+        session.redo();
+        QVERIFY(refused.count() >= 6);
+        QVERIFY(*session.document() == before);
+        QCOMPARE(session.undoName(), undoName);
+        // Selecting and measuring still work.
+        session.select({second});
+        QCOMPARE(session.selection(), std::vector<QUuid>{second});
+        session.selectAll();
+        QCOMPARE(session.selection().size(), size_t(2));
+        QCOMPARE(session.document()->bounds(first), QRectF(10, 10, 50, 40));
+    }
+
+    void lockedTypeCannotBeRestyled()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid text = session.addText({20, 40}, QStringLiteral("Intro"));
+        session.select({text});
+        session.setDocumentLocked(true);
+        const VectorDocument before = *session.document();
+        session.updateText([](TextContent &content) { content.text = QStringLiteral("Changed"); }, QStringLiteral("Restyle"));
+        session.stepText(EditorSession::TextStep::size, 2);
+        QVERIFY(*session.document() == before);
+    }
+
+    void anEditThatWasRefusedDoesNotCloseALaterOne()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid box = rectangle(session, {10, 10, 50, 40});
+        session.setDocumentLocked(true);
+        session.beginEdit(QStringLiteral("Refused"));
+        session.setDocumentLocked(false);
+        // The refused begin's end is the outer one; this edit's own end closes its group.
+        session.beginEdit(QStringLiteral("Rename"));
+        session.rename(box, QStringLiteral("Named"));
+        session.endEdit();
+        QCOMPARE(session.undoName(), QStringLiteral("Rename"));
+        session.endEdit();
+        QCOMPARE(session.undoName(), QStringLiteral("Rename"));
+        session.undo();
+        QCOMPARE(session.document()->find(box)->name, QStringLiteral("Rectangle"));
+    }
+
+    void unlockingEditsAgainAndLockingIsNoUndoStep()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid box = rectangle(session, {10, 10, 50, 40});
+        session.markSaved();
+        QVERIFY(!session.isModified());
+        session.setDocumentLocked(true);
+        QVERIFY(session.isDocumentLocked());
+        // The flag is part of the file, so the document is unsaved until it is written.
+        QVERIFY(session.isModified());
+        QCOMPARE(session.undoName(), QStringLiteral("Draw Rectangle"));
+        session.setDocumentLocked(false);
+        QCOMPARE(session.undoName(), QStringLiteral("Draw Rectangle"));
+        session.rename(box, QStringLiteral("Named"));
+        QCOMPARE(session.document()->find(box)->name, QStringLiteral("Named"));
+        session.undo();
+        QCOMPARE(session.document()->find(box)->name, QStringLiteral("Rectangle"));
+    }
+
+    void lockingClosesADragInsteadOfLosingIt()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid box = rectangle(session, {10, 10, 50, 40});
+        session.beginInteraction(QStringLiteral("Rename"));
+        session.previewObject([&] {
+            VectorObject object = *session.document()->find(box);
+            object.name = QStringLiteral("Dragged");
+            return object;
+        }());
+        session.setDocumentLocked(true);
+        QVERIFY(!session.isInteracting());
+        QCOMPARE(session.document()->find(box)->name, QStringLiteral("Dragged"));
+    }
+
+    void theLockIsSavedInTheFile()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        rectangle(session, {10, 10, 50, 40});
+        session.setDocumentLocked(true);
+        QVERIFY(session.isDocumentLocked());
+        const QJsonObject json = DocumentCodec::encode(*session.document());
+        QVERIFY(json["locked"].toBool());
+        QVERIFY(DocumentCodec::decode(QJsonDocument::fromJson(QJsonDocument(json).toJson()).object()).locked);
+        // A file from before the lock has no key, and reads as unlocked.
+        session.setDocumentLocked(false);
+        QVERIFY(!DocumentCodec::encode(*session.document()).contains(QLatin1String("locked")));
+        QVERIFY(!DocumentCodec::decode(DocumentCodec::encode(*session.document())).locked);
+    }
 };
 
 QTEST_MAIN(EditorSessionTests)

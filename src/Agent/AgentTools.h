@@ -103,8 +103,11 @@ private:
     QJsonObject design(const QJsonObject &params);
     QJsonObject showWindow(const QJsonObject &params);
     QJsonObject quitApp(const QJsonObject &params);
-    // The session to act on for the user; refused while a drag or proposal is open.
-    EditorSession &idleSession();
+    // The session to act on for the user; refused while a drag or proposal is open, and
+    // (unless `forEdit` is false, as for selecting) while the document is locked.
+    EditorSession &idleSession(bool forEdit = true);
+    // Throws documentLocked with the reason, so an agent says so instead of failing quietly.
+    static void requireUnlocked(const EditorSession &session);
     // Commits `document` as one undo step named `name`.
     void commit(EditorSession &session, const QString &name, const VectorDocument &document, const std::vector<QUuid> &selection);
     // Panels.

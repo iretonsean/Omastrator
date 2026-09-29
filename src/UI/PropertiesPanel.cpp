@@ -3,6 +3,7 @@
 #include "UI/CharacterSection.h"
 #include "UI/ColorPaletteControls.h"
 #include "UI/ColorPickerSheet.h"
+#include "UI/FramePresets.h"
 #include "UI/NumberField.h"
 #include "UI/ObjectDialogs.h"
 #include "UI/PaintStack.h"
@@ -50,8 +51,9 @@ PropertiesPanel::PropertiesPanel(EditorSession &session, QWidget *parent) : QScr
     column->setSpacing(0);
     m_character = new CharacterSection(m_session, content);
     m_paragraph = new ParagraphSection(m_session, content);
+    m_framePresets = new FramePresetsSection(m_session, content);
     bool first = true;
-    for (PanelSection *block : {documentSection(), componentSection(), transformSection(), layoutSection(), shapeSection(), static_cast<PanelSection *>(m_character),
+    for (PanelSection *block : {static_cast<PanelSection *>(m_framePresets), documentSection(), componentSection(), transformSection(), layoutSection(), shapeSection(), static_cast<PanelSection *>(m_character),
                                 static_cast<PanelSection *>(m_paragraph), appearanceSection(), strokeSection(), alignSection(), pathfinderSection()}) {
         if (!first) {
             // A section's rule hides with it.
@@ -322,6 +324,7 @@ void PropertiesPanel::synchronize()
         if (QWidget *rule = widget()->findChild<QWidget *>(section->objectName() + QStringLiteral("Rule")))
             rule->setVisible(shown);
     };
+    show(m_framePresets, drawn && m_session.tool() == Tool::frame);
     show(m_document, !selected);
     show(m_transform, selected);
     show(m_character, text);

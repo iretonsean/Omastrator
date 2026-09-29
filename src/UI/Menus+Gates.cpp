@@ -30,8 +30,12 @@ void Menus::synchronize()
     const bool proposal = m_agent && m_agent->hasProposalIn(s);
     for (const char *name : {"newDocument", "open", "closeDocument"})
         action(QString::fromLatin1(name))->setEnabled(free);
-    for (const char *name : {"save", "saveAs", "place"})
+    const bool locked = s.isDocumentLocked();
+    for (const char *name : {"save", "saveAs"})
         action(QString::fromLatin1(name))->setEnabled(free && drawn && !proposal);
+    action(QStringLiteral("place"))->setEnabled(free && drawn && !proposal && !locked);
+    action(QStringLiteral("lockDocument"))->setEnabled(free && drawn && !proposal && !typing);
+    action(QStringLiteral("lockDocument"))->setText(locked ? QStringLiteral("Unlock Document") : QStringLiteral("Lock Document"));
     for (const char *name : {"exportPNG", "exportJPEG", "exportSVG", "exportPDF"})
         action(QString::fromLatin1(name))->setEnabled(free && drawn);
     action(QStringLiteral("exportMenu"))->setEnabled(free && drawn);
@@ -41,15 +45,15 @@ void Menus::synchronize()
     action(QStringLiteral("sendToDevice"))->setEnabled(m_share && free && !m_share->running() && drawn);
     action(QStringLiteral("sharedLinks"))->setEnabled(m_share != nullptr);
     action(QStringLiteral("undo"))->setText(!field && s.canUndo() ? QStringLiteral("Undo %1").arg(s.undoName()) : QStringLiteral("Undo"));
-    action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && s.canUndo()));
+    action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && !locked && s.canUndo()));
     action(QStringLiteral("redo"))->setText(!field && s.canRedo() ? QStringLiteral("Redo %1").arg(s.redoName()) : QStringLiteral("Redo"));
-    action(QStringLiteral("redo"))->setEnabled(field || (!typing && !proposal && s.canRedo()));
-    action(QStringLiteral("cut"))->setEnabled(field || (!typing && !proposal && selected));
+    action(QStringLiteral("redo"))->setEnabled(field || (!typing && !proposal && !locked && s.canRedo()));
+    action(QStringLiteral("cut"))->setEnabled(field || (!typing && !proposal && !locked && selected));
     action(QStringLiteral("copy"))->setEnabled(field || (!typing && selected));
-    action(QStringLiteral("paste"))->setEnabled(field || (!typing && !proposal && drawn && s.canPaste()));
-    action(QStringLiteral("pasteInPlace"))->setEnabled(!field && !typing && !proposal && drawn && s.canPaste());
+    action(QStringLiteral("paste"))->setEnabled(field || (!typing && !proposal && !locked && drawn && s.canPaste()));
+    action(QStringLiteral("pasteInPlace"))->setEnabled(!field && !typing && !proposal && !locked && drawn && s.canPaste());
     action(QStringLiteral("selectAll"))->setEnabled(field || (!typing && drawn));
-    const bool editing = !field && !typing && !proposal;
+    const bool editing = !field && !typing && !proposal && !locked;
     action(QStringLiteral("duplicate"))->setEnabled(editing && selected);
     action(QStringLiteral("delete"))->setEnabled(editing && (selected || !s.pickedNodes().empty()));
     action(QStringLiteral("deselect"))->setEnabled(editing && selected);
@@ -136,7 +140,7 @@ void Menus::synchronize()
     action(QStringLiteral("showGrid"))->setChecked(s.showsGrid);
     action(QStringLiteral("snapToGrid"))->setChecked(s.snapsToGrid);
     for (const char *name : {"pasteInFront", "pasteInBack"})
-        action(QString::fromLatin1(name))->setEnabled(!field && !typing && !proposal && drawn && s.canPaste());
+        action(QString::fromLatin1(name))->setEnabled(!field && !typing && !proposal && !locked && drawn && s.canPaste());
     action(QStringLiteral("transformAgain"))->setEnabled(editing && s.canTransformAgain());
     action(QStringLiteral("copyProperties"))->setEnabled(!field && !typing && s.canCopyProperties());
     action(QStringLiteral("pasteProperties"))->setEnabled(editing && s.canPasteProperties());

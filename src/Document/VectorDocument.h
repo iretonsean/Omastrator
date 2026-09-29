@@ -445,6 +445,8 @@ struct VectorDocument {
     std::vector<Page> pages;
     // The page shown; null, or one that names no page, is the first. View state, not an undo step.
     QUuid currentPage;
+    // File ▸ Lock Document: read-only until unlocked. Saved in the file; EditorSession enforces it.
+    bool locked = false;
 
     // A document with one empty layer.
     static VectorDocument blank(QSizeF size);
