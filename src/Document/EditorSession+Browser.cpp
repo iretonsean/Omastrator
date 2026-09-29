@@ -38,6 +38,18 @@ void EditorSession::setBrowserPicture(const QUuid &frame, const QImage &picture)
     if (!object || !object->browser)
         return;
     object->browser->picture = picture;
+    // The picture is view state, not an edit: every snapshot and a preview in flight share this one image, so history
+    // holds a single picture and an undo or the end of a preview never brings an old one back.
+    const auto share = [&](VectorDocument &document) {
+        VectorObject *recorded = document.find(frame);
+        if (recorded && recorded->browser)
+            recorded->browser->picture = picture;
+    };
+    if (m_interaction) {
+        share(m_interaction->before);
+        share(m_interaction->base);
+    }
+    m_history.mapDocuments(share);
 }
 
 QUuid EditorSession::addBrowserView(const QRectF &rect, const QUrl &url)

@@ -82,6 +82,31 @@ private slots:
         QVERIFY(!board.session.isModified());
     }
 
+    void thePictureIsOneImageInEveryStepAndSurvivesUndoAndAPreview()
+    {
+        Board board;
+        board.session.addFrame({700, 0, 50, 50}, QStringLiteral("Later"));
+        QImage first(400, 300, QImage::Format_ARGB32_Premultiplied);
+        first.fill(Qt::green);
+        board.session.setBrowserPicture(board.frame, first);
+        QImage second(400, 300, QImage::Format_ARGB32_Premultiplied);
+        second.fill(Qt::blue);
+        board.session.setBrowserPicture(board.frame, second);
+        // Undo goes back a step, not back to an older picture.
+        board.session.undo();
+        QCOMPARE(board.view().picture.cacheKey(), second.cacheKey());
+        board.session.redo();
+        QCOMPARE(board.view().picture.cacheKey(), second.cacheKey());
+        // A picture that lands during a held preview is still there when the preview ends.
+        board.session.beginPreview(QStringLiteral("Preview Width"));
+        board.session.previewFrameBox(board.frame, {0, 0, 200, 300});
+        QImage third(400, 300, QImage::Format_ARGB32_Premultiplied);
+        third.fill(Qt::red);
+        board.session.setBrowserPicture(board.frame, third);
+        board.session.cancelInteraction();
+        QCOMPARE(board.view().picture.cacheKey(), third.cacheKey());
+    }
+
     void anUndoAfterANavigationKeepsTheNewAddress()
     {
         Board board;
