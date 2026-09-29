@@ -24,6 +24,8 @@ enum ErrorCode {
     fileError = -32002,
     // The app is not running, or the socket dropped.
     notRunning = -32003,
+    // The document is locked (File ▸ Lock Document); only the user can unlock it.
+    documentLocked = -32004,
 };
 
 // Thrown by the tools; becomes a JSON-RPC error.

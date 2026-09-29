@@ -420,6 +420,10 @@ void EditorSession::pruneSelection()
 
 void EditorSession::beginEdit(const QString &name)
 {
+    if (refuseWhenLocked()) {
+        ++m_refusedEdits;
+        return;
+    }
     // The preference may have changed since this document opened.
     m_history.setEntryLimit(historyLimit());
     m_history.begin(name, m_document, m_selection);
@@ -427,6 +431,10 @@ void EditorSession::beginEdit(const QString &name)
 
 void EditorSession::endEdit()
 {
+    if (m_refusedEdits > 0) {
+        --m_refusedEdits;
+        return;
+    }
     settle();
     m_history.end(m_document, m_selection);
     notify();
@@ -434,7 +442,7 @@ void EditorSession::endEdit()
 
 void EditorSession::edit(const QString &name, const std::function<void(VectorDocument &)> &change)
 {
-    if (!m_document)
+    if (!m_document || refuseWhenLocked())
         return;
     if (m_interaction)
         commitInteraction();
@@ -446,7 +454,10 @@ void EditorSession::edit(const QString &name, const std::function<void(VectorDoc
 
 void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
 {
+    const bool locked = isDocumentLocked();
     m_document = snapshot.document;
+    if (m_document)
+        m_document->locked = locked;
     m_selection = snapshot.selection;
     if (!m_selection.empty())
         m_artboardSelected = false;
@@ -458,6 +469,8 @@ void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
 // Inside an open beginEdit, DocumentHistory refuses both: the edit's own step would otherwise replay the undone one.
 void EditorSession::undo()
 {
+    if (refuseWhenLocked())
+        return;
     if (m_interaction)
         cancelInteraction();
     if (const auto snapshot = m_history.undo())
@@ -466,6 +479,8 @@ void EditorSession::undo()
 
 void EditorSession::redo()
 {
+    if (refuseWhenLocked())
+        return;
     if (m_interaction)
         cancelInteraction();
     if (const auto snapshot = m_history.redo())
@@ -486,7 +501,7 @@ void EditorSession::markUnsaved()
 
 void EditorSession::beginInteraction(const QString &name)
 {
-    if (!m_document)
+    if (!m_document || refuseWhenLocked())
         return;
     if (m_interaction)
         commitInteraction();

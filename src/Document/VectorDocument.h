@@ -427,6 +427,8 @@ struct VectorDocument {
     std::vector<DesignToken> tokens;
     QStringList tokenModes;
     QString tokenMode;
+    // File ▸ Lock Document: read-only until unlocked. Saved in the file; EditorSession enforces it.
+    bool locked = false;
 
     // A document with one empty layer.
     static VectorDocument blank(QSizeF size);

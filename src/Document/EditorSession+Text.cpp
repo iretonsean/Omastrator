@@ -138,6 +138,9 @@ bool EditorSession::fillTextRange(const Paint &fill)
 
 void EditorSession::commitTextEdit(VectorDocument next, const QString &name, bool coalesce)
 {
+    // The amend below skips edit(), so it needs its own gate.
+    if (refuseWhenLocked())
+        return;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (coalesce && now - m_lastTextStep < coalesceWindow) {
         VectorDocument before = std::move(*m_document);

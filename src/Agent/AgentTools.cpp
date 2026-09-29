@@ -197,6 +197,7 @@ VectorDocument AgentTools::draft()
 void AgentTools::propose(const QString &title, const VectorDocument &document, const std::vector<QUuid> &selection)
 {
     EditorSession &current = session();
+    requireUnlocked(current);
     if (!ownsProposal(current)) {
         if (current.isInteracting())
             throw Error(AgentProtocol::busy, QStringLiteral("The user is in the middle of an edit. Try again in a moment."));
