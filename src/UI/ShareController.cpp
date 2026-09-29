@@ -272,6 +272,9 @@ QString ShareController::render(Share::Format format, const QString &baseName, Q
 {
     const ProjectTab &tab = m_workspace.current();
     const EditorSession &session = tab.session;
+    if (!sharesSelection() && !session.document()->artboard(session.activeArtboard()).exported)
+        return QStringLiteral("“%1” is set not to export. Turn it on in Properties ▸ Document, or pick another artboard.")
+            .arg(session.document()->artboard(session.activeArtboard()).name);
     const VectorDocument document = sharesSelection() ? Share::selectionDocument(*session.document(), session.selection())
         : session.document()->artboards.empty() ? *session.document() : session.document()->artboardDocument(session.activeArtboard());
     m_folder = std::make_unique<QTemporaryDir>(QDir::temp().filePath(QStringLiteral("omastrator-share-XXXXXX")));

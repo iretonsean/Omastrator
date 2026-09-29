@@ -14,11 +14,11 @@ Tick each item when it's done. Change `[ ]` to `[x]` and add the merge
 commit and date, for example `[x] … (a1b2c3d, 2026-09-29)`, then commit this
 file with the work. Don't delete finished items.
 
-- [ ] 1. Text stroke inside/outside (check first)
-- [ ] 2. Non-printing / non-exporting artboards
-- [ ] 3. Editable document presets
+- [x] 1. Text stroke inside/outside (check first) (cefed5e, 2026-09-28)
+- [x] 2. Non-printing / non-exporting artboards (a711523, 2026-09-28)
+- [x] 3. Editable document presets (bcd5b25, 2026-09-28)
 - [ ] 4. Frame presets
-- [ ] 5. Per-side padding fields in auto layout
+- [x] 5. Per-side padding fields in auto layout (b63e6d1, 2026-09-28)
 - [ ] 6. Lock Document (read-only mode)
 - [ ] 7. Settings that travel
 - [ ] 8. Canvas size limit (check and document)
@@ -30,6 +30,31 @@ file with the work. Don't delete finished items.
 - HIGH-EFFORT.md isn't scheduled, apart from its item 1, which is item 9
   here.
 - Effects waits on the author's review of docs/EFFECTS.md.
+- GIT-NATIVE.md (readable files, a file CLI, an agent skill, linked
+  libraries, flows) is in the backlog, not scheduled.
+
+## Backlog, not queued
+
+- **Update the screenshots on the public repo page** (the author,
+  2026-09-28).
+  - **Today:** the README's hero image and its 35-picture gallery
+    (`docs/screenshots/`) date from 2026-09-26. That's before the
+    Graphite look, the dense Properties panel, frames and auto layout,
+    Inspect inside windows, the import formats and Pages. They were made
+    by hand, and no script in the repo reproduces them.
+  - **Do:**
+    - add `scripts/screenshots.sh`, which renders each picture offscreen
+      from fixed demo documents (`OMASTRATOR_SNAPSHOT`, the UI tests'
+      `grab()`, and the QML plugins rendered offscreen, as before), so the
+      next refresh is one command;
+    - retake every picture;
+    - add the new features (the Properties panel, auto layout, Inspect,
+      Open from Figma/Sketch/PDF, Pages, the Browser View once it exists);
+    - keep the made-up demo content and no personal data.
+  - **Not promo:** these are product screenshots for the README, not the
+    promo material the author keeps out of the repo.
+  - **Done when:** the README shows the current app, and the script
+    regenerates every picture.
 
 ## Agents and models (the author, 2026-09-28)
 

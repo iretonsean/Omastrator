@@ -14,7 +14,10 @@ to about 540 px.
 - **A number field is one box.** Its label (or the rotation icon) and its unit
   sit inside the box, around a left-aligned value, as Figma draws them.
   Dragging the label still scrubs. `NumberField` paints the box itself, with
-  the style's line-edit panel, so the theme's hover and focus fills apply.
+  the style's line-edit panel, so the theme's hover and focus fills apply. A
+  scrub closes its undo step however it ends: release, or the field being
+  hidden (the selection changed), disabled or losing the grab. Undo and redo
+  wait while an edit is open, so a scrub never records over an undone step.
 - **Fields go in pairs:**
   - Transform: X|Y; W|H with the link; rotation with the reference point,
     drawn compact.
@@ -23,6 +26,10 @@ to about 540 px.
 - **Layout (auto layout):** the flow menu and − (remove) sit in the section
   heading. The alignment grid sits beside the gap and the padding. Absolute
   position and Clip content share a row.
+  - Padding is a pair, ↔ (left and right) and ↕ (top and bottom). The box
+    icon beside it swaps the pair for four fields, L|T over R|B, in the same
+    24 px rows. It opens by itself when the sides differ, as the corner
+    radius does, and each field or scrub is one "Padding" undo step.
 
 ## C: folded sections keep a summary
 

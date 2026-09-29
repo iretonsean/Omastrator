@@ -244,6 +244,14 @@ std::optional<QUuid> EditorCanvas::State::frameLabelAt(QPointF view) const
     return std::nullopt;
 }
 
+namespace {
+// A board that doesn't export says so on its label.
+QString labelText(const Artboard &board)
+{
+    return board.exported ? board.name : board.name + QStringLiteral(" · not exported");
+}
+}
+
 std::vector<std::pair<int, QRectF>> EditorCanvas::State::artboardLabels() const
 {
     std::vector<std::pair<int, QRectF>> labels;
@@ -260,7 +268,7 @@ std::vector<std::pair<int, QRectF>> EditorCanvas::State::artboardLabels() const
     for (int index = 0; index < int(boards.size()); ++index) {
         const Artboard &board = boards[size_t(index)];
         const QPointF at = toView(board.rect.topLeft()) - QPointF(0, 6);
-        QRectF rect(at - QPointF(0, metrics.height()), QSizeF(metrics.horizontalAdvance(board.name) + 2, metrics.height()));
+        QRectF rect(at - QPointF(0, metrics.height()), QSizeF(metrics.horizontalAdvance(labelText(board)) + 2, metrics.height()));
         // A frame at the artboard's corner has its own name there: this one stacks above it.
         for (int tries = 0; tries < 8; ++tries) {
             const bool taken = std::any_of(frames.begin(), frames.end(), [&](const auto &frame) { return frame.second.intersects(rect); });
@@ -294,7 +302,7 @@ void EditorCanvas::State::drawArtboardLabels(QPainter &painter) const
     painter.setFont(font);
     for (const auto &[index, rect] : labels) {
         painter.setPen(index == session.activeArtboard() ? accent() : canvas.palette().color(QPalette::PlaceholderText));
-        painter.drawText(rect, Qt::AlignLeft | Qt::AlignBottom, session.document()->artboard(index).name);
+        painter.drawText(rect, Qt::AlignLeft | Qt::AlignBottom, labelText(session.document()->artboard(index)));
     }
     painter.restore();
 }

@@ -43,6 +43,8 @@ std::vector<Subject> subjects(const VectorDocument &document, const std::vector<
             const int index = shown.artboardIndex(id);
             if (index < 0)
                 continue;
+            if (!shown.artboard(index).exported)
+                break;
             result.push_back({sanitize(shown.artboard(index).name), folderOf(page.id), shown.artboards.empty() ? shown : shown.artboardDocument(index)});
             break;
         }

@@ -131,6 +131,68 @@ private slots:
         QCOMPARE(decoded.exportAssets, document.exportAssets);
     }
 
+    void theExportFlagDefaultsOnRoundTripsAndIsAnAdditiveKey()
+    {
+        VectorDocument document = VectorDocument::blank({400, 300});
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("Phone"), QRectF(0, 0, 375, 812), Qt::white},
+                               {QUuid::createUuid(), QStringLiteral("Notes"), QRectF(400, 0, 100, 100), Qt::white, QUuid(), false}});
+        QVERIFY(document.artboards[0].exported);
+        QCOMPARE(document.firstExportedArtboard(), 0);
+        const QJsonObject json = DocumentCodec::encode(document);
+        // Only the switched-off board writes the key, so a file nobody flagged is unchanged.
+        QVERIFY(!json["artboards"].toArray().at(0).toObject().contains("exported"));
+        QCOMPARE(json["artboards"].toArray().at(1).toObject()["exported"].toBool(true), false);
+        const VectorDocument decoded = DocumentCodec::decode(json);
+        QVERIFY(decoded.allArtboards().at(0).exported);
+        QVERIFY(!decoded.allArtboards().at(1).exported);
+        QCOMPARE(decoded.artboards, document.artboards);
+    }
+
+    void firstExportedArtboardSkipsSwitchedOffOnesAndSaysWhenNoneIsLeft()
+    {
+        VectorDocument document = VectorDocument::blank({100, 100});
+        QCOMPARE(document.firstExportedArtboard(), 0);
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("A"), QRectF(0, 0, 100, 100), Qt::white, QUuid(), false},
+                               {QUuid::createUuid(), QStringLiteral("B"), QRectF(200, 0, 100, 100), Qt::white}});
+        QCOMPARE(document.firstExportedArtboard(), 1);
+        document.artboards[1].exported = false;
+        QCOMPARE(document.firstExportedArtboard(), -1);
+    }
+
+    void switchingExportOffIsOneNamedUndoStepAndKeepsTheBoardEditable()
+    {
+        EditorSession session;
+        session.createDocument({400, 300});
+        // The lone implicit artboard can be switched off too: it becomes a listed one.
+        session.setArtboardExported(0, false);
+        QVERIFY(!session.document()->artboard(0).exported);
+        QCOMPARE(session.document()->artboards.size(), size_t(1));
+        QCOMPARE(session.undoName(), QStringLiteral("Don’t Export Artboard"));
+        // Still there to edit.
+        session.setArtboardSize({500, 300});
+        QCOMPARE(session.document()->artboard(0).rect.size(), QSizeF(500, 300));
+        QVERIFY(!session.document()->artboard(0).exported);
+        session.undo();
+        session.undo();
+        QVERIFY(session.document()->artboard(0).exported);
+        session.redo();
+        session.setArtboardExported(0, true);
+        QCOMPARE(session.undoName(), QStringLiteral("Export Artboard"));
+        // Setting what's already set is no step.
+        const QString name = session.undoName();
+        session.setArtboardExported(0, true);
+        QCOMPARE(session.undoName(), name);
+    }
+
+    void aDuplicateOfAnUnexportedBoardIsUnexportedToo()
+    {
+        EditorSession session;
+        session.createDocument({400, 300});
+        session.setArtboardExported(0, false);
+        session.duplicateArtboard(0);
+        QVERIFY(!session.document()->artboard(1).exported);
+    }
+
     void editorSessionAddsRenamesAndDeletesArtboards()
     {
         EditorSession session;

@@ -71,7 +71,19 @@ Nothing is building or running. Every agent finished and committed, and
 their panes are closed. Their session IDs are in
 `~/Projects/.omastrator-briefs/SESSIONS.md`. Work top to bottom:
 
-1. **Merge five finished branches into `main`** (none is pushed):
+1. **DONE (2026-09-28): merged the five finished branches into `main`.**
+   Each got an Opus review, a Sonnet fix branch (`fix/review-pdf`,
+   `-figma`, `-open`, `-installs`) and an Opus check of the fixes; the
+   reviews and reports are in `~/Projects/.omastrator-briefs/`. Decisions
+   at the merge: one `src/IO/ZipReader` (Figma's structure plus
+   import-open's name handling, with size, ratio and total caps);
+   `VectorFileImporter` is the single dispatch for every layered format
+   (Open, Place, drag-and-drop, the agent's place tool); dropping a
+   .sketch/.penpot/.fig opens it in a tab; `VectorDocument::insert` is
+   now linear for paint-order appends, so PDF budgets are 100k form runs
+   and 250k objects; `sweep.sh` ignores a stock hostname. The release
+   workflows are written but have never run (see docs/RELEASING.md).
+   The original notes:
    - `feat/import-pdf`: an in-tree PDF reader, .ai files, and EPS/PS
      through Ghostscript (docs/import/pdf.md);
    - `feat/import-figma`: Paste from Figma, Import from Figma Link…, and

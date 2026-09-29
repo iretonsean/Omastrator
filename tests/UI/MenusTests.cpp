@@ -2,6 +2,7 @@
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "TemporaryConfig.h"
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
@@ -35,6 +36,7 @@ private slots:
     void groupingFollowsTheSession();
     void viewTogglesAreChecked();
     void windowTogglesThePanels();
+    void exportArtboardIsACheckedToggleOnTheActiveArtboard();
     void remappedKeysReachTheEntries();
     void aFocusedFieldKeepsUndo();
     void closingWithTheShortcutsPanelOpen();
@@ -49,6 +51,7 @@ private slots:
 void MenusTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    useTemporaryConfig();
     clearShortcuts();
     QSettings().remove(ContentView::layersKey);
 }
@@ -213,6 +216,28 @@ void MenusTests::viewTogglesAreChecked()
     menus.action("outline")->trigger();
     QVERIFY(!session.showsOutline);
     QVERIFY(!menus.action("outline")->isChecked());
+}
+
+void MenusTests::exportArtboardIsACheckedToggleOnTheActiveArtboard()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    workspace.createDocument(QSizeF(200, 200));
+    EditorSession &session = workspace.current().session;
+    session.addArtboard(QRectF(300, 0, 200, 200));
+    QAction *toggle = menus.action("artboardExported");
+    QVERIFY(toggle->isCheckable() && toggle->isChecked() && toggle->isEnabled());
+    toggle->trigger();
+    QVERIFY(!session.document()->artboard(1).exported);
+    QVERIFY(session.document()->artboard(0).exported);
+    QVERIFY(!toggle->isChecked());
+    session.setActiveArtboard(0);
+    QVERIFY(toggle->isChecked());
+    session.setActiveArtboard(1);
+    toggle->trigger();
+    QVERIFY(session.document()->artboard(1).exported);
+    QVERIFY(toggle->isChecked());
 }
 
 void MenusTests::windowTogglesThePanels()

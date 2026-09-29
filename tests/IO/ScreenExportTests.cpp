@@ -31,6 +31,23 @@ private slots:
         QCOMPARE(ScreenExport::scaleSuffix(3), QStringLiteral("@3x"));
     }
 
+    void anUnexportedArtboardIsSkippedEvenWhenAskedFor()
+    {
+        VectorDocument document = VectorDocument::blank({100, 100});
+        document.insert(rectangle({10, 10, 20, 20}, QStringLiteral("Art")), document.layers().front());
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("Phone"), QRectF(0, 0, 100, 100), Qt::white},
+                               {QUuid::createUuid(), QStringLiteral("Scratch"), QRectF(150, 0, 100, 100), Qt::white, QUuid(), false}});
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.folder = dir.path();
+        settings.formats = {QStringLiteral("png"), QStringLiteral("svg"), QStringLiteral("pdf")};
+        const QStringList written = ScreenExport::run(document, {document.artboard(0).id, document.artboard(1).id}, {}, settings);
+        QCOMPARE(written.size(), 3);
+        for (const QString &path : written)
+            QVERIFY(QFileInfo(path).fileName().startsWith(QLatin1String("Phone")));
+        QVERIFY(!QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Scratch.png"))));
+    }
+
     void twoArtboardsExportToTwoPngsNamedAfterThem()
     {
         VectorDocument document = VectorDocument::blank({100, 100});
@@ -116,6 +133,27 @@ private slots:
         QCOMPARE(first.pixelColor(100, 100), first.pixelColor(0, 0));
         QVERIFY(second.pixelColor(100, 100) != second.pixelColor(0, 0));
         QCOMPARE(second.pixelColor(20, 20), second.pixelColor(0, 0));
+    }
+
+    void anUnexportedArtboardOnAnotherPageIsSkippedToo()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        session.renameArtboard(0, QStringLiteral("Home"));
+        session.addPage(QStringLiteral("Drafts"));
+        session.renameArtboard(0, QStringLiteral("Sketch"));
+        session.setArtboardExported(0, false);
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        const VectorDocument document = *session.document();
+        const std::vector<QUuid> boards = {document.artboardsOn(document.allPages()[0].id).front().id,
+                                           document.artboardsOn(document.allPages()[1].id).front().id};
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.folder = dir.path();
+        const QStringList written = ScreenExport::run(document, boards, {}, settings);
+        QCOMPARE(written.size(), 1);
+        QVERIFY(QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Page 1/Home.png"))));
+        QVERIFY(!QFileInfo::exists(QDir(dir.path()).filePath(QStringLiteral("Drafts/Sketch.png"))));
     }
 
     void aBadFolderFailsThatFormatWithoutStoppingTheRest()

@@ -126,6 +126,9 @@ private:
     QCheckBox *m_layoutAutoGap = nullptr;
     NumberField *m_layoutPadX = nullptr;
     NumberField *m_layoutPadY = nullptr;
+    // Per side: left, top, right, bottom, shown when the toggle is on or the sides differ.
+    std::array<NumberField *, 4> m_layoutPad{};
+    QToolButton *m_layoutPadSides = nullptr;
     std::array<QToolButton *, 9> m_layoutAlign{};
     QWidget *m_layoutSizing = nullptr;
     QComboBox *m_layoutWidth = nullptr;
@@ -161,6 +164,7 @@ private:
     NumberField *m_artboardHeight = nullptr;
     PaintSwatch *m_background = nullptr;
     QListWidget *m_artboards = nullptr;
+    QCheckBox *m_artboardExported = nullptr;
     QCheckBox *m_grid = nullptr;
     QCheckBox *m_snap = nullptr;
     QCheckBox *m_outline = nullptr;

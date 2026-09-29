@@ -82,6 +82,12 @@ private:
     QHash<std::pair<int, QUuid>, QUuid> m_ocgLayers;
     QUuid m_pageTag;
     int m_formDepth = 0;
+    // Import-wide budgets: nesting depth alone can't stop 50 forms drawing 50 forms drawing…
+    qint64 m_operatorCount = 0;
+    int m_formRuns = 0;
+    bool m_tooComplex = false;
+    int m_ignoredMarks = 0; // likewise for BMC/BDC past the nesting cap
+    int m_ignoredSaves = 0; // q's dropped at the stack cap, so their matching Q's don't pop a real state
 
     QStack<GraphicsState> m_stack;
     GraphicsState m_state;
@@ -127,7 +133,8 @@ private:
     std::shared_ptr<Font> fontFor(const Dict &resources, const QByteArray &name);
 
     // PdfContent+Image.cpp
-    QImage decodeImageObject(const Object &imageObject, const Dict &resources);
+    // `isMask` marks a soft mask or stencil being decoded for another image: it never reads a mask of its own.
+    QImage decodeImageObject(const Object &imageObject, const Dict &resources, bool isMask = false);
 
     // PdfContent+Shading.cpp
     void runShading(const Object &nameObject, const Dict &resources);

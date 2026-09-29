@@ -49,6 +49,7 @@ private:
     // Type 4: a PostScript calculator program.
     QList<PsNode> m_program;
 
+    static Function loadAt(const Document &document, const Object &functionObject, int depth, int &budget);
     QList<double> evaluateSampled(const QList<double> &input) const;
     double sampleValue(const QList<int> &coords, int outputIndex) const;
 };

@@ -92,6 +92,8 @@ public:
     // To the right of `index` with a 20 pt gap, copying its art.
     QUuid duplicateArtboard(int index);
     void renameArtboard(int index, const QString &name);
+    // Off leaves it visible and editable but out of every export, share and page list.
+    void setArtboardExported(int index, bool exported);
     // Never the last artboard; its art is untouched.
     void deleteArtboard(int index);
     // A drag: beginInteraction("Move Artboard" or "Resize Artboard"), a preview per

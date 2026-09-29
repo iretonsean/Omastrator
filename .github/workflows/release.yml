@@ -43,15 +43,19 @@ jobs:
             runner: ubuntu-24.04-arm
             image: menci/archlinuxarm@sha256:d939db4a839a146fe49bbde51e4d8d0453bca4a07e96d795ee8f2ee6a56a6943
     runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.image }}
+    container:
+      image: ${{ matrix.image }}
+      # A container's PID 1 doesn't reap orphans, so processes the tests stop linger as zombies.
+      options: --init
     steps:
       # Chromium isn't installed: its sandbox can't start in a container, and the Chromium
       # tests skip without it. Every step after checkout runs as `builder`, because the suite
       # assumes a normal user (root reads the mode-000 files its tests expect to be
-      # unreadable) and its git tests need an identity.
+      # unreadable) and its git tests need an identity. The image has no fonts at all, and
+      # the type tests measure real glyphs, so it gets DejaVu (fontconfig's default sans).
       - name: Install build and test dependencies
         run: |
-          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq
+          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq ttf-dejavu
           useradd -m builder
 
       - uses: actions/checkout@v4

@@ -398,6 +398,32 @@ private slots:
         QCOMPARE(back.nodes.front().anchor, QPointF(100, 0));
         QCOMPARE(back.nodes.front().out, QPointF(100, -50));
     }
+
+    // A scrub's edit is open while undo arrives: the undone step must stay undone, and the scrub must record on top.
+    void undoAndRedoWaitForAnOpenEdit()
+    {
+        EditorSession session;
+        session.createDocument({200, 200});
+        const QUuid first = rectangle(session, {10, 10, 50, 40});
+        const QUuid second = rectangle(session, {80, 10, 50, 40});
+        session.undo();
+        QVERIFY(!session.document()->find(second));
+        session.beginEdit(QStringLiteral("Scrub"));
+        session.rename(first, QStringLiteral("Moved"));
+        // Neither undo nor redo runs inside the open edit.
+        session.undo();
+        session.redo();
+        QCOMPARE(session.document()->find(first)->name, QStringLiteral("Moved"));
+        QVERIFY(!session.document()->find(second));
+        session.endEdit();
+        QCOMPARE(session.undoName(), QStringLiteral("Scrub"));
+        QVERIFY(!session.canRedo());
+        // Undoing the scrub does not bring the earlier undone step back.
+        session.undo();
+        QVERIFY(session.document()->find(first));
+        QVERIFY(!session.document()->find(second));
+        QCOMPARE(session.document()->find(first)->name, QStringLiteral("Rectangle"));
+    }
 };
 
 QTEST_MAIN(EditorSessionTests)

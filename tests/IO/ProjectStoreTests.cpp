@@ -157,6 +157,21 @@ private slots:
         QCOMPARE(read.allArtboards().front().page, second);
     }
 
+    void anArtboardKeepsBothItsPageAndItsExportFlagThroughAFile()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("both.omai"));
+        QUuid second;
+        VectorDocument document = twoPages(&second);
+        document.artboards.back().exported = false;
+        ProjectStore::write(document, path);
+        const VectorDocument read = ProjectStore::read(path);
+        QVERIFY(read == document);
+        QCOMPARE(read.artboards.back().page, second);
+        QVERIFY(!read.artboards.back().exported);
+        QVERIFY(read.artboards.front().exported);
+    }
+
     void onePageWritesVersion5AndTwoWriteVersion6()
     {
         QCOMPARE(DocumentCodec::encode(sample())["version"].toInt(), 5);

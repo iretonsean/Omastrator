@@ -4,6 +4,7 @@
 #include "UI/NumberField.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "UI/PropertiesPanel.h"
+#include "TemporaryConfig.h"
 #include <QDoubleSpinBox>
 #include <QListWidget>
 #include <QRadioButton>
@@ -49,7 +50,11 @@ class HistoryShapeAlignTests : public QObject {
     Q_OBJECT
 
 private slots:
-    void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void initTestCase()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        useTemporaryConfig();
+    }
     void cleanup() { QSettings().clear(); }
 
     void historyRowsUndoAndRedo()

@@ -1,5 +1,6 @@
 #include "Document/DocumentCodec.h"
 #include "Document/EditorSession.h"
+#include "Document/PathOperations.h"
 #include "Document/StrokeGeometry.h"
 #include "Document/Swatches.h"
 #include "Rendering/VectorRenderer.h"
@@ -161,6 +162,18 @@ private slots:
         QVERIFY(std::abs(grown.left() - 40) < 0.01 && std::abs(grown.bottom() - 160) < 0.01);
         // Open paths ignore alignment.
         QCOMPARE(StrokeGeometry::extent(Shapes::line({0, 0}, {100, 0}).painterPath(), outside).height(), 10.0);
+    }
+
+    void anOutsideStrokeAreaIsARingWhoseHoleStaysOpen()
+    {
+        // Qt's clipper winds ring and hole the same way; the area's own rule has to keep the hole.
+        StrokeStyle outside = stroke(Qt::black, 10);
+        outside.alignment = StrokeAlignment::outside;
+        const QPainterPath ring = StrokeGeometry::area(Shapes::rectangle({50, 50, 100, 100}).painterPath(), outside);
+        QVERIFY(ring.contains(QPointF(45, 100)));
+        QVERIFY(!ring.contains(QPointF(100, 100)));
+        QVERIFY(!ring.contains(QPointF(55, 100)));
+        QVERIFY(!outlineStroke(Shapes::rectangle({50, 50, 100, 100}).painterPath(), outside).contains(QPointF(100, 100)));
     }
 
     void outlineStrokeOnAnArrowedLineIncludesTheHead()

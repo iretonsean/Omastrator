@@ -466,6 +466,7 @@ void EditorSession::restore(const DocumentHistory::Snapshot &snapshot)
     notify();
 }
 
+// Inside an open beginEdit, DocumentHistory refuses both: the edit's own step would otherwise replay the undone one.
 void EditorSession::undo()
 {
     if (m_interaction)

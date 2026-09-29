@@ -30,8 +30,7 @@ QImage render(const VectorDocument &document, double scale, bool transparent)
 {
     if (!(scale > 0) || !std::isfinite(scale))
         throw FileError(QStringLiteral("The export scale must be above zero."));
-    // Several artboards: this call exports the first one alone.
-    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    const VectorDocument page = DocumentExporter::exportedPage(document);
     const double width = std::ceil(page.size.width() * scale), height = std::ceil(page.size.height() * scale);
     if (width > maximumSide || height > maximumSide || width * height > double(maximumPixels))
         throw FileError(QStringLiteral("%1 × %2 pixels is too large to export. Choose a smaller scale.").arg(width).arg(height));
@@ -74,16 +73,35 @@ Format format(const QString &path)
     throw FileError(QStringLiteral("Choose a file name ending in .pdf, .svg, .png or .jpg."));
 }
 
+VectorDocument exportedPage(const VectorDocument &document)
+{
+    if (document.artboards.empty())
+        return document;
+    // Several artboards: a call exports the first one that exports, alone.
+    const int index = document.firstExportedArtboard();
+    if (index < 0)
+        throw FileError(QStringLiteral("Every artboard is set not to export. Turn one on in Properties ▸ Document."));
+    return document.artboardDocument(index);
+}
+
 void writePdf(const VectorDocument &document, const QString &path)
 {
-    // One PDF page per artboard, across every page in page then artboard order.
+    // One PDF page per exported artboard, across every page in page then artboard order.
     std::vector<VectorDocument> sheets;
     for (const Page &page : document.allPages()) {
         VectorDocument shown = document;
         shown.currentPage = page.id;
-        for (int index = 0; index < shown.artboardCount(); ++index)
-            sheets.push_back(shown.artboards.empty() ? shown : shown.artboardDocument(index));
+        if (shown.artboards.empty()) {
+            sheets.push_back(shown);
+            continue;
+        }
+        for (int index = 0; index < shown.artboardCount(); ++index) {
+            if (shown.artboard(index).exported)
+                sheets.push_back(shown.artboardDocument(index));
+        }
     }
+    if (sheets.empty())
+        throw FileError(QStringLiteral("Every artboard is set not to export. Turn one on in Properties ▸ Document."));
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);

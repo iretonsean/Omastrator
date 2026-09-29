@@ -281,6 +281,16 @@ QJsonObject AgentTools::documentGet(const QJsonObject &params)
         }
         json["objects"] = objects;
     }
+    // The codec writes "exported" only when it is off; the agent always sees it.
+    if (json.contains("artboards")) {
+        QJsonArray boards = json["artboards"].toArray();
+        for (qsizetype index = 0; index < boards.size(); ++index) {
+            QJsonObject board = boards[index].toObject();
+            board["exported"] = current.document()->artboard(int(index)).exported;
+            boards[index] = board;
+        }
+        json["artboards"] = boards;
+    }
     json["selection"] = idArray(current.selection());
     if (const auto layer = current.activeLayer())
         json["activeLayer"] = idString(*layer);
@@ -415,7 +425,11 @@ QJsonObject AgentTools::exportFile(const QJsonObject &params)
         break;
     }
     static const char *names[] = {"pdf", "png", "jpeg", "svg"};
-    return {{"path", QFileInfo(path).absoluteFilePath()}, {"format", names[int(format)]}, {"includesProposal", hasProposal()}};
+    QJsonObject reply{{"path", QFileInfo(path).absoluteFilePath()}, {"format", names[int(format)]}, {"includesProposal", hasProposal()}};
+    // Several artboards: which one was written (the first that exports).
+    if (!current.artboards.empty())
+        reply["artboard"] = current.artboard(current.firstExportedArtboard()).name;
+    return reply;
 }
 
 QJsonObject AgentTools::place(const QJsonObject &params)

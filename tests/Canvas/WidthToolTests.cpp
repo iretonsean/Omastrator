@@ -86,6 +86,30 @@ private slots:
         QVERIFY(f.object(id).stroke.widthPoints.empty());
     }
 
+    void aNewPointLandsInOrderAmongExistingOnes()
+    {
+        Fixture f;
+        const QUuid id = f.session.addPath(Shapes::line({50, 100}, {350, 100}), QStringLiteral("Line"));
+        StrokeStyle stroke;
+        stroke.paint = Paint::solid(Qt::black);
+        stroke.width = 8;
+        StrokeWidthPoint existing;
+        existing.t = 0.75;
+        existing.left = existing.right = 10;
+        stroke.widthPoints.push_back(existing);
+        stroke.widthProfile = StrokeWidthProfile::custom;
+        f.session.setStrokeOfSelection(stroke);
+        f.session.select({id});
+        f.session.selectTool(Tool::width);
+        // Earlier along the line than the point that's there: it goes in front of it.
+        f.drag({125, 100}, {125, 120});
+        const StrokeStyle &after = f.object(id).stroke;
+        QCOMPARE(after.widthPoints.size(), size_t(2));
+        QVERIFY(std::abs(after.widthPoints[0].t - 0.25) < 0.01);
+        QCOMPARE(after.widthPoints[1].t, 0.75);
+        QVERIFY(after.widthPoints[0].left > 15);
+    }
+
     void altDragMovesOnlyOneSide()
     {
         Fixture f;

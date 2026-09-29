@@ -9,6 +9,8 @@ bool isDigit(char c)
 {
     return c >= '0' && c <= '9';
 }
+constexpr int maximumLoadDepth = 64;
+constexpr int maximumPageTreeDepth = 128;
 bool isSpace(char c)
 {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\0';
@@ -27,6 +29,13 @@ Object Document::object(int number) const
     const auto cached = m_cache.constFind(number);
     if (cached != m_cache.constEnd())
         return cached.value();
+    if (m_loadDepth >= maximumLoadDepth)
+        return Object::null();
+    struct DepthGuard {
+        int &depth;
+        explicit DepthGuard(int &d) : depth(d) { ++depth; }
+        ~DepthGuard() { --depth; }
+    } guard(m_loadDepth);
     m_cache.insert(number, Object::null()); // guards a self-referential file against infinite recursion
     Object result;
     const auto offsetIt = m_offsets.constFind(number);
@@ -127,6 +136,8 @@ Object Document::loadCompressedObject(int streamNumber, int index) const
     for (int i = 0; i < count; ++i) {
         const Token numberToken = headerLexer.next();
         const Token offsetToken = headerLexer.next();
+        if (offsetToken.kind == TokenKind::end)
+            break;
         if (i == index) {
             offset = qint64(offsetToken.number);
             Q_UNUSED(numberToken);
@@ -354,7 +365,8 @@ void Document::repairByScanning(QStringList *warnings)
             for (int i = 0; i < count; ++i) {
                 const Token numberToken = headerLexer.next();
                 const Token offsetToken = headerLexer.next();
-                Q_UNUSED(offsetToken);
+                if (offsetToken.kind == TokenKind::end)
+                    break;
                 const int number = int(numberToken.number);
                 if (!m_offsets.contains(number))
                     m_compressed.insert(number, {it.key(), i});
@@ -407,8 +419,11 @@ std::unique_ptr<Document> Document::load(const QByteArray &data, QStringList *wa
 }
 
 namespace {
-void collectPages(const Document &document, const Object &nodeReferenceOrValue, Dict inherited, QList<Dict> &out, QSet<int> &visitedKids)
+void collectPages(const Document &document, const Object &nodeReferenceOrValue, Dict inherited, QList<Dict> &out, QSet<int> &visitedKids,
+                  int depth)
 {
+    if (depth > maximumPageTreeDepth)
+        return;
     const Object node = document.resolve(nodeReferenceOrValue);
     if (!node.isDictionary())
         return;
@@ -429,7 +444,7 @@ void collectPages(const Document &document, const Object &nodeReferenceOrValue, 
                     continue;
                 visitedKids.insert(number);
             }
-            collectPages(document, kid, inherited, out, visitedKids);
+            collectPages(document, kid, inherited, out, visitedKids, depth + 1);
         }
     } else {
         Dict page = dict;
@@ -449,7 +464,7 @@ QList<Dict> Document::pages() const
     if (!root.isDictionary())
         return result;
     QSet<int> visited;
-    collectPages(*this, root.at(QStringLiteral("Pages")), Dict(), result, visited);
+    collectPages(*this, root.at(QStringLiteral("Pages")), Dict(), result, visited, 0);
     return result;
 }
 

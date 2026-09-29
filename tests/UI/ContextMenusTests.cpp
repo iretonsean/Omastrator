@@ -7,6 +7,7 @@
 #include "UI/NativeLayerList.h"
 #include "UI/ObjectDialogs.h"
 #include "UI/ProjectWorkspaceView.h"
+#include "TemporaryConfig.h"
 #include <QContextMenuEvent>
 #include <QDialog>
 #include <QDoubleSpinBox>
@@ -79,8 +80,20 @@ private slots:
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
+        useTemporaryConfig();
         QSettings().remove(QLatin1String(ShortcutSettings::storageKey));
         ShortcutSettings::shared().reload();
+    }
+
+    void artboardMenusOfferExportArtboard()
+    {
+        Window w;
+        const std::unique_ptr<QMenu> menu = w.canvasMenu();
+        QMenu *artboards = submenu(*menu, QStringLiteral("contextArtboards"));
+        QVERIFY(artboards);
+        QVERIFY(names(*artboards).contains("artboardExported"));
+        w.session().selectTool(Tool::artboard);
+        QVERIFY(names(*w.canvasMenu()).contains("artboardExported"));
     }
 
     void emptyCanvasOffersPasteViewAndGenerate()

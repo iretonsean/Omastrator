@@ -1,4 +1,6 @@
 #include "IO/PdfLexer.h"
+#include <algorithm>
+#include <cmath>
 
 namespace Pdf {
 
@@ -152,6 +154,8 @@ Token Lexer::lexNumberOrKeyword()
     const qsizetype start = m_pos;
     while (m_pos < m_data.size() && !isDelimiterChar(m_data[m_pos]) && !isWhitespaceChar(m_data[m_pos]))
         ++m_pos;
+    if (m_pos == start)
+        ++m_pos; // always make progress, or a caller looping on tokens never ends
     const QByteArray text = m_data.mid(start, m_pos - start);
 
     bool looksNumeric = true, sawDigit = false, sawDot = false;
@@ -187,6 +191,11 @@ Token Lexer::lexNumberOrKeyword()
 Token Lexer::lex()
 {
     skipWhitespace();
+    // A stray ')' or '>' outside a string is skipped; a loop, not recursion, so a long run costs no stack.
+    while (m_pos < m_data.size() && (m_data[m_pos] == ')' || (m_data[m_pos] == '>' && !(m_pos + 1 < m_data.size() && m_data[m_pos + 1] == '>')))) {
+        ++m_pos;
+        skipWhitespace();
+    }
     if (m_pos >= m_data.size())
         return {};
     const char c = m_data[m_pos];
@@ -202,13 +211,9 @@ Token Lexer::lex()
         ++m_pos;
         return {TokenKind::string, lexHexString()};
     }
-    if (c == '>') {
-        if (m_pos + 1 < m_data.size() && m_data[m_pos + 1] == '>') {
-            m_pos += 2;
-            return {TokenKind::dictEnd, {}};
-        }
-        ++m_pos; // a stray '>' outside a hex string; skip and keep going
-        return lex();
+    if (c == '>') { // only ">>" reaches here; a lone '>' was skipped above
+        m_pos += 2;
+        return {TokenKind::dictEnd, {}};
     }
     if (c == '[') {
         ++m_pos;
@@ -282,7 +287,17 @@ QByteArray Lexer::captureInlineImageData(qint64 expectedLength)
 }
 
 namespace {
-Object parseArrayBody(Lexer &lexer)
+// Deep enough for any real file; beyond it a "[[[[…" bomb would overflow the stack.
+constexpr int maximumNesting = 256;
+
+int clampToInt(double v)
+{
+    return std::isfinite(v) ? int(std::clamp(v, -2e9, 2e9)) : 0;
+}
+
+Object parseObjectAt(Lexer &lexer, int depth);
+
+Object parseArrayBody(Lexer &lexer, int depth)
 {
     Array items;
     while (true) {
@@ -295,12 +310,12 @@ Object parseArrayBody(Lexer &lexer)
             lexer.next();
             break;
         }
-        items.append(parseObject(lexer));
+        items.append(parseObjectAt(lexer, depth + 1));
     }
     return Object::array(std::move(items));
 }
 
-Object parseDictBody(Lexer &lexer)
+Object parseDictBody(Lexer &lexer, int depth)
 {
     Dict dict;
     while (true) {
@@ -314,20 +329,21 @@ Object parseDictBody(Lexer &lexer)
             break;
         }
         if (peeked.kind != TokenKind::name) {
-            parseObject(lexer); // a malformed entry with no key; discard and continue
+            parseObjectAt(lexer, depth + 1); // a malformed entry with no key; discard and continue
             continue;
         }
         lexer.next();
         const QString key = QString::fromLatin1(peeked.bytes);
-        dict.insert(key, parseObject(lexer));
+        dict.insert(key, parseObjectAt(lexer, depth + 1));
     }
     return Object::dictionary(std::move(dict));
 }
-}
 
-Object parseObject(Lexer &lexer)
+Object parseObjectAt(Lexer &lexer, int depth)
 {
     const Token token = lexer.next();
+    if (depth > maximumNesting && (token.kind == TokenKind::arrayStart || token.kind == TokenKind::dictStart))
+        return Object::null();
     switch (token.kind) {
     case TokenKind::number: {
         // "N G R" folds into one indirect-reference object; anything else
@@ -338,20 +354,20 @@ Object parseObject(Lexer &lexer)
             if (second.kind == TokenKind::number && !second.isReal) {
                 const Token third = lexer.next();
                 if (third.kind == TokenKind::keyword && third.bytes == "R")
-                    return Object::reference(int(token.number), int(second.number));
+                    return Object::reference(clampToInt(token.number), clampToInt(second.number));
             }
             lexer.seek(mark);
         }
-        return token.isReal ? Object::real(token.number) : Object::integer(qint64(token.number));
+        return token.isReal ? Object::real(token.number) : Object::integer(std::isfinite(token.number) ? qint64(std::clamp(token.number, -9e18, 9e18)) : 0);
     }
     case TokenKind::string:
         return Object::string(token.bytes);
     case TokenKind::name:
         return Object::name(token.bytes);
     case TokenKind::arrayStart:
-        return parseArrayBody(lexer);
+        return parseArrayBody(lexer, depth);
     case TokenKind::dictStart:
-        return parseDictBody(lexer);
+        return parseDictBody(lexer, depth);
     case TokenKind::keyword:
         if (token.bytes == "true")
             return Object::boolean(true);
@@ -361,6 +377,13 @@ Object parseObject(Lexer &lexer)
     default:
         return Object::null();
     }
+}
+
+}
+
+Object parseObject(Lexer &lexer)
+{
+    return parseObjectAt(lexer, 0);
 }
 
 }

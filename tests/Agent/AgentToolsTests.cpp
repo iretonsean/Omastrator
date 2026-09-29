@@ -437,6 +437,28 @@ private slots:
         QVERIFY(found);
     }
 
+    void documentGetAndExportSayWhichArtboardExports()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({100, 100});
+        rectangle(host.editor, {10, 10, 30, 20});
+        host.editor.addArtboard(QRectF(300, 0, 100, 100));
+        host.editor.renameArtboard(0, QStringLiteral("Scratch"));
+        host.editor.renameArtboard(1, QStringLiteral("Final"));
+        host.editor.setArtboardExported(0, false);
+        AgentTools tools(host);
+        const QJsonArray boards = tools.call(QStringLiteral("document_get"), {})["artboards"].toArray();
+        QCOMPARE(boards.size(), 2);
+        QCOMPARE(boards[0]["exported"].toBool(true), false);
+        QCOMPARE(boards[1]["exported"].toBool(false), true);
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("out.png"));
+        QCOMPARE(tools.call(QStringLiteral("export"), {{"path", path}})["artboard"].toString(), QStringLiteral("Final"));
+        QVERIFY(QFileInfo(path).size() > 0);
+        host.editor.setArtboardExported(1, false);
+        QCOMPARE(failure(tools, QStringLiteral("export"), {{"path", directory.filePath("none.png")}}), int(AgentProtocol::fileError));
+    }
+
     void traceImageBecomesAProposal()
     {
         FakeAgentHost host;

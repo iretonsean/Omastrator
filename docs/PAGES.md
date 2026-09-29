@@ -271,3 +271,24 @@ Where the build chose something the design left open, or differs from it:
   per-page folders.
 - **The link between undo and view:** undoing an edit that changed the current
   page restores it, as section 3 says; page switching itself is never a step.
+
+### With "Artboard::exported" (merged from main)
+
+An artboard set not to export carries both keys: `page` and, only when it is
+off, `exported: false`. Nothing else about the two changed; how they meet:
+
+- **`firstExportedArtboard()` and `exportedPage()` are the current page's.**
+  They go through `artboard(i)`, like every other artboard helper, so PNG, JPEG
+  and SVG export the first artboard on the page you are looking at that
+  exports, and say "every artboard is set not to export" when that page has
+  none, even if another page has one. One file from one call has to be one
+  picture, and the picture is the page on screen.
+- **PDF across pages skips flagged artboards on every page.** A page with
+  nothing to export adds no sheets. The error appears only when no page has an
+  exported artboard at all. A document with no artboard list is still one sheet.
+- **Export for Screens skips them on every page**, even when asked for by id,
+  and its list leaves out a flagged board and the heading of a page whose
+  boards are all flagged. Export assets on a flagged board still export, as
+  before.
+- **Share** refuses a flagged active artboard; the active artboard is always
+  on the current page, so nothing changed there.

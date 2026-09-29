@@ -21,13 +21,19 @@ ColorSpace resolveNamedColorSpace(const Document &document, const Object &value,
 }
 }
 
-QImage Interpreter::decodeImageObject(const Object &imageObject, const Dict &resources)
+QImage Interpreter::decodeImageObject(const Object &imageObject, const Dict &resources, bool isMaskLayer)
 {
     const Dict &dict = imageObject.toDict();
     const int width = int(m_document.resolve(dict.value(QStringLiteral("Width"))).toInt(0));
     const int height = int(m_document.resolve(dict.value(QStringLiteral("Height"))).toInt(0));
     if (width <= 0 || height <= 0)
         return QImage();
+    // ~64 megapixels is 256 MB as ARGB32, and the per-pixel loops below would take minutes past it.
+    constexpr qint64 maximumPixels = 64LL * 1000 * 1000;
+    if (qint64(width) * height > maximumPixels) {
+        warnOnce(QStringLiteral("image-size"), QStringLiteral("An image was too large to import and was left out."));
+        return QImage();
+    }
 
     const bool isMask = m_document.resolve(dict.value(QStringLiteral("ImageMask"))).toBool(false);
     const PdfFilters::Decoded decoded = m_document.streamData(imageObject);
@@ -50,9 +56,17 @@ QImage Interpreter::decodeImageObject(const Object &imageObject, const Dict &res
             return QImage();
         image = image.convertToFormat(QImage::Format_ARGB32);
     } else if (isMask) {
+        // Sample data far shorter than the header's size is a corrupt or hostile header, not a picture.
+        const qint64 needed = qint64(height) * ((qint64(width) + 7) / 8);
+        if (needed > 4096 && decoded.bytes.size() * 8 < needed) {
+            warnOnce(QStringLiteral("image-data"), QStringLiteral("An image's data was too short for its size and was left out."));
+            return QImage();
+        }
         const bool invert = decodeArray.size() == 2 && decodeArray[0].toReal(0) == 1;
         const QColor paintColor = m_state.fillSpace.toColor(m_state.fillComponents);
         image = QImage(width, height, QImage::Format_ARGB32);
+        if (image.isNull())
+            return QImage();
         const qint64 rowBytes = (qint64(width) + 7) / 8;
         for (int y = 0; y < height; ++y) {
             const qint64 rowStart = qint64(y) * rowBytes;
@@ -67,11 +81,17 @@ QImage Interpreter::decodeImageObject(const Object &imageObject, const Dict &res
         const ColorSpace space = resolveNamedColorSpace(m_document, dict.value(QStringLiteral("ColorSpace")), resources, m_warnings);
         if (space.isCmyk())
             warnOnce(QStringLiteral("cmyk"), QStringLiteral("CMYK colors were converted to RGB directly, without a color profile."));
-        const int bitsPerComponent = int(m_document.resolve(dict.value(QStringLiteral("BitsPerComponent"))).toInt(8));
+        const int bitsPerComponent = std::clamp<int>(int(m_document.resolve(dict.value(QStringLiteral("BitsPerComponent"))).toInt(8)), 1, 16);
         const int components = std::max(1, space.componentCount());
         const qint64 rowBytes = (qint64(width) * components * bitsPerComponent + 7) / 8;
+        if (rowBytes * height > 4096 && decoded.bytes.size() * 8 < rowBytes * height) {
+            warnOnce(QStringLiteral("image-data"), QStringLiteral("An image's data was too short for its size and was left out."));
+            return QImage();
+        }
         const double maxValue = double((quint64(1) << std::clamp(bitsPerComponent, 1, 32)) - 1);
         image = QImage(width, height, QImage::Format_ARGB32);
+        if (image.isNull())
+            return QImage();
 
         for (int y = 0; y < height; ++y) {
             qint64 bitPos = qint64(y) * rowBytes * 8;
@@ -108,11 +128,13 @@ QImage Interpreter::decodeImageObject(const Object &imageObject, const Dict &res
     const Object maskObject = m_document.resolve(dict.value(QStringLiteral("Mask")));
     QImage alphaSource;
     bool alphaIsLuminosity = false; // /SMask's gray value is the alpha; a stencil /Mask's own alpha channel is
-    if (smaskObject.isStream()) {
-        alphaSource = decodeImageObject(smaskObject, resources);
+    if (isMaskLayer) {
+        // A mask's own mask is never read: /SMask 5 0 R on image 5 would recurse forever.
+    } else if (smaskObject.isStream()) {
+        alphaSource = decodeImageObject(smaskObject, resources, true);
         alphaIsLuminosity = true;
     } else if (maskObject.isStream()) {
-        alphaSource = decodeImageObject(maskObject, resources);
+        alphaSource = decodeImageObject(maskObject, resources, true);
     } else if (maskObject.isArray()) {
         warnOnce(QStringLiteral("colorkey-mask"), QStringLiteral("A color-key mask was left out."));
     }

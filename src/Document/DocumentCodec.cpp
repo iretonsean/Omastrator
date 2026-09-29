@@ -785,6 +785,9 @@ QJsonObject encode(const VectorDocument &document)
                               {"background", color(board.background)}};
             if (!board.page.isNull())
                 entry["page"] = board.page.toString(QUuid::WithoutBraces);
+            // Additive: only a board switched off writes the key, so older builds read the rest.
+            if (!board.exported)
+                entry["exported"] = false;
             boards.append(entry);
         }
         json["artboards"] = boards;
@@ -830,7 +833,7 @@ VectorDocument decode(const QJsonObject &json)
         if (!(rect.width() > 0 && rect.height() > 0))
             continue;
         document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white),
-                                      QUuid::fromString(board["page"].toString())});
+                                      QUuid::fromString(board["page"].toString()), board["exported"].toBool(true)});
     }
     // Version 6 (or any file with the keys): pages. A file without them is one implicit page.
     if (json.contains("pages")) {

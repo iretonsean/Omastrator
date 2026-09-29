@@ -85,7 +85,9 @@ void EditorCanvas::State::dragWidth(QPointF view, Qt::KeyboardModifiers modifier
         std::tie(point.left, point.right) = StrokeGeometry::widthAt(stroke, point.t);
         const auto at = std::lower_bound(stroke.widthPoints.begin(), stroke.widthPoints.end(), point.t,
                                          [](const StrokeWidthPoint &p, double t) { return p.t < t; });
-        index = int(stroke.widthPoints.insert(at, point) - stroke.widthPoints.begin());
+        // Two statements: in one expression `begin()` may be read before insert() reallocates.
+        const auto inserted = stroke.widthPoints.insert(at, point);
+        index = int(inserted - stroke.widthPoints.begin());
     }
     const StrokeGeometry::PathLocation at = StrokeGeometry::locateAtT(path, stroke.widthPoints[size_t(index)].t);
     const QPointF cursor = toDocument(view);

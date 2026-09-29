@@ -1,6 +1,8 @@
 #include "Document/EditorSession.h"
 #include "Document/PathOperations.h"
 #include "IO/DocumentExporter.h"
+#include "IO/PdfImporter.h"
+#include "IO/SvgExporter.h"
 #include <QFile>
 #include <QImageReader>
 #include <QRegularExpression>
@@ -79,6 +81,64 @@ private slots:
             sizes << match.captured(1) + QLatin1Char('x') + match.captured(2);
         }
         QCOMPARE(sizes, (QStringList{"200x100", "120x80", "200x100", "50x60"}));
+    }
+
+    void aFlaggedArtboardOnPageTwoIsLeftOutOfTheAllPagesPdf()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addArtboard(QRectF(300, 0, 120, 80));
+        session.addPage(QStringLiteral("Second"));
+        session.addArtboard(QRectF(300, 0, 50, 60));
+        session.setArtboardExported(1, false);
+        // Page 1 is the current page, so the flag is on a page the export isn't showing.
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("all.pdf"));
+        DocumentExporter::writePdf(*session.document(), path);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString text = QString::fromLatin1(file.readAll());
+        QRegularExpression box(QStringLiteral(R"(/MediaBox \[0 0 (\d+)(?:\.0+)? (\d+)(?:\.0+)?\])"));
+        QStringList sizes;
+        for (auto it = box.globalMatch(text); it.hasNext();) {
+            const auto match = it.next();
+            sizes << match.captured(1) + QLatin1Char('x') + match.captured(2);
+        }
+        QCOMPARE(sizes, (QStringList{"200x100", "120x80", "200x100"}));
+    }
+
+    void aPageWithNothingToExportIsSkippedAndAllPagesOffIsAnError()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.addPage(QStringLiteral("Second"));
+        session.setArtboardExported(0, false);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("one.pdf"));
+        DocumentExporter::writePdf(*session.document(), path);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromLatin1(file.readAll()).count(QStringLiteral("/MediaBox")), 1);
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        session.setArtboardExported(0, false);
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePdf(*session.document(), dir.filePath(QStringLiteral("none.pdf"))));
+        QVERIFY(!QFileInfo::exists(dir.filePath(QStringLiteral("none.pdf"))));
+    }
+
+    void pngSkipsAFlaggedFirstArtboardOnTheCurrentPageOnly()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.setArtboardExported(0, false);
+        session.addArtboard(QRectF(300, 0, 80, 40));
+        session.addPage(QStringLiteral("Second"));
+        session.setArtboardSize(QSizeF(60, 30));
+        session.setCurrentPage(session.document()->allPages()[0].id);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("page.png"));
+        DocumentExporter::writePng(*session.document(), path);
+        QCOMPARE(QImageReader(path).size(), QSize(80, 40));
     }
 
     void pngExportsTheCurrentPagesFirstArtboard()
@@ -230,6 +290,62 @@ private slots:
         QTemporaryDir dir;
         QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePng(sample(), dir.filePath(QStringLiteral("big.png")), 1000));
         QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePng(sample(), dir.filePath(QStringLiteral("zero.png")), 0));
+    }
+
+    // Two artboards side by side, red 200 × 100 and blue 150 × 300, each named by its colour.
+    static VectorDocument twoBoards(bool firstExports, bool secondExports)
+    {
+        VectorDocument document = VectorDocument::blank({200, 100});
+        for (const auto &[x, color] : {std::pair{0.0, QColor(Qt::red)}, std::pair{300.0, QColor(Qt::blue)}}) {
+            VectorObject rect;
+            rect.path = Shapes::rectangle({x, 0, 200, 100});
+            rect.fill = Paint::solid(color);
+            rect.stroke.paint = Paint::none();
+            document.insert(rect, document.layers().front());
+        }
+        document.setArtboards({{QUuid::createUuid(), QStringLiteral("Red"), QRectF(0, 0, 200, 100), Qt::white, QUuid(), firstExports},
+                               {QUuid::createUuid(), QStringLiteral("Blue"), QRectF(300, 0, 150, 300), Qt::white, QUuid(), secondExports}});
+        return document;
+    }
+
+    void anUnexportedArtboardIsLeftOutSoTheNextOneExports()
+    {
+        QTemporaryDir dir;
+        const VectorDocument document = twoBoards(false, true);
+        const QString png = dir.filePath(QStringLiteral("out.png"));
+        DocumentExporter::writePng(document, png);
+        QVERIFY(close(QImage(png).pixelColor(50, 50), Qt::blue));
+        const QString svg = dir.filePath(QStringLiteral("out.svg"));
+        SvgExporter::write(document, svg);
+        QFile file(svg);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray text = file.readAll();
+        QVERIFY(text.contains("#0000ff"));
+        QVERIFY(!text.contains("#ff0000"));
+        const QString pdf = dir.filePath(QStringLiteral("out.pdf"));
+        DocumentExporter::writePdf(document, pdf);
+        // The page is the blue board's size, not the first board's.
+        const VectorDocument page = PdfImporter::read(pdf);
+        QVERIFY(qAbs(page.size.width() - 150) < 1 && qAbs(page.size.height() - 300) < 1);
+    }
+
+    void withEveryArtboardUnexportedNothingIsWrittenAndTheErrorSaysWhy()
+    {
+        QTemporaryDir dir;
+        const VectorDocument document = twoBoards(false, false);
+        const auto missing = [&](const char *name) { return dir.filePath(QString::fromLatin1(name)); };
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePng(document, missing("a.png")));
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writeJpeg(document, missing("a.jpg")));
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::writePdf(document, missing("a.pdf")));
+        QVERIFY_THROWS_EXCEPTION(FileError, SvgExporter::write(document, missing("a.svg")));
+        for (const char *name : {"a.png", "a.jpg", "a.pdf", "a.svg"})
+            QVERIFY(!QFileInfo::exists(missing(name)));
+        try {
+            DocumentExporter::exportedPage(document);
+            QFAIL("expected a FileError");
+        } catch (const FileError &error) {
+            QVERIFY(error.message().contains(QLatin1String("set not to export")));
+        }
     }
 
     void unwritablePathIsAFileError()

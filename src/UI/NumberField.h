@@ -48,10 +48,14 @@ public:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
+    void changeEvent(QEvent *event) override;
 
 private:
     void apply(double value);
     void stepBy(double amount);
+    // Ends a scrub and closes its edit, if one is open.
+    void endScrub();
 
     const std::function<void(double)> m_change;
     QLabel *m_handle = nullptr;

@@ -313,11 +313,51 @@ void NumberField::paintEvent(QPaintEvent *)
     style()->drawPrimitive(QStyle::PE_PanelLineEdit, &box, &painter, this);
 }
 
+void NumberField::endScrub()
+{
+    const bool open = m_scrubbing;
+    m_scrubX.reset();
+    m_scrubbing = false;
+    if (open && gesture)
+        gesture(false);
+}
+
+void NumberField::hideEvent(QHideEvent *event)
+{
+    endScrub();
+    QWidget::hideEvent(event);
+}
+
+void NumberField::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::EnabledChange)
+        endScrub();
+    QWidget::changeEvent(event);
+}
+
 bool NumberField::eventFilter(QObject *watched, QEvent *event)
 {
     // The box shows the field's focus.
     if (watched == field && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut))
         update();
+    // A scrub's edit must close however it ends: a hidden, disabled or ungrabbed handle never sees the release.
+    if (watched == m_handle) {
+        switch (event->type()) {
+        case QEvent::Hide:
+        case QEvent::UngrabMouse:
+        case QEvent::EnabledChange:
+            endScrub();
+            break;
+        case QEvent::MouseButtonRelease:
+            if (m_scrubX && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {
+                endScrub();
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+    }
     if (watched == m_handle && isEnabled()) {
         const auto *mouse = static_cast<QMouseEvent *>(event);
         switch (event->type()) {
@@ -345,15 +385,6 @@ bool NumberField::eventFilter(QObject *watched, QEvent *event)
                 const double raw = m_scrubStart + std::round(dx) * step * rate;
                 apply(rate < 1 ? std::round(raw * 100) / 100 : raw);
                 field->setText(formatted(m_value));
-                return true;
-            }
-            break;
-        case QEvent::MouseButtonRelease:
-            if (m_scrubX && mouse->button() == Qt::LeftButton) {
-                m_scrubX.reset();
-                if (m_scrubbing && gesture)
-                    gesture(false);
-                m_scrubbing = false;
                 return true;
             }
             break;

@@ -14,6 +14,7 @@ private slots:
     void arrowsStepWithShiftAndAlt();
     void theLabelScrubsAsOneGesture();
     void clearingCanMeanAuto();
+    void aScrubThatLosesItsReleaseStillCloses();
 };
 
 namespace {
@@ -162,6 +163,69 @@ void NumberFieldTests::theLabelScrubsAsOneGesture()
     drag(0, Qt::NoModifier);
     QCOMPARE(recorder.values.size(), before);
     QCOMPARE(gestures.size(), size_t(6));
+}
+
+// Hiding, disabling or losing the grab mid-scrub never delivers a release; the edit must still close.
+void NumberFieldTests::aScrubThatLosesItsReleaseStillCloses()
+{
+    QWidget host;
+    Recorder recorder;
+    recorder.field.setParent(&host);
+    host.show();
+    recorder.field.sync(50);
+    std::vector<bool> gestures;
+    recorder.field.gesture = [&](bool starting) { gestures.push_back(starting); };
+    QLabel *handle = recorder.field.handle();
+    const auto send = [&](QEvent::Type type, double x, Qt::MouseButtons buttons) {
+        QMouseEvent event(type, QPointF(x, 2), handle->mapToGlobal(QPointF(x, 2)), Qt::LeftButton, buttons, Qt::NoModifier);
+        QCoreApplication::sendEvent(handle, &event);
+    };
+    const auto begin = [&] {
+        send(QEvent::MouseButtonPress, 2, Qt::LeftButton);
+        send(QEvent::MouseMove, 12, Qt::LeftButton);
+    };
+    const std::vector<std::function<void()>> interruptions = {
+        [&] { recorder.field.hide(); },
+        [&] { host.hide(); },
+        [&] { recorder.field.setEnabled(false); },
+        [&] { host.setEnabled(false); },
+        [&] {
+            QEvent ungrab(QEvent::UngrabMouse);
+            QCoreApplication::sendEvent(handle, &ungrab);
+        },
+    };
+    for (const auto &interrupt : interruptions) {
+        gestures.clear();
+        host.show();
+        host.setEnabled(true);
+        recorder.field.show();
+        recorder.field.setEnabled(true);
+        begin();
+        QCOMPARE(gestures, (std::vector<bool>{true}));
+        interrupt();
+        QCOMPARE(gestures, (std::vector<bool>{true, false}));
+        // The release that follows, if any, closes nothing twice.
+        send(QEvent::MouseButtonRelease, 12, Qt::NoButton);
+        QCOMPARE(gestures.size(), size_t(2));
+        // The next scrub starts clean.
+        host.show();
+        host.setEnabled(true);
+        recorder.field.show();
+        recorder.field.setEnabled(true);
+        begin();
+        send(QEvent::MouseButtonRelease, 12, Qt::NoButton);
+        QCOMPARE(gestures, (std::vector<bool>{true, false, true, false}));
+    }
+    // A release that arrives after the field was disabled still closes the gesture.
+    gestures.clear();
+    begin();
+    handle->setEnabled(false);
+    QCOMPARE(gestures, (std::vector<bool>{true, false}));
+    handle->setEnabled(true);
+    begin();
+    recorder.field.setEnabled(false);
+    send(QEvent::MouseButtonRelease, 12, Qt::NoButton);
+    QCOMPARE(gestures, (std::vector<bool>{true, false, true, false}));
 }
 
 void NumberFieldTests::clearingCanMeanAuto()

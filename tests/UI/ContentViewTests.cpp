@@ -10,6 +10,7 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QtTest>
 
 // One document's editor: rail, bars, welcome, keys, dock and status.
@@ -60,11 +61,17 @@ private slots:
     void remappedKeysReachTheCanvasAsTheirOriginals();
     void theDockFollowsItsSettings();
     void theDockSplitIsRememberedAndResets();
+
+private:
+    QTemporaryDir m_config;
 };
 
 void ContentViewTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    // The welcome reads the user's size presets from here.
+    QVERIFY(m_config.isValid());
+    qputenv("XDG_CONFIG_HOME", m_config.path().toUtf8());
 }
 
 void ContentViewTests::cleanup()

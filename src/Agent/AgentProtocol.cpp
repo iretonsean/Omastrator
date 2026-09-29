@@ -10,7 +10,7 @@ namespace {
 // JSON Schemas once, as text: MCP's tools/list and the CLI's help both read them.
 constexpr const char *methodTable = R"json([
 {"name": "document_get", "group": "read",
- "description": "The current page (or the `page` asked for) as DocumentCodec JSON (objects bottom to top, children after their parent), plus `pages` ([{id, name, current}]), selection, activeLayer and whether a proposal is open. Placed images are summarised unless includeImages is true.",
+ "description": "The current page (or the `page` asked for) as DocumentCodec JSON (objects bottom to top, children after their parent), plus `pages` ([{id, name, current}]), selection, activeLayer and whether a proposal is open. Each artboard carries \"exported\": false when it is set not to export. Placed images are summarised unless includeImages is true.",
  "inputSchema": {"type": "object", "properties": {
    "includeImages": {"type": "boolean", "description": "Include placed images as base64 PNG. Default false."},
    "page": {"type": "string", "description": "A page's id or name, or \"all\". Default: the current page's objects and artboards. `pages` always lists every page."}}}},
@@ -117,7 +117,7 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "properties": {
    "path": {"type": "string"}}}},
 {"name": "export", "group": "files",
- "description": "Exports the artboard as it shows now, proposal included.",
+ "description": "Exports the artboard as it shows now, proposal included. With several artboards it writes the first one that exports, and the reply's \"artboard\" names it; artboards set not to export are skipped.",
  "inputSchema": {"type": "object", "required": ["path"], "properties": {
    "path": {"type": "string"},
    "format": {"type": "string", "enum": ["pdf", "svg", "png", "jpeg"], "description": "Default: from the file name."},

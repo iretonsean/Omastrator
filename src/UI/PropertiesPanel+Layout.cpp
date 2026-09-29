@@ -108,28 +108,56 @@ PanelSection *PropertiesPanel::layoutSection()
     gapRow->addWidget(m_layoutGap, 1);
     gapRow->addWidget(m_layoutAutoGap);
     fields->addLayout(gapRow);
-    // Padding, sides in pairs as Figma shows them first.
-    auto *padRow = new QHBoxLayout;
-    padRow->setSpacing(6);
-    m_layoutPadX = new NumberField(QStringLiteral("↔"), QStringLiteral("pt"), [this](double padding) {
-        changeLayout(QStringLiteral("Padding"), [padding](AutoLayout &layout) { layout.paddingLeft = layout.paddingRight = std::max(0.0, padding); });
-    }, m_layoutRows);
-    m_layoutPadX->setObjectName(QStringLiteral("layoutPaddingX"));
-    m_layoutPadX->field->setObjectName(QStringLiteral("layoutPaddingXField"));
-    m_layoutPadY = new NumberField(QStringLiteral("↕"), QStringLiteral("pt"), [this](double padding) {
-        changeLayout(QStringLiteral("Padding"), [padding](AutoLayout &layout) { layout.paddingTop = layout.paddingBottom = std::max(0.0, padding); });
-    }, m_layoutRows);
-    m_layoutPadY->setObjectName(QStringLiteral("layoutPaddingY"));
-    m_layoutPadY->field->setObjectName(QStringLiteral("layoutPaddingYField"));
-    for (NumberField *field : {m_layoutPadX, m_layoutPadY}) {
+    // Padding, sides in pairs as Figma shows them first; the toggle beside them opens a field per side.
+    // Both sets share the grid's cells, and only one is visible at a time.
+    auto *padGrid = new QGridLayout;
+    padGrid->setHorizontalSpacing(6);
+    padGrid->setVerticalSpacing(6);
+    padGrid->setColumnStretch(0, 1);
+    padGrid->setColumnStretch(1, 1);
+    const auto padField = [this](const QString &label, const QString &name, const QString &tip,
+                                 std::function<void(AutoLayout &, double)> set) {
+        auto *field = new NumberField(label, QStringLiteral("pt"), [this, set](double padding) {
+            changeLayout(QStringLiteral("Padding"), [&](AutoLayout &layout) { set(layout, std::max(0.0, padding)); });
+        }, m_layoutRows);
+        field->setObjectName(name);
+        field->field->setObjectName(name + QStringLiteral("Field"));
+        field->field->setAccessibleName(tip);
+        field->setToolTip(tip);
         field->lengths = true;
         field->minimum = 0;
-    }
-    m_layoutPadX->setToolTip(QStringLiteral("Padding left and right"));
-    m_layoutPadY->setToolTip(QStringLiteral("Padding top and bottom"));
-    padRow->addWidget(m_layoutPadX, 1);
-    padRow->addWidget(m_layoutPadY, 1);
-    fields->addLayout(padRow);
+        // A scrub is one undo step, however many values it passes through.
+        field->gesture = [this](bool starting) {
+            if (starting)
+                m_session.beginEdit(QStringLiteral("Padding"));
+            else
+                m_session.endEdit();
+        };
+        return field;
+    };
+    m_layoutPadX = padField(QStringLiteral("↔"), QStringLiteral("layoutPaddingX"), QStringLiteral("Padding left and right"),
+                            [](AutoLayout &layout, double padding) { layout.paddingLeft = layout.paddingRight = padding; });
+    m_layoutPadY = padField(QStringLiteral("↕"), QStringLiteral("layoutPaddingY"), QStringLiteral("Padding top and bottom"),
+                            [](AutoLayout &layout, double padding) { layout.paddingTop = layout.paddingBottom = padding; });
+    m_layoutPad[0] = padField(QStringLiteral("L"), QStringLiteral("layoutPaddingLeft"), QStringLiteral("Padding left"),
+                              [](AutoLayout &layout, double padding) { layout.paddingLeft = padding; });
+    m_layoutPad[1] = padField(QStringLiteral("T"), QStringLiteral("layoutPaddingTop"), QStringLiteral("Padding top"),
+                              [](AutoLayout &layout, double padding) { layout.paddingTop = padding; });
+    m_layoutPad[2] = padField(QStringLiteral("R"), QStringLiteral("layoutPaddingRight"), QStringLiteral("Padding right"),
+                              [](AutoLayout &layout, double padding) { layout.paddingRight = padding; });
+    m_layoutPad[3] = padField(QStringLiteral("B"), QStringLiteral("layoutPaddingBottom"), QStringLiteral("Padding bottom"),
+                              [](AutoLayout &layout, double padding) { layout.paddingBottom = padding; });
+    m_layoutPadSides = iconButton(QStringLiteral("layoutPaddingSides"), QStringLiteral("Padding on each side; off for one value across and one down"),
+                                  PanelIcon::padding, [this] { synchronize(); });
+    m_layoutPadSides->setCheckable(true);
+    padGrid->addWidget(m_layoutPadX, 0, 0);
+    padGrid->addWidget(m_layoutPadY, 0, 1);
+    padGrid->addWidget(m_layoutPad[0], 0, 0);
+    padGrid->addWidget(m_layoutPad[1], 0, 1);
+    padGrid->addWidget(m_layoutPad[2], 1, 0);
+    padGrid->addWidget(m_layoutPad[3], 1, 1);
+    padGrid->addWidget(m_layoutPadSides, 0, 2, Qt::AlignTop);
+    fields->addLayout(padGrid);
     // The alignment grid: where the items sit in the frame, as the frame is laid out.
     auto *grid = new QGridLayout;
     grid->setSpacing(0);
@@ -253,6 +281,17 @@ void PropertiesPanel::synchronizeLayout()
             m_layoutGap->syncUnset(layout->gap, QStringLiteral("Auto"));
         else
             m_layoutGap->sync(layout->gap);
+        // Sides that differ show a field each, whatever the toggle said.
+        const bool uneven = layout->paddingLeft != layout->paddingRight || layout->paddingTop != layout->paddingBottom;
+        if (uneven && !m_layoutPadSides->isChecked()) {
+            const QSignalBlocker quiet(m_layoutPadSides);
+            m_layoutPadSides->setChecked(true);
+        }
+        const bool sides = m_layoutPadSides->isChecked();
+        for (NumberField *field : {m_layoutPadX, m_layoutPadY})
+            field->setVisible(!sides);
+        for (NumberField *field : m_layoutPad)
+            field->setVisible(sides);
         if (layout->paddingLeft == layout->paddingRight)
             m_layoutPadX->sync(layout->paddingLeft);
         else
@@ -261,6 +300,10 @@ void PropertiesPanel::synchronizeLayout()
             m_layoutPadY->sync(layout->paddingTop);
         else
             m_layoutPadY->syncMixed();
+        m_layoutPad[0]->sync(layout->paddingLeft);
+        m_layoutPad[1]->sync(layout->paddingTop);
+        m_layoutPad[2]->sync(layout->paddingRight);
+        m_layoutPad[3]->sync(layout->paddingBottom);
         const auto index = [](LayoutAlign align) { return align == LayoutAlign::start ? 0 : align == LayoutAlign::center ? 1 : 2; };
         const bool horizontal = layout->direction == LayoutDirection::horizontal;
         const int column = index(horizontal ? layout->primary : layout->counter), row = index(horizontal ? layout->counter : layout->primary);

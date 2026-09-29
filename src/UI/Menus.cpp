@@ -364,6 +364,10 @@ void Menus::buildObject(QMenuBar &bar)
         [this] { ObjectDialogs::renameArtboard(session(), session().activeArtboard(), &m_window); });
     add(artboards, QStringLiteral("deleteArtboard"), QStringLiteral("Delete Artboard"), QKeySequence(),
         [this] { session().deleteArtboard(session().activeArtboard()); });
+    add(artboards, QStringLiteral("artboardExported"), QStringLiteral("Export Artboard"), QKeySequence(), [this] {
+        const int index = session().activeArtboard();
+        session().setArtboardExported(index, !session().document()->artboard(index).exported);
+    })->setCheckable(true);
     add(artboards, QStringLiteral("fitArtboardToArtwork"), QStringLiteral("Fit to Artwork Bounds"), QKeySequence(),
         [this] { session().fitArtboardToArtwork(session().activeArtboard()); });
     add(artboards, QStringLiteral("switchArtboardOrientation"), QStringLiteral("Switch Orientation"), QKeySequence(),

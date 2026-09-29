@@ -65,12 +65,23 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Artwork Bounds, Switch Orientation and Next/Previous (Shift+PgDn/PgUp); an
   Artboards list sits in Properties ▸ Document. Export, Share and the active
   artboard's own size and background follow whichever one is active.
+  Turn off "Export this artboard" (Properties ▸ Document, or Object ▸
+  Artboards ▸ Export Artboard) for a scratch board: it stays visible and
+  editable, its label reads "not exported", and Export, Export for Screens
+  and Share leave it out. Export assets you collect on such a board still
+  export from Export for Screens, since you picked them one by one.
 - Pages: each page is its own canvas of layers, artboards and guides. The
   Pages list tops the Layers panel (click to switch, double-click to rename,
   drag to reorder), Object ▸ Pages has New, Duplicate, Rename, Delete and
   Move to Page, and Alt+PgDn/PgUp step between them. PDF, Figma, Sketch and
   Penpot files with several pages open as pages, and File ▸ Export ▸ PDF
-  writes every artboard of every page.
+  writes every exported artboard of every page.
+- New-document presets are yours to edit. On the welcome sheet, the ⋯ beside
+  Preset saves the current size and units under a name (Save Preset…), renames
+  or deletes a saved one, and hides a built-in (Letter, A4, A3, 1920 × 1080,
+  1080 × 1080), which Show Hidden Presets brings back. Saved presets list first
+  and live in `~/.config/omastrator/presets.json`. The built-ins can be hidden
+  but never deleted or renamed.
 - The rail's tools sit in slots that share a button when more than one lives
   together (Selection, Artboard, Pen, Type, Shapes, Shape Builder, Transform,
   Paint, Navigate): a corner triangle marks a group, right-click or a long
@@ -134,8 +145,9 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   weight, caps, corners and dashes, opacity and blend modes. **+** stacks
   several fills or strokes on one object, Figma-style, each with its own eye,
   opacity and blend, and a grip to reorder. Strokes align inside, centre or
-  outside, take arrowheads (arrow, triangle, circle, square, bar) and can
-  stretch their dashes to sit on the corners. The Gradient tool (G) drags a
+  outside (on live, editable type too, in exports as well), take arrowheads
+  (arrow, triangle, circle, square, bar) and can stretch their dashes to sit
+  on the corners. The Gradient tool (G) drags a
   gradient's ends and stops right on the object. The Width tool (Shift+W)
   drags on a stroke to add or move a width point, and the Stroke section's
   Profile menu sets a taper, bulge or custom shape along the whole path.

@@ -36,6 +36,8 @@ private:
     int m_highValue = 0; // Indexed
     Function m_tintTransform; // Separation/DeviceN
     QList<double> m_labRange{-100, 100, -100, 100}; // Lab's a*/b* range, from its dictionary
+
+    static ColorSpace loadAt(const Document &document, const Object &spaceObject, QStringList *warnings, int depth);
 };
 
 }

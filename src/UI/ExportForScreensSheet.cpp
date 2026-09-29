@@ -61,14 +61,19 @@ ExportForScreensSheet::ExportForScreensSheet(EditorSession &session, QWidget *pa
         // Every page's artboards, under a heading per page once there are two or more.
         const std::vector<Page> pages = document->allPages();
         for (const Page &page : pages) {
-            if (pages.size() > 1) {
+            std::vector<Artboard> exported;
+            for (const Artboard &board : document->artboardsOn(page.id)) {
+                if (board.exported)
+                    exported.push_back(board);
+            }
+            if (pages.size() > 1 && !exported.empty()) {
                 auto *heading = new QListWidgetItem(page.name, m_artboards);
                 heading->setFlags(Qt::ItemIsEnabled);
                 QFont bold = heading->font();
                 bold.setBold(true);
                 heading->setFont(bold);
             }
-            for (const Artboard &board : document->artboardsOn(page.id))
+            for (const Artboard &board : exported)
                 checkableItem(m_artboards, board.name, board.id.toString(QUuid::WithoutBraces), true);
         }
     }
