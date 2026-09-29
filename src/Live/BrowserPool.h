@@ -38,7 +38,8 @@ public:
     void open(const QUuid &frame, const QString &context = {});
     void close(const QUuid &frame);
     // The escape hatch: every tab closes and the browser stops, and nothing restarts by itself.
-    void closeAll();
+    // With `wait`, it returns once they have: Live needs the profile free before it starts its own Chromium.
+    void closeAll(bool wait = false);
     // Which tabs are on screen; the paused one shown least recently is the first to go past the cap.
     void setShown(const QUuid &frame, bool shown);
     // A command in a frame's tab, or the browser's own when `frame` is null. `reply` runs on the pool's thread.
@@ -89,6 +90,7 @@ private:
     void makeRoom();
     void finishOpen(const QUuid &frame, const QString &context);
     void doClose(const QUuid &frame, CloseReason reason);
+    void doCloseAll(CloseReason reason);
     void stopBrowser(bool later = false);
     void lostBrowser();
     void noteTabs();
@@ -105,6 +107,8 @@ private:
     QList<Pending> m_pending;
     QList<QUuid> m_opening;
     bool m_starting = false;
+    bool m_closeRequested = false;
+    CloseReason m_closeReason = CloseReason::reset;
     qint64 m_shownCounter = 0;
     std::atomic<bool> m_running{false};
     std::atomic<int> m_tabCount{0};

@@ -54,15 +54,28 @@ void BrowserPool::close(const QUuid &frame)
     }, Qt::QueuedConnection);
 }
 
-void BrowserPool::closeAll()
+void BrowserPool::closeAll(bool wait)
 {
-    QMetaObject::invokeMethod(this, [this] {
-        m_pending.clear();
-        const QList<QUuid> frames = m_tabs.keys();
-        for (const QUuid &frame : frames)
-            doClose(frame, CloseReason::reset);
-        stopBrowser();
-    }, Qt::QueuedConnection);
+    if (wait && QThread::currentThread() != m_thread && m_thread->isRunning()) {
+        QMetaObject::invokeMethod(this, [this] { doCloseAll(CloseReason::closed); }, Qt::BlockingQueuedConnection);
+        return;
+    }
+    QMetaObject::invokeMethod(this, [this] { doCloseAll(CloseReason::reset); }, Qt::QueuedConnection);
+}
+
+void BrowserPool::doCloseAll(CloseReason reason)
+{
+    m_pending.clear();
+    // The browser is still starting, in a nested loop of its own: it stops as soon as it is up.
+    if (m_starting) {
+        m_closeRequested = true;
+        m_closeReason = reason;
+        return;
+    }
+    const QList<QUuid> frames = m_tabs.keys();
+    for (const QUuid &frame : frames)
+        doClose(frame, reason);
+    stopBrowser();
 }
 
 void BrowserPool::setShown(const QUuid &frame, bool shown)
@@ -81,7 +94,7 @@ void BrowserPool::call(const QUuid &frame, const QString &method, const QJsonObj
 {
     QMetaObject::invokeMethod(this, [this, frame, method, params, reply] {
         const auto found = m_tabs.constFind(frame);
-        if (!m_browser || (!frame.isNull() && found == m_tabs.constEnd())) {
+        if (!m_browser || !m_running || (!frame.isNull() && found == m_tabs.constEnd())) {
             if (reply)
                 reply({}, QStringLiteral("There is no tab for this frame."));
             return;
@@ -135,6 +148,7 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
         const QString failure = m_browser->start(browser);
         m_starting = false;
         if (!failure.isEmpty()) {
+            m_closeRequested = false;
             m_browser->deleteLater();
             m_browser = nullptr;
             emit openFailed(frame, failure);
@@ -155,6 +169,12 @@ void BrowserPool::doOpen(const QUuid &frame, const QString &context)
                 [this](const QString &method, const QJsonObject &params, const QString &session) { onEvent(method, params, session); });
         connect(m_browser, &Browser::exited, this, [this] { lostBrowser(); });
         emit started();
+        if (std::exchange(m_closeRequested, false)) {
+            m_pending.clear();
+            stopBrowser();
+            emit closed(frame, m_closeReason);
+            return;
+        }
         const QList<Pending> waiting = std::exchange(m_pending, {});
         for (const Pending &each : waiting)
             doOpen(each.frame, each.context);

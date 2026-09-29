@@ -4,6 +4,7 @@
 #include "IO/SvgImporter.h"
 #include "IO/VectorFileImporter.h"
 #include "Logging.h"
+#include "UI/BrowserViews.h"
 #include "UI/ExportSheet.h"
 #include "UI/ProjectWorkspace.h"
 #include <QDialog>
@@ -141,6 +142,8 @@ bool ProjectWorkspace::saveTo(ProjectTab &tab, const QString &path)
 {
     if (!tab.session.hasDocument())
         return false;
+    // The newest picture of each Browser View goes in with the file.
+    BrowserViews::of(tab.session)->flushPictures();
     try {
         ProjectStore::write(*tab.session.document(), path);
     } catch (const FileError &error) {
@@ -221,6 +224,7 @@ bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format fo
     const std::optional<VectorDocument> &document = session.document();
     if (!document)
         return false;
+    BrowserViews::of(session)->flushPictures();
     if (const QString reason = notExportedReason(session); !reason.isEmpty()) {
         showError(QStringLiteral("Couldn’t export “%1”").arg(QFileInfo(path).fileName()), reason);
         return false;

@@ -1,5 +1,6 @@
 #include "UI/ExportForScreensSheet.h"
 #include "IO/ScreenExport.h"
+#include "UI/BrowserViews.h"
 #include <QCheckBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -239,6 +240,7 @@ void ExportForScreensSheet::runExport()
         return;
     }
     saveSettings();
+    BrowserViews::of(m_session)->flushPictures();
     ScreenExport::Settings settings;
     settings.scales = scales;
     settings.formats = formats;

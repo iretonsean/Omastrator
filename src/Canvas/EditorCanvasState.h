@@ -1,4 +1,5 @@
 #pragma once
+#include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/InlineTextEditor.h"
 #include "Canvas/SmartGuides.h"
@@ -194,6 +195,9 @@ struct EditorCanvas::State {
     // Top-level frames' names above their corner, as Figma shows them; a click on one selects its frame.
     std::vector<std::pair<QUuid, QRectF>> frameLabels() const;
     void drawFrameLabels(QPainter &painter) const;
+    // A Browser View's line over the frame, as "Paused by reset" (EditorCanvas+Browser.cpp).
+    void drawBrowserMessages(QPainter &painter) const;
+    BrowserViewHost *browserHost = nullptr;
     std::optional<QUuid> frameLabelAt(QPointF view) const;
 
     // Scissors (C) ------------------------------------------------------------------

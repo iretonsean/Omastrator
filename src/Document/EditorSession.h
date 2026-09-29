@@ -92,6 +92,14 @@ public:
     // the canvas's inline type does.
     bool refuseWhenLocked();
 
+    // Browser Views (EditorSession+Browser.cpp) -------------------------------
+    // The page moved on its own (a link, a redirect): the file is marked unsaved but
+    // no undo step is made (a scroll alone marks nothing), and the recorded steps follow the new address so an undo doesn't
+    // send the tab back. Locked documents take it too, since it isn't an edit.
+    void setBrowserLocation(const QUuid &frame, const QUrl &url, QPointF scroll);
+    // The last picture, refreshed silently: not unsaved, not a step, no signal.
+    void setBrowserPicture(const QUuid &frame, const QImage &picture);
+
     // Artboards (EditorSession+Artboards.cpp) ---------------------------------
     // The Artboard tool, the list, next/previous and select() all set this.
     int activeArtboard() const;

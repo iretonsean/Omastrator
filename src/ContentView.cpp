@@ -1,4 +1,5 @@
 #include "ContentView.h"
+#include "UI/BrowserViews.h"
 #include "Logging.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentPanels.h"
@@ -372,6 +373,7 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     m_canvasSlot->addWidget(m_canvas, 0, 0);
     m_canvasSlot->addWidget(m_dropRing, 0, 0);
     m_canvas->installEventFilter(this);
+    BrowserViews::of(m_session)->attach(m_canvas);
     // Tool keys and the rest also work from a panel: only text fields keep them.
     qApp->installEventFilter(this);
     setAcceptDrops(true);
@@ -434,6 +436,7 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
 ContentView::~ContentView()
 {
     disconnect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
+    BrowserViews::of(m_session)->detach(m_canvas);
     m_canvas->removeEventFilter(this);
 }
 

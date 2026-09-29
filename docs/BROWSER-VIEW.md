@@ -452,3 +452,34 @@ The tests:
     (and if the app didn't answer), so a hung pool goes too.
   - The app's own reset calls `closeAll` on the pool from `BrowserViews`
     (commit 3), the first place the app owns one.
+- **Streaming and the controller (commit 3).**
+  - `BrowserViews` (in oma_ui) is the controller: one per `EditorSession`,
+    one pool for the app. The canvas only knows the abstract
+    `BrowserViewHost` (a picture and a message per frame), so oma_canvas
+    doesn't link oma_live.
+  - The pool has no parent: an object with a parent can't move to its own
+    thread. It is deleted on `aboutToQuit`.
+  - A page's own navigation is written to the frame's address with
+    `setBrowserLocation`. It is no undo step, but it marks the file unsaved,
+    and history snapshots holding the old address follow it, so an undo never
+    steers the tab back.
+  - Scrolling alone is silent: it doesn't mark the file unsaved. The scroll
+    and the last picture are saved with the next edit or save.
+    `flushPictures` runs on save, export, Export for Screens and the Desk's
+    autosave, so a picture reaches the file without an edit.
+  - "Click to resume" after a reset is a selection: selecting a paused frame
+    resumes it. Nothing else brings it back.
+  - An `OMASTRATOR_CHROMIUM` that isn't executable counts as no Chromium.
+  - Frames stream every 2nd frame (every 4th when more than 4 stream), and
+    every frame for the selected one. Hover doesn't count.
+  - While Live has its own window, the pool is stopped first
+    (`closeAll(true)` blocks until it is), since both use one profile. The
+    frames show "Omastrator's browser is open for Live" and resume after.
+  - A reset asked while the browser is still starting stops it as soon as it
+    is up.
+  - The "no page", "not installed" and paused messages are drawn by the
+    canvas over the frame, in the palette's window colours.
+  - `closeAll(true)`, used only when Live opens its window, closes tabs with
+    `CloseReason::closed` and not `reset`, so a late event can't mark the
+    frames "paused by reset". If the browser is still starting it stops just
+    after it is up, so the profile can be busy for that moment.

@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 
+class BrowserViewHost;
 class QMenu;
 
 // The artboard view: draws the document through VectorRenderer, pans and zooms
@@ -42,6 +43,11 @@ public:
     bool isGesturing() const;
     // In-place type's right-click menu: clipboard, case and special characters.
     QMenu *textEditingMenu(QWidget *parent);
+    // Where a Browser View's live picture and messages come from; the canvas owns neither.
+    void setBrowserViewHost(BrowserViewHost *host);
+    BrowserViewHost *browserViewHost() const;
+    // Document points to view pixels, as the canvas draws them now.
+    QTransform documentToView() const;
     // Arrow keys move this many points, ten times as far with Shift.
     static double keyboardIncrement();
     static void setKeyboardIncrement(double points);

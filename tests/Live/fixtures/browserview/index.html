@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Width</title>
+<body style="margin:0;background:#e33;height:3000px">
+<div id="w" style="font:48px sans-serif;color:#fff"></div>
+<script>
+  const show = () => { document.getElementById('w').textContent = innerWidth; document.title = 'w' + innerWidth + 's' + Math.round(scrollY); };
+  show();
+  addEventListener('resize', show);
+  addEventListener('scroll', show);
+</script>

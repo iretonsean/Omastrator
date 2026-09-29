@@ -5,6 +5,7 @@
 #include "Anywhere/Desk.h"
 #include "IO/ProjectStore.h"
 #include "UI/AgentBridge.h"
+#include "UI/BrowserViews.h"
 #include "UI/PageWorkspaces.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/TaskBarActions.h"
@@ -597,6 +598,7 @@ void DesignController::autosaveDesk(bool mark)
         // The Desk keeps itself: there is no Save to forget.
         try {
             QDir().mkpath(QFileInfo(path).absolutePath());
+            BrowserViews::of(tab->session)->flushPictures();
             ProjectStore::write(*tab->session.document(), path);
             if (mark)
                 tab->session.markSaved();
