@@ -119,6 +119,8 @@ foreach(size 16 32 64 128 256 512)
     install(FILES packaging/icons/app-icon-${size}.png
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps RENAME io.github.iretonsean.Omastrator.png)
 endforeach()
+install(FILES packaging/icons/app-icon.svg
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps RENAME io.github.iretonsean.Omastrator.svg)
 install(FILES LICENSE third_party/nanosvg/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL)
 install(FILES third_party/hyph-utf8/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL RENAME LICENSE-hyph-utf8.txt)
 # A direct install registers the document type; packages use hooks.
