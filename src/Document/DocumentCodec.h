@@ -17,7 +17,9 @@ namespace DocumentCodec {
 // 3: styled runs, paragraph formats, OpenType features, character and paragraph styles.
 // 4: design tokens and modes, token references, components, variants and instances.
 // 5: artboards and export assets.
+// 6: two or more pages (a one-page document is still written as 5, so older builds open it).
 constexpr int version = 5;
+constexpr int pagesVersion = 6;
 constexpr const char *clipboardMimeType = "application/x-omastrator-objects";
 
 QJsonObject encode(const VectorDocument &document);
