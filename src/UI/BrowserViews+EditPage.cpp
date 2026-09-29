@@ -35,6 +35,8 @@ void BrowserViews::endEditPage(const QUuid &frame)
 void BrowserViews::onLiveChanged(const QUuid &frame)
 {
     scheduleRepaint(frame);
+    if (m_canvas && m_canvas->editPageFrame() == frame)
+        m_canvas->noteEditPageHostChanged();
     LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
     if (m_canvas && m_canvas->editPageFrame() == frame && (!live || !live->active(frame)))
         m_canvas->leaveEditPage();
@@ -63,4 +65,76 @@ BrowserViewHost::EditBoxes BrowserViews::editBoxes(const QUuid &frame) const
     for (const QJsonValue &each : geometry["selection"].toArray())
         boxes.selection.append(boxOf(each.toObject()));
     return boxes;
+}
+
+BrowserViewHost::ElementState BrowserViews::elementState(const QUuid &frame) const
+{
+    ElementState state;
+    const LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
+    if (!live || !live->active(frame))
+        return state;
+    const LiveFrames::Snapshot snapshot = live->snapshot(frame);
+    state.selection = snapshot.selection;
+    state.tokens = snapshot.tokens;
+    return state;
+}
+
+QString BrowserViews::editElements(const QUuid &frame, const QStringList &properties, const QString &value, bool preview)
+{
+    LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
+    if (!live || !live->active(frame))
+        return QStringLiteral("Edit Page needs a live page.");
+    // Commands run in order on the pool's thread, so a scrub's last preview is always taken off before its edit.
+    live->run(
+        frame,
+        [properties, value, preview](LiveSession &session) {
+            return preview ? session.previewSelection(properties, value) : session.editSelection(properties, value);
+        },
+        [this](const QString &error) {
+            if (!error.isEmpty())
+                emit notice(error);
+        });
+    return {};
+}
+
+QString BrowserViews::editElementText(const QUuid &frame, const QString &selector, const QString &text)
+{
+    LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
+    if (!live || !live->active(frame))
+        return QStringLiteral("Edit Page needs a live page.");
+    live->edit(frame, selector, QStringLiteral("text"), text, [this](const QString &error) {
+        if (!error.isEmpty())
+            emit notice(error);
+    });
+    return {};
+}
+
+bool BrowserViews::canUndoPageEdit(const QUuid &frame) const
+{
+    const LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
+    return live && live->active(frame) && live->snapshot(frame).canUndo;
+}
+
+bool BrowserViews::canRedoPageEdit(const QUuid &frame) const
+{
+    const LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
+    return live && live->active(frame) && live->snapshot(frame).canRedo;
+}
+
+void BrowserViews::undoPageEdit(const QUuid &frame)
+{
+    if (LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly); live && live->active(frame))
+        live->undo(frame, [this](const QString &error) {
+            if (!error.isEmpty())
+                emit notice(error);
+        });
+}
+
+void BrowserViews::redoPageEdit(const QUuid &frame)
+{
+    if (LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly); live && live->active(frame))
+        live->redo(frame, [this](const QString &error) {
+            if (!error.isEmpty())
+                emit notice(error);
+        });
 }

@@ -1,3 +1,5 @@
+#include "Canvas/BrowserViewHost.h"
+#include "Canvas/EditorCanvas.h"
 #include "Document/PathOperations.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
@@ -21,6 +23,18 @@ void clearShortcuts()
     ShortcutSettings::shared().reload();
 }
 
+class PageHost : public BrowserViewHost {
+public:
+    QImage picture(const QUuid &) const override { return {}; }
+    QString message(const QUuid &) const override { return {}; }
+    QString beginEditPage(const QUuid &) override { return {}; }
+    bool canUndoPageEdit(const QUuid &) const override { return undoable; }
+    bool canRedoPageEdit(const QUuid &) const override { return false; }
+    void undoPageEdit(const QUuid &) override { ++undone; }
+    bool undoable = true;
+    int undone = 0;
+};
+
 QUuid box(EditorSession &session, double x)
 {
     return session.addPath(Shapes::rectangle(QRectF(x, 10, 40, 40)), QStringLiteral("Box"));
@@ -35,6 +49,7 @@ private slots:
     void everyMenuKeyHasOneDefinition();
     void entriesNeedADocument();
     void undoAndRedoNameTheirSteps();
+    void undoInEditPageIsThePagesOwn();
     void pageEntriesFollowTheDocument();
     void groupingFollowsTheSession();
     void viewTogglesAreChecked();
@@ -275,6 +290,32 @@ void MenusTests::remappedKeysReachTheEntries()
     QCOMPARE(menus.action("ungroup")->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G));
     clearShortcuts();
     QCOMPARE(menus.action("group")->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_G));
+}
+
+void MenusTests::undoInEditPageIsThePagesOwn()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    workspace.createDocument(QSizeF(400, 400));
+    EditorSession &session = workspace.current().session;
+    box(session, 10);
+    PageHost host;
+    EditorCanvas &canvas = window.content()->canvas();
+    canvas.setBrowserViewHost(&host);
+    const QUuid frame = session.addBrowserView({100, 100, 200, 200}, QUrl(QStringLiteral("https://example.com/")));
+    QVERIFY(canvas.enterEditPage(frame));
+    // Edit Page has its own history: the document's steps aren't offered, and Undo never makes one.
+    QCOMPARE(menus.action("undo")->text(), QString("Undo Page Edit"));
+    QVERIFY(menus.action("undo")->isEnabled());
+    const QString before = session.undoName();
+    menus.action("undo")->trigger();
+    QCOMPARE(host.undone, 1);
+    QCOMPARE(session.undoName(), before);
+    host.undoable = false;
+    canvas.noteEditPageHostChanged();
+    QTRY_VERIFY(!menus.action("undo")->isEnabled());
+    canvas.setBrowserViewHost(nullptr);
 }
 
 void MenusTests::aFocusedFieldKeepsUndo()

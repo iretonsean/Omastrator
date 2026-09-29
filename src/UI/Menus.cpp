@@ -1,10 +1,12 @@
 #include "UI/Menus.h"
+#include "Canvas/ElementBar.h"
 #include "Document/BrowserAddress.h"
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
 #include "UI/CommandPalette.h"
 #include "UI/ContextMenus.h"
+#include "UI/ElementBarActions.h"
 #include "UI/ExportForScreensSheet.h"
 #include "UI/HistoryPanel.h"
 #include "UI/KeyboardShortcuts.h"
@@ -167,12 +169,16 @@ void Menus::buildEdit(QMenuBar &bar)
     add(edit, QStringLiteral("undo"), QStringLiteral("Undo"), QKeySequence(Qt::CTRL | Qt::Key_Z), [this] {
         if (m_field)
             m_field->undo();
+        else if (m_canvas && m_canvas->editPageFrame())
+            m_canvas->undoPageEdit();
         else
             session().undo();
     });
     add(edit, QStringLiteral("redo"), QStringLiteral("Redo"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), [this] {
         if (m_field)
             m_field->redo();
+        else if (m_canvas && m_canvas->editPageFrame())
+            m_canvas->redoPageEdit();
         else
             session().redo();
     });
@@ -634,6 +640,8 @@ void Menus::watchFront(EditorCanvas *canvas)
     disconnect(m_sessionWatch);
     m_sessionWatch = connect(&session(), &EditorSession::changed, this, &Menus::synchronize);
     disconnect(m_canvasWatch);
+    disconnect(m_pageWatch);
+    disconnect(m_pageModeWatch);
     m_canvas = canvas;
     if (m_typeStyles)
         m_typeStyles->follow();
@@ -643,7 +651,12 @@ void Menus::watchFront(EditorCanvas *canvas)
     if (m_canvas) {
         if (!m_canvas->findChild<TaskBar *>())
             TaskBarActions::attach(*this, m_agent, *m_canvas);
+        if (!m_canvas->findChild<ElementBar *>())
+            ElementBarActions::attach(m_agent, *m_canvas);
         m_canvasWatch = connect(m_canvas, &EditorCanvas::textEditingChanged, this, &Menus::synchronize);
+        // Undo in Edit Page is Live's own, so its wording follows the page's edits.
+        m_pageWatch = connect(m_canvas, &EditorCanvas::editPageHostChanged, this, &Menus::synchronize);
+        m_pageModeWatch = connect(m_canvas, &EditorCanvas::editPageChanged, this, &Menus::synchronize);
         m_menuWatch = connect(m_canvas, &EditorCanvas::contextMenuRequested, this, [this](QPoint at, const QList<QUuid> &hits) {
             if (!m_canvas)
                 return;

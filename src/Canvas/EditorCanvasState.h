@@ -4,9 +4,12 @@
 #include "Canvas/InlineTextEditor.h"
 #include "Canvas/SmartGuides.h"
 #include <QCursor>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QElapsedTimer>
 #include <QFontMetricsF>
 #include <QHash>
+#include <QLineEdit>
 #include <QLineF>
 #include <QPointer>
 #include <QTimer>
@@ -257,6 +260,12 @@ struct EditorCanvas::State {
     std::optional<QUuid> editPage;
     bool enterEditPage(const QUuid &frame);
     void leaveEditPage();
+    // The single picked element that is text alone, as the host reports it.
+    std::optional<QJsonObject> pickedText() const;
+    bool openPageTextEditor();
+    void closePageTextEditor();
+    QPointer<QLineEdit> pageTextEdit;
+    QString pageTextSelector;
     // Ends the mode when its frame is gone, off the page or its tool has changed.
     void checkEditPage();
     // The press is the page's when it lands in the frame; outside it the mode ends and this answers false.

@@ -471,3 +471,31 @@ Deploy, Changes and History on the island already go through
     hover is a 1 px outline, the selection 2 px with a `tag  w × h` pill.
   - The Browse and Edit Page modes share the browse drag, so a drag in Edit Page
     is a page drag that the overlay swallows.
+
+- **Commit 4 (the element bar and edits).**
+  - `ElementBar` lives in `oma_canvas`; what is in it comes from
+    `UI/ElementBarActions` (which owns `NumberField` and the colour menus),
+    attached from `Menus::watchFront` next to `TaskBarActions::attach`. It is a
+    28 px plate at every zoom, 8 px from the pick, below it or else above, kept
+    inside the frame's visible rect (inside the canvas when the frame is
+    narrower than the bar). It shows only in Edit Page with a pick, and hides
+    during a page text edit or a gesture.
+  - Lengths still snap to the scale (`TokenSet::resolve`), so typing 13 for
+    padding on a site with a 24 px gap lands on 24. Properties with no scale
+    (font size on a site without font tokens, opacity) go through as typed.
+  - A scrub is shown only: `previewSelected` sets inline styles and remembers
+    the inline style from before the scrub, and `endPreview` takes them off
+    before the one recorded edit, so its "before" is the page's.
+  - A change to several properties or elements (padding ↔ is left and right, ↕
+    is top and bottom) is one grouped undo step (`UndoStep::group`); undo and
+    redo walk the group.
+  - After every edit, undo or redo the session re-reads the selection's info, so
+    the bar shows what the page has now.
+  - In Edit Page, Undo and Redo are the page's ("Undo Page Edit"): they go to
+    Live's history through `BrowserViewHost`, never make a document step, and
+    never mark the file modified.
+  - Edit Text (and a double-click on a picked text-only element) opens a
+    `QLineEdit` over the pick: Enter records one text edit, Esc or losing
+    focus cancels.
+  - Deferred to later commits: margin, per-corner radius, Keep Edits and Hand
+    to Agent (the ⋯ menu holds only Copy Selector for now).

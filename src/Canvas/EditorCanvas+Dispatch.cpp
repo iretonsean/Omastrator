@@ -1,5 +1,6 @@
 #include "Canvas/EditorCanvasState.h"
 #include "Canvas/Rulers.h"
+#include "Document/BrowserInput.h"
 #include <QGuiApplication>
 #include <QStyleHints>
 
@@ -362,7 +363,16 @@ void EditorCanvas::State::doubleClick(QPointF view, Qt::KeyboardModifiers modifi
     if (editPage) {
         if (drag)
             release(view, modifiers);
-        // A second click is one more pick; outside the frame it ends the mode and goes on as a double-click.
+        // On text alone it edits that text; otherwise a second click is one more pick, and outside the frame it ends
+        // the mode and goes on as a double-click.
+        if (const std::optional<QJsonObject> picked = pickedText()) {
+            const QRectF frameBox = browseBox(*editPage);
+            const QJsonObject rect = picked->value(QStringLiteral("rect")).toObject();
+            const QRectF css(rect.value(QStringLiteral("x")).toDouble(), rect.value(QStringLiteral("y")).toDouble(),
+                             rect.value(QStringLiteral("width")).toDouble(), rect.value(QStringLiteral("height")).toDouble());
+            if (css.contains(BrowserInput::cssPoint(toDocument(view), frameBox)) && openPageTextEditor())
+                return;
+        }
         if (editPagePress(view, modifiers))
             return;
     }

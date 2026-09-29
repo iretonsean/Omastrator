@@ -506,6 +506,17 @@ void LiveSession::handle(const QJsonObject &message)
 
 QString LiveSession::edit(const QString &selector, const QString &property, const QString &value)
 {
+    const QString failure = applyEdit(selector, property, value);
+    // The element bar shows what the page has now; a group of edits refreshes once, at its end.
+    if (failure.isEmpty() && m_group == 0) {
+        refreshSelection();
+        emit changed();
+    }
+    return failure;
+}
+
+QString LiveSession::applyEdit(const QString &selector, const QString &property, const QString &value)
+{
     QString error;
     const QJsonObject element = evaluate(QStringLiteral("window.__oma.info(%1)").arg(json(selector)), &error).toObject();
     if (element.isEmpty())
@@ -558,6 +569,7 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
                 {"text", isText ? QJsonValue(textBefore) : QJsonValue()}};
     step.now = {{"style", after["inlineStyle"].toString()}, {"cls", after["classes"].toString()},
                 {"text", isText ? QJsonValue(resolution.value) : QJsonValue()}};
+    step.group = m_group;
     m_redo.clear();
     auto remember = [&](const LiveEdit &made) {
         step.made = made;
@@ -620,6 +632,32 @@ QString LiveSession::undoEdit()
 {
     if (m_undo.empty())
         return QStringLiteral("There's no page edit to undo.");
+    const int group = m_undo.back().group;
+    QString failure = undoStep();
+    while (failure.isEmpty() && group != 0 && !m_undo.empty() && m_undo.back().group == group)
+        failure = undoStep();
+    refreshSelection();
+    emit changed();
+    return failure;
+}
+
+QString LiveSession::redoEdit()
+{
+    if (m_redo.empty())
+        return QStringLiteral("There's no page edit to redo.");
+    const int group = m_redo.back().group;
+    QString failure = redoStep();
+    while (failure.isEmpty() && group != 0 && !m_redo.empty() && m_redo.back().group == group)
+        failure = redoStep();
+    refreshSelection();
+    emit changed();
+    return failure;
+}
+
+QString LiveSession::undoStep()
+{
+    if (m_undo.empty())
+        return QStringLiteral("There's no page edit to undo.");
     if (!m_page)
         return QStringLiteral("Live isn't running.");
     const UndoStep step = m_undo.back();
@@ -645,7 +683,7 @@ QString LiveSession::undoEdit()
     return {};
 }
 
-QString LiveSession::redoEdit()
+QString LiveSession::redoStep()
 {
     if (m_redo.empty())
         return QStringLiteral("There's no page edit to redo.");
@@ -670,6 +708,48 @@ QString LiveSession::redoEdit()
     if (isMockup())
         QTimer::singleShot(0, this, &LiveSession::describeSite);
     return {};
+}
+
+void LiveSession::refreshSelection()
+{
+    if (!m_page || m_selection.isEmpty())
+        return;
+    // The bar shows the values the page has now, which an edit or an undo has just changed.
+    const QJsonValue fresh = evaluate(QStringLiteral("window.__oma ? window.__oma.selection() : null"));
+    if (fresh.isArray())
+        m_selection = fresh.toArray();
+}
+
+QString LiveSession::editSelection(const QStringList &properties, const QString &value)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    evaluate(QStringLiteral("window.__oma && window.__oma.endPreview()"));
+    const QJsonArray elements = m_selection;
+    if (elements.isEmpty())
+        return QStringLiteral("Pick an element first.");
+    m_group = ++m_lastGroup;
+    QString failure;
+    for (const QJsonValue &each : elements) {
+        for (const QString &property : properties) {
+            const QString error = applyEdit(each.toObject()["selector"].toString(), property, value);
+            if (failure.isEmpty())
+                failure = error;
+        }
+    }
+    m_group = 0;
+    refreshSelection();
+    emit changed();
+    return failure;
+}
+
+QString LiveSession::previewSelection(const QStringList &properties, const QString &value)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    evaluate(QStringLiteral("window.__oma && window.__oma.previewSelected(%1, %2)").arg(json(QJsonArray::fromStringList(properties)), json(value)), &error);
+    return error;
 }
 
 void LiveSession::setPageEditing(bool on)

@@ -75,6 +75,8 @@ private:
     QMetaObject::Connection m_sessionWatch;
     QMetaObject::Connection m_canvasWatch;
     QMetaObject::Connection m_menuWatch;
+    QMetaObject::Connection m_pageWatch;
+    QMetaObject::Connection m_pageModeWatch;
     // The field whose undo the Edit entries drive.
     QPointer<QLineEdit> m_field;
     QPointer<EditorCanvas> m_canvas;

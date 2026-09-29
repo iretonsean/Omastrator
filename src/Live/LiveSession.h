@@ -106,6 +106,10 @@ public:
     // Live's own undo: each edit put back as it was, per session. Both return why they couldn't, or empty.
     bool canUndoEdit() const { return !m_undo.empty(); }
     bool canRedoEdit() const { return !m_redo.empty(); }
+    // Changes every selected element, as one undo step: `properties` all take `value`.
+    QString editSelection(const QStringList &properties, const QString &value);
+    // Shows a value on the selection without recording it, for scrubs; the edit that follows takes it off first.
+    QString previewSelection(const QStringList &properties, const QString &value);
     QString undoEdit();
     QString redoEdit();
     // Forgets the recorded edits, or keeps only `edits` (the ones write-back left for the agent).
@@ -201,7 +205,15 @@ private:
         QJsonObject now;
         std::optional<LiveEdit> replaced;
         LiveEdit made;
+        // Steps of one change to several properties or elements undo together; 0 is a step alone.
+        int group = 0;
     };
+    QString applyEdit(const QString &selector, const QString &property, const QString &value);
+    QString undoStep();
+    QString redoStep();
+    void refreshSelection();
+    int m_group = 0;
+    int m_lastGroup = 0;
     std::vector<UndoStep> m_undo;
     std::vector<UndoStep> m_redo;
     std::optional<Browser::Page> m_page;

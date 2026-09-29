@@ -1,5 +1,6 @@
 #pragma once
 #include <QImage>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
 #include <QPointF>
@@ -52,6 +53,23 @@ public:
     };
     virtual EditBoxes editBoxes(const QUuid &frame) const;
 
+    // The element bar (section 3): the selected elements as the page reports them ({selector, tag, classes, text, textOnly,
+    // rect, styles}) and the page's tokens ({colors, spacing, ...} of {name, value}), or nothing while none is picked.
+    struct ElementState {
+        QJsonArray selection;
+        QJsonObject tokens;
+    };
+    virtual ElementState elementState(const QUuid &frame) const;
+    // Every selected element takes `value` for each of `properties`. A preview only shows it (a scrub step); the edit
+    // that follows records it, snapped to a token where the page has one. The answer is why it can't, or empty.
+    virtual QString editElements(const QUuid &frame, const QStringList &properties, const QString &value, bool preview);
+    virtual QString editElementText(const QUuid &frame, const QString &selector, const QString &text);
+    // Live's own undo (section 4), which Ctrl+Z reaches in Edit Page.
+    virtual bool canUndoPageEdit(const QUuid &frame) const;
+    virtual bool canRedoPageEdit(const QUuid &frame) const;
+    virtual void undoPageEdit(const QUuid &frame);
+    virtual void redoPageEdit(const QUuid &frame);
+
     // The sign-in strip inside the first Browser View, until Sign In… or Not Now answers it.
     virtual bool signInOffered() const;
     virtual void signIn();
@@ -68,3 +86,16 @@ inline void BrowserViewHost::dismissSignIn() {}
 inline QString BrowserViewHost::beginEditPage(const QUuid &) { return QStringLiteral("Edit Page needs a live page."); }
 inline void BrowserViewHost::endEditPage(const QUuid &) {}
 inline BrowserViewHost::EditBoxes BrowserViewHost::editBoxes(const QUuid &) const { return {}; }
+inline BrowserViewHost::ElementState BrowserViewHost::elementState(const QUuid &) const { return {}; }
+inline QString BrowserViewHost::editElements(const QUuid &, const QStringList &, const QString &, bool)
+{
+    return QStringLiteral("Edit Page needs a live page.");
+}
+inline QString BrowserViewHost::editElementText(const QUuid &, const QString &, const QString &)
+{
+    return QStringLiteral("Edit Page needs a live page.");
+}
+inline bool BrowserViewHost::canUndoPageEdit(const QUuid &) const { return false; }
+inline bool BrowserViewHost::canRedoPageEdit(const QUuid &) const { return false; }
+inline void BrowserViewHost::undoPageEdit(const QUuid &) {}
+inline void BrowserViewHost::redoPageEdit(const QUuid &) {}

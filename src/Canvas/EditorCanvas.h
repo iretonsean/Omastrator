@@ -57,6 +57,19 @@ public:
     bool enterEditPage(const QUuid &frame);
     void leaveEditPage();
     std::optional<QUuid> editPageFrame() const;
+    // The picked elements' union in view pixels, and the part of the frame the canvas shows; nothing outside Edit Page.
+    std::optional<QRectF> editPageSelectionRect() const;
+    std::optional<QRectF> editPageVisibleRect() const;
+    // The host's answers changed (a pick, an edit, an undo): the element bar and the text editor look again.
+    void noteEditPageHostChanged();
+    // Types over the single picked text element; Enter edits the page, Esc leaves it. False when that isn't picked.
+    bool editPageText();
+    bool isEditingPageText() const;
+    // Ctrl+Z and Ctrl+Shift+Z in Edit Page reach Live's own history, never the document's.
+    bool canUndoPageEdit() const;
+    bool canRedoPageEdit() const;
+    void undoPageEdit();
+    void redoPageEdit();
     // Document points to view pixels, as the canvas draws them now.
     QTransform documentToView() const;
     // Arrow keys move this many points, ten times as far with Shift.
@@ -73,6 +86,8 @@ signals:
     void contextMenuRequested(QPoint globalPosition, const QList<QUuid> &underPointer);
     // Edit Page began or ended.
     void editPageChanged();
+    // The picked elements or their values changed under Edit Page.
+    void editPageHostChanged();
     // A gesture began or ended, or the canvas paused or resumed.
     void gestureChanged();
 

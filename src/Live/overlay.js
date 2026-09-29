@@ -32,6 +32,8 @@
 
   // Each element as it was before anything here changed it, so edits can be taken off again.
   const originals = new Map();
+  // The inline style each element had before a scrub began.
+  const previewed = new Map();
 
   // ------------------------------------------------------------ colours and lengths
 
@@ -691,6 +693,21 @@
       return true;
     },
     selection: () => state.selection.map(info),
+    // A scrub in Omastrator's element bar: shown on each selected element, and taken off before the edit that records it.
+    previewSelected(properties, value) {
+      for (const element of state.selection) {
+        if (!previewed.has(element)) previewed.set(element, element.getAttribute("style"));
+        for (const property of properties) element.style.setProperty(property, value);
+      }
+      redraw();
+    },
+    endPreview() {
+      for (const [element, style] of previewed) {
+        if (style === null) element.removeAttribute("style"); else element.setAttribute("style", style);
+      }
+      previewed.clear();
+      redraw();
+    },
     notice(text) { state.notice = text || ""; redraw(); },
     // Omastrator's answer to an edit: a class swap and, where the page lacks that class's CSS, the value inline.
     applyResolved(resolution) {

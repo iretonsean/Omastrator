@@ -56,6 +56,13 @@ public:
     QString beginEditPage(const QUuid &frame) override;
     void endEditPage(const QUuid &frame) override;
     EditBoxes editBoxes(const QUuid &frame) const override;
+    ElementState elementState(const QUuid &frame) const override;
+    QString editElements(const QUuid &frame, const QStringList &properties, const QString &value, bool preview) override;
+    QString editElementText(const QUuid &frame, const QString &selector, const QString &text) override;
+    bool canUndoPageEdit(const QUuid &frame) const override;
+    bool canRedoPageEdit(const QUuid &frame) const override;
+    void undoPageEdit(const QUuid &frame) override;
+    void redoPageEdit(const QUuid &frame) override;
     // Whether the strip has been answered on this machine; tests clear it.
     static bool signInAnswered();
     static void setSignInAnswered(bool answered);

@@ -45,10 +45,19 @@ void Menus::synchronize()
         action(QString::fromLatin1(name))->setEnabled(m_share && free && !m_share->running() && (drawn || site));
     action(QStringLiteral("sendToDevice"))->setEnabled(m_share && free && !m_share->running() && drawn);
     action(QStringLiteral("sharedLinks"))->setEnabled(m_share != nullptr);
-    action(QStringLiteral("undo"))->setText(!field && s.canUndo() ? QStringLiteral("Undo %1").arg(s.undoName()) : QStringLiteral("Undo"));
-    action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && !locked && s.canUndo()));
-    action(QStringLiteral("redo"))->setText(!field && s.canRedo() ? QStringLiteral("Redo %1").arg(s.redoName()) : QStringLiteral("Redo"));
-    action(QStringLiteral("redo"))->setEnabled(field || (!typing && !proposal && !locked && s.canRedo()));
+    // In Edit Page, Ctrl+Z is the page's own history and never the document's.
+    const bool pageHistory = !field && m_canvas && m_canvas->editPageFrame();
+    if (pageHistory) {
+        action(QStringLiteral("undo"))->setText(QStringLiteral("Undo Page Edit"));
+        action(QStringLiteral("undo"))->setEnabled(m_canvas->canUndoPageEdit());
+        action(QStringLiteral("redo"))->setText(QStringLiteral("Redo Page Edit"));
+        action(QStringLiteral("redo"))->setEnabled(m_canvas->canRedoPageEdit());
+    } else {
+        action(QStringLiteral("undo"))->setText(!field && s.canUndo() ? QStringLiteral("Undo %1").arg(s.undoName()) : QStringLiteral("Undo"));
+        action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && !locked && s.canUndo()));
+        action(QStringLiteral("redo"))->setText(!field && s.canRedo() ? QStringLiteral("Redo %1").arg(s.redoName()) : QStringLiteral("Redo"));
+        action(QStringLiteral("redo"))->setEnabled(field || (!typing && !proposal && !locked && s.canRedo()));
+    }
     action(QStringLiteral("cut"))->setEnabled(field || (!typing && !proposal && !locked && selected));
     action(QStringLiteral("copy"))->setEnabled(field || (!typing && selected));
     action(QStringLiteral("paste"))->setEnabled(field || (!typing && !proposal && !locked && drawn && s.canPaste()));
