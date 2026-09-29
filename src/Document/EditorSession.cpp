@@ -10,7 +10,7 @@ struct ToolInfo {
     const char *raw;
     const char *title;
 };
-const std::array<ToolInfo, 23> toolInfo{{
+const std::array<ToolInfo, 24> toolInfo{{
     {Tool::select, "select", "Selection"},
     {Tool::directSelect, "directSelect", "Direct Selection"},
     {Tool::pen, "pen", "Pen"},
@@ -34,6 +34,7 @@ const std::array<ToolInfo, 23> toolInfo{{
     {Tool::zoom, "zoom", "Zoom"},
     {Tool::artboard, "artboard", "Artboard"},
     {Tool::frame, "frame", "Frame"},
+    {Tool::browserView, "browserView", "Browser View"},
 }};
 }
 

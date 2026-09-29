@@ -483,3 +483,26 @@ The tests:
     `CloseReason::closed` and not `reset`, so a late event can't mark the
     frames "paused by reset". If the browser is still starting it stops just
     after it is up, so the profile can be busy for that moment.
+- **The tool and the bar (commit 4).**
+  - The address bar is drawn by the canvas above the frame, 28 px tall, and
+    the address is a `QLineEdit` only while it is edited. The bar's name area
+    falls through to the ordinary frame-label click (select, rename). Below
+    240 view px it collapses to the name and a globe; frames under that keep a
+    plain label.
+  - A tool drag or a click ends on Select with the new frame selected and its
+    address open for typing. A click without a drag drops 1280 × 800.
+  - An address that isn't http or https keeps the editor open and says so on
+    the status line ("Browser View opens http and https pages only."); a bare
+    host gets https, and `localhost`, `127.0.0.1` and `[::1]` get http.
+  - Back and forward come from `Page.getNavigationHistory`, read after each
+    navigation.
+  - "Not your site" is `ProjectRegistry::owns`, cached for 2 seconds per
+    frame. Live's `isMockup` keeps its own test for now.
+  - The sign-in strip shows once in the first frame that is at least 240 × 120
+    on screen. The answer is stored in `QSettings` as
+    `browserView/signInOffered`. Sign In… opens a normal window on the pool's
+    profile with no debugging port (nothing drives it), and the frames show
+    "Signing in…" like Live's window until it closes.
+  - The bar's right-click menu is mirrored in Object ▸ Browser View, so
+    Ctrl+K finds it as "Browser View: …". Set as Design Width waits for
+    the breakpoints commit.

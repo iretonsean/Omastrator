@@ -40,10 +40,21 @@ public:
 
     QImage picture(const QUuid &frame) const override;
     QString message(const QUuid &frame) const override;
+    Bar bar(const QUuid &frame) const override;
+    void act(const QUuid &frame, Action action) override;
+    bool signInOffered() const override;
+    void signIn() override;
+    void dismissSignIn() override;
+    // Whether the strip has been answered on this machine; tests clear it.
+    static bool signInAnswered();
+    static void setSignInAnswered(bool answered);
+    // Omastrator's browser is open in a normal window on the pool's profile for the user to sign in.
+    static bool isSigningIn();
 
     // The pool every session shares. Tests give it their own profile and no idle wait; the app uses the defaults.
     static void setPoolOptions(const BrowserPool::Options &options);
     static BrowserPool *pool();
+    static const BrowserPool::Options &poolSettings();
     static void shutdownPool();
     // The escape hatch: every frame everywhere pauses, the tabs close and the browser stops, and nothing restarts by itself.
     static void resetAll();
@@ -84,6 +95,12 @@ private:
         bool frozen = false;
         bool shown = false;
         bool loading = false;
+        bool canGoBack = false;
+        bool canGoForward = false;
+        // The registry is read at most every couple of seconds, not on every paint.
+        QUrl ownedFor;
+        bool owned = false;
+        qint64 ownedAt = -100'000;
         // Evicted for the cap: not reopened until the frame has been hidden and shown again.
         bool evicted = false;
         bool restoreScroll = false;
@@ -113,6 +130,7 @@ private:
     void onClosed(const QUuid &key, BrowserPool::CloseReason reason);
     void onTabEvent(const QUuid &key, const QString &method, const QJsonObject &params);
     void onScreencastFrame(Entry &entry, const QUuid &frame, const QJsonObject &params);
+    void refreshHistory(const QUuid &frame);
     void decodeNext(const QUuid &frame);
     void decoded(const QUuid &frame, const QImage &image, int ack);
 

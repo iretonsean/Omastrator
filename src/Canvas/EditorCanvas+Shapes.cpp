@@ -68,6 +68,22 @@ VectorPath EditorCanvas::State::shapePath(QPointF from, QPointF to, Qt::Keyboard
     }
 }
 
+// The Browser View tool ends: the drawn frame (or a click's 1280 × 800 one) is selected and asks for its address.
+void EditorCanvas::State::finishBrowserView()
+{
+    std::optional<QUuid> frame;
+    if (drag->interacting) {
+        frame = drag->object;
+    } else if (!drag->started) {
+        frame = session.addBrowserView(QRectF(drag->pressDocument, QSizeF(1280, 800)));
+    }
+    if (!frame)
+        return;
+    session.selectTool(Tool::select);
+    session.select({*frame});
+    openAddressEditor(*frame);
+}
+
 // The Frame tool: a frame over the drag, nested in the innermost frame under the press, as Figma's are.
 void EditorCanvas::State::dragFrame(const QRectF &rect)
 {
@@ -79,8 +95,12 @@ void EditorCanvas::State::dragFrame(const QRectF &rect)
                 && !document.isEffectivelyLocked(object.id) && object.path.painterPath().contains(drag->pressDocument))
                 host = object.id;
         }
-        session.beginInteraction(QStringLiteral("Draw Frame"));
-        drag->object = session.previewAddObject(VectorObject::frame(rect, document.uniqueName(QStringLiteral("Frame"))), host);
+        const bool web = session.tool() == Tool::browserView;
+        session.beginInteraction(web ? QStringLiteral("Draw Browser View") : QStringLiteral("Draw Frame"));
+        VectorObject frame = VectorObject::frame(rect, document.uniqueName(web ? QStringLiteral("Browser View") : QStringLiteral("Frame")));
+        if (web)
+            frame.browser = BrowserView{};
+        drag->object = session.previewAddObject(frame, host);
         drag->interacting = true;
         return;
     }
@@ -102,7 +122,7 @@ void EditorCanvas::State::dragShape(QPointF view, Qt::KeyboardModifiers modifier
     if (modifiers.testFlag(Qt::ShiftModifier) && session.tool() != Tool::line)
         clearGuides();
     const VectorPath path = shapePath(drag->pressDocument, to, modifiers);
-    if (session.tool() == Tool::frame) {
+    if (session.tool() == Tool::frame || session.tool() == Tool::browserView) {
         dragFrame(path.bounds());
         return;
     }

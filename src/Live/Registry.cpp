@@ -86,6 +86,11 @@ std::optional<QString> folderFor(const QUrl &url)
     return folder;
 }
 
+bool owns(const QUrl &url)
+{
+    return folderFor(url).has_value();
+}
+
 QString remember(const QUrl &url, const QString &folder)
 {
     if (!QFileInfo(folder).isDir())

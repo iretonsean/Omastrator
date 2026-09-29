@@ -29,3 +29,29 @@ void EditorSession::setBrowserPicture(const QUuid &frame, const QImage &picture)
         return;
     object->browser->picture = picture;
 }
+
+QUuid EditorSession::addBrowserView(const QRectF &rect, const QUrl &url)
+{
+    VectorObject frame = VectorObject::frame(rect, m_document ? m_document->uniqueName(QStringLiteral("Browser View")) : QStringLiteral("Browser View"));
+    frame.browser = BrowserView{.url = url, .scroll = {}, .picture = {}};
+    return addFrameObject(frame, QStringLiteral("Draw Browser View"));
+}
+
+void EditorSession::setBrowserUrl(const QUuid &frame, const QUrl &url)
+{
+    const VectorObject *object = m_document ? m_document->find(frame) : nullptr;
+    if (!object || !object->browser || object->browser->url == url)
+        return;
+    edit(QStringLiteral("Change URL"), [&](VectorDocument &document) {
+        document.find(frame)->browser->url = url;
+        document.find(frame)->browser->scroll = {};
+    });
+}
+
+std::optional<QUuid> EditorSession::selectedBrowserView() const
+{
+    if (!m_document || m_selection.size() != 1)
+        return std::nullopt;
+    const VectorObject *object = m_document->find(m_selection.front());
+    return object && object->browser ? std::optional(object->id) : std::nullopt;
+}

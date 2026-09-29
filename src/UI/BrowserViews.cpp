@@ -145,6 +145,8 @@ QString BrowserViews::message(const QUuid &frame) const
     case State::resetPaused:
         return QStringLiteral("Paused by reset. Click to resume.");
     case State::liveOpen:
+        if (isSigningIn())
+            return QStringLiteral("Signing in…");
         return QStringLiteral("Omastrator's browser is open for Live. Frames resume when it closes.");
     case State::unavailable:
         return QStringLiteral("Chromium isn't installed, so this shows the last picture.");
@@ -173,6 +175,11 @@ void BrowserViews::resume(const QUuid &frame)
 void BrowserViews::setPoolOptions(const BrowserPool::Options &options)
 {
     poolOptions() = options;
+}
+
+const BrowserPool::Options &BrowserViews::poolSettings()
+{
+    return poolOptions();
 }
 
 BrowserPool *BrowserViews::pool()

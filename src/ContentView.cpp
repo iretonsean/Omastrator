@@ -28,7 +28,7 @@
 #include <cmath>
 
 const std::vector<std::vector<std::vector<Tool>>> ContentView::toolSlotGroups{
-    {{Tool::select, Tool::directSelect}, {Tool::frame, Tool::artboard}},
+    {{Tool::select, Tool::directSelect}, {Tool::frame, Tool::browserView, Tool::artboard}},
     {{Tool::pen, Tool::pencil, Tool::scissors}, {Tool::text}, {Tool::typeOnPath},
      {Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star, Tool::line}, {Tool::shapeBuilder}},
     {{Tool::rotate, Tool::scale}, {Tool::gradient, Tool::eyedropper}, {Tool::width}},
@@ -414,17 +414,8 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     connect(m_canvas, &EditorCanvas::pointerMoved, this, &ContentView::showPointer);
     connect(m_canvas, &EditorCanvas::textEditingChanged, m_propertiesPanel, &PropertiesPanel::setEditingText);
     connect(&m_session, &EditorSession::changed, this, &ContentView::synchronize);
-    connect(&m_session, &EditorSession::movedToPage, this, [this](const QString &page) {
-        m_flash = tr("Moved to %1").arg(page);
-        const int number = ++m_flashNumber;
-        QTimer::singleShot(4000, this, [this, number] {
-            if (number == m_flashNumber) {
-                m_flash.clear();
-                synchronize();
-            }
-        });
-        synchronize();
-    });
+    connect(&m_session, &EditorSession::movedToPage, this, [this](const QString &page) { flash(tr("Moved to %1").arg(page)); });
+    connect(m_canvas, &EditorCanvas::notice, this, &ContentView::flash);
     connect(&ShortcutSettings::shared(), &ShortcutSettings::changed, this, &ContentView::retitleTools);
     retitleTools();
     synchronizePanels();

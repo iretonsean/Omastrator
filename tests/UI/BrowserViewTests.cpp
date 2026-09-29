@@ -109,6 +109,7 @@ private slots:
         options.profile = m_directory.filePath(QStringLiteral("profile"));
         options.cache = Browser::Cache::minimal;
         BrowserViews::setPoolOptions(options);
+        BrowserViews::setSignInAnswered(false);
     }
 
     void cleanup()
@@ -153,6 +154,33 @@ private slots:
         rig.views()->attach(nullptr);
         rig.views()->attach(&rig.canvas);
         QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w600s120")), patience);
+    }
+
+    void theBarKnowsHistoryAndDrivesBackForwardAndReload()
+    {
+        NEEDS_CHROMIUM;
+        using Action = BrowserViewHost::Action;
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_VERIFY_WITH_TIMEOUT(rig.red(rig.views()->picture(rig.frame)), patience);
+        QVERIFY(!rig.views()->bar(rig.frame).canGoBack);
+        // A site that isn't in the registry is somebody else's.
+        QVERIFY(rig.views()->bar(rig.frame).notYours);
+        rig.session.setBrowserUrl(rig.frame, page(QStringLiteral("second.html")));
+        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("Second")), patience);
+        QTRY_VERIFY_WITH_TIMEOUT(rig.views()->bar(rig.frame).canGoBack, patience);
+        QVERIFY(!rig.views()->bar(rig.frame).canGoForward);
+        rig.views()->act(rig.frame, Action::back);
+        QTRY_VERIFY_WITH_TIMEOUT(rig.browser().url.path().endsWith(QLatin1String("index.html")), patience);
+        QTRY_VERIFY_WITH_TIMEOUT(rig.views()->bar(rig.frame).canGoForward, patience);
+        rig.views()->act(rig.frame, Action::forward);
+        QTRY_VERIFY_WITH_TIMEOUT(rig.browser().url.path().endsWith(QLatin1String("second.html")), patience);
+        // Reloading keeps the page and asks for no undo step.
+        const size_t steps = rig.session.undoNames().size();
+        rig.views()->act(rig.frame, Action::reload);
+        rig.views()->act(rig.frame, Action::reloadIgnoringCache);
+        QTest::qWait(500);
+        QVERIFY(titles().contains(QStringLiteral("Second")));
+        QCOMPARE(rig.session.undoNames().size(), steps);
     }
 
     void aHiddenCanvasPausesTheFrameAndKeepsItsPicture()

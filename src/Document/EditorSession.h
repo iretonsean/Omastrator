@@ -41,11 +41,12 @@ enum class Tool {
     zoom,            // Z
     artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
     frame,           // F: Figma's frame, after the artboard for the same reason
+    browserView,     // no key: a frame that shows a web page (docs/BROWSER-VIEW.md)
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::typeOnPath, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
-                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame};
+                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame, Tool::browserView};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -97,6 +98,12 @@ public:
     // no undo step is made (a scroll alone marks nothing), and the recorded steps follow the new address so an undo doesn't
     // send the tab back. Locked documents take it too, since it isn't an edit.
     void setBrowserLocation(const QUuid &frame, const QUrl &url, QPointF scroll);
+    // The Browser View tool: a frame over `rect` showing `url` (or "no page yet"), nested as addFrame nests. Selected.
+    QUuid addBrowserView(const QRectF &rect, const QUrl &url = QUrl());
+    // "Change URL": the address the user typed, one undo step. Undo goes back to the page before.
+    void setBrowserUrl(const QUuid &frame, const QUrl &url);
+    // The one selected Browser View, for the menu's Browser View commands.
+    std::optional<QUuid> selectedBrowserView() const;
     // The last picture, refreshed silently: not unsaved, not a step, no signal.
     void setBrowserPicture(const QUuid &frame, const QImage &picture);
 
@@ -663,6 +670,7 @@ private:
     // The shared tail of paste(): renumbers ids, places the objects and selects them.
     void pasteObjects(std::vector<VectorObject> objects, PastePosition position);
     void insertNew(VectorDocument &document, VectorObject object);
+    QUuid addFrameObject(VectorObject frame, const QString &step);
     void restore(const DocumentHistory::Snapshot &snapshot);
     // Pages' view memory: what leaving a page keeps, and what entering one restores.
     void rememberPageView();

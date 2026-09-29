@@ -91,6 +91,7 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
             m_session.setBrowserLocation(frame, url, {});
         }
         entry.loading = true;
+        refreshHistory(frame);
         emit frameChanged(frame);
     } else if (method == QLatin1String("Page.navigatedWithinDocument")) {
         const QUrl url(params["url"].toString());
@@ -98,8 +99,9 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
         if (params["frameId"].toString() == entry.mainFrame && object && object->browser && !sameAddress(object->browser->url, url)) {
             entry.navigated = url;
             m_session.setBrowserLocation(frame, url, entry.scroll);
-            emit frameChanged(frame);
         }
+        refreshHistory(frame);
+        emit frameChanged(frame);
     } else if (method == QLatin1String("Page.frameStartedLoading")) {
         entry.loading = true;
         emit frameChanged(frame);
@@ -110,6 +112,7 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
             call(entry, QStringLiteral("Runtime.evaluate"),
                  {{"expression", QStringLiteral("window.scrollTo(%1, %2)").arg(entry.scroll.x()).arg(entry.scroll.y())}});
         }
+        refreshHistory(frame);
         emit frameChanged(frame);
     }
 }

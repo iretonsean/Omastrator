@@ -1,6 +1,7 @@
 #include "ContentView.h"
 #include <QHBoxLayout>
 #include <QLocale>
+#include <QTimer>
 
 namespace {
 QLabel *statusText(QLabel *label, const QString &name)
@@ -55,6 +56,19 @@ void ContentView::showPointer(std::optional<QPointF> point)
     m_pointer->setText(point ? QStringLiteral("X %1  Y %2 pt").arg(point->x(), 0, 'f', 1).arg(point->y(), 0, 'f', 1) : QStringLiteral("X –  Y –"));
 }
 
+void ContentView::flash(const QString &text)
+{
+    m_flash = text;
+    const int number = ++m_flashNumber;
+    QTimer::singleShot(4000, this, [this, number] {
+        if (number == m_flashNumber) {
+            m_flash.clear();
+            synchronize();
+        }
+    });
+    synchronize();
+}
+
 QString ContentView::hint(Tool tool)
 {
     switch (tool) {
@@ -80,6 +94,7 @@ QString ContentView::hint(Tool tool)
     case Tool::hand: return QStringLiteral("Drag to pan · Space pans from any tool");
     case Tool::zoom: return QStringLiteral("Click to zoom in · Alt-click to zoom out");
     case Tool::frame: return QStringLiteral("Drag to draw a frame · Inside a frame it nests · Shift squares · Alt draws from the centre");
+    case Tool::browserView: return QStringLiteral("Drag to draw a Browser View, or click for 1280 × 800 · Then type a URL");
     case Tool::artboard: return QStringLiteral("Drag to draw an artboard · Drag to move or resize · Alt-drag duplicates · Delete removes it");
     }
     return QString();

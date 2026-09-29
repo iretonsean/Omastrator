@@ -10,6 +10,8 @@
 #include <QPainter>
 #include <QStyleHints>
 #include <cmath>
+#include <QHelpEvent>
+#include <QToolTip>
 
 EditorCanvas::State::State(EditorCanvas &canvas, EditorSession &session) : canvas(canvas), session(session), shownTool(session.tool())
 {
@@ -196,6 +198,15 @@ bool EditorCanvas::event(QEvent *event)
             event->accept();
             return true;
         }
+    }
+    if (event->type() == QEvent::ToolTip) {
+        const auto *help = static_cast<QHelpEvent *>(event);
+        const QString tip = m_state->browserBarTip(help->pos());
+        if (tip.isEmpty())
+            QToolTip::hideText();
+        else
+            QToolTip::showText(help->globalPos(), tip, this);
+        return true;
     }
     // Tab would move focus away mid-drawing.
     if (event->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(event)->key() == Qt::Key_Tab && m_state->text)

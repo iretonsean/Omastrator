@@ -46,6 +46,9 @@ public:
     // Where a Browser View's live picture and messages come from; the canvas owns neither.
     void setBrowserViewHost(BrowserViewHost *host);
     BrowserViewHost *browserViewHost() const;
+    // The Browser View's address field opens over its bar; Enter changes the URL, Escape leaves it.
+    void openAddressEditor(const QUuid &frame);
+    bool isEditingAddress() const;
     // Document points to view pixels, as the canvas draws them now.
     QTransform documentToView() const;
     // Arrow keys move this many points, ten times as far with Shift.
@@ -53,6 +56,8 @@ public:
     static void setKeyboardIncrement(double points);
 
 signals:
+    // A line for the status bar, as a URL the Browser View refuses.
+    void notice(const QString &text);
     // The pointer's document position, for the status bar; nullopt off the artboard.
     void pointerMoved(std::optional<QPointF> documentPoint);
     void textEditingChanged(bool editing);

@@ -6,8 +6,11 @@
 #include <QCursor>
 #include <QElapsedTimer>
 #include <QLineF>
+#include <QPointer>
 #include <QTimer>
 #include <memory>
+
+class QLineEdit;
 
 class Rulers;
 
@@ -198,6 +201,29 @@ struct EditorCanvas::State {
     // A Browser View's line over the frame, as "Paused by reset" (EditorCanvas+Browser.cpp).
     void drawBrowserMessages(QPainter &painter) const;
     BrowserViewHost *browserHost = nullptr;
+    // A Browser View's address bar and sign-in strip (EditorCanvas+BrowserBar.cpp), laid out in view pixels.
+    struct BrowserBarLayout {
+        QUuid frame;
+        QRectF bar, back, forward, reload, name, address, tag;
+        bool collapsed = false;
+    };
+    struct SignInStrip {
+        QRectF strip, signIn, notNow;
+    };
+    std::vector<BrowserBarLayout> browserBars() const;
+    void drawBrowserBars(QPainter &painter) const;
+    std::optional<QUuid> browserBarAt(QPointF view) const;
+    QString browserBarTip(QPointF view) const;
+    // True when the press was the bar's or the strip's.
+    bool browserBarPress(QPointF view);
+    bool browserBarMenu(QPointF view, QPoint global);
+    void openAddressEditor(const QUuid &frame);
+    void closeAddressEditor();
+    std::optional<SignInStrip> signInStrip() const;
+    void drawSignInStrip(QPainter &painter) const;
+    bool signInPress(QPointF view);
+    QPointer<QLineEdit> addressEdit;
+    QUuid addressFrame;
     std::optional<QUuid> frameLabelAt(QPointF view) const;
 
     // Scissors (C) ------------------------------------------------------------------
@@ -258,6 +284,7 @@ struct EditorCanvas::State {
     void shapePress(QPointF view);
     void dragShape(QPointF view, Qt::KeyboardModifiers modifiers);
     void dragFrame(const QRectF &rect);
+    void finishBrowserView();
     VectorPath shapePath(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers) const;
 
     // Shape Builder (Shift-M) -------------------------------------------------

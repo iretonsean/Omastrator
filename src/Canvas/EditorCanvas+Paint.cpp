@@ -104,6 +104,8 @@ void EditorCanvas::State::paint(QPainter &painter)
     drawBrowserMessages(painter);
     drawArtboardLabels(painter);
     drawFrameLabels(painter);
+    drawBrowserBars(painter);
+    drawSignInStrip(painter);
     drawGuides(painter);
     drawOverlay(painter);
 }

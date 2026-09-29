@@ -49,6 +49,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
             beginRulerGuide(Qt::Vertical, view);
         return;
     }
+    // A Browser View's bar and sign-in strip take their presses before any tool does.
+    if (browserBarPress(view))
+        return;
     // A guide under the Selection tools moves; a live corner's widget sets its radius;
     // a selected path text's bracket slides its start.
     if (session.tool() == Tool::select || session.tool() == Tool::directSelect) {
@@ -92,6 +95,7 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
         typeOnPathPress(view);
         break;
     case Tool::frame:
+    case Tool::browserView:
     case Tool::line:
     case Tool::rectangle:
     case Tool::roundedRectangle:
@@ -269,10 +273,15 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::scaleTool:
     case DragKind::nodes:
     case DragKind::handle:
-    case DragKind::shape:
     case DragKind::convert:
         if (drag->interacting && session.isInteracting())
             session.commitInteraction();
+        break;
+    case DragKind::shape:
+        if (drag->interacting && session.isInteracting())
+            session.commitInteraction();
+        if (session.tool() == Tool::browserView)
+            finishBrowserView();
         break;
     case DragKind::gradient:
         finishGradient();
