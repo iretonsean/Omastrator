@@ -14,16 +14,16 @@ Tick each item when it's done. Change `[ ]` to `[x]` and add the merge
 commit and date, for example `[x] … (a1b2c3d, 2026-09-29)`, then commit this
 file with the work. Don't delete finished items.
 
-- [x] 1. Text stroke inside/outside (check first) (cefed5e, 2026-09-28)
-- [x] 2. Non-printing / non-exporting artboards (a711523, 2026-09-28)
-- [x] 3. Editable document presets (bcd5b25, 2026-09-28)
-- [x] 4. Frame presets (86f0681, 2026-09-28)
-- [x] 5. Per-side padding fields in auto layout (b63e6d1, 2026-09-28)
-- [x] 6. Lock Document (read-only mode) (77db2d2, 2026-09-28)
-- [x] 7. Settings that travel (7923e6b, 2026-09-28)
-- [x] 8. Canvas size limit (check and document) (a3899b3, 2026-09-28)
+- [x] 1. Text stroke inside/outside (check first) (3a67d4f, 2026-09-28)
+- [x] 2. Non-printing / non-exporting artboards (0cb7b82, 2026-09-28)
+- [x] 3. Editable document presets (990731f, 2026-09-28)
+- [x] 4. Frame presets (8957dc4, 2026-09-28)
+- [x] 5. Per-side padding fields in auto layout (8ea4d54, 2026-09-28)
+- [x] 6. Lock Document (read-only mode) (3399220, 2026-09-28)
+- [x] 7. Settings that travel (1814038, 2026-09-28)
+- [x] 8. Canvas size limit (check and document) (c4c35fb, 2026-09-28)
 - [ ] 9. Browser View and canvas workspaces (high effort, high priority;
-      see section 9). Phase 1, Pages: merged (b82aac5, 2026-09-28).
+      see section 9). Phase 1, Pages: merged (91e8f6c, 2026-09-28).
 
 **The queue ends here.**
 - MEDIUM-EFFORT.md is on hold until the author says otherwise.

@@ -58,12 +58,11 @@ Two loose ends from the design-mode Esc audit mentioned just above:
      strip too (a bar at the bottom or a side isn't handled: the status
      carries only `reservedTop`). Both are pinned in `ShellPluginTests`.
 
-### Done: the promo animation (2026-09-28)
+### Promo material stays out of the repo
 
-The clean-slate promo is finished, approved and posted on X by the author. Its
-brief, source, renderer and video are kept **outside the repo**, in
-`~/Projects/.omastrator-promo/` on the author's machine, along with the older
-`media/promo/` work. The author doesn't want promo material in the repo.
+The author keeps every promo (brief, source, renders, video) outside this repo,
+and the history was rewritten on 2026-09-28 to remove the older `media/promo/`
+work. Don't add promo material here.
 
 ### Checklist for the next session (written 2026-09-28 ~15:00)
 
@@ -344,7 +343,7 @@ What it does:
 suites pass). It's stacked on `feat/graphite-look`, which is stacked on
 `fix/design-mode-escape`. None of them is merged into main yet.
 
-- **Installed:** the app, from `feat/frames` at 0b8bbb3, in ~/.local. The shell
+- **Installed:** the app, from `feat/frames` at 1825fff, in ~/.local. The shell
   plugins are synced too (the author ran `omarchy restart shell` at 08:01).
 - **The daemon** (the app window the author works in) was restarted on the
   08:15 build at the author's OK (08:30), so Name with AI is live.
@@ -358,7 +357,7 @@ suites pass). It's stacked on `feat/graphite-look`, which is stacked on
     The overlay now claims the keyboard on the click (`window.asking` in
     Overlay.qml).
   - Three older QML errors in Island.qml and Overlay.qml are fixed.
-  - **Name with AI** (0b8bbb3):
+  - **Name with AI** (1825fff):
     - The agent's standing instructions (`AgentLauncher::instructions`) require
       real layer names.
     - A `rename` tool renames many objects in one call.
@@ -629,22 +628,6 @@ yet.
   `scripts/install-local.sh --shell` and followed by a daemon restart. The
   author hasn't yet retried "Tidy it up" on a drawing with it; ask how it
   felt.
-- **Branch `wip/promo-v3`** is the promo's third cut and the new app icon.
-  Nothing there is merged.
-  - The animation is `media/promo/promo-v3.html`. The review page is
-    https://claude.ai/artifact/3y4aJA9zbKdYfjpGHAPG37 (a copy with the
-    doctype, html, head and body tags stripped, plus the asset files).
-  - The author hasn't given notes on the animation yet. It runs about 105 s,
-    and cuts were offered: the capture beat, the roast, the Desk's second
-    line, and a shorter thesis.
-  - The new mark is "Off-axis": on an ink tile, a saffron pill top-left, a
-    paper pen stroke through the exact centre, and a cobalt open-square point
-    bottom-right. It's in `packaging/icons/app-icon.svg` and the PNGs (commit
-    9b61b76), and CMake installs the SVG as the scalable icon.
-  - The palette is flat: ink #14151D, paper #F1ECE2, saffron #F2A93B, cobalt
-    #3D5AFE.
-  - Render only after the author approves:
-    `node render.mjs --page promo-v3.html --out omastrator-promo-v3.mp4 --workers 3`
 
 ## Done tonight (fix/design-mode-escape)
 
@@ -709,10 +692,10 @@ obvious, always-working way out.
   `npm run dev` died ("vite: command not found"), and the failure flashed for
   4 s as one cut-off line in the island. The dev server now installs packages
   first, and Live's steps and failures stay readable. Verified on the
-  installed build: installs, then runs on localhost:5173 (fb8c828).
+  installed build: installs, then runs on localhost:5173 (ae89886).
 - **The island ticker:** a message's first line goes in the pill, and the rest
   (or the whole line, when the pill cuts it) goes in a wrapped card under it.
-- **Live in your own Chromium** (eb280e6, docs/OS-SUITE.md "Live in your own
+- **Live in your own Chromium** (3fe7785, docs/OS-SUITE.md "Live in your own
   browser"): an extension plus the `omastrator browser-host` native host plus
   `BrowserLink`. The side panel is the start panel docked to the window.
   Setup is applied on the author's machine: the flags line and the host
