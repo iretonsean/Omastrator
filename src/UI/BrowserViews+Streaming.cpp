@@ -116,6 +116,7 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
                  {{"expression", QStringLiteral("window.scrollTo(%1, %2)").arg(entry.scroll.x()).arg(entry.scroll.y())}});
         }
         refreshHistory(frame);
+        scanBreakpoints(frame);
         emit frameChanged(frame);
     }
 }

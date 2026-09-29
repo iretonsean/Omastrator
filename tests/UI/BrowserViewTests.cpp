@@ -1,5 +1,7 @@
 #include "Canvas/EditorCanvas.h"
 #include "Document/EditorSession.h"
+#include "Live/Breakpoints.h"
+#include "Live/Registry.h"
 #include "Live/StaticServer.h"
 #include "UI/BrowserViews.h"
 #include <QEventLoop>
@@ -249,6 +251,93 @@ private slots:
         QVERIFY(rig.views()->message(rig.frame).contains(QLatin1String("open for Live")));
         BrowserViews::setLiveOpen(false);
         QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, patience);
+    }
+
+    void aResizePreviewReflowsThePageAndEndsWithoutAStep()
+    {
+        NEEDS_CHROMIUM;
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w600s0")), patience);
+        const auto steps = rig.session.undoNames();
+        rig.session.select({rig.frame});
+        rig.session.beginPreview(QStringLiteral("Preview Width"));
+        rig.session.previewFrameBox(rig.frame, {20, 20, 390, 400});
+        // The page lays out at 390 wide, as a phone would show it.
+        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w390s0")), 10'000);
+        rig.session.cancelInteraction();
+        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w600s0")), 10'000);
+        QVERIFY(rig.session.undoNames() == steps);
+        QCOMPARE(rig.session.document()->bounds(rig.frame).width(), 600.0);
+    }
+
+    void aNewDesignWidthReflowsThePageAndUndoGivesItBack()
+    {
+        NEEDS_CHROMIUM;
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w600s0")), patience);
+        rig.session.select({rig.frame});
+        rig.session.beginPreview(QStringLiteral("Preview Width"));
+        rig.session.previewFrameBox(rig.frame, {20, 20, 768, 400});
+        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w768s0")), 10'000);
+        rig.session.setPreviewAsDesignWidth();
+        QTest::qWait(600);
+        QVERIFY(titles().contains(QStringLiteral("w768s0")));
+        rig.session.undo();
+        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w600s0")), 10'000);
+    }
+
+    void aSiteOfYoursOffersItsOwnBreakpointsAndSomebodyElsesOffersTheDefaults()
+    {
+        NEEDS_CHROMIUM;
+        const QUrl url = page(QStringLiteral("breakpoints.html"));
+        {
+            Rig rig(url);
+            QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, patience);
+            QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("w600")), patience);
+            QTest::qWait(500);
+            QVERIFY(rig.views()->bar(rig.frame).notYours);
+            QCOMPARE(rig.views()->breakpoints(rig.frame), Breakpoints::defaults());
+        }
+        BrowserViews::shutdownPool();
+        QVERIFY(ProjectRegistry::remember(url, m_directory.path()).isEmpty());
+        Rig rig(url);
+        QTRY_COMPARE_WITH_TIMEOUT(rig.views()->breakpoints(rig.frame), (QList<int>{768, 1024, 1280}), patience);
+        QVERIFY(!rig.views()->bar(rig.frame).notYours);
+        QVERIFY(ProjectRegistry::forget(url).isEmpty());
+    }
+
+    void aFrameShownBelow160PxPausesAndKeepsItsPicture()
+    {
+        NEEDS_CHROMIUM;
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_VERIFY_WITH_TIMEOUT(rig.red(rig.views()->picture(rig.frame)), patience);
+        // 600 points at a tenth of the zoom are 60 pixels: a thumbnail.
+        rig.session.zoomToRect(QRectF(0, 0, 10000, 8000));
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::paused, 10'000);
+        QVERIFY(rig.red(rig.views()->picture(rig.frame)));
+        rig.session.zoomToRect(QRectF(0, 0, 1000, 800));
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, 10'000);
+    }
+
+    void aFrameOnAnotherPagePausesAndComesBack()
+    {
+        NEEDS_CHROMIUM;
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_VERIFY_WITH_TIMEOUT(rig.red(rig.views()->picture(rig.frame)), patience);
+        const QUuid first = rig.session.document()->currentPageId();
+        rig.session.setCurrentPage(rig.session.addPage(QStringLiteral("Other")));
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::paused, 10'000);
+        rig.session.setCurrentPage(first);
+        QTRY_COMPARE_WITH_TIMEOUT(rig.state(), BrowserViews::State::live, 10'000);
+    }
+
+    void closingTheDocumentClosesEveryTab()
+    {
+        NEEDS_CHROMIUM;
+        Rig rig(page(QStringLiteral("index.html")));
+        QTRY_COMPARE_WITH_TIMEOUT(BrowserViews::pool()->tabCount(), 1, patience);
+        rig.session.loadDocument(VectorDocument::blank({1000, 800}));
+        QTRY_COMPARE_WITH_TIMEOUT(BrowserViews::pool()->tabCount(), 0, 10'000);
     }
 
     void withoutChromiumTheFrameShowsItsLastPicture()

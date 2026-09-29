@@ -103,6 +103,20 @@ public:
     QUuid addBrowserView(const QRectF &rect, const QUrl &url = QUrl());
     // "Change URL": the address the user typed, one undo step. Undo goes back to the page before.
     void setBrowserUrl(const QUuid &frame, const QUrl &url);
+    // A resize preview of a Browser View (docs/BROWSER-VIEW.md, section 6): an interaction that is never recorded. Committing
+    // it, or any edit, undo or tool change but Browse, ends it as cancelInteraction does.
+    void beginPreview(const QString &name);
+    // Shows `frame` at `box`, its children following their constraints (or staying, when fixed). No step is made.
+    void previewFrameBox(const QUuid &frame, const QRectF &box);
+    bool isPreviewOnly() const { return m_interaction && m_interaction->discard; }
+    // The frame's box before the preview began, or its box now.
+    QRectF designBox(const QUuid &frame) const;
+    // "Design Width": the frame's box becomes `box`, one undo step, as Transform's W does.
+    void setDesignBox(const QUuid &frame, const QRectF &box);
+    // The width a preview is showing becomes the design width ("Design Width"); nothing when no preview is showing.
+    void setPreviewAsDesignWidth();
+    // The selected Browser View's children keep their design-width place in the preview ("Fixed while previewing").
+    void setFixedWhilePreviewing(bool fixed);
     // The one selected Browser View, for the menu's Browser View commands.
     std::optional<QUuid> selectedBrowserView() const;
     // The last picture, refreshed silently: not unsaved, not a step, no signal.
@@ -714,6 +728,8 @@ private:
         // The last previewTransform, and whether the selection was copied first.
         std::optional<QTransform> transform;
         bool duplicated = false;
+        // A preview that is never recorded (a Browser View's width).
+        bool discard = false;
     };
     std::optional<Interaction> m_interaction;
     struct PageView {

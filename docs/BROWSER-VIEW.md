@@ -506,8 +506,8 @@ The tests:
     profile with no debugging port (nothing drives it), and the frames show
     "Signing in…" like Live's window until it closes.
   - The bar's right-click menu is mirrored in Object ▸ Browser View, so
-    Ctrl+K finds it as "Browser View: …". Set as Design Width waits for
-    the breakpoints commit.
+    Ctrl+K finds it as "Browser View: …". Set as Design Width came with
+    the breakpoints commit (below).
 - **The Browse tool (commit 5).**
   - Browse sits in the Selection slot of the rail with Select and Direct
     Select, and has no default key (it is under the tool's flyout and Ctrl+K).
@@ -551,3 +551,36 @@ The tests:
   - Focus emulation (`Emulation.setFocusEmulationEnabled`) was tried so pages
     draw a caret. It starves the screencast, and headless pages already count
     as focused (`document.hasFocus()` is true), so it isn't used.
+- **Resize preview and breakpoints (commit 6).**
+  - A preview is an `Interaction` flagged `discard`. `commitInteraction` on one
+    cancels it, so any edit, undo, lock, page switch or tool change ends it
+    without a history step. The exception is Browse: it keeps a held preview,
+    so a site can be browsed at its phone width. (Section 6 says "switching
+    tools ends it"; browsing at a held width is what the previews are for.)
+    `browseBox` reads the document's bounds, so it uses the preview box with no
+    extra code.
+  - Changing the address during a preview also changes the interaction's saved
+    `before` and `base`, so ending the preview doesn't put an old address back.
+  - Dragging a handle of one selected Browser View is a "Preview Width" that
+    is cancelled on release. Other frames, and a Browser View selected with
+    others, scale as before.
+  - The breakpoint buttons sit in the bar, right of the name, and show for a
+    selected, browsed or hovered frame (the hover reaches 36 px above the
+    frame, over the bar). The design width is always among them, dotted; a
+    press on it, on the held width again, on Esc or on the canvas elsewhere
+    ends the preview. The buttons drop out when the address would keep less
+    than 120 px, except while a preview is held (20 px), so a phone-width
+    preview keeps its way back.
+  - Set as Design Width is in the bar's menu (on a button or while a preview
+    shows) and in Object ▸ Browser View (only while a preview is held). It is
+    the one "Design Width" step. A frame that isn't a Browser View is left
+    alone.
+  - "Fixed while previewing" is a checkbox in Layout for the direct children of
+    a Browser View. In a preview such a child is made absolute on the preview's
+    copy only, so it neither flows nor follows constraints.
+  - `Breakpoints` (oma_live) is pure: `scanScript()` and `fromScan()`. The
+    scan runs after each load of a frame that is your own site
+    (`ProjectRegistry::owns`); its answer is cached per origin. `ProjectRegistry::owns`
+    already existed, so `LiveSession::isMockup` is unchanged.
+  - `BrowserViewHost::breakpoints` has a default that answers the four
+    defaults, so canvas tests need no fake for it.

@@ -540,7 +540,8 @@ struct VectorDocument {
     void applyAutoLayout();
     // Figma's resize: the frame's box to `box`, its children outside a flow moved and sized by their
     // constraints (and theirs, in child frames, in turn). Sized by hand, a hugging frame becomes fixed.
-    void resizeFrame(const QUuid &id, const QRectF &box);
+    // A `preview` (a Browser View's resize preview) leaves children whose preview rule is fixed where they are, out of the flow too.
+    void resizeFrame(const QUuid &id, const QRectF &box, bool preview = false);
     // The same for loose art: each of `ids` follows its constraints as the box `old` becomes `fresh`
     // (an artboard's art, whose box isn't an object). Left and Top, the default, follow the top left.
     void constrainToBox(const std::vector<QUuid> &ids, const QRectF &old, const QRectF &fresh);

@@ -182,7 +182,8 @@ void EditorSession::selectTool(Tool tool)
             pruneSelection();
         }
     }
-    if (m_interaction)
+    // Browse can look at a page held at a preview width.
+    if (m_interaction && !(m_interaction->discard && tool == Tool::browse))
         commitInteraction();
     m_tool = tool;
     if (tool != Tool::directSelect && tool != Tool::pen)
@@ -533,7 +534,7 @@ void EditorSession::beginInteraction(const QString &name)
         return;
     if (m_interaction)
         commitInteraction();
-    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false};
+    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false, false};
 }
 
 void EditorSession::previewTransform(const QTransform &transform, bool reflowAreaText)
@@ -569,6 +570,10 @@ void EditorSession::commitInteraction()
 {
     if (!m_interaction)
         return;
+    if (m_interaction->discard) {
+        cancelInteraction();
+        return;
+    }
     Interaction interaction = std::move(*m_interaction);
     m_interaction.reset();
     if (!m_document || *m_document == interaction.before) {

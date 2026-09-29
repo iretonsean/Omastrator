@@ -46,6 +46,7 @@ public:
     void signIn() override;
     void dismissSignIn() override;
     bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params) override;
+    QList<int> breakpoints(const QUuid &frame) const override;
     // Whether the strip has been answered on this machine; tests clear it.
     static bool signInAnswered();
     static void setSignInAnswered(bool answered);
@@ -137,6 +138,9 @@ private:
     void onTabEvent(const QUuid &key, const QString &method, const QJsonObject &params);
     void onScreencastFrame(Entry &entry, const QUuid &frame, const QJsonObject &params);
     void refreshHistory(const QUuid &frame);
+    // Whether the frame's page is one of the user's own sites, read from the registry at most every couple of seconds.
+    bool owned(const QUuid &frame) const;
+    void scanBreakpoints(const QUuid &frame);
     // Page limits (BrowserViews+Limits.cpp).
     void limitPage(const Entry &entry);
     void onPageLimit(Entry &entry, const QString &method, const QJsonObject &params);
@@ -166,6 +170,8 @@ private:
     QUuid m_scope = QUuid::createUuid();
     QHash<QUuid, Entry> m_entries;
     QHash<QUuid, QUuid> m_frameOfKey;
+    // Each own site's breakpoints, by origin, read again on every load.
+    QHash<QString, QList<int>> m_breakpoints;
     QPointer<BrowserPool> m_connectedPool;
     QThreadPool m_decoder;
     QTimer m_reconcile;

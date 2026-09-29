@@ -327,6 +327,8 @@ void Menus::buildObject(QMenuBar &bar)
         if (const auto frame = browserFrame())
             QDesktopServices::openUrl(session().document()->find(*frame)->browser->url);
     });
+    add(browserView, QStringLiteral("browserViewDesignWidth"), QStringLiteral("Set as Design Width"), QKeySequence(),
+        [this] { session().setPreviewAsDesignWidth(); });
     browserView->addSeparator();
     add(browserView, QStringLiteral("browserViewReload"), QStringLiteral("Reload"), QKeySequence(), [this, browserFrame] {
         if (const auto frame = browserFrame())

@@ -93,6 +93,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             cancelDrag();
         } else if (pen) {
             finishPen();
+        } else if (endHeldPreview()) {
+            // A breakpoint button's width lets go.
         } else if (session.isolatedGroup()) {
             session.exitIsolation();
         } else if (!session.pickedNodes().empty()) {

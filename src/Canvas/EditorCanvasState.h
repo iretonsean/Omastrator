@@ -5,6 +5,7 @@
 #include "Canvas/SmartGuides.h"
 #include <QCursor>
 #include <QElapsedTimer>
+#include <QFontMetricsF>
 #include <QLineF>
 #include <QPointer>
 #include <QTimer>
@@ -100,6 +101,8 @@ struct EditorCanvas::State {
         std::optional<QUuid> keyCandidate;
         // Width tool: the point's position along the path (0..1), fixed at press.
         double pathT = 0;
+        // A handle drag on a Browser View is a preview of its width, never a step.
+        std::optional<QUuid> previewFrame;
     };
     std::optional<Drag> drag;
     // A fresh drag of `kind` pressed at `view`.
@@ -207,6 +210,9 @@ struct EditorCanvas::State {
     struct BrowserBarLayout {
         QUuid frame;
         QRectF bar, back, forward, reload, name, address, tag;
+        // The breakpoint buttons and the width each previews, ascending; the design width is among them.
+        std::vector<std::pair<QRectF, int>> widths;
+        int designWidth = 0;
         bool collapsed = false;
     };
     struct SignInStrip {
@@ -224,6 +230,23 @@ struct EditorCanvas::State {
     std::optional<SignInStrip> signInStrip() const;
     void drawSignInStrip(QPainter &painter) const;
     bool signInPress(QPointF view);
+    // The breakpoint buttons (EditorCanvas+Breakpoints.cpp) ---------------------------------
+    struct HeldPreview {
+        QUuid frame;
+        int width = 0;
+    };
+    // The width a button holds a frame at, until the same button, the design-width button, Esc, a new press or a tool change.
+    std::optional<HeldPreview> held;
+    // The width the frame is showing at while a preview is (held, or the handle drag's), rounded; nothing otherwise.
+    std::optional<int> previewedWidth(const QUuid &frame) const;
+    bool showsWidths(const QUuid &frame) const;
+    // Lays the buttons out to the left of `right`, and answers where the rest of the bar now ends.
+    double addWidthButtons(BrowserBarLayout &layout, double right, double left, const QFontMetricsF &metrics) const;
+    void holdPreview(const QUuid &frame, int width);
+    // False when nothing was held.
+    bool endHeldPreview();
+    void setDesignWidth(const QUuid &frame, int width);
+    void drawWidthButtons(QPainter &painter, const BrowserBarLayout &layout) const;
     QPointer<QLineEdit> addressEdit;
     QUuid addressFrame;
     std::optional<QUuid> frameLabelAt(QPointF view) const;

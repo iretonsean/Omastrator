@@ -39,17 +39,25 @@ BrowserViewHost::Bar BrowserViews::bar(const QUuid &frame) const
     bar.canGoBack = found->canGoBack;
     bar.canGoForward = found->canGoForward;
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
-    if (object && object->browser && !object->browser->url.isEmpty()) {
-        // A cache written from a const call: it only spares the registry file a read on every paint.
-        auto &entry = const_cast<Entry &>(*found);
-        if (entry.ownedFor != object->browser->url || m_clock.elapsed() - entry.ownedAt > ownershipCheckMs) {
-            entry.ownedFor = object->browser->url;
-            entry.owned = ProjectRegistry::owns(object->browser->url);
-            entry.ownedAt = m_clock.elapsed();
-        }
-        bar.notYours = !entry.owned;
-    }
+    if (object && object->browser && !object->browser->url.isEmpty())
+        bar.notYours = !owned(frame);
     return bar;
+}
+
+bool BrowserViews::owned(const QUuid &frame) const
+{
+    const auto found = m_entries.constFind(frame);
+    const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
+    if (found == m_entries.constEnd() || !object || !object->browser || object->browser->url.isEmpty())
+        return false;
+    // A cache written from a const call: it only spares the registry file a read on every paint.
+    auto &entry = const_cast<Entry &>(*found);
+    if (entry.ownedFor != object->browser->url || m_clock.elapsed() - entry.ownedAt > ownershipCheckMs) {
+        entry.ownedFor = object->browser->url;
+        entry.owned = ProjectRegistry::owns(object->browser->url);
+        entry.ownedAt = m_clock.elapsed();
+    }
+    return entry.owned;
 }
 
 void BrowserViews::refreshHistory(const QUuid &frame)

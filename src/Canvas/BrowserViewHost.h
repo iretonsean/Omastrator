@@ -1,6 +1,7 @@
 #pragma once
 #include <QImage>
 #include <QJsonObject>
+#include <QList>
 #include <QString>
 #include <QUuid>
 
@@ -30,6 +31,9 @@ public:
     // or paused, in which case a frame that reset paused starts again.
     virtual bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params);
 
+    // The widths the frame's breakpoint buttons offer, ascending: its own site's media queries, or the defaults.
+    virtual QList<int> breakpoints(const QUuid &frame) const;
+
     // The sign-in strip inside the first Browser View, until Sign In… or Not Now answers it.
     virtual bool signInOffered() const;
     virtual void signIn();
@@ -39,6 +43,7 @@ public:
 inline BrowserViewHost::Bar BrowserViewHost::bar(const QUuid &) const { return {}; }
 inline void BrowserViewHost::act(const QUuid &, Action) {}
 inline bool BrowserViewHost::dispatch(const QUuid &, const QString &, const QJsonObject &) { return false; }
+inline QList<int> BrowserViewHost::breakpoints(const QUuid &) const { return {390, 768, 1280, 1440}; }
 inline bool BrowserViewHost::signInOffered() const { return false; }
 inline void BrowserViewHost::signIn() {}
 inline void BrowserViewHost::dismissSignIn() {}

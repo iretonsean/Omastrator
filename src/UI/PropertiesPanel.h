@@ -136,6 +136,7 @@ private:
     QComboBox *m_layoutWidth = nullptr;
     QComboBox *m_layoutHeight = nullptr;
     QCheckBox *m_layoutAbsolute = nullptr;
+    QCheckBox *m_layoutFixedPreview = nullptr;
     QWidget *m_layoutConstraints = nullptr;
     QComboBox *m_constraintX = nullptr;
     QComboBox *m_constraintY = nullptr;

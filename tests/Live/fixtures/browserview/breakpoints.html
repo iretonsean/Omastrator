@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Breakpoints</title>
+<style>
+  :root { --breakpoint-xl: 80rem; }
+  body { margin: 0; background: #e33; height: 800px; }
+  @media (min-width: 768px) { body { background: #3a3; } }
+  @media (width >= 64rem) { body { background: #33e; } }
+  @media (min-width: 768px) { h1 { color: #fff; } }
+</style>
+<h1 id="w"></h1>
+<script>
+  const show = () => { document.title = 'w' + innerWidth; document.getElementById('w').textContent = innerWidth; };
+  show();
+  addEventListener('resize', show);
+</script>

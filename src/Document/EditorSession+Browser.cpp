@@ -10,6 +10,15 @@ void EditorSession::setBrowserLocation(const QUuid &frame, const QUrl &url, QPoi
         return;
     object->browser->url = url;
     object->browser->scroll = scroll;
+    // A preview in flight would put the old address back when it ends.
+    if (m_interaction) {
+        for (VectorDocument *held : {&m_interaction->before, &m_interaction->base}) {
+            if (VectorObject *recorded = held->find(frame); recorded && recorded->browser) {
+                recorded->browser->url = url;
+                recorded->browser->scroll = scroll;
+            }
+        }
+    }
     // Scrolling alone is view state, like the picture: saved with the file, never a reason to ask about saving.
     if (before != url) {
         m_history.mapDocuments([&](VectorDocument &document) {
@@ -54,4 +63,59 @@ std::optional<QUuid> EditorSession::selectedBrowserView() const
         return std::nullopt;
     const VectorObject *object = m_document->find(m_selection.front());
     return object && object->browser ? std::optional(object->id) : std::nullopt;
+}
+
+void EditorSession::beginPreview(const QString &name)
+{
+    beginInteraction(name);
+    if (m_interaction)
+        m_interaction->discard = true;
+}
+
+void EditorSession::previewFrameBox(const QUuid &frame, const QRectF &box)
+{
+    if (!m_document || !m_interaction || !m_interaction->base.find(frame))
+        return;
+    VectorDocument document = m_interaction->base;
+    document.resizeFrame(frame, box, true);
+    m_document = std::move(document);
+    notify();
+}
+
+QRectF EditorSession::designBox(const QUuid &frame) const
+{
+    const VectorDocument *document = m_interaction ? &m_interaction->before : m_document ? &*m_document : nullptr;
+    return document && document->find(frame) ? document->bounds(frame) : QRectF();
+}
+
+void EditorSession::setDesignBox(const QUuid &frame, const QRectF &box)
+{
+    const VectorObject *object = m_document ? m_document->find(frame) : nullptr;
+    if (!object || !object->browser || box.width() < 1 || box.height() < 1)
+        return;
+    if (m_interaction && m_interaction->discard)
+        cancelInteraction();
+    if (m_document->bounds(frame) == box)
+        return;
+    edit(QStringLiteral("Design Width"), [&](VectorDocument &document) { document.resizeFrame(frame, box); });
+}
+
+void EditorSession::setPreviewAsDesignWidth()
+{
+    const std::optional<QUuid> frame = selectedBrowserView();
+    if (frame && isPreviewOnly())
+        setDesignBox(*frame, m_document->bounds(*frame));
+}
+
+void EditorSession::setFixedWhilePreviewing(bool fixed)
+{
+    if (!m_document)
+        return;
+    const std::vector<QUuid> ids = m_selection;
+    edit(QStringLiteral("Fixed While Previewing"), [&](VectorDocument &document) {
+        for (const QUuid &id : ids) {
+            if (VectorObject *object = document.find(id))
+                object->layout.previewRule = fixed ? PreviewRule::fixed : PreviewRule::constraints;
+        }
+    });
 }

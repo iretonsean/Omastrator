@@ -9,6 +9,7 @@
 #include <QPainterPath>
 #include <QFocusEvent>
 #include <QKeyEvent>
+#include <algorithm>
 #include <functional>
 
 // A Browser View's address bar and sign-in strip (docs/BROWSER-VIEW.md, section 4), drawn over the canvas at a constant screen size.
@@ -126,6 +127,7 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
                 right -= width + 4;
             }
         }
+        right = addWidthButtons(layout, right, x, metrics);
         const double nameWidth = std::min(metrics.horizontalAdvance(object.name) + 8, std::max(0.0, (right - x) * 0.3));
         layout.name = QRectF(x, top + (barHeight - metrics.height()) / 2, nameWidth, metrics.height());
         x += nameWidth + 2;
@@ -188,6 +190,7 @@ void EditorCanvas::State::drawBrowserBars(QPainter &painter) const
         const QString shown = empty ? QStringLiteral("Type a URL") : BrowserAddress::shown(object->browser->url);
         painter.drawText(layout.address.adjusted(8, 0, -6, 0), Qt::AlignLeft | Qt::AlignVCenter,
                          metrics.elidedText(shown, Qt::ElideMiddle, layout.address.width() - 14));
+        drawWidthButtons(painter, layout);
         if (!layout.tag.isNull()) {
             painter.setPen(QPen(quiet, 1));
             painter.setBrush(Qt::NoBrush);
@@ -224,6 +227,10 @@ QString EditorCanvas::State::browserBarTip(QPointF view) const
             return browserHost->bar(layout.frame).loading ? QStringLiteral("Stop") : QStringLiteral("Reload");
         if (layout.tag.contains(view))
             return QStringLiteral("Not your site: changes stay on this machine.");
+        for (const auto &[rect, width] : layout.widths) {
+            if (rect.contains(view))
+                return width == layout.designWidth ? QStringLiteral("Design width: %1").arg(width) : QStringLiteral("Preview at %1 wide").arg(width);
+        }
     }
     return {};
 }
@@ -243,6 +250,14 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
             browserHost->act(layout.frame, BrowserViewHost::Action::forward);
         } else if (layout.reload.contains(view)) {
             browserHost->act(layout.frame, browserHost->bar(layout.frame).loading ? BrowserViewHost::Action::stop : BrowserViewHost::Action::reload);
+        } else if (const auto pressed = std::find_if(layout.widths.begin(), layout.widths.end(), [&](const auto &each) { return each.first.contains(view); });
+                   pressed != layout.widths.end()) {
+            // The same button, or the design width's, lets the preview go.
+            const int width = pressed->second;
+            if (width == layout.designWidth || (held && held->frame == layout.frame && held->width == width && session.isPreviewOnly()))
+                endHeldPreview();
+            else
+                holdPreview(layout.frame, width);
         } else if (layout.address.contains(view)) {
             session.select({layout.frame});
             openAddressEditor(layout.frame);
@@ -414,6 +429,24 @@ bool EditorCanvas::State::browserBarMenu(QPointF view, QPoint global)
     open->setEnabled(!url.isEmpty());
     QObject::connect(open, &QAction::triggered, menu, [url] { QDesktopServices::openUrl(url); });
     menu->addSeparator();
+    // On a button it sets that width; elsewhere, the width a preview is showing.
+    const auto button = [&] {
+        for (const BrowserBarLayout &layout : browserBars()) {
+            if (layout.frame != *frame)
+                continue;
+            for (const auto &[rect, width] : layout.widths) {
+                if (rect.contains(view))
+                    return std::optional<int>(width);
+            }
+        }
+        return std::optional<int>();
+    }();
+    QAction *design = menu->addAction(QStringLiteral("Set as Design Width"));
+    design->setEnabled(button || previewedWidth(*frame));
+    QObject::connect(design, &QAction::triggered, menu, [this, id = *frame, button] {
+        if (const std::optional<int> width = button ? button : previewedWidth(id))
+            setDesignWidth(id, *width);
+    });
     QAction *hard = menu->addAction(QStringLiteral("Reload Ignoring Cache"));
     QObject::connect(hard, &QAction::triggered, menu, [this, id = *frame] { browserHost->act(id, BrowserViewHost::Action::reloadIgnoringCache); });
     QAction *signIn = menu->addAction(QStringLiteral("Sign in to Omastrator's browser…"));

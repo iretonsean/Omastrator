@@ -52,6 +52,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     // A Browser View's bar and sign-in strip take their presses before any tool does.
     if (browserBarPress(view))
         return;
+    // A held width preview ends with the next press anywhere but the page the Browse tool is looking at.
+    if (session.tool() != Tool::browse)
+        endHeldPreview();
     if (session.tool() == Tool::browse) {
         browsePress(view, modifiers, false);
         return;
@@ -290,8 +293,13 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::nodes:
     case DragKind::handle:
     case DragKind::convert:
-        if (drag->interacting && session.isInteracting())
-            session.commitInteraction();
+        if (drag->interacting && session.isInteracting()) {
+            // A Browser View's width was only a preview: the frame goes back to its design width.
+            if (drag->previewFrame)
+                session.cancelInteraction();
+            else
+                session.commitInteraction();
+        }
         break;
     case DragKind::shape:
         if (drag->interacting && session.isInteracting())

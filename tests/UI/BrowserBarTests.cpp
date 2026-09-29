@@ -7,6 +7,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <algorithm>
 
 // The Browser View tool, its address bar and the sign-in strip (docs/BROWSER-VIEW.md, section 4). None of it needs
 // Chromium: the canvas talks to a fake host, and signing in runs a fake browser script.
@@ -17,11 +18,13 @@ public:
     QString message(const QUuid &) const override { return {}; }
     Bar bar(const QUuid &) const override { return state; }
     void act(const QUuid &frame, Action action) override { acts.emplace_back(frame, action); }
+    QList<int> breakpoints(const QUuid &) const override { return widths; }
     bool signInOffered() const override { return offered; }
     void signIn() override { ++signIns; offered = false; }
     void dismissSignIn() override { ++dismissals; offered = false; }
 
     Bar state;
+    QList<int> widths{390, 768, 1280, 1440};
     std::vector<std::pair<QUuid, Action>> acts;
     bool offered = false;
     int signIns = 0;
@@ -56,6 +59,31 @@ struct Rig {
         frame = session.addBrowserView(rect, QUrl(QStringLiteral("https://example.com/a")));
         session.deselectAll();
     }
+    // The middle of the breakpoint button for `width`, laid out from the bar's right end as the canvas does.
+    QPoint button(int width, QList<int> all)
+    {
+        const VectorObject *object = this->object(frame);
+        const QRectF box = canvas.documentToView().mapRect(object->path.painterPath().boundingRect());
+        const int design = int(std::lround(session.designBox(frame).width()));
+        if (!all.contains(design))
+            all.append(design);
+        std::sort(all.begin(), all.end());
+        QFont font = canvas.font();
+        font.setPixelSize(11);
+        const QFontMetricsF metrics(font);
+        const auto size = [&](int each) { return metrics.horizontalAdvance(QString::number(each)) + 14; };
+        double total = -2;
+        for (int each : all)
+            total += size(each) + 2;
+        double x = box.right() - 2 - total;
+        for (int each : all) {
+            if (each == width)
+                return QPoint(int(x + size(each) / 2), int(box.top() - 4 - 14));
+            x += size(each) + 2;
+        }
+        return {};
+    }
+    void click(QPoint at) { QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, at); }
     void draw(QPointF from, QPointF to)
     {
         session.selectTool(Tool::browserView);
@@ -250,6 +278,112 @@ private slots:
         const QPointF corner = rig.view({100, 200});
         QTest::mouseClick(&rig.canvas, Qt::LeftButton, Qt::NoModifier, QPoint(int(corner.x() + 14), int(corner.y() - 18)));
         QVERIFY(rig.host.acts.empty());
+    }
+
+    void aSelectedViewOffersItsBreakpointsAndAHoveredOneToo()
+    {
+        Rig rig;
+        rig.add();
+        QVERIFY(rig.button(768, rig.host.widths) != QPoint());
+        // Nothing selected and the pointer far away: the bar keeps to the address.
+        const QImage quiet = rig.canvas.grab().toImage();
+        rig.session.select({rig.frame});
+        QVERIFY(rig.canvas.grab().toImage() != quiet);
+    }
+
+    void aButtonHoldsTheFrameAtItsWidthWithoutAStep()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        const auto steps = rig.session.undoNames();
+        const bool modified = rig.session.isModified();
+        rig.click(rig.button(390, rig.host.widths));
+        QVERIFY(rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 390.0);
+        QCOMPARE(rig.object(rig.frame)->path.bounds().topLeft(), QPointF(100, 200));
+        rig.click(rig.button(1280, rig.host.widths));
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 1280.0);
+        // The same button again ends it, and so does the dotted design width.
+        rig.click(rig.button(1280, rig.host.widths));
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+        rig.click(rig.button(768, rig.host.widths));
+        rig.click(rig.button(600, rig.host.widths));
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+        QVERIFY(rig.session.undoNames() == steps);
+        QCOMPARE(rig.session.isModified(), modified);
+    }
+
+    void escapeAPressElsewhereAndAnEditEndAHeldPreview()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        rig.click(rig.button(390, rig.host.widths));
+        QVERIFY(rig.session.isPreviewOnly());
+        QTest::keyClick(&rig.canvas, Qt::Key_Escape);
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+
+        rig.click(rig.button(390, rig.host.widths));
+        rig.click(rig.view({3000, 2500}).toPoint());
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+
+        rig.session.select({rig.frame});
+        rig.click(rig.button(390, rig.host.widths));
+        rig.session.moveSelection({10, 0});
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+    }
+
+    void aHeldPreviewSurvivesTheBrowseTool()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        rig.click(rig.button(390, rig.host.widths));
+        rig.session.selectTool(Tool::browse);
+        QVERIFY(rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 390.0);
+        rig.session.selectTool(Tool::select);
+        QVERIFY(!rig.session.isPreviewOnly());
+    }
+
+    void setAsDesignWidthIsOneStep()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        const int steps = rig.session.undoNames().size();
+        rig.click(rig.button(768, rig.host.widths));
+        rig.session.setPreviewAsDesignWidth();
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 768.0);
+        QCOMPARE(rig.session.undoNames().size(), steps + 1);
+        rig.session.undo();
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+    }
+
+    void draggingAHandleOfABrowserViewIsAPreviewThatEndsOnRelease()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        const auto steps = rig.session.undoNames();
+        // The right-middle handle.
+        const QPoint handle = rig.view({700, 400}).toPoint();
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle);
+        QTest::mouseMove(&rig.canvas, handle - QPoint(40, 0));
+        QTest::mouseMove(&rig.canvas, handle - QPoint(120, 0));
+        QVERIFY(rig.session.isPreviewOnly());
+        QVERIFY(rig.object(rig.frame)->path.bounds().width() < 600);
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle - QPoint(120, 0));
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+        QVERIFY(rig.session.undoNames() == steps);
     }
 
     void theSignInStripOffersAndRecordsTheAnswer()
