@@ -451,7 +451,7 @@ Item {
         readonly property var spot: remembered.pinned
                                     ? Logic.clampBar(remembered.pinX, remembered.pinY, width, height, window.place, window.topClear)
                                     : target ? Logic.barPosition(target.bounds, width, height, window.place, Style.space(10), window.topClear) : ({ x: 0, y: 0 })
-        visible: window.mine && !window.drawing && target !== null && !root.onboarding.open
+        visible: window.mine && !window.drawing && Logic.barShownOn(target, window.place) && !root.onboarding.open
         onVisibleChanged: if (!visible) window.asking = false
         x: spot.x
         y: spot.y

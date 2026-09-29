@@ -59,6 +59,18 @@ private slots:
         }
     }
 
+    // The bar sticks to its app unless "Bar follows focus" is on.
+    void barFollowsFocusIsOffUntilTurnedOnAndKeptAcrossReads()
+    {
+        QVERIFY(!AnywhereSettings::barFollowsFocus());
+        QCOMPARE(AnywhereSettings::setBarFollowsFocus(true), QString());
+        QVERIFY(AnywhereSettings::barFollowsFocus());
+        // Turning it on leaves the other settings alone.
+        QVERIFY(AnywhereSettings::read().contains(QLatin1String("barFollowsFocus")));
+        QCOMPARE(AnywhereSettings::setBarFollowsFocus(false), QString());
+        QVERIFY(!AnywhereSettings::barFollowsFocus());
+    }
+
     void onboardingAnswersAreKeptAndChecked()
     {
         QVERIFY(AnywhereSettings::needsOnboarding());

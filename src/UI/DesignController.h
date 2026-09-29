@@ -40,6 +40,8 @@ public:
     QString run(const QString &action, const QJsonObject &params, QJsonObject &result);
     // The status stream's "design" key.
     QJsonObject status();
+    // Whether the bar follows the pointer and focus from window to window (Anywhere settings), else it sticks.
+    bool barFollowsFocus() const { return m_settings["barFollowsFocus"].toBool(false); }
 
     // The Desk's tab, opened (without showing the window) when needed. Null with `error` set if the file can't be read.
     ProjectTab *deskTab(QString *error = nullptr);
@@ -89,6 +91,21 @@ private:
     };
     // `params.target` (an inspection id), else the selected art, else what's selected or hovered.
     std::optional<Target> target(const QJsonObject &params, QString *error);
+    // The bar sticks to the window (or the desktop) design mode started on until something else is picked
+    // (docs/ANYWHERE.md), unless "Bar follows focus" is on. `key` is the surface's, `address` the window's.
+    struct Home {
+        QString key;
+        QString address;
+    };
+    void setHome(const Surface &surface);
+    void homeOnFocus();
+    // Something newly selected (art, or a pinned element) is an explicit pick: the bar moves to its surface.
+    void syncHome();
+    bool onHome(const Surface &surface) const;
+    // False while the home window is off screen or gone; the desktop is always shown.
+    bool homeShown() const;
+    // Where the inspection is now: its bounds move with its window.
+    QRect placedBounds(const Inspection &inspection) const;
     QString kindOf(const Target &target) const;
     QString surfaceKeyOf(const Target &target) const;
     Surface surfaceOf(const Target &target) const;
@@ -114,7 +131,8 @@ private:
     // Where each surface with art sits on screen now; web pages are read for their scroll.
     void updatePlacements();
     // The surface's screen rectangle now, if it's shown.
-    std::optional<Surface> locate(const QString &key);
+    // `preferAddress`: of several windows of one app, this one.
+    std::optional<Surface> locate(const QString &key, const QString &preferAddress = QString());
     // A screenshot of `rect` kept in the captures folder; empty when grim can't.
     QString keepScreenshot(const QRect &rect, QImage *image = nullptr);
     void say(const QString &line);
@@ -140,6 +158,11 @@ private:
     QString m_askSurface;
     QJsonObject m_askFrozen;
     QString m_message;
+    std::optional<Home> m_home;
+    QString m_seenArt;
+    int m_seenPinned = 0;
+    // The last element hovered on the home window, which the bar keeps while the pointer is on other windows.
+    std::optional<Inspection> m_barHover;
     bool m_onboardingOpen = false;
     std::optional<Inspection> m_detail;
     QTimer m_deskSave;

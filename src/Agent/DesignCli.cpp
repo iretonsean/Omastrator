@@ -60,6 +60,10 @@ QString designHelp()
         "  alt on|off         Hold to measure from what's hovered to the next thing.\n"
         "  select ID | deselect\n"
         "                     Pin the floating bar to a hovered thing (its id).\n"
+        "  home [--target N]  Move the floating bar to that window (or the one hovered), where it\n"
+        "                     then sticks.\n"
+        "  follow on|off      Whether the bar follows the pointer from window to window\n"
+        "                     instead of sticking to its app (off unless turned on).\n"
         "  measure ID [off]   Measure from that thing until turned off.\n"
         "  draw TOOL X,Y [X,Y…] [--text WORDS]\n"
         "                     Draw on the surface under the first point.\n"
@@ -136,6 +140,14 @@ int runDesign(const QStringList &args, QTextStream &out, QTextStream &err)
         if (rest.size() != 1)
             return failed(err, QStringLiteral("Name one tool: point, inspect, pen, rectangle, ellipse, line, arrow, text or note."));
         params["tool"] = rest[0];
+    } else if (verb == QLatin1String("follow")) {
+        if (rest.size() != 1 || (rest[0] != QLatin1String("on") && rest[0] != QLatin1String("off")))
+            return failed(err, QStringLiteral("Say on or off: omastrator design follow off keeps the bar with its app."));
+        params["action"] = QStringLiteral("barFollowsFocus");
+        params["on"] = rest[0] == QLatin1String("on");
+    } else if (verb == QLatin1String("home")) {
+        if (!targetOption())
+            return failed(err, QStringLiteral("--target needs an id."));
     } else if (verb == QLatin1String("alt")) {
         params["on"] = rest.value(0) != QLatin1String("off");
     } else if (verb == QLatin1String("select")) {

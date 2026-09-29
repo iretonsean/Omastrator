@@ -120,6 +120,26 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
                                : QStringLiteral("Reset. Design mode is off and the drawings are cleared; Undo on the island brings them back."));
         return {};
     }
+    if (action == QLatin1String("barFollowsFocus")) {
+        const bool follows = params["on"].toBool(true);
+        if (const QString failure = AnywhereSettings::setBarFollowsFocus(follows); !failure.isEmpty())
+            return failure;
+        m_settings = AnywhereSettings::read();
+        result["barFollowsFocus"] = follows;
+        emit changed();
+        return {};
+    }
+    if (action == QLatin1String("home")) {
+        // Explicitly moves the bar to the window pointed at (or `target`'s), where it then sticks.
+        QString error;
+        const std::optional<Target> chosen = target(params, &error);
+        if (!chosen)
+            return error;
+        setHome(surfaceOf(*chosen));
+        m_barHover = chosen->inspection;
+        emit changed();
+        return {};
+    }
     if (action == QLatin1String("alt")) {
         m_mode->setAlt(params["on"].toBool(true));
         return {};

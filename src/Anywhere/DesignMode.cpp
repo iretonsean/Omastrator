@@ -109,11 +109,38 @@ QString DesignMode::setTool(const QString &tool)
     return {};
 }
 
+namespace {
+// What the bar's stickiness reads: which windows exist and are shown, where, and which one has focus.
+QString desktopSignature(const std::vector<Hyprland::Window> &windows, const std::vector<Hyprland::Monitor> &monitors)
+{
+    QString signature;
+    for (const Hyprland::Window &window : windows)
+        signature += QStringLiteral("%1 %2,%3,%4,%5 %6 %7%8 %9;").arg(window.address).arg(window.rect.x()).arg(window.rect.y()).arg(window.rect.width())
+                         .arg(window.rect.height()).arg(window.workspace).arg(window.mapped).arg(window.hidden).arg(window.focusHistory);
+    for (const Hyprland::Monitor &monitor : monitors)
+        signature += QStringLiteral("%1 %2 %3;").arg(monitor.name).arg(monitor.activeWorkspace).arg(monitor.specialWorkspace);
+    return signature;
+}
+}
+
 void DesignMode::refresh()
 {
     m_windows = m_source.windows();
     m_monitors = m_source.monitors();
     m_sinceRefresh.start();
+}
+
+void DesignMode::watchDesktop()
+{
+    if (m_sinceRefresh.isValid() && m_sinceRefresh.elapsed() <= 500)
+        return;
+    refresh();
+    // A window that moved, closed or went to another workspace matters even while the pointer rests.
+    const QString now = desktopSignature(m_windows, m_monitors);
+    if (now != m_signature) {
+        m_signature = now;
+        emit changed();
+    }
 }
 
 void DesignMode::poll()
@@ -128,6 +155,7 @@ void DesignMode::poll()
 
 void DesignMode::pollOnce()
 {
+    watchDesktop();
     const std::optional<QPoint> cursor = m_source.cursor();
     if (!cursor)
         return;
@@ -139,8 +167,7 @@ void DesignMode::pollOnce()
     } else if (++m_rest < 2 || m_deepDone) {
         return;
     }
-    if (!m_sinceRefresh.isValid() || m_sinceRefresh.elapsed() > 500)
-        refresh();
+    watchDesktop();
     const auto monitor = Hyprland::monitorNamed(m_monitor, m_monitors);
     if (monitor && !monitor->rect.contains(*cursor)) {
         // Design mode covers its own monitor only.

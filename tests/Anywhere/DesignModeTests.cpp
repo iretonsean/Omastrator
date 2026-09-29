@@ -140,6 +140,28 @@ private slots:
         QCOMPARE(mode.hover()->pixel, desktop.screenColor);
     }
 
+    // The bar sticks to its window, so it has to know when that window moves, closes or leaves the screen while the pointer rests.
+    void aWindowThatMovesOrLeavesIsNoticedWhileThePointerRests()
+    {
+        FakeDesktop desktop;
+        desktop.addWindow(QStringLiteral("foot"), QRect(0, 0, 960, 1080), 100);
+        DesignMode mode(desktop);
+        mode.setOn(true);
+        mode.setTool(QStringLiteral("inspect"));
+        desktop.pointer = QPoint(100, 100);
+        mode.poll();
+        QSignalSpy changed(&mode, &DesignMode::changed);
+        // Nothing moved: nothing to say.
+        QTest::qWait(600);
+        mode.poll();
+        const int quiet = changed.count();
+        desktop.clients[0].workspace = 3;
+        QTest::qWait(600);
+        mode.poll();
+        QVERIFY(changed.count() > quiet);
+        QVERIFY(!Hyprland::isShown(mode.windows().front(), mode.monitors()));
+    }
+
     void itCoversOnlyItsMonitorAndTheDesktopUnderNoWindow()
     {
         FakeDesktop desktop;
