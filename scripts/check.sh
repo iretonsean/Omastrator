@@ -9,9 +9,11 @@ cmake -S . -B "$dir" -DCMAKE_BUILD_TYPE=Debug -DOMASTRATOR_WERROR=ON >/dev/null 
 if ! cmake --build "$dir" -j"$jobs" >"$dir/build.log" 2>&1; then
     grep -E "error" "$dir/build.log" | head -20; echo "CHECK FAIL: build (see $dir/build.log)"; exit 1
 fi
-ctest --test-dir "$dir" -j"$jobs" --timeout 300 >"$dir/ctest.log" 2>&1
+# ctest's exit code, not its summary: newer CMake always prints "0 tests failed".
+ctest --test-dir "$dir" -j"$jobs" --timeout 300 --no-tests=error >"$dir/ctest.log" 2>&1
+status=$?
 summary=$(grep -E "tests passed" "$dir/ctest.log")
-if grep -qE "tests failed" "$dir/ctest.log"; then
-    sed -n '/The following tests FAILED/,$p' "$dir/ctest.log" | head -20; echo "CHECK FAIL: $summary"; exit 1
+if (( status != 0 )); then
+    sed -n '/The following tests FAILED/,$p' "$dir/ctest.log" | head -20; echo "CHECK FAIL: ${summary:-ctest exited $status}"; exit 1
 fi
 echo "CHECK OK: $summary"
