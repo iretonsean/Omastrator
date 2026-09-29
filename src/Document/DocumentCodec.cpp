@@ -788,7 +788,7 @@ QJsonArray encode(const std::vector<VectorObject> &objects, bool pictures)
     QJsonArray array;
     for (const VectorObject &object : objects) {
         array.append(encode(object));
-        if (pictures && object.kind == ObjectKind::frame && object.browser && object.shape && !object.browser->picture.isNull())
+        if (pictures && object.kind == ObjectKind::frame && object.showsBrowserPicture() && !object.browser->picture.isNull())
             array.append(encodePicture(object));
     }
     return array;

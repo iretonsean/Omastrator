@@ -421,6 +421,8 @@ struct VectorObject {
     std::optional<InstanceInfo> instance;
 
     bool isContainer() const { return kind == ObjectKind::layer || kind == ObjectKind::group || kind == ObjectKind::frame; }
+    // A Browser View's picture is stretched over the box, so only a frame that isn't rotated or skewed can show it.
+    bool showsBrowserPicture() const { return browser && shape && shape->placement.isIdentity(); }
     bool hasPaint() const { return kind == ObjectKind::path || kind == ObjectKind::text || kind == ObjectKind::frame; }
     // A frame around `rect`, in document coordinates, with a white fill as Figma's new frames have.
     static VectorObject frame(const QRectF &rect, const QString &name = QStringLiteral("Frame"));

@@ -405,7 +405,7 @@ private:
         writeCommon(frame);
         writeFrameBox(frame, true);
         const std::vector<QUuid> children = document.children(frame.id);
-        const bool pictured = frame.browser && !frame.browser->picture.isNull();
+        const bool pictured = frame.showsBrowserPicture() && !frame.browser->picture.isNull();
         if (!children.empty() || pictured) {
             QString clip;
             if (frame.clipsContent) {

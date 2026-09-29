@@ -88,6 +88,18 @@ private slots:
         QVERIFY(svg.contains(QStringLiteral("data:image/png;base64,")));
     }
 
+    void aRotatedBrowserViewExportsNoPicture()
+    {
+        VectorDocument document = VectorDocument::blank({300, 200});
+        VectorObject view = VectorObject::frame({10, 10, 100, 80}, QStringLiteral("Site"));
+        QImage picture(50, 40, QImage::Format_ARGB32_Premultiplied);
+        picture.fill(Qt::green);
+        view.browser = BrowserView{QUrl(QStringLiteral("https://example.com")), {}, picture};
+        view.shape->placement = QTransform().rotate(15);
+        document.insert(view, document.layers().front());
+        QVERIFY(!QString::fromUtf8(SvgExporter::serialize(document)).contains(QStringLiteral("<image")));
+    }
+
     void artboardSizeSurvives()
     {
         const VectorDocument document = roundTrip(VectorDocument::blank({612.5, 792}));

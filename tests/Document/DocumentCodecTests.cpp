@@ -93,6 +93,14 @@ private slots:
         QCOMPARE(back.objects.size(), fixture.document.objects.size());
     }
 
+    void aRotatedFrameStoresNoPicture()
+    {
+        Fixture fixture;
+        fixture.document.find(fixture.frame)->shape->placement = QTransform().rotate(15);
+        const QJsonArray objects = DocumentCodec::encode(fixture.document)["objects"].toArray();
+        QVERIFY(find(objects, QStringLiteral("Last picture of example.com")).isEmpty());
+    }
+
     void aLongPictureIsScaledDownToTheStoredLimit()
     {
         Fixture fixture;
