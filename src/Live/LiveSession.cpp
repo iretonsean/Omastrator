@@ -420,6 +420,16 @@ QString LiveSession::startServer(const QString &folder, int generation)
     return {};
 }
 
+void LiveSession::setServerPaused(bool paused)
+{
+    if (m_serverPaused == paused)
+        return;
+    m_serverPaused = paused;
+    if (m_lease)
+        DevServers::shared().setPaused(m_lease, paused);
+    emit changed();
+}
+
 void LiveSession::releaseServer(bool wait)
 {
     if (m_lease)

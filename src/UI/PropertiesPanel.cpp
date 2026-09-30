@@ -325,7 +325,7 @@ void PropertiesPanel::synchronize()
         if (QWidget *rule = widget()->findChild<QWidget *>(section->objectName() + QStringLiteral("Rule")))
             rule->setVisible(shown);
     };
-    show(m_framePresets, drawn && (m_session.tool() == Tool::frame || m_session.tool() == Tool::browserView));
+    show(m_framePresets, drawn && m_session.tool() == Tool::frame);
     show(m_document, !selected);
     show(m_transform, selected);
     show(m_character, text);

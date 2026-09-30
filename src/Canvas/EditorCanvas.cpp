@@ -310,6 +310,11 @@ void EditorCanvas::mouseMoveEvent(QMouseEvent *event)
     const bool held = event->buttons() & (Qt::LeftButton | Qt::MiddleButton);
     m_state->rulers->setMarker(event->position());
     m_state->move(event->position(), event->modifiers(), held);
+    // The pointer brings a frame's Browser View switch out, and takes it away again.
+    if (const std::optional<QUuid> frame = held ? m_state->switchHover : m_state->hoveredFrame(); frame != m_state->switchHover) {
+        m_state->switchHover = frame;
+        update();
+    }
     m_state->updateCursor();
     noteGesture();
     if (m_session.hasDocument())
@@ -387,6 +392,10 @@ void EditorCanvas::leaveEvent(QEvent *event)
     if (m_state->session.tool() == Tool::browse && !m_state->drag)
         m_state->browseMove(QPointF(-1e6, -1e6), {}, false);
     m_state->hover.reset();
+    if (m_state->switchHover) {
+        m_state->switchHover.reset();
+        update();
+    }
     m_state->rulers->setMarker(std::nullopt);
     m_state->updateHoverGuides(std::nullopt);
     m_state->updateBuilderHover(std::nullopt);

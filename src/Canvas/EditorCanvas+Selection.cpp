@@ -347,7 +347,7 @@ void EditorCanvas::State::dragScale(QPointF view, Qt::KeyboardModifiers modifier
         return;
     if (!drag->interacting) {
         // Resizing a Browser View's handles previews the site at that width and leaves the design alone.
-        if (const std::optional<QUuid> frame = session.selectedBrowserView(); frame && session.document()->find(*frame)->shape) {
+        if (const std::optional<QUuid> frame = session.selectedBrowserView(); frame && session.document()->find(*frame)->shape && session.browserViewOn(*frame)) {
             drag->previewFrame = frame;
             session.beginPreview(QStringLiteral("Preview Width"));
         } else {

@@ -50,7 +50,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
             beginRulerGuide(Qt::Vertical, view);
         return;
     }
-    // A Browser View's bar and sign-in strip take their presses before any tool does.
+    // The Browser View switch, then a Browser View's bar and sign-in strip, take their presses before any tool does.
+    if (browserSwitchPress(view))
+        return;
     if (browserBarPress(view))
         return;
     // Edit Page: a press in the frame is the page's; outside it, the mode ends and the press goes on to the tool.
@@ -312,8 +314,6 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::shape:
         if (drag->interacting && session.isInteracting())
             session.commitInteraction();
-        if (session.tool() == Tool::browserView)
-            finishBrowserView();
         break;
     case DragKind::gradient:
         finishGradient();

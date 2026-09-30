@@ -334,6 +334,11 @@ void Menus::buildObject(QMenuBar &bar)
             return selected;
         return m_canvas->editPageFrame();
     };
+    // The frame's Browser View switch, as on the canvas: any selected frame, plain or Browser View. Its words follow the state.
+    add(browserView, QStringLiteral("browserViewSwitch"), QStringLiteral("Turn On Browser View"), QKeySequence(), [this] {
+        if (const auto frame = session().selectedFrame(); frame && m_canvas)
+            m_canvas->flipBrowserView(*frame);
+    });
     add(browserView, QStringLiteral("browserViewEditPage"), QStringLiteral("Edit Page"), QKeySequence(), [this, browserFrame] {
         if (!m_canvas)
             return;

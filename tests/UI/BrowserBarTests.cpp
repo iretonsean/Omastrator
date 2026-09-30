@@ -14,7 +14,7 @@
 #include <QTest>
 #include <algorithm>
 
-// The Browser View tool, its address bar and the sign-in strip (docs/BROWSER-VIEW.md, section 4). None of it needs
+// The Frame tool's Browser View switch, the address bar and the sign-in strip (docs/BROWSER-VIEW.md, section 4). None of it needs
 // Chromium: the canvas talks to a fake host, and signing in runs a fake browser script.
 namespace {
 class FakeHost : public BrowserViewHost {
@@ -91,13 +91,35 @@ struct Rig {
         return {};
     }
     void click(QPoint at) { QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, at); }
-    void draw(QPointF from, QPointF to)
+    // The Frame tool's drag, which leaves the new frame selected.
+    void drawFrame(QPointF from, QPointF to)
     {
-        session.selectTool(Tool::browserView);
+        session.selectTool(Tool::frame);
         QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, view(from).toPoint());
         QTest::mouseMove(&canvas, view((from + to) / 2).toPoint());
         QTest::mouseMove(&canvas, view(to).toPoint());
         QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, view(to).toPoint());
+    }
+    // The switch's pill at a plain (or switched-off) frame's top-right: its track, 4 in from the right end.
+    QPoint pill(const QUuid &id) const
+    {
+        const QRectF box = canvas.documentToView().mapRect(session.document()->bounds(id));
+        return QPoint(int(box.right() - 14), int(box.top() - 4 - 9));
+    }
+    // The switch in a Browser View's bar, after back, forward and reload.
+    QPoint barSwitch(const QUuid &id) const
+    {
+        const QRectF box = canvas.documentToView().mapRect(session.document()->bounds(id));
+        return QPoint(int(box.left() + 2 + 3 * 24 + 2 + 15), int(box.top() - 4 - 14));
+    }
+    // Draws a frame and turns its Browser View on from the pill, as a designer does.
+    QUuid drawView(QPointF from, QPointF to)
+    {
+        drawFrame(from, to);
+        const QUuid id = session.selection().front();
+        QTest::mouseMove(&canvas, pill(id));
+        click(pill(id));
+        return id;
     }
 };
 }
@@ -198,23 +220,30 @@ private slots:
         QCOMPARE(rig.session.undoNames().size(), before);
     }
 
-    void draggingWithTheToolDrawsAViewAndAsksForItsAddress()
+    void theFrameToolsSwitchTurnsAFrameIntoAViewAndAsksForItsAddress()
     {
         Rig rig;
-        rig.draw({200, 300}, {900, 800});
-        QVERIFY(rig.session.selectedBrowserView().has_value());
-        const QUuid frame = *rig.session.selectedBrowserView();
-        const QRectF bounds = rig.object(frame)->path.bounds();
-        QVERIFY(qAbs(bounds.width() - 700) < 3 && qAbs(bounds.height() - 500) < 3);
-        QVERIFY(qAbs(bounds.left() - 200) < 3 && qAbs(bounds.top() - 300) < 3);
-        QCOMPARE(rig.session.undoNames().back(), QStringLiteral("Draw Browser View"));
-        QCOMPARE(rig.session.tool(), Tool::select);
+        rig.drawFrame({200, 300}, {900, 800});
+        const QUuid frame = rig.session.selection().front();
+        QVERIFY(!rig.object(frame)->browser);
+        QCOMPARE(rig.session.tool(), Tool::frame);
+        const size_t steps = rig.session.undoNames().size();
+        QTest::mouseMove(&rig.canvas, rig.pill(frame));
+        rig.click(rig.pill(frame));
+        QVERIFY(rig.object(frame)->showsPage());
+        QCOMPARE(rig.session.undoNames().size(), steps + 1);
+        QCOMPARE(rig.session.undoNames().back(), QStringLiteral("Turn On Browser View"));
+        QCOMPARE(rig.session.selectedBrowserView(), std::optional<QUuid>(frame));
         QVERIFY(rig.editor());
         QCOMPARE(rig.editor()->placeholderText(), QStringLiteral("Type a URL"));
         QVERIFY(rig.canvas.isEditingAddress());
+        // One undo makes it a plain frame again.
+        QTest::keyClick(rig.editor(), Qt::Key_Escape);
+        rig.session.undo();
+        QVERIFY(!rig.object(frame)->browser);
     }
 
-    void drawingAtAFractionalZoomGivesWholeCssPixels()
+    void turningOnAtAFractionalZoomGivesWholeCssPixels()
     {
         Rig rig;
         rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
@@ -223,33 +252,69 @@ private slots:
         const QPoint to = rig.view({900, 800}).toPoint();
         // The pointer lands on whole view points, so the drag itself is a fractional number of CSS px.
         const double rawWidth = (to.x() - from.x()) / zoom;
-        const double rawHeight = (to.y() - from.y()) / zoom;
-        QVERIFY(qAbs(rawWidth - std::round(rawWidth)) > 0.01 && qAbs(rawHeight - std::round(rawHeight)) > 0.01);
-        rig.draw({200, 300}, {900, 800});
-        QVERIFY(rig.session.selectedBrowserView().has_value());
-        const QRectF bounds = rig.object(*rig.session.selectedBrowserView())->path.bounds();
-        QCOMPARE(bounds.width(), std::round(rawWidth));
-        QCOMPARE(bounds.height(), std::round(rawHeight));
-    }
-
-    // Rounding the size must not move the edge the user isn't moving: the corner the drag began at stays exactly there.
-    void drawingUpAndToTheLeftKeepsTheCornerTheDragBeganAt()
-    {
-        Rig rig;
-        rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
-        const QPoint press = rig.view({900, 800}).toPoint();
-        const QPoint to = rig.view({200, 300}).toPoint();
-        const QTransform toDocument = rig.canvas.documentToView().inverted();
-        const QPointF corner = toDocument.map(QPointF(press));
-        const QPointF far = toDocument.map(QPointF(to));
-        QVERIFY(qAbs((corner.x() - far.x()) - std::round(corner.x() - far.x())) > 0.01);
-        rig.draw({900, 800}, {200, 300});
-        QVERIFY(rig.session.selectedBrowserView().has_value());
-        const QRectF bounds = rig.object(*rig.session.selectedBrowserView())->path.bounds();
-        QVERIFY(qAbs(bounds.right() - corner.x()) < 1e-6);
-        QVERIFY(qAbs(bounds.bottom() - corner.y()) < 1e-6);
+        QVERIFY(qAbs(rawWidth - std::round(rawWidth)) > 0.01);
+        const QUuid frame = rig.drawView({200, 300}, {900, 800});
+        QVERIFY(rig.object(frame)->showsPage());
+        const QRectF bounds = rig.object(frame)->path.bounds();
         QCOMPARE(bounds.width(), std::round(bounds.width()));
         QCOMPARE(bounds.height(), std::round(bounds.height()));
+        QVERIFY(qAbs(bounds.width() - rawWidth) < 1);
+    }
+
+    void thePillShowsOnlyForTheSelectedOrHoveredFrame()
+    {
+        Rig rig;
+        const QUuid frame = rig.session.addFrame({100, 200, 600, 400});
+        rig.session.deselectAll();
+        QTest::mouseMove(&rig.canvas, rig.view({2000, 2000}).toPoint());
+        const QImage quiet = rig.canvas.grab().toImage();
+        rig.session.select({frame});
+        const QImage selected = rig.canvas.grab().toImage();
+        QVERIFY(quiet.pixel(rig.pill(frame)) != selected.pixel(rig.pill(frame)));
+        rig.session.deselectAll();
+        QTest::mouseMove(&rig.canvas, rig.view({400, 400}).toPoint());
+        const QImage hovered = rig.canvas.grab().toImage();
+        QCOMPARE(hovered.pixel(rig.pill(frame)), selected.pixel(rig.pill(frame)));
+        // Clicking where the pill was, with no frame selected or hovered, is a plain press.
+        QTest::mouseMove(&rig.canvas, rig.view({2000, 2000}).toPoint());
+        rig.session.selectTool(Tool::select);
+        const size_t steps = rig.session.undoNames().size();
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, rig.view({2000, 2000}).toPoint());
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, rig.view({2000, 2000}).toPoint());
+        QCOMPARE(rig.session.undoNames().size(), steps);
+    }
+
+    void theBarsSwitchTurnsItOffAndThePillTurnsItBackOn()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.selectTool(Tool::select);
+        rig.click(rig.barSwitch(rig.frame));
+        QVERIFY(rig.object(rig.frame)->browser.has_value());
+        QVERIFY(!rig.object(rig.frame)->showsPage());
+        QCOMPARE(rig.session.undoNames().back(), QStringLiteral("Turn Off Browser View"));
+        // Off keeps the page's address, and the frame wears its plain label and the pill.
+        QCOMPARE(rig.object(rig.frame)->browser->url, QUrl(QStringLiteral("https://example.com/a")));
+        QVERIFY(!rig.editor());
+        QTest::mouseMove(&rig.canvas, rig.pill(rig.frame));
+        rig.click(rig.pill(rig.frame));
+        QVERIFY(rig.object(rig.frame)->showsPage());
+        QCOMPARE(rig.session.undoNames().back(), QStringLiteral("Turn On Browser View"));
+        // It has its page, so nothing asks for one.
+        QVERIFY(!rig.editor());
+        rig.session.undo();
+        QVERIFY(!rig.object(rig.frame)->showsPage());
+        rig.session.undo();
+        QVERIFY(rig.object(rig.frame)->showsPage());
+    }
+
+    void aLockedDocumentKeepsTheSwitch()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.setDocumentLocked(true);
+        rig.session.setBrowserViewOn(rig.frame, false);
+        QVERIFY(rig.object(rig.frame)->showsPage());
     }
 
     void aLeftOrTopHandleDragKeepsTheOppositeEdgeAtAFractionalZoom()
@@ -303,23 +368,10 @@ private slots:
         QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, to);
     }
 
-    void aClickWithTheToolDrops1280By800()
-    {
-        Rig rig;
-        rig.session.selectTool(Tool::browserView);
-        QTest::mouseClick(&rig.canvas, Qt::LeftButton, Qt::NoModifier, rig.view({300, 400}).toPoint());
-        QVERIFY(rig.session.selectedBrowserView().has_value());
-        const QRectF bounds = rig.object(*rig.session.selectedBrowserView())->path.bounds();
-        QCOMPARE(bounds.size(), QSizeF(1280, 800));
-        QCOMPARE(rig.session.tool(), Tool::select);
-        QVERIFY(rig.editor());
-    }
-
     void enterInTheAddressFieldChangesTheUrl()
     {
         Rig rig;
-        rig.draw({200, 300}, {900, 800});
-        const QUuid frame = *rig.session.selectedBrowserView();
+        const QUuid frame = rig.drawView({200, 300}, {900, 800});
         QLineEdit *edit = rig.editor();
         QVERIFY(edit);
         QTest::keyClicks(edit, QStringLiteral("localhost:5173/x"));
@@ -332,8 +384,7 @@ private slots:
     void aRefusedAddressSaysSoAndStaysForCorrecting()
     {
         Rig rig;
-        rig.draw({200, 300}, {900, 800});
-        const QUuid frame = *rig.session.selectedBrowserView();
+        const QUuid frame = rig.drawView({200, 300}, {900, 800});
         QSignalSpy notices(&rig.canvas, &EditorCanvas::notice);
         QLineEdit *edit = rig.editor();
         QTest::keyClicks(edit, QStringLiteral("file:///etc/passwd"));
@@ -559,10 +610,14 @@ private slots:
         QVERIFY(!rig.session.isSelected(rig.frame));
     }
 
-    void theToolIsKnownByName()
+    // The Browser View tool is the Frame tool's switch now: off the rail and Ctrl+K, but its old name still reads.
+    void theOldToolNameGivesTheFrameTool()
     {
-        QVERIFY(std::find(allTools.begin(), allTools.end(), Tool::browserView) != allTools.end());
+        QVERIFY(std::find(allTools.begin(), allTools.end(), Tool::browserView) == allTools.end());
         QCOMPARE(toolNamed(QStringLiteral("browserView")), std::optional<Tool>(Tool::browserView));
+        EditorSession session;
+        session.selectTool(Tool::browserView);
+        QCOMPARE(session.tool(), Tool::frame);
     }
 
     void aSignInWindowLeftByAnEarlierRunStillHoldsTheProfile()

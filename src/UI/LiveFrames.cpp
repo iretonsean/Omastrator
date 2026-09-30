@@ -123,6 +123,7 @@ LiveFrames::Snapshot LiveFrames::capture(const LiveSession &session)
     snapshot.serverCommand = session.serverCommand().description;
     snapshot.serverUrl = session.serverUrl();
     snapshot.startingServer = session.startingServer();
+    snapshot.serverPaused = session.serverPaused();
     snapshot.original = session.showingOriginal();
     return snapshot;
 }
@@ -189,6 +190,14 @@ void LiveFrames::undo(const QUuid &frame, Done done)
 void LiveFrames::redo(const QUuid &frame, Done done)
 {
     run(frame, [](LiveSession &live) { return live.redoEdit(); }, std::move(done));
+}
+
+void LiveFrames::setServerPaused(const QUuid &frame, bool paused)
+{
+    run(frame, [paused](LiveSession &live) {
+        live.setServerPaused(paused);
+        return QString();
+    });
 }
 
 void LiveFrames::setPageEditing(const QUuid &frame, bool on)

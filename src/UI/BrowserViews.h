@@ -3,6 +3,7 @@
 #include "Live/BrowserPool.h"
 #include <QElapsedTimer>
 #include <QHash>
+#include <QSet>
 #include <QImage>
 #include <QObject>
 #include <QPointer>
@@ -56,6 +57,18 @@ public:
     void dismissSignIn() override;
     bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params) override;
     void extendBarMenu(const QUuid &frame, QMenu *menu) override;
+    void browserViewSwitched(const QUuid &frame, bool on) override;
+    // The Browser View switch (BrowserViews+Switch.cpp), for the menu, Ctrl+K and the island: one undo step in the document,
+    // then on starts the project's dev server (or wakes the frozen one) and streams; off freezes the server and keeps the
+    // last picture. Undo and redo follow the same way, so a server is never started or left behind by history.
+    void setBrowserViewOn(const QUuid &frame, bool on);
+    bool browserViewOn(const QUuid &frame) const;
+    // What runs behind a frame whose switch is on, for the island's Live controls.
+    enum class Server { none, starting, running, paused, failed };
+    Server server(const QUuid &frame) const;
+    // The app's last window closed while it keeps running in the background: every frame's dev server stops, as on quit.
+    // A frame still switched on starts its server again when its canvas is next seen.
+    static void stopServers();
     // The window's bridge, which Deploy, Save, Review Changes and History go through (BrowserViews+Deploy.cpp). Set by
     // the menus when the session's canvas is in front.
     void setAgent(AgentBridge *agent);
@@ -111,12 +124,17 @@ signals:
     void frameChanged(const QUuid &frame);
     // Something the page tried that Browser View refuses, said once to the user.
     void notice(const QString &text);
+    // A frame's Browser View switch went on or off, by any door (the switch, a command, undo, an agent, deleting it). The
+    // island shows Live controls for a selected frame that is on.
+    void browserViewChanged(const QUuid &frame, bool on);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     static void profileHoldChanged();
+    // Every session's controller.
+    static QList<BrowserViews *> everyone();
     struct Applied {
         QSize css;
         int scale = 0;
@@ -178,6 +196,9 @@ private:
         int frameGap = 0;
     };
 
+    // The switch's servers (BrowserViews+Switch.cpp): follow a change of the document's switch, and start what waits.
+    void followSwitch(const QUuid &frame, bool on);
+    void serveWaiting();
     // The pool's side.
     void connectPool();
     void onOpened(const QUuid &key);
@@ -272,5 +293,9 @@ private:
     std::vector<QUuid> m_lastSelection;
     // Frames the Browse tool has sent input to; they stream every frame.
     QSet<QUuid> m_browsed;
+    // Each Browser View's switch as last seen, so a change (undo included) is followed once.
+    QHash<QUuid, bool> m_wasOn;
+    // Frames switched on whose project's server should start once they have an address and are seen.
+    QSet<QUuid> m_serveWanted;
     QElapsedTimer m_clock;
 };

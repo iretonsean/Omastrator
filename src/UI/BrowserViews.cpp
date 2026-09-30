@@ -69,6 +69,11 @@ int &pausedCloseMs()
 }
 }
 
+QList<BrowserViews *> BrowserViews::everyone()
+{
+    return instances();
+}
+
 void BrowserViews::setPausedCloseMs(int ms)
 {
     pausedCloseMs() = ms;
@@ -213,7 +218,8 @@ QImage BrowserViews::picture(const QUuid &frame) const
 QString BrowserViews::message(const QUuid &frame) const
 {
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
-    if (!object || !object->browser)
+    // Switched off, the frame is its last picture and nothing more.
+    if (!object || !object->showsPage())
         return {};
     switch (state(frame)) {
     case State::resetPaused:
@@ -494,7 +500,7 @@ BrowserViews::Want BrowserViews::wanted(const QUuid &frame, const VectorObject &
     const VectorDocument &document = *m_session.document();
     const QRectF box = document.bounds(frame);
     want.css = QSize(std::max(1, int(std::lround(box.width()))), std::max(1, int(std::lround(box.height()))));
-    if (!onScreen() || !document.isOnCurrentPage(frame) || !document.isEffectivelyVisible(frame))
+    if (!object.showsPage() || !onScreen() || !document.isOnCurrentPage(frame) || !document.isEffectivelyVisible(frame))
         return want;
     want.view = m_canvas->documentToView().mapRect(box);
     want.shown = want.view.width() >= minimumShownWidth && want.view.intersects(QRectF(m_canvas->rect()));
@@ -533,7 +539,7 @@ void BrowserViews::reconcile()
         if (!object.browser)
             continue;
         present.insert(object.id);
-        if (onScreen() && document.isOnCurrentPage(object.id))
+        if (object.browser->on && onScreen() && document.isOnCurrentPage(object.id))
             ++streaming;
     }
     // An override that names nothing runnable counts as no Chromium too.
@@ -553,9 +559,18 @@ void BrowserViews::reconcile()
             m_frameOfKey.insert(entry.key, object.id);
             entry.scroll = object.browser->scroll;
         }
+        // The switch changed since the last look: by the switch itself, a command, undo or an agent. A frame seen for the
+        // first time (a file opening, a paste) runs no server by itself: opening a file never runs `npm install`.
+        if (added) {
+            m_wasOn.insert(object.id, object.browser->on);
+            if (object.browser->on)
+                emit browserViewChanged(object.id, true);
+        } else if (m_wasOn.value(object.id) != object.browser->on) {
+            followSwitch(object.id, object.browser->on);
+        }
         const Want want = wanted(object.id, object, streaming);
-        // A frame with no address needs no browser, so it says "No page yet." whether or not Chromium is there.
-        const bool needsChromium = !object.browser->url.isEmpty();
+        // A frame with no address, or switched off, needs no browser; it shows its last picture whether or not Chromium is there.
+        const bool needsChromium = object.browser->on && !object.browser->url.isEmpty();
         if (!installed && needsChromium && entry.state != State::resetPaused && entry.state != State::liveOpen) {
             if (entry.state != State::unavailable)
                 note(object.id, State::unavailable);
@@ -574,6 +589,7 @@ void BrowserViews::reconcile()
         if (!present.contains(frame))
             dropEntry(frame);
     }
+    serveWaiting();
     bool casting = false;
     for (const Entry &entry : std::as_const(m_entries))
         casting = casting || entry.casting;
@@ -746,4 +762,8 @@ void BrowserViews::dropEntry(const QUuid &frame)
         BrowserViews::pool()->close(found->key);
     m_frameOfKey.remove(found->key);
     m_entries.erase(found);
+    m_serveWanted.remove(frame);
+    // Gone, or no longer a Browser View (an undo): its server went with its Live above.
+    if (m_wasOn.take(frame))
+        emit browserViewChanged(frame, false);
 }

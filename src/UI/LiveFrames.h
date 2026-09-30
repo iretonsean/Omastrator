@@ -35,6 +35,8 @@ public:
         QUrl serverUrl;
         // The dev server is starting, and the tab is still on the production page.
         bool startingServer = false;
+        // The frame's Browser View is off, so its dev server is frozen.
+        bool serverPaused = false;
         bool original = false;
     };
     using Done = std::function<void(const QString &error)>;
@@ -59,6 +61,8 @@ public:
     void undo(const QUuid &frame, Done done = {});
     void redo(const QUuid &frame, Done done = {});
     void setPageEditing(const QUuid &frame, bool on);
+    // The frame's Browser View switch: off freezes the dev server its session holds, on wakes the same one (docs/BROWSER-VIEW.md).
+    void setServerPaused(const QUuid &frame, bool paused);
 
     // Across every document. Pending edits of a project are its frames' and the held ones; the window's are the bridge's.
     static std::vector<LiveEdit> pendingEdits(const QString &folder);

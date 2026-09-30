@@ -185,7 +185,7 @@ bool EditorCanvas::State::enterEditPage(const QUuid &frame)
     if (!browserHost || !session.hasDocument())
         return false;
     const VectorObject *object = session.document()->find(frame);
-    if (!object || !object->browser || !session.document()->isOnCurrentPage(frame))
+    if (!object || !object->showsPage() || !session.document()->isOnCurrentPage(frame))
         return false;
     finishText();
     // The Selection tool is the mode's tool; any other leaves it.
@@ -232,7 +232,7 @@ void EditorCanvas::State::checkEditPage()
     if (!editPage)
         return;
     const VectorObject *object = session.hasDocument() ? session.document()->find(*editPage) : nullptr;
-    if (!object || !object->browser || !session.document()->isOnCurrentPage(*editPage) || session.tool() != Tool::select)
+    if (!object || !object->showsPage() || !session.document()->isOnCurrentPage(*editPage) || session.tool() != Tool::select)
         leaveEditPage();
 }
 

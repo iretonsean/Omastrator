@@ -12,6 +12,8 @@ QString BrowserViews::beginEditPage(const QUuid &frame)
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
     if (!object || !object->browser)
         return QStringLiteral("That isn't a Browser View.");
+    if (!object->browser->on)
+        return QStringLiteral("Browser View is off for this frame. Turn it on to edit the page.");
     if (object->browser->url.isEmpty())
         return QStringLiteral("Type an address first; there's no page to edit.");
     LiveFrames *live = LiveFrames::of(m_session);

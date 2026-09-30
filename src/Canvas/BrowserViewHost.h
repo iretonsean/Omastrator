@@ -93,6 +93,10 @@ public:
     virtual void undoPageEdit(const QUuid &frame);
     virtual void redoPageEdit(const QUuid &frame);
 
+    // The user flipped the frame's Browser View switch, after the document took it (EditorSession::setBrowserViewOn). On is
+    // a request to run the page: the host starts the project's dev server once the frame has an address.
+    virtual void browserViewSwitched(const QUuid &frame, bool on);
+
     // The sign-in strip inside the first Browser View, until Sign In… or Not Now answers it.
     virtual bool signInOffered() const;
     virtual void signIn();
@@ -103,6 +107,7 @@ inline BrowserViewHost::Bar BrowserViewHost::bar(const QUuid &) const { return {
 inline void BrowserViewHost::act(const QUuid &, Action) {}
 inline bool BrowserViewHost::dispatch(const QUuid &, const QString &, const QJsonObject &) { return false; }
 inline QList<int> BrowserViewHost::breakpoints(const QUuid &) const { return {390, 768, 1280, 1440}; }
+inline void BrowserViewHost::browserViewSwitched(const QUuid &, bool) {}
 inline bool BrowserViewHost::signInOffered() const { return false; }
 inline void BrowserViewHost::signIn() {}
 inline void BrowserViewHost::dismissSignIn() {}

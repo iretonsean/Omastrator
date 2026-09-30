@@ -1,4 +1,5 @@
 #include "UI/ProjectWorkspaceView.h"
+#include "UI/BrowserViews.h"
 #include "UI/ContextBar.h"
 #include "UI/SharePanels.h"
 #include <QCloseEvent>
@@ -134,6 +135,8 @@ void ProjectWorkspaceView::closeEvent(QCloseEvent *event)
     if (property("background").toBool()) {
         event->ignore();
         hide();
+        // To the user the app has closed, so the Browser Views' dev servers and headless browser stop as on quit.
+        BrowserViews::stopServers();
         return;
     }
     // The workspace asks first, then closes us with its mark.

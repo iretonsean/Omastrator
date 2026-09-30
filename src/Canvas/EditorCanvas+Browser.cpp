@@ -30,7 +30,7 @@ void EditorCanvas::State::drawBrowserMessages(QPainter &painter) const
     painter.save();
     painter.setFont(font);
     for (const VectorObject &object : document.objects) {
-        if (!object.browser || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
+        if (!object.showsPage() || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
             continue;
         const QString message = browserHost->message(object.id);
         if (message.isEmpty())

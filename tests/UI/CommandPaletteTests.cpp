@@ -138,6 +138,10 @@ private slots:
         QCOMPARE(w.command(QStringLiteral("tool:pen"))->shortcut, QStringLiteral("P"));
         QCOMPARE(w.command(QStringLiteral("tool:select"))->shortcut, QStringLiteral("V"));
         QCOMPARE(w.command(QStringLiteral("tool:shapeBuilder"))->shortcut, QStringLiteral("Shift+M"));
+        // The Browser View tool is the Frame tool's switch now: the switch is a command, the old tool isn't.
+        QVERIFY(!w.command(QStringLiteral("tool:browserView")));
+        QVERIFY(w.command(QStringLiteral("tool:frame")));
+        QCOMPARE(w.command(QStringLiteral("action:browserViewSwitch"))->where, QStringLiteral("Object ▸ Browser View"));
         // Panels, settings, AI and the document's own.
         QVERIFY(w.command(QStringLiteral("action:showLayers")));
         QVERIFY(w.command(QStringLiteral("panel:variations")));

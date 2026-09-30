@@ -48,6 +48,8 @@ public:
     // Where a Browser View's live picture and messages come from; the canvas owns neither.
     void setBrowserViewHost(BrowserViewHost *host);
     BrowserViewHost *browserViewHost() const;
+    // The frame's Browser View switch, as a click on it does (the menu and Ctrl+K come here).
+    void flipBrowserView(const QUuid &frame);
     // The Browser View's address field opens over its bar; Enter changes the URL, Escape leaves it.
     void openAddressEditor(const QUuid &frame);
     bool isEditingAddress() const;

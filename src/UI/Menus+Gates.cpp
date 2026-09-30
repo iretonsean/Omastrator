@@ -140,8 +140,12 @@ void Menus::synchronize()
         action(QString::fromLatin1(name))->setEnabled(drawn);
     const bool browserSelected = editing && m_canvas && m_canvas->browserViewHost() && s.selectedBrowserView().has_value();
     const bool pageEditing = editing && m_canvas && m_canvas->editPageFrame().has_value();
-    action(QStringLiteral("browserViewMenu"))->setEnabled(browserSelected || pageEditing);
-    action(QStringLiteral("browserViewEditPage"))->setEnabled(browserSelected || pageEditing);
+    const std::optional<QUuid> selectedFrame = editing && m_canvas && m_canvas->browserViewHost() ? s.selectedFrame() : std::nullopt;
+    const bool browserOn = selectedFrame && s.browserViewOn(*selectedFrame);
+    action(QStringLiteral("browserViewMenu"))->setEnabled(selectedFrame || pageEditing);
+    action(QStringLiteral("browserViewSwitch"))->setEnabled(selectedFrame && !s.isDocumentLocked() && !s.document()->isEffectivelyLocked(*selectedFrame));
+    action(QStringLiteral("browserViewSwitch"))->setText(browserOn ? QStringLiteral("Turn Off Browser View") : QStringLiteral("Turn On Browser View"));
+    action(QStringLiteral("browserViewEditPage"))->setEnabled(browserOn || pageEditing);
     for (const char *name : {"browserViewCopyUrl", "browserViewOpen", "browserViewReload", "browserViewReloadHard", "browserViewSignIn"})
         action(QString::fromLatin1(name))->setEnabled(browserSelected);
     // The project items need a frame to act on: the selected one, or the one in Edit Page.

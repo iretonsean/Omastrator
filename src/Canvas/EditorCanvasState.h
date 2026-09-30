@@ -213,7 +213,7 @@ struct EditorCanvas::State {
     // A Browser View's address bar and sign-in strip (EditorCanvas+BrowserBar.cpp), laid out in view pixels.
     struct BrowserBarLayout {
         QUuid frame;
-        QRectF bar, back, forward, reload, name, address, tag, dev, deploy, build, editPage;
+        QRectF bar, back, forward, reload, name, address, tag, dev, deploy, build, editPage, toggle;
         // The breakpoint buttons and the width each previews, ascending; the design width is among them.
         std::vector<std::pair<QRectF, int>> widths;
         int designWidth = 0;
@@ -231,6 +231,25 @@ struct EditorCanvas::State {
     bool browserBarMenu(QPointF view, QPoint global);
     void openAddressEditor(const QUuid &frame);
     void closeAddressEditor();
+    // The Browser View switch (EditorCanvas+BrowserSwitch.cpp): in a Browser View's bar, or a pill at the top-right of a
+    // selected or hovered frame.
+    struct BrowserSwitch {
+        QUuid frame;
+        QRectF rect;
+        bool on = false;
+        bool pill = false;
+    };
+    std::vector<BrowserSwitch> browserSwitches() const;
+    // The innermost frame under the pointer, its name's row included.
+    std::optional<QUuid> hoveredFrame() const;
+    void drawBrowserSwitches(QPainter &painter) const;
+    QString browserSwitchTip(QPointF view) const;
+    // True when the press was on a switch.
+    bool browserSwitchPress(QPointF view);
+    // Turns the frame's Browser View on or off, one undo step; on with no page yet opens the address field.
+    void flipBrowserView(const QUuid &frame);
+    // The frame whose pill the pointer brings out, so a move repaints only when it changes.
+    std::optional<QUuid> switchHover;
     std::optional<SignInStrip> signInStrip() const;
     void drawSignInStrip(QPainter &painter) const;
     bool signInPress(QPointF view);
@@ -367,7 +386,6 @@ struct EditorCanvas::State {
     void shapePress(QPointF view);
     void dragShape(QPointF view, Qt::KeyboardModifiers modifiers);
     void dragFrame(const QRectF &rect);
-    void finishBrowserView();
     VectorPath shapePath(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers) const;
 
     // Shape Builder (Shift-M) -------------------------------------------------

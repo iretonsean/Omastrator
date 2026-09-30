@@ -98,7 +98,7 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
     font.setPixelSize(11);
     const QFontMetricsF metrics(font);
     for (const VectorObject &object : document.objects) {
-        if (!object.browser || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
+        if (!object.showsPage() || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
             continue;
         const QRectF box = documentToView().mapRect(object.path.painterPath().boundingRect());
         BrowserBarLayout layout;
@@ -117,7 +117,14 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
         layout.back = buttonAt(x, layout.bar);
         layout.forward = buttonAt(x + buttonSize, layout.bar);
         layout.reload = buttonAt(x + 2 * buttonSize, layout.bar);
-        x += 3 * buttonSize + 6;
+        x += 3 * buttonSize + 2;
+        // The Browser View switch sits with the browser's own controls, where a narrow bar still has room for it.
+        if (!document.isEffectivelyLocked(object.id)) {
+            layout.toggle = QRectF(x, top + 2, 30, barHeight - 4);
+            x += 34;
+        } else {
+            x += 4;
+        }
         double right = layout.bar.right() - 2;
         const BrowserViewHost::Bar state = browserHost->bar(object.id);
         if (!state.deploy.isEmpty()) {
@@ -272,6 +279,8 @@ std::optional<QUuid> EditorCanvas::State::browserBarAt(QPointF view) const
 
 QString EditorCanvas::State::browserBarTip(QPointF view) const
 {
+    if (const QString tip = browserSwitchTip(view); !tip.isEmpty())
+        return tip;
     for (const BrowserBarLayout &layout : browserBars()) {
         if (layout.collapsed)
             continue;
@@ -432,7 +441,7 @@ std::optional<EditorCanvas::State::SignInStrip> EditorCanvas::State::signInStrip
         return std::nullopt;
     const VectorDocument &document = *session.document();
     for (const VectorObject &object : document.objects) {
-        if (!object.browser || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
+        if (!object.showsPage() || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
             continue;
         const QRectF box = documentToView().mapRect(object.path.painterPath().boundingRect());
         // The offer waits for a frame big enough to read it in; it stays with the first one.

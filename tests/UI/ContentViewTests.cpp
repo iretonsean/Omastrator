@@ -101,6 +101,14 @@ void ContentViewTests::theRailHoldsEveryToolInGroups()
     QVERIFY(editor.tool(Tool::select).y() < editor.tool(Tool::pen).y());
     QVERIFY(editor.tool(Tool::pen).y() < editor.tool(Tool::rotate).y());
     QVERIFY(editor.tool(Tool::rotate).y() < editor.tool(Tool::hand).y());
+    // Frame does Browser View, through its switch: no Browser View tool, and Frame and Artboard each have their own slot.
+    for (const std::vector<Tool> &slot : ContentView::toolSlots()) {
+        QVERIFY(std::find(slot.begin(), slot.end(), Tool::browserView) == slot.end());
+        if (std::find(slot.begin(), slot.end(), Tool::frame) != slot.end() || std::find(slot.begin(), slot.end(), Tool::artboard) != slot.end())
+            QCOMPARE(slot.size(), size_t(1));
+    }
+    QVERIFY(!editor.view.findChild<QToolButton *>(QStringLiteral("tool:browserView")));
+    QVERIFY(editor.tool(Tool::artboard).isVisible());
 }
 
 void ContentViewTests::aRailClickPicksTheTool()

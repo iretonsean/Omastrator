@@ -41,6 +41,8 @@ public:
     bool undoable = true;
     int undone = 0;
     QList<QPair<QUuid, Action>> acted;
+    void browserViewSwitched(const QUuid &frame, bool on) override { switched.push_back({frame, on}); }
+    QList<QPair<QUuid, bool>> switched;
 };
 
 QUuid box(EditorSession &session, double x)
@@ -60,6 +62,7 @@ private slots:
     void undoInEditPageIsThePagesOwn();
     void enterInAnElementFieldLeavesUndoToThePage();
     void browserViewItemsFollowTheFrameEvenInEditPage();
+    void theBrowserViewSwitchIsACommandForAnyFrame();
     void pageEntriesFollowTheDocument();
     void groupingFollowsTheSession();
     void viewTogglesAreChecked();
@@ -408,6 +411,38 @@ void MenusTests::browserViewItemsFollowTheFrameEvenInEditPage()
     QCOMPARE(host.acted[0].first, frame);
     QCOMPARE(host.acted[0].second, BrowserViewHost::Action::deploy);
     QCOMPARE(host.acted[1].second, BrowserViewHost::Action::buildIt);
+    canvas.setBrowserViewHost(nullptr);
+}
+
+void MenusTests::theBrowserViewSwitchIsACommandForAnyFrame()
+{
+    PageHost host;
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    workspace.createDocument(QSizeF(400, 400));
+    EditorSession &session = workspace.current().session;
+    EditorCanvas &canvas = window.content()->canvas();
+    canvas.setBrowserViewHost(&host);
+    box(session, 10);
+    QTRY_VERIFY(!menus.action("browserViewSwitch")->isEnabled());
+    // A plain frame: the menu opens for it, and the switch turns it on with one step.
+    const QUuid frame = session.addFrame({100, 100, 200, 200});
+    session.select({frame});
+    QTRY_VERIFY(menus.action("browserViewSwitch")->isEnabled());
+    QVERIFY(menus.action("browserViewMenu")->isEnabled());
+    QCOMPARE(menus.action("browserViewSwitch")->text(), QString("Turn On Browser View"));
+    QVERIFY(!menus.action("browserViewEditPage")->isEnabled());
+    menus.action("browserViewSwitch")->trigger();
+    QVERIFY(session.browserViewOn(frame));
+    QCOMPARE(session.undoName(), QString("Turn On Browser View"));
+    QCOMPARE(host.switched, (QList<QPair<QUuid, bool>>{{frame, true}}));
+    QTRY_COMPARE(menus.action("browserViewSwitch")->text(), QString("Turn Off Browser View"));
+    QVERIFY(menus.action("browserViewEditPage")->isEnabled());
+    menus.action("browserViewSwitch")->trigger();
+    QVERIFY(!session.browserViewOn(frame));
+    QCOMPARE(host.switched.back(), (QPair<QUuid, bool>{frame, false}));
+    QTRY_COMPARE(menus.action("browserViewSwitch")->text(), QString("Turn On Browser View"));
     canvas.setBrowserViewHost(nullptr);
 }
 

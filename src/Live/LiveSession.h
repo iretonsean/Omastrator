@@ -87,6 +87,9 @@ public:
     QUrl serverUrl() const { return m_serverUrl; }
     // A frame's project is starting its dev server; the tab still shows the production page.
     bool startingServer() const { return m_serving; }
+    // The frame's Browser View is off: the dev server this session holds is frozen, now or once it has one, until it's on.
+    void setServerPaused(bool paused);
+    bool serverPaused() const { return m_serverPaused; }
     // Show Original is on: the page is as the site made it.
     bool showingOriginal() const { return m_original; }
     bool inFrame() const { return m_pool != nullptr; }
@@ -217,6 +220,7 @@ private:
     bool m_inTab = false;
     QString m_title;
     quint64 m_lease = 0;
+    bool m_serverPaused = false;
     QString m_serverFolder;
     // The project the held lease serves, so coming back to the dev server finds it again.
     QString m_serverProject;

@@ -198,6 +198,9 @@ void LiveSession::serveProject(int generation)
         // The frame's tab loads the dev server next; the overlay comes with that page.
         setState(State::running);
     });
+    // Turned off before the server was asked for: it freezes as soon as it answers.
+    if (m_serverPaused && m_lease)
+        DevServers::shared().setPaused(m_lease, true);
 }
 
 void LiveSession::tabGone()

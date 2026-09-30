@@ -371,7 +371,7 @@ struct Filler {
         } else if (kind == QLatin1String("frame")) {
             // A Browser View's first action is picking its page's elements.
             const VectorObject *selected = session().document()->find(session().selection().front());
-            if (selected && selected->browser)
+            if (selected && selected->showsPage())
                 action("browserViewEditPage", QStringLiteral("Edit Page"));
             swatches();
             if (session().canRemoveAutoLayout())
