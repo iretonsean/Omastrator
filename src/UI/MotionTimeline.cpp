@@ -231,12 +231,12 @@ QString MotionTimeline::openForSelection()
     const VectorDocument &document = *m_session.document();
     for (const QUuid &id : m_session.selection()) {
         const VectorObject *object = document.find(id);
-        if (object && object->browser)
+        if (object && object->showsPage())
             return open(id);
     }
     QList<QUuid> frames;
     for (const VectorObject &object : document.objects)
-        if (object.browser && document.isOnCurrentPage(object.id))
+        if (object.showsPage() && document.isOnCurrentPage(object.id))
             frames.append(object.id);
     if (frames.size() == 1)
         return open(frames.first());
@@ -250,8 +250,8 @@ QString MotionTimeline::open(const QUuid &frame)
     if (isOpen())
         close();
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
-    if (!object || !object->browser)
-        return tr("That isn't a Browser View.");
+    if (!object || !object->showsPage())
+        return object && object->browser ? tr("Turn the frame's Browser View on first.") : tr("That isn't a Browser View.");
     // The frame is set first: Edit Page beginning tells this timeline, which follows only its own frame.
     m_frame = frame;
     if (!m_canvas.enterEditPage(frame)) {

@@ -74,7 +74,8 @@ BrowserViewHost::Empty BrowserViews::empty(const QUuid &frame) const
 {
     Empty offer;
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
-    if (!object || !object->browser || !object->browser->url.isEmpty())
+    // A plain frame has no page to generate into until its Browser View switch is on, and one that is off shows nothing.
+    if (!object || !object->showsPage() || !object->browser->url.isEmpty())
         return offer;
     if (const auto found = m_generations.constFind(frame); found != m_generations.constEnd()) {
         offer.generating = (*found)->agentRunning;
@@ -154,7 +155,7 @@ void BrowserViews::runGenerateAction(const QUuid &frame, Action action, const QS
         return;
     }
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
-    if (!object || !object->browser || !object->browser->url.isEmpty())
+    if (!object || !object->showsPage() || !object->browser->url.isEmpty())
         return;
     if (m_generations.contains(frame)) {
         emit notice(QStringLiteral("A page is already being written for this frame."));
@@ -186,6 +187,8 @@ QString BrowserViews::startGenerate(const QUuid &frame, const QString &descripti
     const VectorObject *object = m_session.document()->find(frame);
     if (!object || !object->browser)
         return QStringLiteral("That isn't a Browser View.");
+    if (!object->browser->on)
+        return QStringLiteral("Turn the frame's Browser View on first.");
     if (!object->browser->url.isEmpty())
         return QStringLiteral("This frame already has a page. Generate a page fills an empty one.");
     if (m_generations.contains(frame))
@@ -432,6 +435,9 @@ void BrowserViews::serveGenerated(const QUuid &frame)
             return;
         }
         m_generated[frame].dev = result.url;
+        // Switched off while it was starting: it freezes, and wakes with the switch.
+        if (!browserViewOn(frame) && m_generated[frame].lease != 0)
+            DevServers::shared().setPaused(m_generated[frame].lease, true);
         if (state->install >= 0)
             state->lines[state->install].state = Line::State::done;
         state->lines[state->server].state = Line::State::done;

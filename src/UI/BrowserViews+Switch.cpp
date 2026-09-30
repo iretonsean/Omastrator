@@ -56,6 +56,9 @@ BrowserViews::Server BrowserViews::server(const QUuid &frame) const
 void BrowserViews::followSwitch(const QUuid &frame, bool on)
 {
     m_wasOn.insert(frame, on);
+    // A page Generate made holds its dev server on a lease of this object's own: the switch freezes and wakes that too.
+    if (const auto generated = m_generated.constFind(frame); generated != m_generated.constEnd() && generated->lease != 0)
+        DevServers::shared().setPaused(generated->lease, !on);
     LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
     if (!on) {
         m_serveWanted.remove(frame);

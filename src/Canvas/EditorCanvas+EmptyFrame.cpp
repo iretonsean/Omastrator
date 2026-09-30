@@ -23,7 +23,7 @@ std::vector<EditorCanvas::State::EmptyLayout> EditorCanvas::State::emptyFrames()
     font.setPixelSize(12);
     const QFontMetricsF metrics(font);
     for (const VectorObject &object : document.objects) {
-        if (!object.browser || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
+        if (!object.showsPage() || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
             continue;
         const BrowserViewHost::Empty offer = browserHost->empty(object.id);
         if (!offer.offered)
