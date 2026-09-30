@@ -175,6 +175,16 @@ public:
     // The block's `@media (prefers-reduced-motion: reduce)` rule taken out (`removed` is its text, `added` empty) or put back
     // (`added` is its text): only the code has it, so it is an edit and nothing on the page.
     QString motionSetReducedMotion(const QString &block, const QString &removed, const QString &added);
+    // The page emulates a visitor who asked for less motion (`prefers-reduced-motion: reduce`), or no longer does: what is left
+    // running shows in the list.
+    QString motionEmulateReduced(bool reduced);
+    bool motionReduced() const { return m_reducedEmulated; }
+    // What starts the row's motion (load, scroll, hover or click), as an edit for the agent: shown at once where the page can
+    // (load replays; scroll moves the running animations onto a view timeline), and kept as a description of the change for the
+    // agent otherwise.
+    QString motionSetTrigger(const QString &name, const QStringList &selectors, const QString &from, const QString &to);
+    // A preview server stands in for the project's page on this origin: the project is still the frame's project there.
+    void setPreviewOrigin(const QUrl &origin);
     // The last list `__oma.motion.list()` gave, and whether the timeline holds the page.
     const QJsonObject &motion() const { return m_motion; }
     bool motionHeld() const { return m_motionHeld; }
@@ -280,6 +290,8 @@ private:
     QHash<QString, int> m_forcedNodes;
     int m_domRoot = 0;
     bool m_agentsOn = false;
+    bool m_reducedEmulated = false;
+    QUrl m_previewOrigin;
     void motionLetGo(int timeoutMs);
     QString forceState(const QString &selector, const QString &state, int timeoutMs);
     void syncForced();

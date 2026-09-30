@@ -517,7 +517,9 @@ private slots:
             return label ? label->text() : QString();
         };
         QCOMPARE(text("motionInspectorName"), QStringLiteral("h1 .word × 5"));
-        QCOMPARE(text("motionInspectorStarts"), QStringLiteral("On load"));
+        // What starts it is a segmented control; this one starts on load.
+        QVERIFY(inspector.findChild<QToolButton *>(QStringLiteral("motionInspectorStarts:load"))->isChecked());
+        QVERIFY(!inspector.findChild<QToolButton *>(QStringLiteral("motionInspectorStarts:scroll"))->isChecked());
         // The values are fields (phase B): the easing as text and a preset, the duration and stagger in ms.
         auto *easing = inspector.findChild<QLineEdit *>(QStringLiteral("motionInspectorEasingText"));
         QVERIFY(easing);

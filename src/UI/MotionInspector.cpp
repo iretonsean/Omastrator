@@ -7,6 +7,7 @@
 #include "UI/HandsFocusBack.h"
 #include "UI/MotionTimeline.h"
 #include "UI/NumberField.h"
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -128,9 +129,38 @@ void MotionInspector::rebuild()
     column->setSpacing(10);
 
     const Motion::Track *track = m_timeline.selectedTrack();
+    // Motion the agent wrote, previewed: what breaks its contract, and the way out.
+    if (m_timeline.isOpen() && m_timeline.previewing()) {
+        const QString notice = m_timeline.previewNotice();
+        if (!notice.isEmpty())
+            column->addWidget(label(notice, QStringLiteral("motionInspectorNotice"), m_body));
+        auto *discard = new QToolButton(m_body);
+        discard->setObjectName(QStringLiteral("motionInspectorDiscard"));
+        discard->setText(tr("Discard the preview"));
+        discard->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        discard->setFocusPolicy(Qt::NoFocus);
+        connect(discard, &QToolButton::clicked, discard, [this] { m_timeline.discardPreview(); });
+        column->addWidget(discard, 0, Qt::AlignLeft);
+    }
+    // Reduced motion is previewed for the whole page, so its switch stays where it is when the rows go.
+    if (m_timeline.isOpen()) {
+        auto *preview = new QToolButton(m_body);
+        preview->setObjectName(QStringLiteral("motionInspectorPreviewReduced"));
+        preview->setText(tr("Preview reduced"));
+        preview->setToolTip(tr("Play the page as for someone who asked for less motion"));
+        preview->setCheckable(true);
+        preview->setChecked(m_timeline.previewReduced());
+        preview->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        preview->setFocusPolicy(Qt::NoFocus);
+        connect(preview, &QToolButton::clicked, preview, [this](bool on) { m_timeline.setPreviewReduced(on); });
+        column->addWidget(preview, 0, Qt::AlignLeft);
+    }
     if (!track) {
-        column->addWidget(label(m_timeline.isOpen() ? tr("No motion on this element yet.") : tr("Open the timeline to see a page's motion."),
+        column->addWidget(label(!m_timeline.isOpen() ? tr("Open the timeline to see a page's motion.")
+                                : m_timeline.previewReduced() ? tr("No motion when reduced.")
+                                                              : tr("No motion on this element yet."),
                                 QStringLiteral("motionInspectorEmpty"), m_body, true));
+        column->addStretch(1);
         return;
     }
 
@@ -151,7 +181,33 @@ void MotionInspector::rebuild()
     auto *form = new QFormLayout;
     form->setContentsMargins(0, 0, 0, 0);
     form->setLabelAlignment(Qt::AlignLeft);
-    form->addRow(tr("Starts"), label(Motion::triggerText(track->trigger), QStringLiteral("motionInspectorStarts"), m_body));
+    auto *starts = new QWidget(m_body);
+    starts->setObjectName(QStringLiteral("motionInspectorStarts"));
+    auto *startsRow = new QHBoxLayout(starts);
+    startsRow->setContentsMargins(0, 0, 0, 0);
+    startsRow->setSpacing(2);
+    auto *group = new QButtonGroup(starts);
+    group->setExclusive(true);
+    for (const auto &kind : {std::pair<QString, QString>{QStringLiteral("load"), tr("Load")}, {QStringLiteral("scroll"), tr("Scroll")},
+                             {QStringLiteral("hover"), tr("Hover")}, {QStringLiteral("click"), tr("Click")}}) {
+        auto *button = new QToolButton(starts);
+        button->setObjectName(QStringLiteral("motionInspectorStarts:") + kind.first);
+        button->setText(kind.second);
+        button->setCheckable(true);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setFocusPolicy(Qt::NoFocus);
+        button->setChecked(track->trigger == kind.first);
+        // Only motion in CSS animations can change what starts it; the agent writes the rest.
+        button->setEnabled(animation);
+        group->addButton(button);
+        startsRow->addWidget(button);
+        const QString trigger = kind.first;
+        connect(button, &QToolButton::clicked, button, [this, trigger] { m_timeline.setStarts(trigger); });
+    }
+    startsRow->addStretch(1);
+    starts->setToolTip(animation ? tr("What starts this motion. Load and Scroll show here; your agent writes any change when you save.")
+                                 : tr("Motion your agent wrote or the page made itself: ask your agent to change what starts it."));
+    form->addRow(tr("Starts"), starts);
 
     if (!track->easing.isEmpty() && timed) {
         const QString css = track->easing;
@@ -261,6 +317,24 @@ void MotionInspector::rebuild()
             }
         }
         column->addLayout(list);
+    }
+
+    // The site's own motion with no rule for visitors who asked for less: the agent can add one.
+    if (!m_timeline.timeline().reducedRule && timed) {
+        column->addWidget(label(tr("This motion plays for people who asked for less motion."), QStringLiteral("motionInspectorReducedWarning"), m_body));
+        auto *ask = new QToolButton(m_body);
+        ask->setObjectName(QStringLiteral("motionInspectorAskReduced"));
+        ask->setText(tr("Ask…"));
+        ask->setToolTip(tr("Ask your agent to add a reduced-motion rule"));
+        ask->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        ask->setFocusPolicy(Qt::NoFocus);
+        connect(ask, &QToolButton::clicked, ask, [this] {
+            const QString failure = m_timeline.askAgent(tr("Add a prefers-reduced-motion rule for this motion, so it doesn't play for people who asked for less motion. "
+                                                            "Stop the movement and keep any colour or opacity change."));
+            if (!failure.isEmpty())
+                emit m_timeline.notice(failure);
+        });
+        column->addWidget(ask, 0, Qt::AlignLeft);
     }
 
     auto *reduced = new QCheckBox(tr("Also write a reduced-motion version (prefers-reduced-motion)"), m_body);

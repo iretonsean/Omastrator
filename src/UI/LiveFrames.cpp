@@ -202,6 +202,14 @@ void LiveFrames::setPageEditing(const QUuid &frame, bool on)
     });
 }
 
+void LiveFrames::setPreview(const QUuid &frame, const QUrl &origin)
+{
+    run(frame, [origin](LiveSession &live) {
+        live.setPreviewOrigin(origin);
+        return QString();
+    });
+}
+
 void LiveFrames::stop(const QUuid &frame)
 {
     if (!m_frames.contains(frame))

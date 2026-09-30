@@ -65,6 +65,9 @@ struct Timeline {
     double scrollMax = 0;
     double viewport = 0;
     bool truncated = false;
+    // The page has a style rule for visitors who asked for less motion, and whether the page is playing as if one did.
+    bool reducedRule = false;
+    bool reduced = false;
     QString url;
     // Rows that run on time first, then the rows driven by scrolling.
     QList<Track> tracks;

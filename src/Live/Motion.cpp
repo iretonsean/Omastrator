@@ -46,16 +46,22 @@ QStringList strings(const QJsonArray &array)
 
 // What makes two animations one row: the same motion, on siblings, on the same clock. Transitions of one element are one row,
 // whatever they move, and whether or not a state is holding them yet.
-QString groupKey(const QJsonObject &each)
+QString idKey(const QJsonObject &each)
 {
     const QString kind = each["kind"].toString();
     if (kind == QLatin1String("css-transition"))
-        return QStringList{kind, each["selector"].toString(), each["timeline"].toString()}.join(QLatin1Char('|'));
+        return QStringList{kind, each["selector"].toString()}.join(QLatin1Char('|'));
     const QString parent = each["parent"].toObject()["selector"].toString(each["selector"].toString());
     QString name = each["name"].toString();
     if (name.isEmpty() || kind != QLatin1String("css-animation"))
         name += QLatin1Char('|') + strings(each["properties"].toArray()).join(QLatin1Char(','));
-    return QStringList{kind, name, parent, each["timeline"].toString()}.join(QLatin1Char('|'));
+    return QStringList{kind, name, parent}.join(QLatin1Char('|'));
+}
+
+// The row's id stays the same when its motion moves from time to scrolling, so a picked row stays picked; two clocks are two rows.
+QString groupKey(const QJsonObject &each)
+{
+    return idKey(each) + QLatin1Char('|') + each["timeline"].toString();
 }
 
 Bar barOf(const QJsonObject &each, double &delay, double &duration)
@@ -162,6 +168,8 @@ Timeline parse(const QJsonObject &list)
     timeline.held = list["held"].toBool();
     timeline.time = list["time"].toDouble();
     timeline.truncated = list["truncated"].toBool();
+    timeline.reducedRule = list["reducedRule"].toBool();
+    timeline.reduced = list["reduced"].toBool();
     timeline.url = list["url"].toString();
     const QJsonObject scroll = list["scroll"].toObject();
     timeline.scrollY = scroll["y"].toDouble();
@@ -187,7 +195,7 @@ Timeline parse(const QJsonObject &list)
     for (const Row &row : std::as_const(rows)) {
         const QJsonObject &first = row.members.first();
         Track track;
-        track.id = row.key;
+        track.id = idKey(row.members.first());
         track.label = labelFor(row.members);
         track.kind = first["kind"].toString();
         track.timeline = first["timeline"].toString() == QLatin1String("document") ? QStringLiteral("document") : QStringLiteral("scroll");

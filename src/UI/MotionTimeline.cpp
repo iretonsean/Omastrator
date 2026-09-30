@@ -1,6 +1,7 @@
 #include "UI/MotionTimeline.h"
 #include "Canvas/EditorCanvas.h"
 #include "Document/EditorSession.h"
+#include "UI/AgentBridge.h"
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
 #include "UI/MotionTrackView.h"
@@ -18,6 +19,13 @@
 #include <algorithm>
 
 namespace {
+// scheme://host:port of a page's address.
+QString originOf(const QString &address)
+{
+    const QUrl url(address);
+    return url.isValid() && !url.host().isEmpty() ? QStringLiteral("%1://%2:%3").arg(url.scheme(), url.host()).arg(url.port(-1)) : QString();
+}
+
 QHash<EditorSession *, MotionTimeline *> &registry()
 {
     static QHash<EditorSession *, MotionTimeline *> all;
@@ -111,6 +119,12 @@ MotionTimeline::MotionTimeline(EditorSession &session, EditorCanvas &canvas, QWi
     m_timeText->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     m_trigger = new QLabel(header);
     m_trigger->setObjectName(QStringLiteral("motionTrigger"));
+    m_save = tool(tr("Save to code"), QStringLiteral("motionSaveToCode"), tr("Write this motion into your project's code and commit it"), header);
+    m_discard = tool(tr("Discard"), QStringLiteral("motionDiscard"), tr("Drop the motion your agent wrote. Nothing has been written."), header);
+    m_save->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_discard->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_save->hide();
+    m_discard->hide();
     m_timelineTab = tool(tr("Timeline"), QStringLiteral("motionTabTimeline"), tr("Timeline"), header, true);
     m_codeTab = tool(tr("Code"), QStringLiteral("motionTabCode"), tr("Code"), header, true);
     m_timelineTab->setChecked(true);
@@ -122,6 +136,8 @@ MotionTimeline::MotionTimeline(EditorSession &session, EditorCanvas &canvas, QWi
     row->addWidget(m_timeText);
     row->addWidget(m_trigger);
     row->addStretch(1);
+    row->addWidget(m_discard);
+    row->addWidget(m_save);
     row->addWidget(m_timelineTab);
     row->addWidget(m_codeTab);
     row->addWidget(close);
@@ -164,6 +180,12 @@ MotionTimeline::MotionTimeline(EditorSession &session, EditorCanvas &canvas, QWi
     connect(m_timelineTab, &QToolButton::clicked, this, [this] { showTab(false); });
     connect(m_codeTab, &QToolButton::clicked, this, [this] { showTab(true); });
     connect(close, &QToolButton::clicked, this, &MotionTimeline::close);
+    connect(m_save, &QToolButton::clicked, this, &MotionTimeline::saveToCode);
+    connect(m_discard, &QToolButton::clicked, this, &MotionTimeline::discardPreview);
+    connect(BrowserViews::of(m_session), &BrowserViews::previewStateChanged, this, [this](const QUuid &frame) {
+        if (frame == m_frame)
+            syncHeader();
+    });
     connect(&m_canvas, &EditorCanvas::editPageChanged, this, &MotionTimeline::onEditPage);
     connect(BrowserViews::of(m_session), &BrowserViews::pictureArrived, this, [this](const QUuid &frame) {
         if (frame == m_frame && m_inFlight) {
@@ -266,6 +288,8 @@ void MotionTimeline::close()
     m_gate.stop();
     m_forced.clear();
     m_scrubbing = false;
+    m_previewReduced = false;
+    m_replayWhen = false;
     if (m_live && m_live->active(frame))
         m_live->run(frame, [](LiveSession &session) { return session.motionRelease(); });
     BrowserViews::of(m_session)->setScrubbed(frame, false);
@@ -298,7 +322,7 @@ void MotionTimeline::onLiveChanged(const QUuid &frame)
     }
     const LiveFrames::Snapshot snapshot = m_live->snapshot(frame);
     if (snapshot.state == LiveSession::State::running)
-        m_status = tr("No motion on this page yet.");
+        m_status = m_previewReduced ? tr("No motion when reduced.") : tr("No motion on this page yet.");
     else
         m_status = snapshot.message.isEmpty() ? tr("Waiting for the page…") : snapshot.message;
     if (snapshot.state == LiveSession::State::running && !snapshot.motionHeld && m_wantHold && !m_holding)
@@ -366,6 +390,11 @@ void MotionTimeline::refresh(const QJsonObject &list)
     m_tracks->update();
     if (m_code)
         rebuildCode();
+    // Animate's preview loads on a server of its own: once its page is here, the motion plays from the start.
+    if (m_replayWhen && m_timeline.hasTime() && originOf(m_timeline.url) != m_replayOrigin) {
+        m_replayWhen = false;
+        QTimer::singleShot(0, this, &MotionTimeline::replay);
+    }
     emit changed();
 }
 
@@ -385,6 +414,9 @@ void MotionTimeline::syncHeader()
     m_playButton->setAccessibleName(m_playing ? tr("Pause") : tr("Play"));
     m_playButton->setEnabled(rows);
     m_replayButton->setEnabled(rows);
+    const bool showing = previewing();
+    m_save->setVisible(showing);
+    m_discard->setVisible(showing);
 }
 
 void MotionTimeline::scrubTo(double ms)
@@ -782,4 +814,86 @@ QString MotionTimeline::pendingValue(const QString &property, const QString &fal
         if (edit.selector == QLatin1String(":root") && edit.property == property)
             value = edit.after;
     return value;
+}
+
+QString MotionTimeline::openAndPlay(const QUuid &frame)
+{
+    // The page shown now is the one before the preview; the one from another origin is what plays.
+    LiveFrames *frames = m_live ? m_live.data() : LiveFrames::of(m_session);
+    const QString before = !frame.isNull() && frames->active(frame) ? originOf(frames->snapshot(frame).url.toString()) : QString();
+    const QString failure = open(frame);
+    if (!failure.isEmpty())
+        return failure;
+    m_replayOrigin = before;
+    m_replayWhen = true;
+    return {};
+}
+
+bool MotionTimeline::previewing() const
+{
+    return !m_frame.isNull() && BrowserViews::of(m_session)->previewing(m_frame);
+}
+
+void MotionTimeline::saveToCode()
+{
+    if (m_frame.isNull())
+        return;
+    const QString failure = BrowserViews::of(m_session)->savePreview(m_frame);
+    if (!failure.isEmpty())
+        emit notice(failure);
+}
+
+void MotionTimeline::discardPreview()
+{
+    if (!m_frame.isNull())
+        BrowserViews::of(m_session)->discardPreview(m_frame);
+}
+
+void MotionTimeline::setPreviewReduced(bool on)
+{
+    if (!m_live || m_frame.isNull() || on == m_previewReduced)
+        return;
+    m_previewReduced = on;
+    const QUuid frame = m_frame;
+    m_live->run(frame, [on](LiveSession &session) { return session.motionEmulateReduced(on); }, [this, frame](const QString &error) {
+        if (frame == m_frame && !error.isEmpty())
+            emit notice(error);
+    });
+    emit changed();
+}
+
+void MotionTimeline::setStarts(const QString &trigger)
+{
+    const Motion::Track *track = selectedTrack();
+    if (!m_live || m_frame.isNull() || !track || track->kind != QLatin1String("css-animation") || trigger == track->trigger)
+        return;
+    const QUuid frame = m_frame;
+    const QString name = track->name;
+    const QStringList selectors = track->selectors;
+    const QString from = track->trigger;
+    m_live->run(frame, [name, selectors, from, trigger](LiveSession &session) { return session.motionSetTrigger(name, selectors, from, trigger); },
+                [this, frame](const QString &error) {
+                    if (frame == m_frame && !error.isEmpty())
+                        emit notice(error);
+                });
+}
+
+QString MotionTimeline::askAgent(const QString &prompt)
+{
+    if (!m_live || m_frame.isNull())
+        return tr("Open the timeline on a page first.");
+    AgentBridge *agent = BrowserViews::of(m_session)->agent();
+    const LiveFrames::Snapshot snapshot = m_live->snapshot(m_frame);
+    if (!agent)
+        return tr("Open the project's window to ask.");
+    if (snapshot.project.isEmpty() || snapshot.mockup)
+        return tr("This page isn't one of your sites, so there's no code to change.");
+    return agent->liveAsk(prompt, snapshot.selection, nullptr, snapshot.project);
+}
+
+QString MotionTimeline::previewNotice() const
+{
+    AgentBridge *agent = BrowserViews::of(m_session)->agent();
+    const auto preview = agent && !m_frame.isNull() ? agent->previewOfFrame(m_frame) : std::nullopt;
+    return preview ? preview->notice : QString();
 }

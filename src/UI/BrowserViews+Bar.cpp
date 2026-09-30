@@ -55,6 +55,14 @@ BrowserViewHost::Bar BrowserViews::bar(const QUuid &frame) const
             bar.devTip = snapshot.serverCommand.isEmpty() ? snapshot.serverUrl.toString()
                                                           : QStringLiteral("%1\n%2").arg(snapshot.serverUrl.toString(), snapshot.serverCommand);
     }
+    // Motion the agent wrote, served from its worktree: the pill says so, and names the branch.
+    if (m_previewed.contains(frame) && m_agent) {
+        if (const auto preview = m_agent->previewOfFrame(frame)) {
+            bar.dev = true;
+            bar.devLabel = QStringLiteral("preview");
+            bar.devTip = QStringLiteral("On branch %1. Nothing is saved until Save to code.").arg(preview->branch);
+        }
+    }
     fillDeploy(frame, bar);
     fillBuild(frame, bar);
     return bar;

@@ -33,6 +33,9 @@ public:
     // Opens the file behind the Code tab with this in place of xdg-open (OMASTRATOR_XDG_OPEN also replaces it); tests set it.
     static void setOpener(std::function<void(const QString &path)> opener);
 
+    // Opens on the frame if it isn't, and plays the new page from 0 once it has loaded: what Animate does when the agent's
+    // motion is ready to preview. Returns why it can't open, or empty.
+    QString openAndPlay(const QUuid &frame);
     // Window ▸ Timeline: closes it when open, else opens it on the selection and says why it can't.
     void toggle();
     // Opens on the Browser View in Edit Page, else the selected one, else the page's only one. Returns why it can't, or empty.
@@ -67,6 +70,20 @@ public:
     QList<MotionCode::Block> codeBlocks() const;
     void showTab(bool code);
     bool codeShown() const { return m_code; }
+    // Save to code and Discard, while the frame shows the agent's motion as a preview (docs/MOTION.md, section 4).
+    bool previewing() const;
+    // The line the inspector shows when what the agent wrote breaks the output contract; empty when it holds.
+    QString previewNotice() const;
+    void saveToCode();
+    void discardPreview();
+    // Preview reduced: the page plays as for a visitor who asked for less motion, and the rows show what is left.
+    void setPreviewReduced(bool on);
+    bool previewReduced() const { return m_previewReduced; }
+    // What starts the selected row's motion: "load", "scroll", "hover" or "click". It shows on the page where it can (load,
+    // scroll) and is an edit the agent finishes.
+    void setStarts(const QString &trigger);
+    // Asks the agent about the picked elements, in the frame's project. Returns why it can't, or empty.
+    QString askAgent(const QString &prompt);
     // Edits (docs/MOTION.md, section 3). Each is shown on the page as a preview while `preview` is true, and is one Live edit,
     // with its undo, when it is not. The inspector's fields call them. A motion token (--duration-*, --ease-*, --stagger-*) is
     // a custom property on :root.
@@ -147,6 +164,10 @@ private:
     // The pending edits when the project's code was last read: the code is read again when they change.
     size_t m_editCount = 0;
     bool m_scrubbing = false;
+    bool m_previewReduced = false;
+    // Play the new page from 0 when its list arrives from another origin than `m_replayOrigin`.
+    bool m_replayWhen = false;
+    QString m_replayOrigin;
     bool m_code = false;
     QList<MotionCode::Block> m_allBlocks;
     QString m_project;
@@ -156,6 +177,8 @@ private:
     QToolButton *m_replayButton = nullptr;
     QToolButton *m_timelineTab = nullptr;
     QToolButton *m_codeTab = nullptr;
+    QToolButton *m_save = nullptr;
+    QToolButton *m_discard = nullptr;
     QLabel *m_timeText = nullptr;
     QLabel *m_trigger = nullptr;
     QStackedWidget *m_pages = nullptr;

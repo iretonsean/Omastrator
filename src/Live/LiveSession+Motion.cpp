@@ -1,6 +1,7 @@
 #include "Live/LiveSession.h"
 #include "Live/Tokens.h"
 #include <QJsonDocument>
+#include <QTimer>
 
 // Motion (docs/MOTION.md): the timeline's calls into the page. The reading, holding and seeking are in motion.js; the
 // DevTools Protocol is used only where it alone can act: forcing :hover and :focus.
@@ -71,6 +72,11 @@ void LiveSession::motionLetGo(int timeoutMs)
     m_forcedNodes.clear();
     if (!m_page)
         return;
+    // A visitor who asked for less motion was only being played.
+    if (m_reducedEmulated) {
+        m_reducedEmulated = false;
+        call(cdp(), QStringLiteral("Emulation.setEmulatedMedia"), {{"features", QJsonArray()}}, session, nullptr, timeoutMs);
+    }
     evaluate(QStringLiteral("window.__oma && window.__oma.motion && window.__oma.motion.release()"));
 }
 
@@ -303,6 +309,67 @@ QString LiveSession::motionSetTiming(const QString &name, const QStringList &sel
         step.property = property;
         step.was = first ? QJsonObject{{"motion", applied["was"]}} : QJsonObject{{"codeOnly", true}};
         step.now = first ? QJsonObject{{"motion", applied["now"]}} : QJsonObject{{"codeOnly", true}};
+        step.group = m_group;
+        keep(edit, step);
+        first = false;
+    }
+    m_group = 0;
+    return motionRefresh();
+}
+
+QString LiveSession::motionEmulateReduced(bool reduced)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    const QJsonArray features = reduced ? QJsonArray{QJsonObject{{"name", "prefers-reduced-motion"}, {"value", "reduce"}}} : QJsonArray();
+    call(cdp(), QStringLiteral("Emulation.setEmulatedMedia"), {{"features", features}}, m_page->sessionId, &error);
+    if (!error.isEmpty())
+        return QStringLiteral("Couldn't preview reduced motion: %1").arg(error);
+    m_reducedEmulated = reduced;
+    // The page's own rules take the motion away or not, in the next frame; the list is read then.
+    QTimer::singleShot(120, this, [this] {
+        if (m_page && m_motionHeld)
+            motionRefresh();
+    });
+    return {};
+}
+
+void LiveSession::setPreviewOrigin(const QUrl &origin)
+{
+    m_previewOrigin = origin;
+}
+
+QString LiveSession::motionSetTrigger(const QString &name, const QStringList &selectors, const QString &from, const QString &to)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    // Load and scroll can be seen: the overlay moves the running animations to a view timeline, or lets them play from the start.
+    QJsonObject applied;
+    if (to == QLatin1String("scroll") || to == QLatin1String("load")) {
+        applied = evaluate(QStringLiteral("window.__oma && window.__oma.motion ? window.__oma.motion.setStarts(%1, %2) : null").arg(literal(name), literal(to)), &error).toObject();
+        if (!error.isEmpty())
+            return error;
+    }
+    m_group = ++m_lastGroup;
+    bool first = true;
+    for (const QString &selector : selectors) {
+        LiveEdit edit;
+        edit.selector = selector;
+        edit.property = QStringLiteral("motion-trigger");
+        edit.before = from;
+        edit.after = to;
+        edit.path = EditSets::pathOf(m_url);
+        edit.origin = EditSets::originOf(m_url);
+        edit.element = described(selector, QString(), edit.path);
+        edit.element["animation"] = name;
+        UndoStep step;
+        step.selector = selector;
+        step.property = edit.property;
+        const bool carries = first && !applied.isEmpty();
+        step.was = carries ? QJsonObject{{"motion", applied["was"]}} : QJsonObject{{"codeOnly", true}};
+        step.now = carries ? QJsonObject{{"motion", applied["now"]}} : QJsonObject{{"codeOnly", true}};
         step.group = m_group;
         keep(edit, step);
         first = false;

@@ -142,7 +142,7 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
             }
         }
         if (state.dev) {
-            const double width = metrics.horizontalAdvance(QStringLiteral("dev")) + 14;
+            const double width = metrics.horizontalAdvance(state.devLabel) + 14;
             if (right - x - width > 140) {
                 layout.dev = QRectF(right - width, top + 5, width, barHeight - 10);
                 right -= width + 4;
@@ -251,7 +251,7 @@ void EditorCanvas::State::drawBrowserBars(QPainter &painter) const
             painter.setPen(QPen(accent(), 1));
             painter.setBrush(Qt::NoBrush);
             painter.drawRoundedRect(layout.dev, 8, 8);
-            painter.drawText(layout.dev, Qt::AlignCenter, QStringLiteral("dev"));
+            painter.drawText(layout.dev, Qt::AlignCenter, browserHost->bar(layout.frame).devLabel);
         }
         if (state.loading) {
             painter.setPen(QPen(accent(), 2));
@@ -288,7 +288,9 @@ QString EditorCanvas::State::browserBarTip(QPointF view) const
         if (layout.tag.contains(view))
             return QStringLiteral("Not your site: changes stay on this machine. Click if it is.");
         if (layout.dev.contains(view))
-            return QStringLiteral("Running from the project's dev server\n%1").arg(browserHost->bar(layout.frame).devTip);
+            return browserHost->bar(layout.frame).devLabel == QLatin1String("preview")
+                ? QStringLiteral("Previewing the motion your agent wrote\n%1").arg(browserHost->bar(layout.frame).devTip)
+                : QStringLiteral("Running from the project's dev server\n%1").arg(browserHost->bar(layout.frame).devTip);
         if (layout.editPage.contains(view))
             return editPage == layout.frame ? QStringLiteral("Stop editing the page") : QStringLiteral("Edit Page");
         for (const auto &[rect, width] : layout.widths) {

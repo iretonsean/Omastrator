@@ -272,6 +272,23 @@
     return { count, start: count ? start : 0, end: count ? end : 0 };
   }
 
+  // Whether any style sheet has a rule for people who asked for less motion. A page with motion and none is playing it for them.
+  function hasReducedRule() {
+    let found = false;
+    const visit = (rules) => {
+      for (const rule of rules) {
+        if (found) return;
+        if (typeof CSSMediaRule !== "undefined" && rule instanceof CSSMediaRule && /prefers-reduced-motion/.test(rule.media.mediaText)) { found = true; return; }
+        if (rule.cssRules && rule.cssRules.length) visit(rule.cssRules);
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      try { visit(sheet.cssRules); } catch (e) { /* a cross-origin sheet */ }
+      if (found) break;
+    }
+    return found;
+  }
+
   function list() {
     const all = animations();
     const out = [];
@@ -280,7 +297,8 @@
       if (anim.effect.target && typeof CSSTransition !== "undefined" && anim instanceof CSSTransition) running.add(anim.effect.target);
       if (out.length < cap) out.push(describe(anim));
     }
-    return { held, time: lastSeek, url: location.href, truncated: all.length > cap,
+    return { held, time: lastSeek, url: location.href, truncated: all.length > cap, reducedRule: hasReducedRule(),
+      reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
       scroll: { y: scrollY, max: Math.max(0, document.documentElement.scrollHeight - innerHeight), viewport: innerHeight },
       animations: out.concat(candidates(running)), gsap: gsapInfo() };
   }
@@ -389,6 +407,34 @@
       const t = a.effect.getTiming();
       return { selector: oma.selectorFor(a.effect.target), name, timing: { duration: t.duration, delay: t.delay, easing: t.easing } };
     }) };
+  }
+
+  // Where each animation of that name runs: on the document's clock, or on a view timeline (scrolling), and its timing.
+  function startsState(name) {
+    return { type: "starts", items: withName(name).map((a) => {
+      const t = a.effect.getTiming();
+      return { selector: oma.selectorFor(a.effect.target), name, view: !!scrollKind(a), duration: t.duration, delay: t.delay };
+    }) };
+  }
+
+  // Puts one animation on the document's clock or on a view timeline of its element, keeping the hold's bookkeeping right.
+  const startsMemo = new WeakMap();
+  function moveTo(anim, view, timing) {
+    const target = anim.effect.target;
+    if (view) {
+      const t = anim.effect.getTiming();
+      if (typeof t.duration === "number") startsMemo.set(anim, { duration: t.duration, delay: t.delay });
+      records.delete(anim);
+      anim.effect.updateTiming({ duration: "auto", delay: 0 });
+      anim.timeline = new ViewTimeline({ subject: target });
+      anim.play();
+    } else {
+      anim.timeline = document.timeline;
+      const saved = typeof timing.duration === "number" ? timing : (startsMemo.get(anim) || { duration: 1000, delay: 0 });
+      anim.effect.updateTiming({ duration: saved.duration, delay: saved.delay });
+      if (held) adopt(anim, true);
+    }
+    serial++;
   }
 
   const findAnimation = (item) => withName(item.name).find((a) => oma.selectorFor(a.effect.target) === item.selector);
@@ -529,15 +575,35 @@
       }
       return { was: before, now: timingState(name) };
     },
-    // Puts a state from setKeyframe or setTiming back.
+    // What starts a row's motion, as far as the page can show it: "scroll" moves its animations onto a view timeline of each
+    // element, "load" puts them back on the document's clock (they play from the start). Returns the states that undo and redo it,
+    // or null where the page can't (no view timelines).
+    setStarts(name, to) {
+      if (to === "scroll" && typeof ViewTimeline === "undefined") return null;
+      const was = startsState(name);
+      if (!was.items.length) return null;
+      try {
+        for (const item of was.items) {
+          const anim = findAnimation(item);
+          if (!anim) continue;
+          if (to === "scroll" && !item.view) moveTo(anim, true, item);
+          else if (to === "load" && item.view) moveTo(anim, false, item);
+        }
+      } catch (e) { return null; }
+      return { was, now: startsState(name) };
+    },
+    // Puts a state from setKeyframe, setTiming or setStarts back.
     undo(state) {
       let done = false;
       for (const item of state.items || []) {
         const target = findAnimation(item);
         if (!target) continue;
-        if (state.type === "keyframes") target.effect.setKeyframes(item.keyframes);
-        else target.effect.updateTiming(item.timing);
-        done = true;
+        try {
+          if (state.type === "keyframes") target.effect.setKeyframes(item.keyframes);
+          else if (state.type === "starts") { if (item.view !== !!scrollKind(target)) moveTo(target, item.view, item); }
+          else target.effect.updateTiming(item.timing);
+          done = true;
+        } catch (e) { /* an animation that ended meanwhile */ }
       }
       return done;
     }

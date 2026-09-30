@@ -46,6 +46,7 @@ void BrowserViews::setAgent(AgentBridge *agent)
     m_agent = agent;
     if (!agent)
         return;
+    connect(agent, &AgentBridge::previewChanged, this, &BrowserViews::onPreviewChanged);
     // The stage and the result show on the bar; the result goes away by itself, so it repaints once more then.
     connect(agent, &AgentBridge::waitingChanged, this, [this] {
         for (auto it = m_entries.constBegin(); it != m_entries.constEnd(); ++it)

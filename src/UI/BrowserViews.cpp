@@ -1,3 +1,4 @@
+#include "UI/AgentBridge.h"
 #include "UI/BrowserViews.h"
 #include "Canvas/EditorCanvas.h"
 #include "Document/BrowserAddress.h"
@@ -111,6 +112,12 @@ BrowserViews::BrowserViews(EditorSession &session) : QObject(&session), m_sessio
 BrowserViews::~BrowserViews()
 {
     instances().removeAll(this);
+    // A preview shown here goes with the document: its server and worktree, and nothing was written.
+    if (m_agent) {
+        const QStringList folders = m_previewed.values();
+        for (const QString &folder : folders)
+            m_agent->discardPreview(folder);
+    }
     // A decode in flight posts its result to this object, so it ends first.
     m_decoder.waitForDone();
     // The session may be going too, so nothing of it is touched here.
