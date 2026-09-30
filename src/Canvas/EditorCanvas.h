@@ -3,6 +3,7 @@
 #include <QLineF>
 #include <QList>
 #include <QWidget>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -62,6 +63,8 @@ public:
     std::optional<QRectF> editPageVisibleRect() const;
     // The host's answers changed (a pick, an edit, an undo): the element bar and the text editor look again.
     void noteEditPageHostChanged();
+    // Esc goes to this first, and is used up when it returns true: a recording stops before Esc leaves Edit Page.
+    void setEscapeHook(std::function<bool()> hook);
     // Types over the single picked text element; Enter edits the page, Esc leaves it. False when that isn't picked.
     bool editPageText();
     bool isEditingPageText() const;

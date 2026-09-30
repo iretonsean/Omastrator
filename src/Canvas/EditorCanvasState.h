@@ -258,6 +258,7 @@ struct EditorCanvas::State {
 
     // Edit Page (EditorCanvas+EditPage.cpp) -----------------------------------------------
     std::optional<QUuid> editPage;
+    std::function<bool()> escapeHook;
     bool enterEditPage(const QUuid &frame);
     void leaveEditPage();
     // The single picked element that is text alone, as the host reports it.

@@ -67,6 +67,11 @@ std::optional<QRectF> EditorCanvas::editPageVisibleRect() const
     return documentToView().mapRect(m_state->browseBox(*m_state->editPage)).intersected(QRectF(rect()));
 }
 
+void EditorCanvas::setEscapeHook(std::function<bool()> hook)
+{
+    m_state->escapeHook = std::move(hook);
+}
+
 void EditorCanvas::noteEditPageHostChanged()
 {
     if (!m_state->editPage)

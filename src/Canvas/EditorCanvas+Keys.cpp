@@ -87,7 +87,9 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         }
         return plain;
     case Qt::Key_Escape:
-        if (editPage) {
+        if (escapeHook && escapeHook()) {
+            // The host was busy with something that ends first.
+        } else if (editPage) {
             leaveEditPage();
         } else if (linkArmedFrom) {
             linkArmedFrom.reset();

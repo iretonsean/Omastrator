@@ -3,6 +3,7 @@
 #include "Document/EditorSession.h"
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
+#include "UI/MotionRecorder.h"
 #include "UI/MotionTrackView.h"
 #include <QApplication>
 #include <QFontDatabase>
@@ -122,6 +123,7 @@ MotionTimeline::MotionTimeline(EditorSession &session, EditorCanvas &canvas, QWi
     row->addWidget(m_timeText);
     row->addWidget(m_trigger);
     row->addStretch(1);
+    buildRecord(header, row);
     row->addWidget(m_timelineTab);
     row->addWidget(m_codeTab);
     row->addWidget(close);
@@ -237,6 +239,8 @@ QString MotionTimeline::open(const QUuid &frame)
     m_live = LiveFrames::of(m_session);
     connect(m_live, &LiveFrames::changed, this, &MotionTimeline::onLiveChanged, Qt::UniqueConnection);
     BrowserViews::of(m_session)->setScrubbed(frame, true);
+    m_canEncode = !FrameRecorder::ffmpeg().isEmpty();
+    m_recordedText.clear();
     m_wantHold = true;
     m_holdTries = 0;
     m_timeline = {};
@@ -256,6 +260,7 @@ void MotionTimeline::close()
 {
     if (m_frame.isNull())
         return;
+    abortRecording();
     pause();
     const QUuid frame = std::exchange(m_frame, QUuid());
     m_wantHold = false;
@@ -377,10 +382,14 @@ void MotionTimeline::syncHeader()
     m_playButton->setAccessibleName(m_playing ? tr("Pause") : tr("Play"));
     m_playButton->setEnabled(rows);
     m_replayButton->setEnabled(rows);
+    syncRecord();
 }
 
 void MotionTimeline::scrubTo(double ms)
 {
+    // A recording holds the clock.
+    if (m_recording)
+        return;
     // Dragging the playhead is the user taking the clock.
     if (m_playing)
         pause();
@@ -394,6 +403,8 @@ void MotionTimeline::scrubTo(double ms)
 
 void MotionTimeline::scrubScrollTo(double px)
 {
+    if (m_recording)
+        return;
     if (m_playing)
         pause();
     m_scroll = std::clamp(px, 0.0, std::max(0.0, m_timeline.scrollMax));
@@ -406,7 +417,7 @@ void MotionTimeline::scrubScrollTo(double px)
 
 void MotionTimeline::pump()
 {
-    if (m_inFlight || m_frame.isNull() || !m_live || !m_live->active(m_frame))
+    if (m_recording || m_inFlight || m_frame.isNull() || !m_live || !m_live->active(m_frame))
         return;
     std::function<QString(LiveSession &)> command;
     if (m_wantTime) {
@@ -447,7 +458,7 @@ void MotionTimeline::sent()
 
 void MotionTimeline::play()
 {
-    if (m_timeline.tracks.isEmpty())
+    if (m_timeline.tracks.isEmpty() || m_recording)
         return;
     if (m_timeline.hasTime() && m_time >= m_timeline.duration - 1)
         m_time = 0;
@@ -469,6 +480,8 @@ void MotionTimeline::pause()
 
 void MotionTimeline::replay()
 {
+    if (m_recording)
+        return;
     pause();
     if (m_timeline.hasTime()) {
         m_time = 0;
@@ -552,7 +565,7 @@ void MotionTimeline::tick()
 void MotionTimeline::selectRow(const QString &id)
 {
     const Motion::Track *track = m_timeline.find(id);
-    if (!track || !m_live || m_frame.isNull())
+    if (!track || !m_live || m_frame.isNull() || m_recording)
         return;
     m_selected = id;
     QStringList selectors;
