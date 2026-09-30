@@ -139,7 +139,7 @@ void AgentBridge::stopPage(const QString &id)
     stopPageJob(id.isEmpty() && !m_pages.empty() ? m_pages.begin()->first : id);
 }
 
-void AgentBridge::stopPageJob(const QString &id)
+void AgentBridge::stopPageJob(QString id)
 {
     auto found = m_pages.find(id);
     if (found == m_pages.end())

@@ -412,7 +412,8 @@ private:
     QString pageAgentDone(const QString &requestId, const QString &summary);
     void finishPage(const QString &requestId, const QString &summary);
     void pageRunFinished(const QString &requestId, AgentRun &run);
-    void stopPageJob(const QString &requestId);
+    // By value: callers pass the job's own key, or a waiting's id, and both go while it runs.
+    void stopPageJob(QString requestId);
     QString quietly(const std::function<bool()> &run);
     // Follows the front tab's session, so its tool and document reach status followers.
     void watchFront();
