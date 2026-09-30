@@ -1,9 +1,11 @@
+#include "../RestoreEnvironment.h"
 #include "Canvas/EditorCanvas.h"
 #include "Document/EditorSession.h"
 #include "Live/DevServers.h"
 #include "Live/Registry.h"
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
+#include <QDirIterator>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -103,13 +105,19 @@ private:
     // Reads the tab's page straight off the pool, so it works whether or not Live is running on the frame.
     QString where(EditorSession &session, const QUuid &frame)
     {
+        return text(session, frame, QStringLiteral("document.getElementById('where') ? document.getElementById('where').textContent : ''"));
+    }
+
+    // A string `expression` gives in the frame's tab, read off the pool.
+    QString text(EditorSession &session, const QUuid &frame, const QString &expression)
+    {
         const QUuid key = BrowserViews::of(session)->poolKey(frame);
         if (key.isNull())
             return {};
         auto answer = std::make_shared<std::atomic<int>>(0);
         auto text = std::make_shared<QString>();
         BrowserViews::pool()->call(key, QStringLiteral("Runtime.evaluate"),
-                                   {{"expression", QStringLiteral("document.getElementById('where') ? document.getElementById('where').textContent : ''")},
+                                   {{"expression", expression},
                                     {"returnByValue", true}},
                                    [answer, text](const QJsonObject &result, const QString &error) {
                                        if (error.isEmpty())
@@ -132,6 +140,30 @@ private:
         for (int i = 0; i < 200 && !answered->load(); ++i)
             QTest::qWait(25);
         QVERIFY(answered->load());
+    }
+
+    // Whether the picture has a patch of `colour` (within a small tolerance) anywhere.
+    static bool shows(const QImage &picture, const QColor &colour)
+    {
+        if (picture.isNull())
+            return false;
+        int hits = 0;
+        for (int y = 0; y < picture.height(); y += 3) {
+            for (int x = 0; x < picture.width(); x += 3) {
+                const QColor pixel = picture.pixelColor(x, y);
+                if (qAbs(pixel.red() - colour.red()) < 24 && qAbs(pixel.green() - colour.green()) < 24 && qAbs(pixel.blue() - colour.blue()) < 24 && ++hits > 20)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    void edit(EditorSession &session, const QUuid &frame, const QString &selector, const QString &property, const QString &value)
+    {
+        QString failure = QStringLiteral("pending");
+        LiveFrames::of(session)->edit(frame, selector, property, value, [&](const QString &error) { failure = error; });
+        QTRY_VERIFY_WITH_TIMEOUT(failure != QLatin1String("pending"), patience);
+        QVERIFY2(failure.isEmpty(), qPrintable(failure));
     }
 
 private slots:
@@ -348,6 +380,74 @@ private slots:
         QVERIFY(!frames->snapshot(hosted.frame).mockup);
         frames->stop(hosted.frame);
         QCOMPARE(DevServers::shared().holders(folder), 0);
+    }
+
+    // The project's dev server started through npm, as a real project's is: `npm run dev` prints Vite's banner, whose address
+    // is read from it and is on `localhost`. LiveFramePictureTests runs the same follow-the-page steps against a Python
+    // server named by omastrator.json; this is the other way in, npm's own start. The package has no dependencies, so
+    // nothing is installed and the test needs no network: dev-server.mjs stands in for `vite`.
+    void thePictureFollowsThePageOnTheProjectsNpmDevServer()
+    {
+        NEEDS_CHROMIUM;
+        if (QStandardPaths::findExecutable(QStringLiteral("npm")).isEmpty() || QStandardPaths::findExecutable(QStringLiteral("node")).isEmpty())
+            QSKIP("npm and node aren't installed, so the dev-server fixture can't run.");
+        // npm looks for a newer npm on the registry unless told not to; nothing here goes to the network.
+        const RestoreEnvironment notifier("NPM_CONFIG_UPDATE_NOTIFIER");
+        qputenv("NPM_CONFIG_UPDATE_NOTIFIER", "false");
+        Production production;
+        QVERIFY(production.listen());
+        const QString folder = QFileInfo(m_directory.path()).canonicalFilePath() + QStringLiteral("/npm%1").arg(++m_sites);
+        const QString fixture = QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/vite-tailwind");
+        QDirIterator files(fixture, QDir::Files, QDirIterator::Subdirectories);
+        while (files.hasNext()) {
+            const QString path = files.next();
+            const QString relative = QDir(fixture).relativeFilePath(path);
+            // Its own package.json names Vite and Tailwind, which `npm install` would fetch; this one names nothing.
+            if (relative == QLatin1String("package.json") || relative == QLatin1String("package-lock.json"))
+                continue;
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            write(folder + QLatin1Char('/') + relative, file.readAll());
+        }
+        write(folder + QStringLiteral("/package.json"), R"({"name": "dev-server-fixture", "private": true, "type": "module", "scripts": {"dev": "node dev-server.mjs"}})");
+        m_folders.append(folder);
+        QVERIFY(ProjectRegistry::remember(production.url(), folder).isEmpty());
+
+        EditorSession session;
+        Hosted hosted(session, production.url());
+        BrowserViews *views = BrowserViews::of(session);
+        LiveFrames *frames = LiveFrames::of(session);
+        QTRY_VERIFY_WITH_TIMEOUT(!views->poolKey(hosted.frame).isNull(), patience);
+        QTRY_COMPARE_WITH_TIMEOUT(where(session, hosted.frame), QStringLiteral("production"), patience);
+        QTRY_VERIFY_WITH_TIMEOUT(!views->picture(hosted.frame).isNull(), patience);
+
+        // Edit Page starts the project's dev server, and the picture moves to it: the fixture's sky-500 button.
+        QVERIFY2(views->beginEditPage(hosted.frame).isEmpty(), "Edit Page must start");
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).state, LiveSession::State::running, patience);
+        QVERIFY(!frames->snapshot(hosted.frame).serverUrl.isEmpty());
+        QCOMPARE(frames->snapshot(hosted.frame).serverUrl.host(), QStringLiteral("localhost"));
+        QCOMPARE(frames->snapshot(hosted.frame).serverCommand, QStringLiteral("npm run dev"));
+        const QString overlay = QStringLiteral("document.querySelector('#cta') && window.__oma ? 'ready' : ''");
+        QTRY_COMPARE_WITH_TIMEOUT(text(session, hosted.frame, overlay), QStringLiteral("ready"), patience);
+        QTRY_VERIFY2_WITH_TIMEOUT(shows(views->picture(hosted.frame), QColor(0x00, 0xa6, 0xf4)), "the picture never showed the dev server's page", 15'000);
+
+        // An edit reaches the picture, and so does the next one.
+        edit(session, hosted.frame, QStringLiteral("#title"), QStringLiteral("background-color"), QStringLiteral("#e11d48"));
+        QTRY_VERIFY2_WITH_TIMEOUT(shows(views->picture(hosted.frame), QColor(0xe1, 0x1d, 0x48)), "the picture didn't show the first edit", 15'000);
+        edit(session, hosted.frame, QStringLiteral("#cta"), QStringLiteral("background-color"), QStringLiteral("#16a34a"));
+        QTRY_VERIFY2_WITH_TIMEOUT(shows(views->picture(hosted.frame), QColor(0x16, 0xa3, 0x4a)), "the picture didn't show the second edit", 15'000);
+
+        // The code changes on disk, as an agent's Build It changes it, and Reload shows it; edits after that still show.
+        QFile style(folder + QStringLiteral("/src/style.css"));
+        QVERIFY(style.open(QIODevice::Append));
+        style.write("\nbody { background-color: #7c3aed; }\n");
+        style.close();
+        views->act(hosted.frame, BrowserViewHost::Action::reload);
+        QTRY_VERIFY2_WITH_TIMEOUT(shows(views->picture(hosted.frame), QColor(0x7c, 0x3a, 0xed)), "the picture didn't follow Reload", 15'000);
+        QTRY_COMPARE_WITH_TIMEOUT(text(session, hosted.frame, overlay), QStringLiteral("ready"), patience);
+        edit(session, hosted.frame, QStringLiteral("#title"), QStringLiteral("background-color"), QStringLiteral("#f59e0b"));
+        QTRY_VERIFY2_WITH_TIMEOUT(shows(views->picture(hosted.frame), QColor(0xf5, 0x9e, 0x0b)), "the picture stopped following after Reload", 15'000);
+        frames->stop(hosted.frame);
     }
 
     void aSiteThatIsntYoursStaysOnItsOwnServer()
