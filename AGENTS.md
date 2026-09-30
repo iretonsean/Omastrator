@@ -81,7 +81,14 @@ Each folder builds as its own static library:
 - `src/Canvas` → `oma_canvas`. `EditorCanvas` and its tools, `SmartGuides`,
   `Rulers` and `InlineTextEditor`.
 - `src/UI`, `src/ContentView*` → `oma_ui`. The window, tabs, panels, menus,
-  sheets, shortcuts and the Omarchy theme. Share with client
+  sheets, shortcuts and the Omarchy theme. Live inside a Browser View
+  (docs/LIVE-IN-FRAME.md): `LiveFrames` (a frame's `LiveSession` on the pool's
+  thread, snapshots, queued commands, held and pending edits), `ElementBar`
+  (in `Canvas`) and `ElementBarActions`, and `BrowserViews+Site.cpp` (sites
+  that aren't yours, This Is My Site), `BrowserViews+Deploy.cpp` (Deploy, Save,
+  Review Changes, History) and `BrowserViews+Build.cpp` (Build It) on top of
+  `AgentBridge`. `DevServers` (in `src/Live`) starts a project's dev server
+  for the window and the frames. Share with client
   (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and
   `SharePanels`; its tests use the fake rclone and a fake `gh`. Send to a device
   (AirDrop) is `DeviceSend` and `ShareController+Device.cpp`, tested against a

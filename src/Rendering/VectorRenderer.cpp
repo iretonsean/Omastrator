@@ -231,15 +231,23 @@ void drawChildren(QPainter &painter, const VectorDocument &document, const Vecto
         if (container.clipsContent)
             painter.setClipPath(box, Qt::IntersectClip);
         if (container.showsBrowserPicture() && !options.outlineMode) {
-            // A Browser View: the live picture, else the last one, stretched to the box under its children.
+            // A Browser View: the live picture, else the last one, under its children.
             QImage picture = options.livePicture ? options.livePicture(container.id) : QImage();
-            if (picture.isNull())
+            const bool live = !picture.isNull();
+            if (!live)
                 picture = container.browser->picture;
             if (!picture.isNull()) {
                 painter.save();
                 painter.setClipPath(box, Qt::IntersectClip);
                 painter.setRenderHint(QPainter::SmoothPixmapTransform);
-                painter.drawImage(box.boundingRect(), picture);
+                const QRectF where = box.boundingRect();
+                // A live picture's pixel ratio is its pixels per CSS px. One of another size than the box is the page at
+                // the frame's old width: it stays that size until the reflowed one comes, not stretched to the new one.
+                const QSizeF shown = picture.deviceIndependentSize();
+                if (!live || (std::abs(shown.width() - where.width()) <= 2 && std::abs(shown.height() - where.height()) <= 2))
+                    painter.drawImage(where, picture);
+                else
+                    painter.drawImage(QRectF(where.topLeft(), shown), picture);
                 painter.restore();
             }
         }

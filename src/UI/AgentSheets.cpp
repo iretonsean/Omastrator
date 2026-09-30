@@ -288,7 +288,7 @@ QDialog *handoffFrom(QWidget *window, const QString &what, const QString &given,
     return dialog;
 }
 
-QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder, bool deploying)
+QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder, bool deploying, bool fromFrame)
 {
     QFormLayout *form = nullptr;
     QLabel *error = nullptr;
@@ -336,12 +336,15 @@ QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder, boo
         form->addRow(QStringLiteral("Name:"), name);
         QObject::connect(create, &QCheckBox::toggled, name, &QLineEdit::setEnabled);
     }
-    finish(dialog, form, error, deploying ? QStringLiteral("Deploy") : QStringLiteral("Save"), [&bridge, question, deploying, dontAsk, create, name] {
+    finish(dialog, form, error, deploying ? QStringLiteral("Deploy") : QStringLiteral("Save"), [&bridge, question, deploying, dontAsk, create, name, named = !folder.isEmpty(), fromFrame] {
         AgentBridge::DeployRequest request;
         request.deploy = deploying;
         request.confirm = true;
         request.remember = dontAsk && dontAsk->isChecked();
-        request.folder = question.folder;
+        request.fromFrame = fromFrame;
+        // Asked with no folder (the island's Deploy), it answers with none, so the island stays what it was.
+        if (named)
+            request.folder = question.folder;
         if (create)
             request.github = create->isChecked() ? name->text().trimmed() : QString();
         if (create && create->isChecked() && name->text().trimmed().isEmpty())

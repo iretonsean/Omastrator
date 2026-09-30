@@ -20,7 +20,7 @@ std::optional<QUuid> EditorCanvas::State::browseFrameAt(QPointF view) const
     const VectorDocument &document = *session.document();
     const QPointF point = toDocument(view);
     for (auto it = document.objects.rbegin(); it != document.objects.rend(); ++it) {
-        if (it->browser && document.isOnCurrentPage(it->id) && document.isEffectivelyVisible(it->id)
+        if (it->browser && (!editPage || it->id == *editPage) && document.isOnCurrentPage(it->id) && document.isEffectivelyVisible(it->id)
             && it->path.painterPath().boundingRect().contains(point))
             return it->id;
     }
@@ -138,7 +138,7 @@ void EditorCanvas::State::browseLeave()
 
 bool EditorCanvas::State::browseWheel(QWheelEvent *event)
 {
-    if (session.tool() != Tool::browse || !browserHost || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier)))
+    if ((session.tool() != Tool::browse && !editPage) || !browserHost || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier)))
         return false;
     const std::optional<QUuid> frame = browseFrameAt(event->position());
     if (!frame)

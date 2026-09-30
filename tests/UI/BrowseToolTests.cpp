@@ -75,7 +75,9 @@ struct Answer {
     QEventLoop *loop = nullptr;
 };
 
-Answer ask(const QUuid &frame, const QString &method, const QJsonObject &params = {})
+// A wait for the browser's answer. A caller that polls in a QTRY loop gives it a short one: a single answer that is slow to
+// come must cost one turn of the loop, not the whole of its time.
+Answer ask(const QUuid &frame, const QString &method, const QJsonObject &params = {}, int timeoutMs = 15'000)
 {
     auto answer = std::make_shared<Answer>();
     QEventLoop loop;
@@ -88,7 +90,7 @@ Answer ask(const QUuid &frame, const QString &method, const QJsonObject &params 
                 answer->loop->quit();
         }, Qt::QueuedConnection);
     });
-    QTimer::singleShot(15'000, &loop, &QEventLoop::quit);
+    QTimer::singleShot(timeoutMs, &loop, &QEventLoop::quit);
     loop.exec();
     answer->loop = nullptr;
     return *answer;
@@ -97,7 +99,7 @@ Answer ask(const QUuid &frame, const QString &method, const QJsonObject &params 
 QStringList titles()
 {
     QStringList found;
-    for (const QJsonValue &each : ask(QUuid(), QStringLiteral("Target.getTargets")).result["targetInfos"].toArray()) {
+    for (const QJsonValue &each : ask(QUuid(), QStringLiteral("Target.getTargets"), {}, 2'000).result["targetInfos"].toArray()) {
         if (each["type"].toString() == QLatin1String("page"))
             found << each["title"].toString();
     }
@@ -383,12 +385,17 @@ private slots:
         Rig rig(page(QStringLiteral("index.html")));
         BrowserViews::of(rig.session)->attach(&rig.canvas);
         QTRY_VERIFY_WITH_TIMEOUT(BrowserViews::of(rig.session)->state(rig.frame) == BrowserViews::State::live, patience);
-        QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("start")), 10'000);
-        const qsizetype tabs = titles().size();
+        // The tabs as they are once the page is up, from the answer that showed it.
+        QStringList before;
+        QTRY_VERIFY_WITH_TIMEOUT((before = titles()).contains(QStringLiteral("start")), 10'000);
+        const qsizetype tabs = before.size();
         click(&rig.canvas, rig.view({100.0 + 100, 200.0 + cssY}));
+        // The outcome first, as the app records it: the frame's address moves to the popup's page. That needs no question put
+        // to the browser, and a machine that is slow (a build running beside the test) gets the wait it needs.
+        const auto address = [&] { return rig.session.document()->find(rig.frame)->browser->url.toString(); };
+        QTRY_VERIFY2_WITH_TIMEOUT(address().endsWith(QStringLiteral("popup.html")), qPrintable(address()), 45'000);
         QTRY_VERIFY_WITH_TIMEOUT(titles().contains(QStringLiteral("popup")), 15'000);
         QTRY_COMPARE_WITH_TIMEOUT(titles().size(), tabs, 15'000);
-        QVERIFY(rig.session.document()->find(rig.frame)->browser->url.toString().endsWith(QStringLiteral("popup.html")));
     }
 
     void aLinkToANewWindowOpensInTheSameFrame()

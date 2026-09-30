@@ -293,6 +293,11 @@ with the program". This is what it did, and what it does now.
   `omastrator design follow on|off`, saved as `barFollowsFocus` in
   `anywhere.json`. On, the bar goes wherever the pointer is; nothing else about
   it changes.
+- **Browser View frames follow the same escape hatches** (LIVE-IN-FRAME.md,
+  section 6): `omastrator reset` stops every frame's Live (its own-site edits
+  become held edits), releases the dev servers, ends Edit Page and stops a
+  Build It agent; Esc leaves Edit Page in one press; and Edit Page never sends
+  keys to the page.
 - **The escape hatches don't depend on the bar.** Esc, the island's Leave,
   `omastrator reset` and Super+Alt+Escape work whether the bar is showing,
   hidden with its window, or on another monitor. The bar is only drawn on the

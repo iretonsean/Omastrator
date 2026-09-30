@@ -10,10 +10,13 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <QWindow>
+#include <functional>
 #include <QUrl>
 #include <QUuid>
 
 class EditorCanvas;
+class QMenu;
+class AgentBridge;
 struct VectorObject;
 class EditorSession;
 
@@ -52,7 +55,31 @@ public:
     void signIn() override;
     void dismissSignIn() override;
     bool dispatch(const QUuid &frame, const QString &method, const QJsonObject &params) override;
+    void extendBarMenu(const QUuid &frame, QMenu *menu) override;
+    // The window's bridge, which Deploy, Save, Review Changes and History go through (BrowserViews+Deploy.cpp). Set by
+    // the menus when the session's canvas is in front.
+    void setAgent(AgentBridge *agent);
     QList<int> breakpoints(const QUuid &frame) const override;
+    QString beginEditPage(const QUuid &frame) override;
+    void endEditPage(const QUuid &frame) override;
+    EditBoxes editBoxes(const QUuid &frame) const override;
+    ElementState elementState(const QUuid &frame) const override;
+    QString editElements(const QUuid &frame, const QStringList &properties, const QString &value, bool preview) override;
+    QString editElementText(const QUuid &frame, const QString &selector, const QString &text) override;
+    bool canUndoPageEdit(const QUuid &frame) const override;
+    bool canRedoPageEdit(const QUuid &frame) const override;
+    void undoPageEdit(const QUuid &frame) override;
+    void redoPageEdit(const QUuid &frame) override;
+    // Live runs the frame's project from its dev server: the tab shows the document's address on `server`, and the
+    // document keeps the production address. An empty `server` puts the tab back on the production page.
+    void useDevServer(const QUuid &frame, const QUrl &server);
+    // Answers This Is My Site…'s folder question in place of its dialog: the page's address in, the folder out (empty
+    // cancels). Tests set it; an empty function puts the dialog back.
+    using FolderChooser = std::function<QString(const QUrl &page)>;
+    static void setFolderChooser(FolderChooser chooser);
+    // Answers Build It with a Note…'s question in place of its dialog (empty cancels). Tests set it.
+    using NoteChooser = std::function<QString()>;
+    static void setNoteChooser(NoteChooser chooser);
     // Whether the strip has been answered on this machine; tests clear it.
     static bool signInAnswered();
     static void setSignInAnswered(bool answered);
@@ -138,6 +165,8 @@ private:
         bool holding = false;
         QByteArray pendingData;
         int pendingAck = -1;
+        // The page size, in CSS px, that the waiting frame shows.
+        QSizeF pendingCss;
     };
     struct Want {
         bool shown = false;
@@ -164,6 +193,8 @@ private:
     void limitPage(const Entry &entry);
     void onPageLimit(Entry &entry, const QString &method, const QJsonObject &params);
     void onPopup(const QUuid &key, const QUrl &url);
+    // A frame's Live changed: its boxes repaint, and Edit Page ends when its Live has.
+    void onLiveChanged(const QUuid &frame);
     void takeFrame(const QUuid &frame);
     void decodeNext(const QUuid &frame);
     void decoded(const QUuid &frame, const QImage &image, int ack);
@@ -184,6 +215,27 @@ private:
     void scheduleRepaint(const QUuid &frame);
     void forgetTabs();
     static bool sameAddress(const QUrl &a, const QUrl &b);
+    // A document address as the tab shows it, and a tab address as the document keeps it (they differ on the dev server).
+    QUrl toTabUrl(const QUuid &frame, const QUrl &document) const;
+    QUrl toDocumentUrl(const QUuid &frame, const QUrl &tab) const;
+    // A navigation to somewhere other than the dev server ends a retired swap.
+    void settleSwap(const QUuid &frame, const QUrl &tab);
+    // The bar menu's items for a site that isn't the user's, and This Is My Site… (BrowserViews+Site.cpp).
+    void addSiteActions(const QUuid &frame, QMenu *menu);
+    void chooseMySite(const QUuid &frame);
+    void runSiteAction(const QUuid &frame, Action action);
+    void fillEditSets(const QUuid &frame, QMenu *menu);
+    // The frame's own-site project, or empty (BrowserViews+Deploy.cpp).
+    QString projectOf(const QUuid &frame) const;
+    void fillDeploy(const QUuid &frame, Bar &bar) const;
+    void runProjectAction(const QUuid &frame, Action action);
+    void addProjectActions(const QUuid &frame, QMenu *menu);
+    // Build It (BrowserViews+Build.cpp): the bar's button, its actions, and the package handed to the agent.
+    void fillBuild(const QUuid &frame, Bar &bar) const;
+    void runBuildAction(const QUuid &frame, Action action);
+    QString startBuild(const QUuid &frame, const QString &folder, const QString &note);
+    void addBuildActions(const QUuid &frame, QMenu *menu);
+    bool hasDesign(const QUuid &frame) const;
     void call(const Entry &entry, const QString &method, const QJsonObject &params = {});
     QUuid frameOf(const QUuid &key) const;
     void note(const QUuid &frame, State state);
@@ -193,6 +245,19 @@ private:
     QUuid m_scope = QUuid::createUuid();
     QHash<QUuid, Entry> m_entries;
     QHash<QUuid, QUuid> m_frameOfKey;
+    // Frames whose tab is on the dev server: {dev origin, production origin}, apart from the entries so a reopened tab
+    // still goes to the server.
+    // A retired swap no longer sends the tab to the server, but still names the server's pages by their production
+    // address until the tab leaves the dev origin, so a dev address never reaches the document.
+    struct DevSwap {
+        QUrl dev;
+        QUrl production;
+        bool retired = false;
+    };
+    QHash<QUuid, DevSwap> m_swaps;
+    QPointer<AgentBridge> m_agent;
+    // When each project last deployed, from the bridge's state (ms since the epoch).
+    QHash<QString, qint64> m_deployedAt;
     // Each own site's breakpoints, by origin, read again on every load.
     QHash<QString, QList<int>> m_breakpoints;
     QPointer<BrowserPool> m_connectedPool;

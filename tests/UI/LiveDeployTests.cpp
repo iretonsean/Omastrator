@@ -1,9 +1,13 @@
 #include "Agent/AgentProtocol.h"
+#include "Canvas/EditorCanvas.h"
 #include "Document/PathOperations.h"
 #include "Live/Deploy.h"
+#include "Live/Registry.h"
 #include "Live/History.h"
 #include "Live/WriteBack.h"
 #include "UI/AgentSheets.h"
+#include "UI/BrowserViews.h"
+#include "UI/LiveFrames.h"
 #include "UI/LiveHistoryPanel.h"
 #include "UI/LivePanel.h"
 #include "UI/ProjectWorkspaceView.h"
@@ -13,6 +17,7 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
@@ -46,6 +51,12 @@ constexpr const char *fakeGh =
     "  git init -q --bare \"$FAKE_GH_REMOTES/$3.git\" && git remote add origin \"https://github.com/tester/$3.git\" && git push -q -u origin HEAD; exit $?\n"
     "fi\n"
     "exit 2\n";
+
+// Names the default agent for a scope, and puts the fake omarchy's own default (sh) back after.
+struct DefaultAgent {
+    explicit DefaultAgent(const char *name) { qputenv("FAKE_AGENT", name); }
+    ~DefaultAgent() { qunsetenv("FAKE_AGENT"); }
+};
 
 const QByteArray secret = "s3cr3t-deploy-token-9876";
 const QByteArray style = "body { color: #111; }\n";
@@ -115,6 +126,45 @@ private:
         return folder;
     }
 
+    // Browser View frames on `urls`, on a canvas that stays hidden so no Chromium starts. Each url's frame is returned.
+    QList<QUuid> framesFor(EditorSession &session, EditorCanvas &canvas, const QList<QUrl> &urls)
+    {
+        VectorDocument document = VectorDocument::blank({1000, 800});
+        QList<QUuid> frames;
+        for (const QUrl &url : urls) {
+            VectorObject view = VectorObject::frame({20, 20, 300, 200}, QStringLiteral("Site"));
+            view.browser = BrowserView{url, {}, {}};
+            frames << view.id;
+            document.insert(view, document.layers().front());
+        }
+        session.loadDocument(document);
+        BrowserViews::of(session)->attach(&canvas);
+        for (const QUuid &frame : frames)
+            for (int i = 0; i < 200 && BrowserViews::of(session)->poolKey(frame).isNull(); ++i)
+                QTest::qWait(10);
+        return frames;
+    }
+
+    static QStringList menuTitles(BrowserViewHost *host, const QUuid &frame)
+    {
+        QMenu menu;
+        host->extendBarMenu(frame, &menu);
+        QStringList titles;
+        for (const QAction *action : menu.actions())
+            titles << action->text();
+        return titles;
+    }
+
+    static LiveEdit headline(const QString &after)
+    {
+        LiveEdit edit;
+        edit.selector = QStringLiteral("#title");
+        edit.property = QStringLiteral("text");
+        edit.before = QStringLiteral("Hello");
+        edit.after = after;
+        return edit;
+    }
+
     bool finished(AgentBridge &bridge)
     {
         QElapsedTimer clock;
@@ -127,6 +177,16 @@ private:
     QString prompt() { return QString::fromUtf8(read(m_directory.filePath(QStringLiteral("prompt")))); }
 
 private slots:
+    void init()
+    {
+        BrowserPool::Options options;
+        options.profile = m_directory.filePath(QStringLiteral("profile"));
+        options.cache = Browser::Cache::minimal;
+        BrowserViews::setPoolOptions(options);
+    }
+
+    void cleanup() { BrowserViews::shutdownPool(); }
+
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
@@ -162,6 +222,348 @@ private slots:
         const QString bin = FakeAgents::install(m_directory.path());
         QVERIFY(!bin.isEmpty());
         qputenv("PATH", (bin + QLatin1Char(':') + qEnvironmentVariable("PATH")).toUtf8());
+    }
+
+    void aFramesDeployButtonAppearsOnlyForYourSiteWithSomethingToSend()
+    {
+        const QString site = repository(true, QStringLiteral("true"));
+        const QUrl mine(QStringLiteral("http://127.0.0.2:11/mine.html"));
+        const QUrl theirs(QStringLiteral("http://127.0.0.2:12/theirs.html"));
+        QVERIFY(ProjectRegistry::remember(mine, site).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {mine, theirs});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(window.agent());
+
+        // Nothing to send yet; the menu has the project's actions on the site that is yours, and not on the other.
+        QVERIFY(views->bar(frames[0]).deploy.isEmpty());
+        QVERIFY(menuTitles(views, frames[0]).contains(QStringLiteral("Deploy")));
+        QVERIFY(menuTitles(views, frames[0]).contains(QStringLiteral("Review Changes")));
+        QVERIFY(!menuTitles(views, frames[1]).contains(QStringLiteral("Deploy")));
+
+        LiveFrames::hold(site, {headline(QStringLiteral("Goodbye"))});
+        QCOMPARE(views->bar(frames[0]).deploy, QStringLiteral("Deploy"));
+        QVERIFY(!views->bar(frames[0]).deployBusy && !views->bar(frames[0]).deployFailed);
+        QVERIFY(views->bar(frames[1]).deploy.isEmpty());
+        LiveFrames::clearPending(site);
+        QVERIFY(views->bar(frames[0]).deploy.isEmpty());
+    }
+
+    void deployFromAFrameSendsHeldEditsAsOneCommitAndSaysWhereItIsLive()
+    {
+        const QString site = repository(true, QStringLiteral("echo 'Production: https://one.example.test/'"));
+        Deploy::saveSettings(site, {true, false});
+        const QUrl url(QStringLiteral("http://127.0.0.2:13/index.html"));
+        QVERIFY(ProjectRegistry::remember(url, site).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {url});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+
+        // The frame's Live had stopped and held its edit; Deploy from the frame writes it, commits and pushes it.
+        LiveFrames::hold(site, {headline(QStringLiteral("Goodbye"))});
+        const QString before = git(site, {"rev-parse", "HEAD"}).trimmed();
+        views->act(frames[0], BrowserViewHost::Action::deployButton);
+        QVERIFY(bridge.deployState().running);
+        QCOMPARE(bridge.deployState().folder, site);
+        QVERIFY(views->bar(frames[0]).deployBusy);
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("done"));
+        QVERIFY(read(site + "/index.html").contains("Goodbye"));
+        const QString after = git(site, {"rev-parse", "HEAD"}).trimmed();
+        QVERIFY(after != before);
+        QCOMPARE(git(site, {"rev-list", "--count", before + ".." + after}).trimmed(), QStringLiteral("1"));
+        QCOMPARE(git(site + ".git", {"rev-parse", "main"}).trimmed(), after);
+        QVERIFY(LiveFrames::pendingEdits(site).empty());
+
+        // The bar says where it is live, for a few seconds, and there is nothing more to send.
+        QCOMPARE(views->bar(frames[0]).deploy, QStringLiteral("Live at one.example.test"));
+        QVERIFY(!views->bar(frames[0]).deployBusy && !views->bar(frames[0]).deployFailed);
+    }
+
+    void theIslandsDeployWritesBackOnlyWhatTheWindowEditedNotAFramesHeldEdits()
+    {
+        const QString site = repository(true, QStringLiteral("true"));
+        Deploy::saveSettings(site, {true, false});
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        bridge.rememberProject(site);
+        LiveFrames::hold(site, {headline(QStringLiteral("Goodbye"))});
+
+        // No folder is the island's call: the Live window has no edits here, so nothing is written, as before frames had Live.
+        AgentBridge::DeployRequest request;
+        request.deploy = false;
+        QVERIFY(bridge.liveDeploy(request).isEmpty());
+        QVERIFY(finished(bridge));
+        QVERIFY(!read(site + "/index.html").contains("Goodbye"));
+        QCOMPARE(LiveFrames::held(site).size(), size_t(1));
+
+        // The frame's own Save names its folder, and writes everything pending for it.
+        QVERIFY(bridge.liveSave(site).isEmpty());
+        QVERIFY(finished(bridge));
+        QVERIFY(read(site + "/index.html").contains("Goodbye"));
+        QVERIFY(LiveFrames::held(site).empty());
+    }
+
+    void aFramesDeployIsNotTheIslandsAndLeavesItsProjectAlone()
+    {
+        const QString remembered = repository(true, QStringLiteral("true"));
+        const QString other = repository(true, QStringLiteral("echo nope; exit 4"));
+        Deploy::saveSettings(other, {true, false});
+        const QUrl url(QStringLiteral("http://127.0.0.2:18/index.html"));
+        QVERIFY(ProjectRegistry::remember(url, other).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {url});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+        bridge.rememberProject(remembered);
+        const QString island = bridge.deployProject();
+        QCOMPARE(island, QFileInfo(remembered).canonicalFilePath());
+
+        // The frame is selected and idle Live has no project: the island's is still the one it remembered.
+        views->act(frames[0], BrowserViewHost::Action::deploy);
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("failed"));
+        QVERIFY(session.isSelected(frames[0]));
+        QCOMPARE(bridge.deployProject(), island);
+
+        // The frame's bar shows the failure; the status stream and the island don't.
+        QVERIFY(views->bar(frames[0]).deployFailed);
+        const QJsonObject live = bridge.tools().status()["live"].toObject();
+        QCOMPARE(live["deployProject"].toString(), island);
+        QCOMPARE(live["deploy"].toObject()["stage"].toString(), QStringLiteral("idle"));
+        QVERIFY(!live["deploy"].toObject()["failed"].toBool());
+
+        // The island's own deploy of its project does show.
+        AgentBridge::DeployRequest request;
+        request.deploy = false;
+        QVERIFY(bridge.liveDeploy(request).isEmpty());
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.tools().status()["live"].toObject()["deploy"].toObject()["stage"].toString(), QStringLiteral("done"));
+    }
+
+    void saveFromAFrameCommitsAndPushesWithoutDeploying()
+    {
+        const QString site = repository(true, QStringLiteral("echo deployed > \"$ENV_DUMP\""));
+        QFile::remove(qEnvironmentVariable("ENV_DUMP"));
+        Deploy::saveSettings(site, {true, false});
+        const QUrl url(QStringLiteral("http://127.0.0.2:14/index.html"));
+        QVERIFY(ProjectRegistry::remember(url, site).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {url});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+
+        LiveFrames::hold(site, {headline(QStringLiteral("Saved"))});
+        views->act(frames[0], BrowserViewHost::Action::save);
+        QVERIFY(finished(bridge));
+        QVERIFY(git(site, {"show", "HEAD:index.html"}).contains("Saved"));
+        QCOMPARE(git(site + ".git", {"rev-parse", "main"}).trimmed(), git(site, {"rev-parse", "HEAD"}).trimmed());
+        QVERIFY(!QFileInfo::exists(qEnvironmentVariable("ENV_DUMP")));
+    }
+
+    void aFailedDeployShowsOnTheFrameAndReviewFollowsTheSelectedFrame()
+    {
+        const QString first = repository(true, QStringLiteral("echo nope; exit 4"));
+        const QString second = repository(true, QStringLiteral("true"));
+        Deploy::saveSettings(first, {true, false});
+        const QUrl one(QStringLiteral("http://127.0.0.2:15/one.html"));
+        const QUrl two(QStringLiteral("http://127.0.0.2:16/two.html"));
+        QVERIFY(ProjectRegistry::remember(one, first).isEmpty());
+        QVERIFY(ProjectRegistry::remember(two, second).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {one, two});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+
+        views->act(frames[0], BrowserViewHost::Action::deploy);
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("failed"));
+        QCOMPARE(views->bar(frames[0]).deploy, QStringLiteral("Deploy failed"));
+        QVERIFY(views->bar(frames[0]).deployFailed);
+        // Another project's frame doesn't wear it.
+        QVERIFY(!views->bar(frames[1]).deployFailed);
+
+        // Review Changes and History are about the frame that was asked.
+        views->act(frames[1], BrowserViewHost::Action::reviewChanges);
+        QCOMPARE(bridge.panelProject(), second);
+        QVERIFY(session.isSelected(frames[1]));
+        QVERIFY(bridge.reviewPanel().isVisible());
+        views->act(frames[0], BrowserViewHost::Action::history);
+        QCOMPARE(bridge.panelProject(), first);
+        QVERIFY(bridge.deployProject().isEmpty());
+        QVERIFY(bridge.historyPanel().isVisible());
+    }
+
+    void aFailedSaveSaysSaveFailedAndLeavesTheWrittenEditsForTheNextSave()
+    {
+        const QString site = repository(true);
+        const QUrl url(QStringLiteral("http://127.0.0.2:19/index.html"));
+        QVERIFY(ProjectRegistry::remember(url, site).isEmpty());
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {url});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+        QSignalSpy notices(views, &BrowserViews::notice);
+
+        // The text edit is certain and is written; the colour has no rule of its own, so it goes to an agent.
+        LiveEdit colour = headline(QStringLiteral("red"));
+        colour.property = QStringLiteral("color");
+        colour.before = QStringLiteral("#111");
+        LiveFrames::hold(site, {headline(QStringLiteral("Goodbye")), colour});
+        const QString first = git(site, {"rev-parse", "HEAD"}).trimmed();
+
+        {
+            const DefaultAgent none("no-such-agent");
+            views->act(frames[0], BrowserViewHost::Action::save);
+        }
+        QVERIFY(!bridge.deployState().running);
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("failed"));
+        // It was a Save, so it says so, in the bar and in the message.
+        QCOMPARE(views->bar(frames[0]).deploy, QStringLiteral("Save failed"));
+        QVERIFY(views->bar(frames[0]).deployFailed);
+        QCOMPARE(notices.size(), 1);
+        const QString message = notices.first().first().toString();
+        QCOMPARE(message, bridge.deployState().message);
+        QVERIFY2(message.contains(QLatin1String("1 edit wasn't certain enough to write directly, and the agent couldn't take it:")), qPrintable(message));
+        QVERIFY2(message.contains(QLatin1String("index.html is written but not committed; the next Save or Deploy commits it.")), qPrintable(message));
+        // Nothing was rolled back and nothing half-saved was committed.
+        QVERIFY(read(site + "/index.html").contains("Goodbye"));
+        QCOMPARE(git(site, {"status", "--porcelain", "--untracked-files=no"}).trimmed(), QStringLiteral("M index.html"));
+        QCOMPARE(git(site, {"rev-parse", "HEAD"}).trimmed(), first);
+        QCOMPARE(bridge.unsavedFiles(), 1);
+        // The written edit is no longer pending; the one the agent didn't take is.
+        QCOMPARE(LiveFrames::pendingEdits(site).size(), size_t(1));
+        QCOMPARE(LiveFrames::pendingEdits(site).front().property, QStringLiteral("color"));
+
+        // The next Save has an agent. It commits the written text once, with the agent's change, and pushes.
+        QFile::remove(m_directory.filePath(QStringLiteral("prompt")));
+        QVERIFY(bridge.liveSave(site, true).isEmpty());
+        QTRY_VERIFY(prompt().contains(QLatin1String("(request ")));
+        const QString id = prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0);
+        QVERIFY(bridge.liveAgentDone(id, QStringLiteral("Made the title red")).isEmpty());
+        QVERIFY(finished(bridge));
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("done"));
+        QCOMPARE(git(site, {"rev-list", "--count", first + "..HEAD"}).trimmed(), QStringLiteral("1"));
+        QCOMPARE(git(site, {"show", "HEAD:index.html"}).count("Goodbye"), 1);
+        QCOMPARE(read(site + "/index.html").count("Goodbye"), 1);
+        QVERIFY(git(site, {"status", "--porcelain", "--untracked-files=no"}).trimmed().isEmpty());
+        QCOMPARE(git(site + ".git", {"rev-parse", "main"}).trimmed(), git(site, {"rev-parse", "HEAD"}).trimmed());
+        QVERIFY(LiveFrames::pendingEdits(site).empty());
+        QCOMPARE(bridge.unsavedFiles(), 0);
+        int liveEdits = 0;
+        for (const WriteBack::Review &review : bridge.liveReviews()) {
+            QVERIFY(!review.commit.isEmpty());
+            liveEdits += review.title == QLatin1String("Live edits");
+        }
+        QCOMPARE(liveEdits, 1);
+    }
+
+    void theFailureMessageAgreesWithTheCountAndOnlyNamesWhatIsOnDisk()
+    {
+        const QString site = repository(true);
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        LiveEdit colour = headline(QStringLiteral("red"));
+        colour.property = QStringLiteral("color");
+        LiveEdit other = colour;
+        other.property = QStringLiteral("padding");
+        LiveFrames::hold(site, {colour, other});
+
+        const DefaultAgent none("no-such-agent");
+        const QString message = bridge.liveSave(site, true);
+        QVERIFY2(message.contains(QLatin1String("2 edits weren't certain enough to write directly, and the agent couldn't take them:")), qPrintable(message));
+        // Nothing was written, so there is nothing to say about the disk.
+        QVERIFY2(!message.contains(QLatin1String("not committed")), qPrintable(message));
+        QCOMPARE(bridge.deployState().message, message);
+        QCOMPARE(bridge.unsavedFiles(), 0);
+        LiveFrames::clearPending(site);
+    }
+
+    void theGitHubHintIsOnlyForProjectsThatCouldUseGitHub()
+    {
+        struct Gh {
+            QByteArray was = qgetenv("OMASTRATOR_GH");
+            Gh() { qputenv("OMASTRATOR_GH", "/nonexistent/gh"); }
+            ~Gh() { qputenv("OMASTRATOR_GH", was); }
+        } missing;
+        const auto panelFor = [&](const QString &site) {
+            ProjectWorkspace workspace;
+            ProjectWorkspaceView window(workspace);
+            AgentBridge &bridge = *window.agent();
+            bridge.githubAuth(true);
+            bridge.rememberProject(site);
+            bridge.showLivePanel();
+            auto *panel = window.findChild<LivePanel *>();
+            return panel ? shownText(panel) : QString();
+        };
+        const QString hint = QStringLiteral("install the gh CLI");
+
+        // No remote yet: History could go to GitHub, so the hint is useful.
+        QString text = panelFor(repository(false));
+        QVERIFY2(text.contains(QLatin1String("Review Changes")), qPrintable(text));
+        QVERIFY2(text.contains(hint), qPrintable(text));
+        // A remote that is on GitHub: the same.
+        const QString onGitHub = repository(false);
+        git(onGitHub, {"remote", "add", "origin", "https://github.com/tester/site.git"});
+        text = panelFor(onGitHub);
+        QVERIFY2(text.contains(hint), qPrintable(text));
+        // A remote somewhere else (here a local bare repository, as a self-hosted one would be): it is no use to them.
+        text = panelFor(repository(true));
+        QVERIFY2(text.contains(QLatin1String("Review Changes")), qPrintable(text));
+        QVERIFY2(!text.contains(hint), qPrintable(text));
+    }
+
+    void deployOnASiteThatIsntYoursSaysSoAndRunsNothing()
+    {
+        const QUrl url(QStringLiteral("http://127.0.0.2:17/theirs.html"));
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QList<QUuid> frames = framesFor(session, canvas, {url});
+        BrowserViews *views = BrowserViews::of(session);
+        views->setAgent(&bridge);
+        QSignalSpy notices(views, &BrowserViews::notice);
+        views->act(frames[0], BrowserViewHost::Action::deploy);
+        QCOMPARE(notices.size(), 1);
+        QVERIFY(notices.first().first().toString().contains(QLatin1String("isn't one of your sites")));
+        QVERIFY(!bridge.deployState().running);
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("idle"));
     }
 
     void nothingToDeployWithoutAProject()

@@ -1,5 +1,6 @@
 #include "Canvas/EditorCanvasState.h"
 #include "Canvas/Rulers.h"
+#include "Document/BrowserInput.h"
 #include <QGuiApplication>
 #include <QStyleHints>
 
@@ -51,6 +52,9 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
     }
     // A Browser View's bar and sign-in strip take their presses before any tool does.
     if (browserBarPress(view))
+        return;
+    // Edit Page: a press in the frame is the page's; outside it, the mode ends and the press goes on to the tool.
+    if (editPagePress(view, modifiers))
         return;
     // A held width preview ends with the next press anywhere but the page the Browse tool is looking at.
     if (session.tool() != Tool::browse)
@@ -146,7 +150,7 @@ void EditorCanvas::State::move(QPointF view, Qt::KeyboardModifiers modifiers, bo
 {
     if (!session.hasDocument())
         return;
-    if (session.tool() == Tool::browse && (!drag || drag->kind == DragKind::browse)) {
+    if ((session.tool() == Tool::browse || editPage) && (!drag || drag->kind == DragKind::browse)) {
         // Without a button the release was lost: the page gets it.
         if (drag && !held) {
             release(view, modifiers);
@@ -356,6 +360,22 @@ void EditorCanvas::State::doubleClick(QPointF view, Qt::KeyboardModifiers modifi
         browsePress(view, modifiers, true);
         return;
     }
+    if (editPage) {
+        if (drag)
+            release(view, modifiers);
+        // On text alone it edits that text; otherwise a second click is one more pick, and outside the frame it ends
+        // the mode and goes on as a double-click.
+        if (const std::optional<QJsonObject> picked = pickedText()) {
+            const QRectF frameBox = browseBox(*editPage);
+            const QJsonObject rect = picked->value(QStringLiteral("rect")).toObject();
+            const QRectF css(rect.value(QStringLiteral("x")).toDouble(), rect.value(QStringLiteral("y")).toDouble(),
+                             rect.value(QStringLiteral("width")).toDouble(), rect.value(QStringLiteral("height")).toDouble());
+            if (css.contains(BrowserInput::cssPoint(toDocument(view), frameBox)) && openPageTextEditor())
+                return;
+        }
+        if (editPagePress(view, modifiers))
+            return;
+    }
     const QPointF document = toDocument(view);
     // A second click in the type being edited selects its word.
     if (text && textBox().adjusted(-reach(4), -reach(4), reach(4), reach(4)).contains(document)) {
@@ -372,6 +392,11 @@ void EditorCanvas::State::doubleClick(QPointF view, Qt::KeyboardModifiers modifi
         return;
     if (drag)
         release(view, modifiers);
+    if (const std::optional<QUuid> page = editPageTargetAt(view)) {
+        session.deselectAll();
+        enterEditPage(*page);
+        return;
+    }
     const std::optional<QUuid> leaf = hitLeaf(document);
     if (!leaf) {
         // A double-click on a guide types its place; elsewhere outside, isolation steps out a level.
@@ -411,6 +436,7 @@ void EditorCanvas::State::toolChanged()
     shownTool = session.tool();
     if (was == Tool::browse)
         browseLeave();
+    checkEditPage();
     if (drag && drag->kind != DragKind::pan)
         cancelDrag();
     if (pen && shownTool != Tool::pen)
@@ -441,6 +467,7 @@ void EditorCanvas::State::documentChanged()
         setBrowseFocus(std::nullopt);
     if (browseHover && (!document || !document->find(*browseHover)))
         browseHover.reset();
+    checkEditPage();
     if (!document) {
         drag.reset();
         pen.reset();

@@ -5,12 +5,21 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <algorithm>
 #include <unistd.h>
 
 namespace {
+// The pool's thread and the UI's both remember sites; each read-modify-write is one turn.
+QMutex &registryMutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+
 QJsonObject load()
 {
     QFile file(ProjectRegistry::path());
@@ -80,6 +89,7 @@ QString originOf(const QUrl &url)
 
 std::optional<QString> folderFor(const QUrl &url)
 {
+    QMutexLocker lock(&registryMutex());
     const QString folder = load()[originOf(url)].toString();
     if (folder.isEmpty() || !QFileInfo(folder).isDir())
         return std::nullopt;
@@ -95,6 +105,7 @@ QString remember(const QUrl &url, const QString &folder)
 {
     if (!QFileInfo(folder).isDir())
         return QStringLiteral("%1 isn't a folder.").arg(folder);
+    QMutexLocker lock(&registryMutex());
     QJsonObject projects = load();
     projects[originOf(url)] = QFileInfo(folder).canonicalFilePath();
     return save(projects);
@@ -102,6 +113,7 @@ QString remember(const QUrl &url, const QString &folder)
 
 QString forget(const QUrl &url)
 {
+    QMutexLocker lock(&registryMutex());
     QJsonObject projects = load();
     projects.remove(originOf(url));
     return save(projects);
@@ -116,6 +128,7 @@ QStringList defaultRoots()
             roots << QFileInfo(path).canonicalFilePath();
     }
     // Folders already registered say where this user keeps projects.
+    QMutexLocker lock(&registryMutex());
     const QJsonObject projects = load();
     for (auto it = projects.begin(); it != projects.end(); ++it) {
         const QString parent = QFileInfo(it.value().toString()).absolutePath();

@@ -49,7 +49,15 @@ struct AgentWork {
         // A site's edits as CSS, and the same as a before → after list.
         QString css;
         QString diff;
+        // "Designed at 1280 px wide; the site's breakpoints are 768, 1024 and 1280.", and the site's production address
+        // when `url` is its dev server (Build It, docs/LIVE-IN-FRAME.md).
+        QString breakpoints;
+        QString production;
+        // The frame's pending edits, as the Live task lists them.
+        std::vector<LiveEdit> pending;
         QString command;
     };
+    // A line per edit: what the user changed on the live page.
+    static QString describe(const std::vector<LiveEdit> &edits);
     QString handoffPrompt(const Package &package) const;
 };

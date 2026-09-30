@@ -183,6 +183,10 @@ The test ruled out the first choice, and the author approved this instead:
    Object ▸ Browser View menu and the Frame flyout's Browser View tool; the
    design and what was decided while building are in BROWSER-VIEW.md).
 4. **Live inside the frame:** the element bar, tokens, Review changes,
-   History, Deploy, and "Build it" through the agent. Then remove Live mode
-   from the island.
+   History, Deploy, and "Build it" through the agent. **Built**, apart from
+   the island (Edit Page, the element bar, the dev server behind the frame,
+   Deploy, Save, Review Changes, History and Build It; the design and what was
+   decided while building are in LIVE-IN-FRAME.md). Removing Live mode from
+   the island is still to do, and until then the island's Live row and Live's
+   own window work as they did.
 5. **Duplicate at Breakpoints,** the three pinning rules, and Clean Session.

@@ -12,6 +12,9 @@
 #include "Live/LiveSession.h"
 #include "Live/WriteBack.h"
 #include "UI/FloatingPanel.h"
+#include <QHash>
+#include <QImage>
+#include <QJsonArray>
 #include <QObject>
 #include <QDateTime>
 #include <QPointer>
@@ -141,9 +144,12 @@ public:
     QString startLive(const QUrl &url, const QString &folder, const QString &command = QString(), bool app = false);
     // Writes the live edits back: the certain ones directly, the rest through the agent. `agentRequest` gets the
     // agent's request id when it took some. Nothing opens; each write is recorded for Review changes.
-    QString liveWriteBack(QString *agentRequest = nullptr);
+    // `folder` names the project when the edits are in Browser Views rather than the window (else the window's).
+    QString liveWriteBack(QString *agentRequest = nullptr, const QString &folder = QString());
+    // The window's edits, the Browser Views' and the held ones, for a project.
+    std::vector<LiveEdit> pendingEdits(const QString &folder) const;
     // "Ask AI…" in the page: the agent changes the code in a worktree of its own.
-    QString liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest = nullptr);
+    QString liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest = nullptr, const QString &folder = QString());
     // Hand to agent: the front document as a mockup, for an app whose code is in `folder`.
     QString handToAgent(const QString &folder, const QString &instruction);
     // Hand to Agent from any surface (docs/ANYWHERE.md): a page that isn't yours, a lifted app, art on the overlay.
@@ -162,10 +168,25 @@ public:
         // A site's edits, kept or not, and its origin.
         std::vector<EditSets::Edit> edits;
         QString origin;
+        // Build It (docs/LIVE-IN-FRAME.md, section 5): the Browser View this is built from. Its review is named `title`;
+        // `backdrop` is the page under the art in mockup.png; `selectors`, `breakpoints` and `production` say where each shape
+        // sits, the widths the site has, and the address the dev server stands in for; `pending` are the frame's edits.
+        QUuid frame;
+        QString title;
+        QImage backdrop;
+        QJsonArray selectors;
+        QString breakpoints;
+        QString production;
+        std::vector<LiveEdit> pending;
     };
     // Packages it (render, SVG, lifted selectors, the edits as CSS) and runs the agent headlessly in a worktree of
     // `folder`; its change lands as a review. Returns why it couldn't start, or empty.
     QString handOff(const HandOff &handOff, QString *requestId = nullptr);
+    // The Browser View a Build It is running for, or null; and when one finished (ms since the epoch), until the next action.
+    QUuid buildingFrame() const;
+    QString buildingAgent() const;
+    qint64 builtAt(const QUuid &frame) const { return m_built.value(frame, 0); }
+    void clearBuilt(const QUuid &frame);
     // A site that isn't yours (docs/ANYWHERE.md): keep, toggle, remove and export its edit sets, Before and After, and
     // Hand to Agent. `params` holds the set's `name`, `on`, a `path` to export to, the agent's `folder`.
     QString siteAction(const QString &action, const QJsonObject &params, QJsonObject &result);
@@ -195,11 +216,14 @@ public:
         std::optional<QString> github;
         // Default: Live's project, else the last one.
         QString folder;
+        // A Browser View asked: the island and the status stream leave it to the frame's bar.
+        bool fromFrame = false;
     };
     // Starts it in the background; returns why it couldn't, or empty. With nothing answered yet on a first deploy
     // (or a GitHub repository to offer), `needsAnswer` is set and nothing starts: the Deploy sheet asks.
     QString liveDeploy(const DeployRequest &request, bool *needsAnswer = nullptr);
-    QString liveSave();
+    // `folder` is the project to save; empty is deployProject().
+    QString liveSave(const QString &folder = QString(), bool fromFrame = false);
     // What the Deploy sheet asks for the project.
     struct DeployQuestion {
         QString folder;
@@ -215,8 +239,13 @@ public:
     void cancelDeploy();
     // `live_deployed` from the agent deploying.
     QString liveDeployed(const QString &requestId, const QString &url, const QString &command, const QString &error);
-    // The project Deploy, Save and History act on.
+    // The project the island and the status stream act on: the window's, else the last one it deployed or handed over.
     QString deployProject() const;
+    // The island's project once Live is stopped: set by the window's Live, a deploy from the island and a hand-over. Never by a Browser View.
+    void rememberProject(const QString &folder);
+    // The project the Review Changes and History panels show: the one a Browser View opened them for, else the selected
+    // Browser View's own site, else deployProject().
+    QString panelProject();
     struct DeployState {
         // idle, writing, committing, github, pushing, deploying, done, failed.
         QString stage = QStringLiteral("idle");
@@ -226,19 +255,29 @@ public:
         bool running = false;
         // A command the agent used, to offer "Remember this command".
         QString suggested;
+        // The project it ran for, and when it stopped (ms since the epoch; 0 while it runs), so a frame's bar shows its own.
+        QString folder;
+        qint64 finishedAt = 0;
+        // The run deployed (a save doesn't), and it went through.
+        bool deployed = false;
+        // What the run is for: false for a Save, so a failure isn't called a failed deploy.
+        bool deploy = true;
+        // A Browser View started it: the island and the status stream don't show it.
+        bool fromFrame = false;
     };
     const DeployState &deployState() const { return m_deployState; }
     QString rememberSuggested();
     // `gh auth status`, remembered for a minute unless `refresh`.
     GitHub::Auth githubAuth(bool refresh = false);
     QString connectGitHub();
-    std::vector<History::Entry> history();
+    std::vector<History::Entry> history(const QString &folder = QString());
     // Brings back that commit's files as a new commit, pushed; Deploy is offered next.
-    QString restoreVersion(const QString &sha);
+    QString restoreVersion(const QString &sha, const QString &folder = QString());
 
     // The Live panel: Deploy first; Review changes shows the diffs only when asked.
-    void showLivePanel(bool changes = false);
-    void showHistoryPanel();
+    // A Browser View names its `folder`; the panels keep to it until both are closed.
+    void showLivePanel(bool changes = false, const QString &folder = QString());
+    void showHistoryPanel(const QString &folder = QString());
     // Details: the last deploy's log.
     QString showDeployLog();
     FloatingPanel &reviewPanel() { return m_reviewPanel; }
@@ -312,7 +351,17 @@ private:
     std::vector<WriteBack::Review> m_reviews;
     // The project last opened in Live, which Deploy, Save and History keep acting on after Live stops.
     QString m_lastProject;
+    // The project a Browser View opened the Live and History panels for; kept apart from m_lastProject, which is the island's.
+    QString m_panelProject;
+    void followFrame(const QString &folder);
     std::map<QString, AgentWork> m_liveJobs;
+    // Build Its by request id, and when each frame's last one finished.
+    struct Build {
+        QUuid frame;
+        QString title;
+    };
+    QHash<QString, Build> m_builds;
+    QHash<QUuid, qint64> m_built;
     QString m_liveMessage;
     QString m_liveLog;
     void wireDeploy();
@@ -325,6 +374,8 @@ private:
     void commitAndShip();
     // `log` replaces the job's for Details, when an agent's run is what failed.
     void pipelineFailed(const QString &line, const QString &log = QString());
+    // What a failed run left on disk: changes written and recorded but not committed, or empty.
+    QString uncommittedNote(const QString &folder) const;
     void launchDeployAgent();
     QString startSave(const QString &folder, const QString &doneMessage);
     struct Pipeline {

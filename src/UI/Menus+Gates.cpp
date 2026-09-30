@@ -1,5 +1,6 @@
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
+#include "UI/LiveFrames.h"
 #include "UI/Menus.h"
 #include "UI/PageWorkspaces.h"
 #include "UI/ShareController.h"
@@ -45,10 +46,19 @@ void Menus::synchronize()
         action(QString::fromLatin1(name))->setEnabled(m_share && free && !m_share->running() && (drawn || site));
     action(QStringLiteral("sendToDevice"))->setEnabled(m_share && free && !m_share->running() && drawn);
     action(QStringLiteral("sharedLinks"))->setEnabled(m_share != nullptr);
-    action(QStringLiteral("undo"))->setText(!field && s.canUndo() ? QStringLiteral("Undo %1").arg(s.undoName()) : QStringLiteral("Undo"));
-    action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && !locked && s.canUndo()));
-    action(QStringLiteral("redo"))->setText(!field && s.canRedo() ? QStringLiteral("Redo %1").arg(s.redoName()) : QStringLiteral("Redo"));
-    action(QStringLiteral("redo"))->setEnabled(field || (!typing && !proposal && !locked && s.canRedo()));
+    // In Edit Page, Ctrl+Z is the page's own history and never the document's.
+    const bool pageHistory = !field && m_canvas && m_canvas->editPageFrame();
+    if (pageHistory) {
+        action(QStringLiteral("undo"))->setText(QStringLiteral("Undo Page Edit"));
+        action(QStringLiteral("undo"))->setEnabled(m_canvas->canUndoPageEdit());
+        action(QStringLiteral("redo"))->setText(QStringLiteral("Redo Page Edit"));
+        action(QStringLiteral("redo"))->setEnabled(m_canvas->canRedoPageEdit());
+    } else {
+        action(QStringLiteral("undo"))->setText(!field && s.canUndo() ? QStringLiteral("Undo %1").arg(s.undoName()) : QStringLiteral("Undo"));
+        action(QStringLiteral("undo"))->setEnabled(field || (!typing && !proposal && !locked && s.canUndo()));
+        action(QStringLiteral("redo"))->setText(!field && s.canRedo() ? QStringLiteral("Redo %1").arg(s.redoName()) : QStringLiteral("Redo"));
+        action(QStringLiteral("redo"))->setEnabled(field || (!typing && !proposal && !locked && s.canRedo()));
+    }
     action(QStringLiteral("cut"))->setEnabled(field || (!typing && !proposal && !locked && selected));
     action(QStringLiteral("copy"))->setEnabled(field || (!typing && selected));
     action(QStringLiteral("paste"))->setEnabled(field || (!typing && !proposal && !locked && drawn && s.canPaste()));
@@ -129,9 +139,27 @@ void Menus::synchronize()
     for (const char *name : {"typeSizeMenu", "typeTrackingMenu", "typeLeadingMenu", "typeBaselineMenu"})
         action(QString::fromLatin1(name))->setEnabled(drawn);
     const bool browserSelected = editing && m_canvas && m_canvas->browserViewHost() && s.selectedBrowserView().has_value();
-    action(QStringLiteral("browserViewMenu"))->setEnabled(browserSelected);
+    const bool pageEditing = editing && m_canvas && m_canvas->editPageFrame().has_value();
+    action(QStringLiteral("browserViewMenu"))->setEnabled(browserSelected || pageEditing);
+    action(QStringLiteral("browserViewEditPage"))->setEnabled(browserSelected || pageEditing);
     for (const char *name : {"browserViewCopyUrl", "browserViewOpen", "browserViewReload", "browserViewReloadHard", "browserViewSignIn"})
         action(QString::fromLatin1(name))->setEnabled(browserSelected);
+    // The project items need a frame to act on: the selected one, or the one in Edit Page.
+    const bool onFrame = browserSelected || pageEditing;
+    std::optional<QUuid> frame = browserSelected ? s.selectedBrowserView() : std::nullopt;
+    if (!frame && pageEditing)
+        frame = m_canvas->editPageFrame();
+    LiveFrames *live = frame ? s.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
+    const bool liveHere = live && frame && live->active(*frame);
+    const bool notYours = onFrame && (!liveHere || live->snapshot(*frame).project.isEmpty());
+    for (const char *name : {"browserViewDeploy", "browserViewSave", "browserViewReviewChanges", "browserViewHistory", "browserViewBuildIt",
+                             "browserViewBuildItWithNote"})
+        action(QString::fromLatin1(name))->setEnabled(onFrame);
+    action(QStringLiteral("browserViewStopBuild"))->setEnabled(onFrame && m_agent && frame && m_agent->buildingFrame() == *frame);
+    action(QStringLiteral("browserViewStopLive"))->setEnabled(liveHere);
+    for (const char *name : {"browserViewKeepEdits", "browserViewEditSets", "browserViewShowOriginal", "browserViewExportCss"})
+        action(QString::fromLatin1(name))->setEnabled(liveHere && notYours);
+    action(QStringLiteral("browserViewThisIsMySite"))->setEnabled(notYours);
     // Only while a breakpoint button is holding a width.
     action(QStringLiteral("browserViewDesignWidth"))->setEnabled(browserSelected && s.isPreviewOnly());
     const bool agent = m_agent != nullptr;

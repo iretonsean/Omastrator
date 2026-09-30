@@ -94,20 +94,24 @@ void BrowserViews::onTabEvent(const QUuid &key, const QString &method, const QJs
             return;
         const VectorObject *object = m_session.document()->find(frame);
         // The address the user gave stays as it was typed when the page merely confirmed it.
-        if (object && object->browser && !sameAddress(object->browser->url, url)) {
+        const QUrl document = toDocumentUrl(frame, url);
+        settleSwap(frame, url);
+        if (object && object->browser && !sameAddress(object->browser->url, document)) {
             entry.navigated = url;
             entry.scroll = {};
-            m_session.setBrowserLocation(frame, url, {});
+            m_session.setBrowserLocation(frame, document, {});
         }
         entry.loading = true;
         refreshHistory(frame);
         emit frameChanged(frame);
     } else if (method == QLatin1String("Page.navigatedWithinDocument")) {
         const QUrl url(params["url"].toString());
+        const QUrl document = toDocumentUrl(frame, url);
+        settleSwap(frame, url);
         const VectorObject *object = m_session.document()->find(frame);
-        if (params["frameId"].toString() == entry.mainFrame && object && object->browser && !sameAddress(object->browser->url, url)) {
+        if (params["frameId"].toString() == entry.mainFrame && object && object->browser && !sameAddress(object->browser->url, document)) {
             entry.navigated = url;
-            m_session.setBrowserLocation(frame, url, entry.scroll);
+            m_session.setBrowserLocation(frame, document, entry.scroll);
         }
         refreshHistory(frame);
         emit frameChanged(frame);
@@ -137,6 +141,7 @@ void BrowserViews::onScreencastFrame(Entry &entry, const QUuid &frame, const QJs
     if (entry.pendingAck >= 0)
         call(entry, QStringLiteral("Page.screencastFrameAck"), {{"sessionId", entry.pendingAck}});
     entry.pendingData = params["data"].toString().toLatin1();
+    entry.pendingCss = QSizeF(metadata["deviceWidth"].toDouble(), metadata["deviceHeight"].toDouble());
     entry.pendingAck = ack;
     if (!entry.decoding)
         takeFrame(frame);
@@ -172,10 +177,14 @@ void BrowserViews::decodeNext(const QUuid &frame)
         return;
     const QByteArray data = std::exchange(found->pendingData, {});
     const int ack = std::exchange(found->pendingAck, -1);
+    const QSizeF css = found->pendingCss;
     found->decoding = true;
     found->decodedAt = m_clock.elapsed();
-    m_decoder.start([this, frame, data, ack] {
-        const QImage image = QImage::fromData(QByteArray::fromBase64(data), "JPEG");
+    m_decoder.start([this, frame, data, ack, css] {
+        QImage image = QImage::fromData(QByteArray::fromBase64(data), "JPEG");
+        // The picture says how big the page it shows was, so it is never drawn at another size than that.
+        if (!image.isNull() && css.width() > 0)
+            image.setDevicePixelRatio(image.width() / css.width());
         QMetaObject::invokeMethod(this, [this, frame, image, ack] { decoded(frame, image, ack); }, Qt::QueuedConnection);
     });
 }

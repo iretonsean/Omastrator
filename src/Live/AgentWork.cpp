@@ -83,6 +83,19 @@ void AgentWork::cleanup()
     worktree.clear();
 }
 
+QString AgentWork::describe(const std::vector<LiveEdit> &edits)
+{
+    QString text;
+    for (const LiveEdit &edit : edits) {
+        text += edit.property == QLatin1String("text")
+                    ? QStringLiteral("- %1: text \"%2\" becomes \"%3\"\n").arg(edit.selector, edit.before, edit.after)
+                    : QStringLiteral("- %1: %2 %3 → %4%5\n")
+                          .arg(edit.selector, edit.property, edit.before.isEmpty() ? QStringLiteral("(unset)") : edit.before, edit.after,
+                               edit.token.isEmpty() ? QString() : QStringLiteral(" (the project's token %1)").arg(edit.token));
+    }
+    return text;
+}
+
 QString AgentWork::prompt(const Brief &brief) const
 {
     QString text = QStringLiteral(
@@ -95,14 +108,7 @@ QString AgentWork::prompt(const Brief &brief) const
     if (!brief.instruction.isEmpty())
         text += QStringLiteral("\nThe user asked, about the selected elements: %1\n").arg(brief.instruction);
     if (!brief.edits.empty()) {
-        text += QStringLiteral("\nThe user changed these on the live page. Make the source produce the same result:\n");
-        for (const LiveEdit &edit : brief.edits) {
-            text += edit.property == QLatin1String("text")
-                        ? QStringLiteral("- %1: text \"%2\" becomes \"%3\"\n").arg(edit.selector, edit.before, edit.after)
-                        : QStringLiteral("- %1: %2 %3 → %4%5\n")
-                              .arg(edit.selector, edit.property, edit.before.isEmpty() ? QStringLiteral("(unset)") : edit.before, edit.after,
-                                   edit.token.isEmpty() ? QString() : QStringLiteral(" (the project's token %1)").arg(edit.token));
-        }
+        text += QStringLiteral("\nThe user changed these on the live page. Make the source produce the same result:\n") + describe(brief.edits);
     }
     if (!brief.elements.isEmpty()) {
         text += QStringLiteral("\nThe selected elements, as the browser sees them (selector, classes, computed styles, markup):\n");
@@ -132,6 +138,10 @@ QString AgentWork::handoffPrompt(const Package &package) const
         text += QStringLiteral("It came from: %1%2\n").arg(package.source, package.url.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(package.url));
     text += package.svg.isEmpty() ? QStringLiteral("The mockup: %1 (look at it)\n").arg(package.png)
                                   : QStringLiteral("The mockup: %1 (look at it), and the same as SVG: %2\n").arg(package.png, package.svg);
+    if (!package.breakpoints.isEmpty())
+        text += package.breakpoints + QLatin1Char('\n');
+    if (!package.production.isEmpty())
+        text += QStringLiteral("The live site, which the page above stands in for: %1\n").arg(package.production);
     if (!package.screenshot.isEmpty())
         text += QStringLiteral("The screen as it is now: %1\n").arg(package.screenshot);
     if (!package.original.isEmpty())
@@ -145,6 +155,8 @@ QString AgentWork::handoffPrompt(const Package &package) const
         if (!package.diff.isEmpty())
             text += QStringLiteral("And as before → after, per page and element:\n%1\n").arg(package.diff.left(20'000));
     }
+    if (!package.pending.empty())
+        text += QStringLiteral("\nThe user also changed these on the live page. Make the source produce the same result:\n") + describe(package.pending);
     if (!package.instruction.isEmpty())
         text += QStringLiteral("\nThe user says: %1\n").arg(package.instruction);
     text += QStringLiteral(

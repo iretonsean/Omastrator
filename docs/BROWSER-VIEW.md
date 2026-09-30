@@ -19,6 +19,10 @@ kind: an unknown `kind` makes an older build refuse the whole file.
   - `QImage picture`: the last picture, at 1× the frame's size.
 - **The design width is the frame's width**, and the viewport height is its
   height. 1 pt is 1 CSS px. There's no separate field that could drift.
+  Both are whole px: the tool, the handles, Transform's W and H, a breakpoint
+  and Set as Design Width all round to whole px (`BrowserView::wholeSize`, in
+  `VectorDocument::resizeFrame` and where the tool draws), whatever the zoom.
+  The position may stay fractional.
 - **Breakpoints aren't stored.** They're read from the project, or are the
   defaults (section 7). Phase 5's Duplicate at Breakpoints reads the same list.
 - `LayoutItem::previewRule` on every object: `constraints` (the default) or
@@ -113,6 +117,13 @@ Only some of the document state is undoable:
     it's on another page, or the window is hidden. The screencast stops, and
     `Page.setWebLifecycleState frozen` saves CPU. The frame shows its last
     picture.
+  - **Resume:** `Page.setWebLifecycleState active`, then
+    `Emulation.setFocusEmulationEnabled true`. Chromium hides the page when
+    it freezes it and doesn't show it again when it becomes active, and a
+    hidden page paints no more screencast frames, so without this the frame
+    kept the picture it had when it came back. Focus emulation shows the
+    page. The pause turns it off before the freeze, because a page that
+    emulates focus stays visible and doesn't freeze.
   - **Close:** the frame is deleted, undone away, or its document closes.
     Undo or redo that brings a frame back opens a new tab at its URL. The
     back and forward stack is lost.
@@ -146,7 +157,9 @@ Only some of the document state is undoable:
   maxHeight}`.
   - `maxWidth` and `maxHeight` are the frame's size on screen in device
     pixels, rounded up to 64, and at most 2560. A zoom that has settled for
-    150 ms restarts the screencast at the new size.
+    150 ms restarts the screencast at the new size. So does a change of the
+    page's CSS size, since Chromium sends no reflowed frame after a metrics
+    override on its own.
   - Each `Page.screencastFrame` goes to a decode worker, with one decode in
     flight per frame. The newer frame wins, and the ack is sent when the
     decode finishes. That's the back-pressure.
@@ -385,7 +398,13 @@ The tests:
 - **No Chromium** (`OMASTRATOR_CHROMIUM=/nonexistent`): the frame draws its
   picture and the message, and editing, saving and exporting work.
 - **`VectorRendererTests`:** an export draws `browser->picture` under the
-  frame's clip.
+  frame's clip. A live picture of the frame's size fills it (at 390 wide,
+  every corner of the phone layout lands on the frame's). A stale one, in a
+  box larger or smaller than the page it shows, is drawn 1:1 from the top
+  left and clipped, at zoom 1 and 2.
+- **`LiveFramePictureTests`** (UI, Chromium): after a pause and resume (the
+  frame's page shown and back), a change in the page reaches what the canvas
+  draws, twice over. The dev-server half is in docs/LIVE-IN-FRAME.md.
 - **`WorkspaceClaimsTests`** (or a new `ResetTests`): `runReset` kills a pid
   from `browser-view.json` only when its cmdline names the profile. The test
   uses a fake long-running script.
@@ -437,7 +456,9 @@ The tests:
   - The picture child's id is a UUIDv5 of the frame's id, so it's stable
     across saves.
   - A stored picture is scaled to at most 2048 px on its long side.
-  - The renderer stretches the picture over the frame's box.
+  - The renderer stretches the stored picture over the frame's box. A live
+    picture is stretched only while it depicts the frame's size; a stale one
+    is drawn 1:1, top-left and clipped, until the reflowed one arrives.
   - The clipboard, the agent's reads and the library leave pictures out;
     the SVG export embeds the last picture.
   - A `browserView` URL that doesn't parse reads as "no page yet".

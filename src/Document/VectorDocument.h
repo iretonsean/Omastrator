@@ -14,7 +14,9 @@
 #include <QTransform>
 #include <QUrl>
 #include <QUuid>
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -355,6 +357,15 @@ struct BrowserView {
     QPointF scroll;
     // The last picture at 1x the frame's size: view state kept in the file, refreshed silently.
     QImage picture;
+    // The size the page is laid out at: whole CSS px, at least 1 × 1.
+    static QSizeF wholeSize(const QSizeF &size) { return {std::max(1.0, std::round(size.width())), std::max(1.0, std::round(size.height()))}; }
+    // `wanted` with a whole size, keeping the edge the user isn't moving: `rightStays` and `bottomStays` name the right and
+    // bottom edge as the fixed ones (a left or top handle, a drag up or to the left); otherwise the left and top stay.
+    static QRectF wholeBox(const QRectF &wanted, bool rightStays = false, bool bottomStays = false)
+    {
+        const QSizeF size = wholeSize(wanted.size());
+        return QRectF(QPointF(rightStays ? wanted.right() - size.width() : wanted.left(), bottomStays ? wanted.bottom() - size.height() : wanted.top()), size);
+    }
     friend bool operator==(const BrowserView &, const BrowserView &) = default;
 };
 
@@ -539,7 +550,8 @@ struct VectorDocument {
     void expandEditedShapes();
     // Lays out every auto-layout frame, innermost first, until nothing moves
     // (docs/AUTO-LAYOUT.md). Rotated frames are left as they are.
-    void applyAutoLayout();
+    // Lays every auto-layout frame out again; the number of passes it took (it stops when a pass moves nothing).
+    int applyAutoLayout();
     // Figma's resize: the frame's box to `box`, its children outside a flow moved and sized by their
     // constraints (and theirs, in child frames, in turn). Sized by hand, a hugging frame becomes fixed.
     // A `preview` (a Browser View's resize preview) leaves children whose preview rule is fixed where they are, out of the flow too.

@@ -2,8 +2,10 @@
 #include "Document/EditorSession.h"
 #include "Live/Browser.h"
 #include "Live/Registry.h"
+#include "UI/AgentBridge.h"
 #include "Canvas/EditorCanvas.h"
 #include "UI/BrowserViews.h"
+#include "UI/LiveFrames.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -46,6 +48,15 @@ BrowserViewHost::Bar BrowserViews::bar(const QUuid &frame) const
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
     if (object && object->browser && !object->browser->url.isEmpty())
         bar.notYours = !owned(frame);
+    if (const LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly); live && live->active(frame)) {
+        const LiveFrames::Snapshot snapshot = live->snapshot(frame);
+        bar.dev = !snapshot.serverUrl.isEmpty() && m_swaps.contains(frame);
+        if (bar.dev)
+            bar.devTip = snapshot.serverCommand.isEmpty() ? snapshot.serverUrl.toString()
+                                                          : QStringLiteral("%1\n%2").arg(snapshot.serverUrl.toString(), snapshot.serverCommand);
+    }
+    fillDeploy(frame, bar);
+    fillBuild(frame, bar);
     return bar;
 }
 
@@ -103,6 +114,24 @@ void BrowserViews::refreshHistory(const QUuid &frame)
 
 void BrowserViews::act(const QUuid &frame, Action action)
 {
+    if (action == Action::thisIsMySite) {
+        chooseMySite(frame);
+        return;
+    }
+    if (action >= Action::keepEdits && action <= Action::exportCss) {
+        runSiteAction(frame, action);
+        return;
+    }
+    if (action >= Action::buildButton) {
+        runBuildAction(frame, action);
+        return;
+    }
+    if (action >= Action::deployButton) {
+        if (m_agent)
+            m_agent->clearBuilt(frame);
+        runProjectAction(frame, action);
+        return;
+    }
     const auto found = m_entries.constFind(frame);
     if (found == m_entries.constEnd() || found->state != State::live)
         return;
@@ -114,6 +143,8 @@ void BrowserViews::act(const QUuid &frame, Action action)
         break;
     case Action::stop:
         BrowserViews::pool()->call(key, QStringLiteral("Page.stopLoading"), {});
+        break;
+    default:
         break;
     case Action::back:
     case Action::forward:

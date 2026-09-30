@@ -82,6 +82,7 @@ void EditorCanvas::State::paint(QPainter &painter)
         shown = *document;
         shown->find(text->object.id)->text = text->displayObject().text;
     }
+    dimEditPageChildren(shown);
     const VectorDocument &drawn = shown ? *shown : *document;
     if (const std::optional<QUuid> group = session.isolatedGroup(); group && drawn.find(*group))
         drawIsolated(painter, drawn, *group);
@@ -105,6 +106,7 @@ void EditorCanvas::State::paint(QPainter &painter)
     drawArtboardLabels(painter);
     drawFrameLabels(painter);
     drawBrowserBars(painter);
+    drawEditPage(painter);
     drawSignInStrip(painter);
     drawGuides(painter);
     drawOverlay(painter);

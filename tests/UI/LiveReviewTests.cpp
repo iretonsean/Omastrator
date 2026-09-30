@@ -4,6 +4,7 @@
 #include "Live/WriteBack.h"
 #include "UI/AgentSheets.h"
 #include "Document/PathOperations.h"
+#include "UI/LiveFrames.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "../Agent/FakeAgents.h"
 #include <QDirIterator>
@@ -63,6 +64,25 @@ private:
         while (clock.elapsed() < 60'000 && bridge.liveSession().state() == LiveSession::State::starting)
             QTest::qWait(50);
         return bridge.liveSession().state() == LiveSession::State::running;
+    }
+
+    // The plain fixture as a repository of its own with a local bare upstream.
+    QString repositoryOf(const QString &name)
+    {
+        const QString site = m_directory.filePath(name);
+        QDirIterator files(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/plain"), QDir::Files);
+        while (files.hasNext()) {
+            const QString path = files.next();
+            write(QDir(site).filePath(QFileInfo(path).fileName()), read(path));
+        }
+        const QString bare = m_directory.filePath(name + QStringLiteral(".git"));
+        QProcess::execute(QStringLiteral("git"), {"init", "-q", "--bare", bare});
+        git(site, {"init", "-q", "-b", "main"});
+        git(site, {"add", "-A"});
+        git(site, {"commit", "-q", "-m", "Plain site"});
+        git(site, {"remote", "add", "origin", bare});
+        git(site, {"push", "-q", "-u", "origin", "main"});
+        return site;
     }
 
     // Omastrator's own worktrees for the project, besides the checkout.
@@ -209,6 +229,76 @@ private slots:
         QVERIFY(git(m_repo, {"log", "-1", "--format=%s"}).startsWith(QLatin1String("Discard: ")));
         QVERIFY(!read(m_repo + "/index.html").contains("Hello, edited") && read(m_repo + "/index.html").contains("<!-- mine -->"));
         write(m_repo + "/index.html", git(m_repo, {"show", "HEAD:index.html"}).toUtf8());
+        live.stop();
+    }
+
+    void theWindowsEditsAndAFramesHeldEditsReachOneCommit()
+    {
+        // A repository of its own: the shared one has been through every earlier case.
+        const QString site = repositoryOf(QStringLiteral("both"));
+
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        QVERIFY(bridge.startLive({}, site).isEmpty());
+        QVERIFY2(running(bridge), qPrintable(bridge.liveSession().message()));
+        LiveSession &live = bridge.liveSession();
+        QVERIFY(live.evaluate(QStringLiteral("window.__oma.editText('.lead', 'Window edit.')")).toBool());
+        QTRY_COMPARE(live.edits().size(), size_t(1));
+
+        // A Browser View's Live had stopped on the same project and held its edit.
+        LiveEdit held;
+        held.selector = QStringLiteral("#title");
+        held.property = QStringLiteral("text");
+        held.before = QStringLiteral("Hello from a plain site");
+        held.after = QStringLiteral("Frame edit");
+        LiveFrames::hold(site, {held});
+
+        const QString before = git(site, {"rev-parse", "HEAD"}).trimmed();
+        QVERIFY(bridge.liveSave(site).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.deployState().running, 30'000);
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("done"));
+        QCOMPARE(git(site, {"rev-list", "--count", before + QStringLiteral("..HEAD")}).trimmed(), QStringLiteral("1"));
+        const QString page = git(site, {"show", "HEAD:index.html"});
+        QVERIFY(page.contains(QLatin1String("Window edit.")) && page.contains(QLatin1String("Frame edit")));
+        QVERIFY(LiveFrames::held(site).empty());
+        QVERIFY(live.edits().empty());
+        live.stop();
+    }
+
+    void theIslandsDeployWritesBackOnlyTheWindowsEditsAndKeepsAFramesHeldOnes()
+    {
+        const QString site = repositoryOf(QStringLiteral("island"));
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        QVERIFY(bridge.startLive({}, site).isEmpty());
+        QVERIFY2(running(bridge), qPrintable(bridge.liveSession().message()));
+        LiveSession &live = bridge.liveSession();
+        QVERIFY(live.evaluate(QStringLiteral("window.__oma.editText('.lead', 'Window edit.')")).toBool());
+        QTRY_COMPARE(live.edits().size(), size_t(1));
+        LiveEdit held;
+        held.selector = QStringLiteral("#title");
+        held.property = QStringLiteral("text");
+        held.before = QStringLiteral("Hello from a plain site");
+        held.after = QStringLiteral("Frame edit");
+        LiveFrames::hold(site, {held});
+
+        // The island names no folder: it is the window's Live it has always deployed.
+        AgentBridge::DeployRequest request;
+        request.deploy = false;
+        QVERIFY(bridge.liveDeploy(request).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!bridge.deployState().running, 30'000);
+        QCOMPARE(bridge.deployState().stage, QStringLiteral("done"));
+        const QString page = git(site, {"show", "HEAD:index.html"});
+        QVERIFY(page.contains(QLatin1String("Window edit.")));
+        QVERIFY(!page.contains(QLatin1String("Frame edit")));
+        QVERIFY(live.edits().empty());
+        QCOMPARE(LiveFrames::held(site).size(), size_t(1));
         live.stop();
     }
 

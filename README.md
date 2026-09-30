@@ -93,6 +93,15 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   keeps a note or callout put during a preview. Frames pause when off screen,
   small or hidden, at most 8 tabs are open at once, and `omastrator reset` closes them.
   Sign-in happens once in a normal window on the same profile.
+  On a page from a site of yours, the bar's pencil starts Edit Page: click the
+  page's own elements on the canvas and change their colour, padding, size,
+  radius or text from the bar that appears (Ctrl+Z undoes the page edit, not the
+  document). The tab shows your project's dev server when it has one. Deploy,
+  Save, Review Changes and History are in the bar's menu, and Deploy appears in the
+  bar when there is something to send. Draw a redesign over the page and press
+  Build It: your agent changes the code to match it on its own git branch, and
+  Review Changes shows the result. Build It with a Note… adds a line for the
+  agent; on a site that isn't yours it asks for the code's folder first.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.

@@ -1,10 +1,13 @@
 #include "UI/Menus.h"
+#include "Canvas/ElementBar.h"
 #include "Document/BrowserAddress.h"
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentSheets.h"
+#include "UI/BrowserViews.h"
 #include "UI/CommandPalette.h"
 #include "UI/ContextMenus.h"
+#include "UI/ElementBarActions.h"
 #include "UI/ExportForScreensSheet.h"
 #include "UI/HistoryPanel.h"
 #include "UI/KeyboardShortcuts.h"
@@ -167,12 +170,16 @@ void Menus::buildEdit(QMenuBar &bar)
     add(edit, QStringLiteral("undo"), QStringLiteral("Undo"), QKeySequence(Qt::CTRL | Qt::Key_Z), [this] {
         if (m_field)
             m_field->undo();
+        else if (m_canvas && m_canvas->editPageFrame())
+            m_canvas->undoPageEdit();
         else
             session().undo();
     });
     add(edit, QStringLiteral("redo"), QStringLiteral("Redo"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), [this] {
         if (m_field)
             m_field->redo();
+        else if (m_canvas && m_canvas->editPageFrame())
+            m_canvas->redoPageEdit();
         else
             session().redo();
     });
@@ -319,7 +326,23 @@ void Menus::buildObject(QMenuBar &bar)
     QMenu *browserView = object->addMenu(QStringLiteral("Browser View"));
     browserView->menuAction()->setObjectName(QStringLiteral("browserViewMenu"));
     // The bar's right-click menu, for the selected frame; they name the Browser View in Ctrl+K.
-    const auto browserFrame = [this] { return m_canvas && m_canvas->browserViewHost() ? session().selectedBrowserView() : std::nullopt; };
+    // Edit Page deselects the document, so its frame stands in for the selected one.
+    const auto browserFrame = [this]() -> std::optional<QUuid> {
+        if (!m_canvas || !m_canvas->browserViewHost())
+            return std::nullopt;
+        if (const auto selected = session().selectedBrowserView())
+            return selected;
+        return m_canvas->editPageFrame();
+    };
+    add(browserView, QStringLiteral("browserViewEditPage"), QStringLiteral("Edit Page"), QKeySequence(), [this, browserFrame] {
+        if (!m_canvas)
+            return;
+        if (m_canvas->editPageFrame())
+            m_canvas->leaveEditPage();
+        else if (const auto frame = browserFrame())
+            m_canvas->enterEditPage(*frame);
+    });
+    browserView->addSeparator();
     add(browserView, QStringLiteral("browserViewCopyUrl"), QStringLiteral("Copy URL"), QKeySequence(), [this, browserFrame] {
         if (const auto frame = browserFrame())
             QApplication::clipboard()->setText(session().document()->find(*frame)->browser->url.toString());
@@ -333,6 +356,41 @@ void Menus::buildObject(QMenuBar &bar)
     });
     add(browserView, QStringLiteral("browserViewDesignWidth"), QStringLiteral("Set as Design Width"), QKeySequence(),
         [this] { session().setPreviewAsDesignWidth(); });
+    browserView->addSeparator();
+    // The frame's own-site project through the same pipeline as the Live window (BrowserViews+Deploy.cpp).
+    const struct {
+        const char *name;
+        const char *title;
+        BrowserViewHost::Action action;
+    } projectActions[] = {{"browserViewDeploy", "Deploy", BrowserViewHost::Action::deploy},
+                          {"browserViewSave", "Save", BrowserViewHost::Action::save},
+                          {"browserViewReviewChanges", "Review Changes", BrowserViewHost::Action::reviewChanges},
+                          {"browserViewHistory", "History", BrowserViewHost::Action::history},
+                          {"browserViewBuildIt", "Build It", BrowserViewHost::Action::buildIt},
+                          {"browserViewBuildItWithNote", "Build It with a Note…", BrowserViewHost::Action::buildItWithNote},
+                          {"browserViewStopBuild", "Stop Build", BrowserViewHost::Action::stopBuild},
+                          {"browserViewStopLive", "Stop Live", BrowserViewHost::Action::stopLive}};
+    for (const auto &each : projectActions)
+        add(browserView, QString::fromLatin1(each.name), QString::fromLatin1(each.title), QKeySequence(), [this, browserFrame, action = each.action] {
+            if (const auto frame = browserFrame())
+                m_canvas->browserViewHost()->act(*frame, action);
+        });
+    browserView->addSeparator();
+    // For a site that isn't yours: the bar menu's own items (BrowserViews+Site.cpp).
+    const struct {
+        const char *name;
+        const char *title;
+        BrowserViewHost::Action action;
+    } siteActions[] = {{"browserViewKeepEdits", "Keep Edits…", BrowserViewHost::Action::keepEdits},
+                       {"browserViewEditSets", "Edit Sets…", BrowserViewHost::Action::editSets},
+                       {"browserViewShowOriginal", "Show Original", BrowserViewHost::Action::showOriginal},
+                       {"browserViewExportCss", "Export CSS…", BrowserViewHost::Action::exportCss},
+                       {"browserViewThisIsMySite", "This Is My Site…", BrowserViewHost::Action::thisIsMySite}};
+    for (const auto &each : siteActions)
+        add(browserView, QString::fromLatin1(each.name), QString::fromLatin1(each.title), QKeySequence(), [this, browserFrame, action = each.action] {
+            if (const auto frame = browserFrame())
+                m_canvas->browserViewHost()->act(*frame, action);
+        });
     browserView->addSeparator();
     add(browserView, QStringLiteral("browserViewReload"), QStringLiteral("Reload"), QKeySequence(), [this, browserFrame] {
         if (const auto frame = browserFrame())
@@ -625,6 +683,8 @@ void Menus::watchFront(EditorCanvas *canvas)
     disconnect(m_sessionWatch);
     m_sessionWatch = connect(&session(), &EditorSession::changed, this, &Menus::synchronize);
     disconnect(m_canvasWatch);
+    disconnect(m_pageWatch);
+    disconnect(m_pageModeWatch);
     m_canvas = canvas;
     if (m_typeStyles)
         m_typeStyles->follow();
@@ -634,7 +694,13 @@ void Menus::watchFront(EditorCanvas *canvas)
     if (m_canvas) {
         if (!m_canvas->findChild<TaskBar *>())
             TaskBarActions::attach(*this, m_agent, *m_canvas);
+        if (!m_canvas->findChild<ElementBar *>())
+            ElementBarActions::attach(m_agent, *m_canvas);
+        BrowserViews::of(session())->setAgent(m_agent);
         m_canvasWatch = connect(m_canvas, &EditorCanvas::textEditingChanged, this, &Menus::synchronize);
+        // Undo in Edit Page is Live's own, so its wording follows the page's edits.
+        m_pageWatch = connect(m_canvas, &EditorCanvas::editPageHostChanged, this, &Menus::synchronize);
+        m_pageModeWatch = connect(m_canvas, &EditorCanvas::editPageChanged, this, &Menus::synchronize);
         m_menuWatch = connect(m_canvas, &EditorCanvas::contextMenuRequested, this, [this](QPoint at, const QList<QUuid> &hits) {
             if (!m_canvas)
                 return;

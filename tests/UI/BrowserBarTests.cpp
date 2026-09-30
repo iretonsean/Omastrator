@@ -80,6 +80,8 @@ struct Rig {
         double total = -2;
         for (int each : all)
             total += size(each) + 2;
+        // The Edit Page pencil (24 wide) ends the row, a gap and 4 points after the last button.
+        total += 2 + 4 + 24;
         double x = box.right() - 2 - total;
         for (int each : all) {
             if (each == width)
@@ -210,6 +212,95 @@ private slots:
         QVERIFY(rig.editor());
         QCOMPARE(rig.editor()->placeholderText(), QStringLiteral("Type a URL"));
         QVERIFY(rig.canvas.isEditingAddress());
+    }
+
+    void drawingAtAFractionalZoomGivesWholeCssPixels()
+    {
+        Rig rig;
+        rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
+        const double zoom = rig.canvas.documentToView().m11();
+        const QPoint from = rig.view({200, 300}).toPoint();
+        const QPoint to = rig.view({900, 800}).toPoint();
+        // The pointer lands on whole view points, so the drag itself is a fractional number of CSS px.
+        const double rawWidth = (to.x() - from.x()) / zoom;
+        const double rawHeight = (to.y() - from.y()) / zoom;
+        QVERIFY(qAbs(rawWidth - std::round(rawWidth)) > 0.01 && qAbs(rawHeight - std::round(rawHeight)) > 0.01);
+        rig.draw({200, 300}, {900, 800});
+        QVERIFY(rig.session.selectedBrowserView().has_value());
+        const QRectF bounds = rig.object(*rig.session.selectedBrowserView())->path.bounds();
+        QCOMPARE(bounds.width(), std::round(rawWidth));
+        QCOMPARE(bounds.height(), std::round(rawHeight));
+    }
+
+    // Rounding the size must not move the edge the user isn't moving: the corner the drag began at stays exactly there.
+    void drawingUpAndToTheLeftKeepsTheCornerTheDragBeganAt()
+    {
+        Rig rig;
+        rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
+        const QPoint press = rig.view({900, 800}).toPoint();
+        const QPoint to = rig.view({200, 300}).toPoint();
+        const QTransform toDocument = rig.canvas.documentToView().inverted();
+        const QPointF corner = toDocument.map(QPointF(press));
+        const QPointF far = toDocument.map(QPointF(to));
+        QVERIFY(qAbs((corner.x() - far.x()) - std::round(corner.x() - far.x())) > 0.01);
+        rig.draw({900, 800}, {200, 300});
+        QVERIFY(rig.session.selectedBrowserView().has_value());
+        const QRectF bounds = rig.object(*rig.session.selectedBrowserView())->path.bounds();
+        QVERIFY(qAbs(bounds.right() - corner.x()) < 1e-6);
+        QVERIFY(qAbs(bounds.bottom() - corner.y()) < 1e-6);
+        QCOMPARE(bounds.width(), std::round(bounds.width()));
+        QCOMPARE(bounds.height(), std::round(bounds.height()));
+    }
+
+    void aLeftOrTopHandleDragKeepsTheOppositeEdgeAtAFractionalZoom()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
+        rig.session.select({rig.frame});
+        // The left-middle handle, dragged right: the frame's right edge (700) stays.
+        const QPoint left = rig.view({100, 400}).toPoint();
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, left);
+        QTest::mouseMove(&rig.canvas, left + QPoint(40, 0));
+        QTest::mouseMove(&rig.canvas, left + QPoint(101, 0));
+        QVERIFY(rig.session.isPreviewOnly());
+        QRectF shown = rig.object(rig.frame)->path.bounds();
+        QVERIFY(shown.left() > 100);
+        QVERIFY(qAbs(shown.right() - 700) < 1e-6);
+        QCOMPARE(shown.width(), std::round(shown.width()));
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, left + QPoint(101, 0));
+        QVERIFY(!rig.session.isPreviewOnly());
+        // The top-middle handle, dragged down: the bottom edge (600) stays.
+        const QPoint top = rig.view({400, 200}).toPoint();
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, top);
+        QTest::mouseMove(&rig.canvas, top + QPoint(0, 30));
+        QTest::mouseMove(&rig.canvas, top + QPoint(0, 77));
+        QVERIFY(rig.session.isPreviewOnly());
+        shown = rig.object(rig.frame)->path.bounds();
+        QVERIFY(shown.top() > 200);
+        QVERIFY(qAbs(shown.bottom() - 600) < 1e-6);
+        QCOMPARE(shown.height(), std::round(shown.height()));
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, top + QPoint(0, 77));
+    }
+
+    void aHandleDragAtAFractionalZoomShowsWholeCssPixels()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.zoomToRect(QRectF(0, 0, 1300, 1000));
+        rig.session.select({rig.frame});
+        const double zoom = rig.canvas.documentToView().m11();
+        const QPoint handle = rig.view({700, 400}).toPoint();
+        const QPoint to = handle - QPoint(101, 0);
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle);
+        QTest::mouseMove(&rig.canvas, handle - QPoint(40, 0));
+        QTest::mouseMove(&rig.canvas, to);
+        QVERIFY(rig.session.isPreviewOnly());
+        const double width = rig.object(rig.frame)->path.bounds().width();
+        // The preview is neither the raw 600 − 101/zoom nor anything but whole px.
+        QVERIFY(qAbs((600 - 101 / zoom) - std::round(600 - 101 / zoom)) > 0.01);
+        QCOMPARE(width, std::round(width));
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, to);
     }
 
     void aClickWithTheToolDrops1280By800()

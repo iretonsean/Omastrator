@@ -67,6 +67,8 @@ class DeployTests : public QObject {
 private:
     QTemporaryDir m_directory;
     QString m_bin;
+    // The PATH the test was started with, put back at the end.
+    QByteArray m_startPath;
     int m_repos = 0;
 
     QString repository(bool withRemote = true)
@@ -92,6 +94,12 @@ private slots:
         if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
             QSKIP("git isn't installed.");
         QVERIFY(m_directory.isValid());
+        // A host CLI counts only when it is on PATH, so the tests see the system folders and nothing the user installed
+        // (a global vercel, netlify or wrangler from npm or mise would change what a project deploys with).
+        m_startPath = qgetenv("PATH");
+        qputenv("PATH", "/usr/bin:/bin");
+        if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty() || QStandardPaths::findExecutable(QStringLiteral("sh")).isEmpty())
+            QSKIP("git and sh aren't in /usr/bin or /bin.");
         const QString gitconfig = m_directory.filePath(QStringLiteral("gitconfig"));
         qputenv("GIT_CONFIG_GLOBAL", gitconfig.toUtf8());
         qputenv("GIT_CONFIG_NOSYSTEM", "1");
@@ -111,6 +119,12 @@ private slots:
         write(m_directory.filePath(QStringLiteral("terminal")), "#!/bin/sh\necho \"$@\" > \"$FAKE_TERMINAL_OUT\"\n", true);
         qputenv("OMASTRATOR_TERMINAL", m_directory.filePath(QStringLiteral("terminal")).toUtf8());
         qputenv("FAKE_TERMINAL_OUT", m_directory.filePath(QStringLiteral("terminal.out")).toUtf8());
+    }
+
+    void cleanupTestCase()
+    {
+        if (!m_startPath.isNull())
+            qputenv("PATH", m_startPath);
     }
 
     void dotenvFilesParseAsDotenvDoes()

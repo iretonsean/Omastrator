@@ -1,9 +1,15 @@
 #pragma once
 #include <QImage>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
+#include <QPointF>
+#include <QRectF>
 #include <QString>
 #include <QUuid>
+#include <optional>
+
+class QMenu;
 
 // What the canvas asks of whoever streams a Browser View's page (docs/BROWSER-VIEW.md), so the canvas
 // needn't link the browser code.
@@ -22,8 +28,27 @@ public:
         bool canGoForward = false;
         // The page isn't one of the user's own sites, so edits to it stay on this machine.
         bool notYours = false;
+        // Live runs the page from the project's dev server; `devTip` is its address and command.
+        bool dev = false;
+        QString devTip;
+        // Deploy, for a frame running Live on the user's own site: the button's word, the stage while it runs, or its
+        // result for a few seconds. Empty when there is nothing to deploy.
+        QString deploy;
+        bool deployBusy = false;
+        bool deployFailed = false;
+        QString deployTip;
+        // Build It, for a frame with design on it: "Build It", "Building with <agent>…" while it works (a click stops it),
+        // or "Built. Review changes" until the next action. Empty when there is nothing to build.
+        QString build;
+        bool buildBusy = false;
+        bool buildDone = false;
+        QString buildTip;
     };
-    enum class Action { back, forward, reload, reloadIgnoringCache, stop };
+    // `keepEdits`, `editSets`, `showOriginal` and `exportCss` are for a site that isn't the user's (the bar menu's items, also in
+    // Object ▸ Browser View and Ctrl+K). `deployButton` is the bar's pill (it opens Details after a failure and the site after a deploy); `deploy` and
+    // `save` always start one. The rest are the bar menu's, for the frame's project; `buildButton` is the bar's Build It pill (it starts a
+    // build, stops one, or opens the review of a finished one).
+    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, keepEdits, editSets, showOriginal, exportCss, deployButton, deploy, save, reviewChanges, history, stopLive, buildButton, buildIt, buildItWithNote, stopBuild };
     virtual Bar bar(const QUuid &frame) const;
     virtual void act(const QUuid &frame, Action action);
 
@@ -33,6 +58,40 @@ public:
 
     // The widths the frame's breakpoint buttons offer, ascending: its own site's media queries, or the defaults.
     virtual QList<int> breakpoints(const QUuid &frame) const;
+
+    // Edit Page (docs/LIVE-IN-FRAME.md, section 3): the page's elements can be picked. Beginning starts Live on the frame
+    // if it isn't running; the answer is why it can't, or empty.
+    virtual QString beginEditPage(const QUuid &frame);
+    // The host's own items for the bar's right-click menu (Live's: keep edits, edit sets, This Is My Site…).
+    virtual void extendBarMenu(const QUuid &frame, QMenu *menu);
+    virtual void endEditPage(const QUuid &frame);
+    // The page's hover and selection boxes in its CSS px (the frame's box top-left is 0,0), each with a "tag  W × H" label.
+    struct EditBox {
+        QRectF rect;
+        QString label;
+    };
+    struct EditBoxes {
+        std::optional<EditBox> hover;
+        QList<EditBox> selection;
+    };
+    virtual EditBoxes editBoxes(const QUuid &frame) const;
+
+    // The element bar (section 3): the selected elements as the page reports them ({selector, tag, classes, text, textOnly,
+    // rect, styles}) and the page's tokens ({colors, spacing, ...} of {name, value}), or nothing while none is picked.
+    struct ElementState {
+        QJsonArray selection;
+        QJsonObject tokens;
+    };
+    virtual ElementState elementState(const QUuid &frame) const;
+    // Every selected element takes `value` for each of `properties`. A preview only shows it (a scrub step); the edit
+    // that follows records it, snapped to a token where the page has one. The answer is why it can't, or empty.
+    virtual QString editElements(const QUuid &frame, const QStringList &properties, const QString &value, bool preview);
+    virtual QString editElementText(const QUuid &frame, const QString &selector, const QString &text);
+    // Live's own undo (section 4), which Ctrl+Z reaches in Edit Page.
+    virtual bool canUndoPageEdit(const QUuid &frame) const;
+    virtual bool canRedoPageEdit(const QUuid &frame) const;
+    virtual void undoPageEdit(const QUuid &frame);
+    virtual void redoPageEdit(const QUuid &frame);
 
     // The sign-in strip inside the first Browser View, until Sign In… or Not Now answers it.
     virtual bool signInOffered() const;
@@ -47,3 +106,20 @@ inline QList<int> BrowserViewHost::breakpoints(const QUuid &) const { return {39
 inline bool BrowserViewHost::signInOffered() const { return false; }
 inline void BrowserViewHost::signIn() {}
 inline void BrowserViewHost::dismissSignIn() {}
+inline void BrowserViewHost::extendBarMenu(const QUuid &, QMenu *) {}
+inline QString BrowserViewHost::beginEditPage(const QUuid &) { return QStringLiteral("Edit Page needs a live page."); }
+inline void BrowserViewHost::endEditPage(const QUuid &) {}
+inline BrowserViewHost::EditBoxes BrowserViewHost::editBoxes(const QUuid &) const { return {}; }
+inline BrowserViewHost::ElementState BrowserViewHost::elementState(const QUuid &) const { return {}; }
+inline QString BrowserViewHost::editElements(const QUuid &, const QStringList &, const QString &, bool)
+{
+    return QStringLiteral("Edit Page needs a live page.");
+}
+inline QString BrowserViewHost::editElementText(const QUuid &, const QString &, const QString &)
+{
+    return QStringLiteral("Edit Page needs a live page.");
+}
+inline bool BrowserViewHost::canUndoPageEdit(const QUuid &) const { return false; }
+inline bool BrowserViewHost::canRedoPageEdit(const QUuid &) const { return false; }
+inline void BrowserViewHost::undoPageEdit(const QUuid &) {}
+inline void BrowserViewHost::redoPageEdit(const QUuid &) {}

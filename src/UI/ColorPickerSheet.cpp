@@ -108,6 +108,10 @@ protected:
         shape.addRoundedRect(QRectF(rect()), 5, 5);
         painter.save();
         painter.setClipPath(shape);
+        // A translucent colour shows over a checkerboard, as transparency does everywhere else.
+        for (int y = 0; y < height(); y += 8)
+            for (int x = 0; x < width(); x += 8)
+                painter.fillRect(QRect(x, y, 8, 8), ((x + y) / 8) % 2 ? QColor(0xcc, 0xcc, 0xcc) : QColor(Qt::white));
         painter.fillRect(QRectF(0, 0, width(), height() / 2.0), m_sheet.color());
         painter.fillRect(QRectF(0, height() / 2.0, width(), height() / 2.0), m_original);
         painter.restore();
@@ -128,8 +132,11 @@ public:
         setObjectName(QStringLiteral("recentColor"));
         setFixedSize(18, 18);
         setCursor(Qt::PointingHandCursor);
-        setToolTip(color.name().toUpper());
-        setAccessibleName(QStringLiteral("Recent color %1").arg(color.name().toUpper()));
+        // A translucent colour says how much, as the sheet's opacity field will show it.
+        const QString shown = color.alpha() < 255 ? QStringLiteral("%1, %2%").arg(color.name().toUpper()).arg(std::lround(color.alphaF() * 100))
+                                                  : color.name().toUpper();
+        setToolTip(shown);
+        setAccessibleName(QStringLiteral("Recent color %1").arg(shown));
     }
     QColor color() const { return m_color; }
 
@@ -167,14 +174,20 @@ std::vector<QColor> list()
     return colors;
 }
 
+// Opaque colours as #rrggbb, translucent ones as #aarrggbb, so a recent colour keeps its opacity.
+static QString stored(const QColor &color)
+{
+    return color.name(color.alpha() < 255 ? QColor::HexArgb : QColor::HexRgb);
+}
+
 void add(const QColor &color)
 {
     if (!color.isValid())
         return;
-    QStringList names{color.name()};
+    QStringList names{stored(color)};
     for (const QColor &each : list()) {
-        if (each.rgb() != color.rgb() && names.size() < limit)
-            names << each.name();
+        if (each.rgba() != color.rgba() && names.size() < limit)
+            names << stored(each);
     }
     QSettings().setValue(QStringLiteral("colors/recent"), names);
 }
@@ -221,8 +234,9 @@ void PickerField::focusOutEvent(QFocusEvent *event)
     QLineEdit::focusOutEvent(event);
 }
 
-ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std::optional<QColor>)> finish, QWidget *parent)
+ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std::optional<QColor>)> finish, QWidget *parent, bool withAlpha)
     : QWidget(parent), m_original(initial), m_hsb(PickerHSB::from(initial)),
+      m_alphaPercent(withAlpha ? int(std::lround(initial.alphaF() * 100)) : 100),
       m_field(new SaturationBrightness(*this, [this](QPointF point) {
           pick([point](PickerHSB &hsb) {
               hsb.saturation = std::clamp(point.x() / (fieldSize - 1), 0.0, 1.0);
@@ -281,6 +295,21 @@ ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std
     m_hex->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     fields->addWidget(label(QStringLiteral("#"), this), 3, 0);
     fields->addWidget(m_hex, 3, 1, Qt::AlignLeft);
+    if (withAlpha) {
+        m_alpha = new PickerField([this] {
+            if (m_alpha->isModified() && !m_alpha->text().isEmpty())
+                setAlphaPercent(m_alpha->text().toInt());
+            m_alpha->setModified(false);
+            synchronize();
+        }, [this](int step) { setAlphaPercent(m_alphaPercent + step); }, this);
+        m_alpha->setObjectName(QStringLiteral("alpha"));
+        m_alpha->setPlaceholderText(QStringLiteral("%"));
+        m_alpha->setAccessibleName(QStringLiteral("Opacity in percent"));
+        m_alpha->setFixedWidth(52);
+        m_alpha->setValidator(new QRegularExpressionValidator(QRegularExpression(QStringLiteral("[0-9]{0,3}")), m_alpha));
+        fields->addWidget(label(QStringLiteral("A"), this), 4, 0);
+        fields->addWidget(m_alpha, 4, 1, Qt::AlignLeft);
+    }
     auto *column = new QVBoxLayout;
     column->setSpacing(0);
     column->setContentsMargins(0, 0, 0, 0);
@@ -307,7 +336,11 @@ ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std
         strip->setSpacing(4);
         for (const QColor &each : recent) {
             auto *chip = new RecentChip(each, this);
-            connect(chip, &QAbstractButton::clicked, this, [this, each] { setHSB(PickerHSB::from(each)); });
+            // With an opacity field the chip's opacity comes too; without one the colour stays opaque.
+            connect(chip, &QAbstractButton::clicked, this, [this, each] {
+                setHSB(PickerHSB::from(each));
+                setAlphaPercent(int(std::lround(each.alphaF() * 100)));
+            });
             strip->addWidget(chip);
         }
         strip->addStretch(1);
@@ -316,14 +349,32 @@ ColorPickerSheet::ColorPickerSheet(const QColor &initial, std::function<void(std
     synchronize();
 }
 
-void ColorPickerSheet::showIn(FloatingPanel &panel, const QString &title, const QColor &initial, std::function<void(QColor)> apply)
+void ColorPickerSheet::showIn(FloatingPanel &panel, const QString &title, const QColor &initial, std::function<void(QColor)> apply, bool withAlpha)
 {
     panel.onClose = [&panel] { panel.close(); };
     panel.show(title, new ColorPickerSheet(initial, [&panel, apply = std::move(apply)](std::optional<QColor> chosen) {
         panel.close();
         if (chosen)
             apply(*chosen);
-    }));
+    }, nullptr, withAlpha));
+}
+
+QColor ColorPickerSheet::color() const
+{
+    QColor picked = m_hsb.color();
+    picked.setAlphaF(m_alphaPercent / 100.0);
+    return picked;
+}
+
+void ColorPickerSheet::setAlphaPercent(int percent)
+{
+    const int clamped = std::clamp(percent, 0, 100);
+    if (!m_alpha || clamped == m_alphaPercent)
+        return;
+    m_alphaPercent = clamped;
+    m_alpha->setModified(false);
+    synchronize();
+    emit colorChanged(color());
 }
 
 PickerField *ColorPickerSheet::channel(int index)
@@ -408,6 +459,8 @@ void ColorPickerSheet::synchronize()
     }
     if (!m_hex->hasFocus())
         m_hex->setText(rgb.name().mid(1).toUpper());
+    if (m_alpha && (!m_alpha->hasFocus() || !m_alpha->isModified()))
+        m_alpha->setText(QString::number(m_alphaPercent));
     m_hue->setAccessibleDescription(QStringLiteral("%1 degrees").arg(std::lround(m_hsb.hue)));
     m_field->update();
     // The arrows reach five points past the strip.

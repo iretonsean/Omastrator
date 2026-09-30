@@ -120,10 +120,31 @@ std::vector<EditorCanvas::State::BrowserBarLayout> EditorCanvas::State::browserB
         x += 3 * buttonSize + 6;
         double right = layout.bar.right() - 2;
         const BrowserViewHost::Bar state = browserHost->bar(object.id);
+        if (!state.deploy.isEmpty()) {
+            const double width = std::min(metrics.horizontalAdvance(state.deploy) + 18, 170.0);
+            if (right - x - width > 140) {
+                layout.deploy = QRectF(right - width, top + 4, width, barHeight - 8);
+                right -= width + 4;
+            }
+        }
+        if (!state.build.isEmpty()) {
+            const double width = std::min(metrics.horizontalAdvance(state.build) + 18 + (state.buildBusy ? 12 : 0), 190.0);
+            if (right - x - width > 140) {
+                layout.build = QRectF(right - width, top + 4, width, barHeight - 8);
+                right -= width + 4;
+            }
+        }
         if (state.notYours) {
             const double width = metrics.horizontalAdvance(QStringLiteral("Not your site")) + 14;
             if (right - x - width > 140) {
                 layout.tag = QRectF(right - width, top + 5, width, barHeight - 10);
+                right -= width + 4;
+            }
+        }
+        if (state.dev) {
+            const double width = metrics.horizontalAdvance(QStringLiteral("dev")) + 14;
+            if (right - x - width > 140) {
+                layout.dev = QRectF(right - width, top + 5, width, barHeight - 10);
                 right -= width + 4;
             }
         }
@@ -191,11 +212,46 @@ void EditorCanvas::State::drawBrowserBars(QPainter &painter) const
         painter.drawText(layout.address.adjusted(8, 0, -6, 0), Qt::AlignLeft | Qt::AlignVCenter,
                          metrics.elidedText(shown, Qt::ElideMiddle, layout.address.width() - 14));
         drawWidthButtons(painter, layout);
+        if (!layout.deploy.isNull()) {
+            const bool hovered = hover && layout.deploy.contains(*hover) && !state.deployBusy;
+            const QColor colour = state.deployFailed ? QColor(0xd9, 0x53, 0x4f) : accent();
+            painter.setPen(QPen(colour, 1));
+            // The idle button is the accent's fill; a stage or a result is only its outline.
+            const bool idle = !state.deployBusy && !state.deployFailed && state.deploy == QLatin1String("Deploy");
+            painter.setBrush(idle ? colour.lighter(hovered ? 115 : 100) : Qt::NoBrush);
+            painter.drawRoundedRect(layout.deploy, 6, 6);
+            painter.setPen(idle ? palette.color(QPalette::HighlightedText) : colour);
+            painter.drawText(layout.deploy, Qt::AlignCenter, metrics.elidedText(state.deploy, Qt::ElideRight, layout.deploy.width() - 10));
+            painter.setBrush(Qt::NoBrush);
+        }
+        if (!layout.build.isNull()) {
+            const bool hovered = hover && layout.build.contains(*hover);
+            painter.setPen(QPen(accent(), 1));
+            painter.setBrush(hovered ? QBrush(QColor(accent().red(), accent().green(), accent().blue(), 40)) : Qt::NoBrush);
+            painter.drawRoundedRect(layout.build, 6, 6);
+            QRectF label = layout.build;
+            if (state.buildBusy) {
+                // The tray light's dot, so it is plain that something is working.
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(accent());
+                painter.drawEllipse(QPointF(label.left() + 11, label.center().y()), 3, 3);
+                label.adjust(12, 0, 0, 0);
+            }
+            painter.setPen(accent());
+            painter.setBrush(Qt::NoBrush);
+            painter.drawText(label, Qt::AlignCenter, metrics.elidedText(state.build, Qt::ElideRight, label.width() - 10));
+        }
         if (!layout.tag.isNull()) {
             painter.setPen(QPen(quiet, 1));
             painter.setBrush(Qt::NoBrush);
             painter.drawRoundedRect(layout.tag, 8, 8);
             painter.drawText(layout.tag, Qt::AlignCenter, QStringLiteral("Not your site"));
+        }
+        if (!layout.dev.isNull()) {
+            painter.setPen(QPen(accent(), 1));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(layout.dev, 8, 8);
+            painter.drawText(layout.dev, Qt::AlignCenter, QStringLiteral("dev"));
         }
         if (state.loading) {
             painter.setPen(QPen(accent(), 2));
@@ -225,8 +281,16 @@ QString EditorCanvas::State::browserBarTip(QPointF view) const
             return QStringLiteral("Forward");
         if (layout.reload.contains(view))
             return browserHost->bar(layout.frame).loading ? QStringLiteral("Stop") : QStringLiteral("Reload");
+        if (layout.deploy.contains(view))
+            return browserHost->bar(layout.frame).deployTip;
+        if (layout.build.contains(view))
+            return browserHost->bar(layout.frame).buildTip;
         if (layout.tag.contains(view))
-            return QStringLiteral("Not your site: changes stay on this machine.");
+            return QStringLiteral("Not your site: changes stay on this machine. Click if it is.");
+        if (layout.dev.contains(view))
+            return QStringLiteral("Running from the project's dev server\n%1").arg(browserHost->bar(layout.frame).devTip);
+        if (layout.editPage.contains(view))
+            return editPage == layout.frame ? QStringLiteral("Stop editing the page") : QStringLiteral("Edit Page");
         for (const auto &[rect, width] : layout.widths) {
             if (rect.contains(view))
                 return width == layout.designWidth ? QStringLiteral("Design width: %1").arg(width) : QStringLiteral("Preview at %1 wide").arg(width);
@@ -250,6 +314,22 @@ bool EditorCanvas::State::browserBarPress(QPointF view)
             browserHost->act(layout.frame, BrowserViewHost::Action::forward);
         } else if (layout.reload.contains(view)) {
             browserHost->act(layout.frame, browserHost->bar(layout.frame).loading ? BrowserViewHost::Action::stop : BrowserViewHost::Action::reload);
+        } else if (layout.deploy.contains(view)) {
+            // In Edit Page the frame stays unselected: its handles would sit over the page.
+            if (editPage != layout.frame)
+                session.select({layout.frame});
+            browserHost->act(layout.frame, BrowserViewHost::Action::deployButton);
+        } else if (layout.build.contains(view)) {
+            if (editPage != layout.frame)
+                session.select({layout.frame});
+            browserHost->act(layout.frame, BrowserViewHost::Action::buildButton);
+        } else if (layout.tag.contains(view)) {
+            browserHost->act(layout.frame, BrowserViewHost::Action::thisIsMySite);
+        } else if (layout.editPage.contains(view)) {
+            if (editPage == layout.frame)
+                leaveEditPage();
+            else
+                enterEditPage(layout.frame);
         } else if (const auto pressed = std::find_if(layout.widths.begin(), layout.widths.end(), [&](const auto &each) { return each.first.contains(view); });
                    pressed != layout.widths.end()) {
             // The same button, or the design width's, lets the preview go.
@@ -421,7 +501,8 @@ bool EditorCanvas::State::browserBarMenu(QPointF view, QPoint global)
     const VectorObject *object = session.document()->find(*frame);
     if (!object || !object->browser)
         return false;
-    session.select({*frame});
+    if (editPage != *frame)
+        session.select({*frame});
     auto *menu = new QMenu(&canvas);
     menu->setAttribute(Qt::WA_DeleteOnClose);
     const QUrl url = object->browser->url;
@@ -431,6 +512,15 @@ bool EditorCanvas::State::browserBarMenu(QPointF view, QPoint global)
     QAction *open = menu->addAction(QStringLiteral("Open in My Chromium"));
     open->setEnabled(!url.isEmpty());
     QObject::connect(open, &QAction::triggered, menu, [url] { QDesktopServices::openUrl(url); });
+    QAction *page = menu->addAction(QStringLiteral("Edit Page"));
+    page->setCheckable(true);
+    page->setChecked(editPage == *frame);
+    QObject::connect(page, &QAction::triggered, menu, [this, id = *frame] {
+        if (editPage == id)
+            leaveEditPage();
+        else
+            enterEditPage(id);
+    });
     menu->addSeparator();
     // On a button it sets that width; elsewhere, the width a preview is showing.
     const auto button = [&] {
@@ -454,6 +544,7 @@ bool EditorCanvas::State::browserBarMenu(QPointF view, QPoint global)
     QObject::connect(hard, &QAction::triggered, menu, [this, id = *frame] { browserHost->act(id, BrowserViewHost::Action::reloadIgnoringCache); });
     QAction *signIn = menu->addAction(QStringLiteral("Sign in to Omastrator's browser…"));
     QObject::connect(signIn, &QAction::triggered, menu, [this] { browserHost->signIn(); });
+    browserHost->extendBarMenu(*frame, menu);
     menu->popup(global);
     return true;
 }

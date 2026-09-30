@@ -51,6 +51,25 @@ public:
     // The Browser View's address field opens over its bar; Enter changes the URL, Escape leaves it.
     void openAddressEditor(const QUuid &frame);
     bool isEditingAddress() const;
+    // Edit Page (docs/LIVE-IN-FRAME.md, section 3): the frame's page takes clicks as element picks. False, with a notice,
+    // when the page can't be edited. It ends on Esc, a click outside the frame, another tool, a page switch, deleting the
+    // frame and Live stopping.
+    bool enterEditPage(const QUuid &frame);
+    void leaveEditPage();
+    std::optional<QUuid> editPageFrame() const;
+    // The picked elements' union in view pixels, and the part of the frame the canvas shows; nothing outside Edit Page.
+    std::optional<QRectF> editPageSelectionRect() const;
+    std::optional<QRectF> editPageVisibleRect() const;
+    // The host's answers changed (a pick, an edit, an undo): the element bar and the text editor look again.
+    void noteEditPageHostChanged();
+    // Types over the single picked text element; Enter edits the page, Esc leaves it. False when that isn't picked.
+    bool editPageText();
+    bool isEditingPageText() const;
+    // Ctrl+Z and Ctrl+Shift+Z in Edit Page reach Live's own history, never the document's.
+    bool canUndoPageEdit() const;
+    bool canRedoPageEdit() const;
+    void undoPageEdit();
+    void redoPageEdit();
     // Document points to view pixels, as the canvas draws them now.
     QTransform documentToView() const;
     // Arrow keys move this many points, ten times as far with Shift.
@@ -65,6 +84,10 @@ signals:
     void textEditingChanged(bool editing);
     // A right-click, once it picked its target: the leaves under the pointer, topmost first.
     void contextMenuRequested(QPoint globalPosition, const QList<QUuid> &underPointer);
+    // Edit Page began or ended.
+    void editPageChanged();
+    // The picked elements or their values changed under Edit Page.
+    void editPageHostChanged();
     // A gesture began or ended, or the canvas paused or resumed.
     void gestureChanged();
 

@@ -1,4 +1,5 @@
 #include "Live/DevServer.h"
+#include "Live/LiveSession.h"
 #include "Live/Registry.h"
 #include "Live/StaticServer.h"
 #include "Live/Tokens.h"
@@ -10,10 +11,13 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QProcess>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
+#include <thread>
+#include <vector>
 
 // Phase 5 of docs/OS-SUITE.md without a browser: tokens, dev commands, the registry, the static server.
 namespace {
@@ -217,6 +221,29 @@ private slots:
         QVERIFY(!ProjectRegistry::folderFor(site));
     }
 
+    void sitesRememberedFromSeveralThreadsAreAllKept()
+    {
+        const QString folder = m_directory.filePath(QStringLiteral("shared-registry-folder"));
+        QDir().mkpath(folder);
+        constexpr int threads = 6;
+        constexpr int each = 12;
+        std::vector<std::thread> workers;
+        for (int t = 0; t < threads; ++t)
+            workers.emplace_back([folder, t] {
+                for (int i = 0; i < each; ++i)
+                    ProjectRegistry::remember(QUrl(QStringLiteral("https://thread%1-site%2.example.test").arg(t).arg(i)), folder);
+            });
+        for (std::thread &worker : workers)
+            worker.join();
+        // Each remember is a read, a change and a write: two at once would lose one of the changes.
+        int found = 0;
+        for (int t = 0; t < threads; ++t)
+            for (int i = 0; i < each; ++i)
+                if (ProjectRegistry::folderFor(QUrl(QStringLiteral("https://thread%1-site%2.example.test").arg(t).arg(i))))
+                    ++found;
+        QCOMPARE(found, threads * each);
+    }
+
     void localhostPortsNameTheirFolder()
     {
         QTcpServer listening;
@@ -245,6 +272,81 @@ private slots:
         get(server.url().resolved(QUrl(QStringLiteral("/%2e%2e/secret.txt"))), &status);
         QCOMPARE(status, 404);
         QCOMPARE(StaticServer::mimeType(QStringLiteral("x.svg")), QByteArray("image/svg+xml"));
+    }
+
+    void removingEditsForgetsExactlyTheNamedOnes()
+    {
+        const auto edit = [](const QString &selector, const QString &property, const QString &after) {
+            LiveEdit made;
+            made.selector = selector;
+            made.property = property;
+            made.before = QStringLiteral("0");
+            made.after = after;
+            return made;
+        };
+        LiveSession session;
+        QSignalSpy changed(&session, &LiveSession::changed);
+        session.setEdits({edit("#a", "opacity", "0.5"), edit("#b", "opacity", "0.6"), edit("#c", "opacity", "0.7")});
+        changed.clear();
+
+        // The edit made since the caller read the list (#c) and one that shares a target but not a value stay; the shared
+        // target now starts from the value the taken one wrote.
+        session.removeEdits({edit("#a", "opacity", "0.5"), edit("#b", "opacity", "0.9")});
+        QCOMPARE(session.edits().size(), size_t(2));
+        QCOMPARE(session.edits()[0].selector, QStringLiteral("#b"));
+        QCOMPARE(session.edits()[0].before, QStringLiteral("0.9"));
+        QCOMPARE(session.edits()[1].before, QStringLiteral("0"));
+        QCOMPARE(session.edits()[1].selector, QStringLiteral("#c"));
+        QCOMPARE(changed.size(), 1);
+
+        // Naming nothing that is there changes nothing and says nothing.
+        session.removeEdits({edit("#z", "opacity", "1")});
+        QCOMPARE(session.edits().size(), size_t(2));
+        QCOMPARE(changed.size(), 1);
+    }
+
+    // Save takes "Hello" → "Hi" and writes "Hi"; a change queued behind it has already merged into the session's edit, which
+    // is now "Hello" → "Hey" and so is not the one taken. It stays, and starts from what the file has now.
+    void aKeptEditStartsFromWhatTheTakenOneWrote()
+    {
+        const auto text = [](const QString &before, const QString &after) {
+            LiveEdit made;
+            made.selector = QStringLiteral("#title");
+            made.property = QStringLiteral("text");
+            made.before = before;
+            made.after = after;
+            return made;
+        };
+        LiveSession session;
+        session.setEdits({text("Hello", "Hey")});
+        session.removeEdits({text("Hello", "Hi")});
+        QCOMPARE(session.edits().size(), size_t(1));
+        QCOMPARE(session.edits()[0].before, QStringLiteral("Hi"));
+        QCOMPARE(session.edits()[0].after, QStringLiteral("Hey"));
+
+        // A class swap that chained from the taken one removes the class the taken one added.
+        LiveEdit taken = text("", "");
+        taken.property = QStringLiteral("padding");
+        taken.removeClass = QStringLiteral("p-2");
+        taken.addClass = QStringLiteral("p-4");
+        taken.classesBefore = QStringLiteral("card p-2");
+        taken.classesAfter = QStringLiteral("card p-4");
+        LiveEdit chained = taken;
+        chained.addClass = QStringLiteral("p-8");
+        chained.classesAfter = QStringLiteral("card p-8");
+        session.setEdits({chained});
+        session.removeEdits({taken});
+        QCOMPARE(session.edits()[0].removeClass, QStringLiteral("p-4"));
+        QCOMPARE(session.edits()[0].addClass, QStringLiteral("p-8"));
+        QCOMPARE(session.edits()[0].classesBefore, QStringLiteral("card p-4"));
+
+        // Another element's edit, or another property's, is left as it was.
+        LiveEdit other = text("Hello", "Hey");
+        other.selector = QStringLiteral("#other");
+        session.setEdits({other, text("Hello", "Hey")});
+        session.removeEdits({text("Bye", "Hi")});
+        QCOMPARE(session.edits()[0].before, QStringLiteral("Hello"));
+        QCOMPARE(session.edits()[1].before, QStringLiteral("Hi"));
     }
 
     void viteHelperMarksSourceLocations()

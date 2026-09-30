@@ -16,7 +16,7 @@ QDialog *vectorize(AgentBridge &bridge, QWidget *window);
 // The island's Live mode: a page, and which folder its code is in (suggested, or none for a mock-up).
 QDialog *live(AgentBridge &bridge, QWidget *window);
 // Live's Deploy (or Save) when there's something to answer first: production the first time, and a GitHub repository.
-QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder = QString(), bool deploying = true);
+QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder = QString(), bool deploying = true, bool fromFrame = false);
 // Details: a deploy's log, redacted.
 QDialog *deployLog(QWidget *window, const QString &path);
 // File ▸ Hand to Agent…: the document in front as a mockup, for an app whose source is in a folder.

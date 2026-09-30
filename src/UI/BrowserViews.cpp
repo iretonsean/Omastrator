@@ -2,6 +2,7 @@
 #include "Canvas/EditorCanvas.h"
 #include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
+#include "UI/LiveFrames.h"
 #include <QCoreApplication>
 #include <QEvent>
 #include <QFileInfo>
@@ -228,6 +229,12 @@ QString BrowserViews::message(const QUuid &frame) const
     default:
         break;
     }
+    // Live's own words over the last picture: the dev server starting, or why it didn't.
+    if (const LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly); live && live->active(frame)) {
+        const LiveFrames::Snapshot snapshot = live->snapshot(frame);
+        if (snapshot.startingServer || snapshot.state == LiveSession::State::failed)
+            return snapshot.message;
+    }
     return object->browser->url.isEmpty() ? QStringLiteral("No page yet.") : QString();
 }
 
@@ -272,6 +279,8 @@ void BrowserViews::shutdownPool()
     BrowserPool *&instance = poolInstance();
     if (!instance)
         return;
+    // Their sessions live on the pool's thread, which is about to end.
+    LiveFrames::stopAll();
     delete instance;
     instance = nullptr;
     for (BrowserViews *views : std::as_const(instances()))
@@ -318,6 +327,8 @@ QUuid BrowserViews::frameOf(const QUuid &key) const
 
 void BrowserViews::resetAll()
 {
+    // Every frame's Live ends first, so nothing re-attaches to a tab the reset closes.
+    LiveFrames::stopAll();
     for (BrowserViews *views : std::as_const(instances())) {
         for (auto it = views->m_entries.begin(); it != views->m_entries.end(); ++it) {
             views->savePicture(it.key(), *it);
@@ -402,6 +413,69 @@ bool BrowserViews::sameAddress(const QUrl &a, const QUrl &b)
         return url;
     };
     return normal(a) == normal(b);
+}
+
+namespace {
+bool sameOrigin(const QUrl &a, const QUrl &b)
+{
+    return a.scheme() == b.scheme() && a.host() == b.host() && a.port(-1) == b.port(-1);
+}
+
+QUrl moved(const QUrl &url, const QUrl &to)
+{
+    QUrl result = url;
+    result.setScheme(to.scheme());
+    result.setHost(to.host());
+    result.setPort(to.port(-1));
+    return result;
+}
+}
+
+QUrl BrowserViews::toTabUrl(const QUuid &frame, const QUrl &document) const
+{
+    const auto swap = m_swaps.constFind(frame);
+    return swap != m_swaps.constEnd() && !swap->retired && sameOrigin(document, swap->production) ? moved(document, swap->dev) : document;
+}
+
+QUrl BrowserViews::toDocumentUrl(const QUuid &frame, const QUrl &tab) const
+{
+    const auto swap = m_swaps.constFind(frame);
+    return swap != m_swaps.constEnd() && sameOrigin(tab, swap->dev) ? moved(tab, swap->production) : tab;
+}
+
+void BrowserViews::settleSwap(const QUuid &frame, const QUrl &tab)
+{
+    const auto swap = m_swaps.constFind(frame);
+    if (swap != m_swaps.constEnd() && swap->retired && !sameOrigin(tab, swap->dev))
+        m_swaps.remove(frame);
+}
+
+void BrowserViews::useDevServer(const QUuid &frame, const QUrl &server)
+{
+    const auto entry = m_entries.find(frame);
+    if (server.isEmpty()) {
+        const auto swap = m_swaps.find(frame);
+        if (swap == m_swaps.end() || swap->retired)
+            return;
+        // Still on the server's page when Live ends: the tab goes back to production, and its events keep the swap until then.
+        if (entry != m_entries.end() && !entry->navigated.isEmpty() && !sameOrigin(entry->navigated, swap->dev))
+            m_swaps.erase(swap);
+        else
+            swap->retired = true;
+    } else {
+        const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
+        if (!object || !object->browser || object->browser->url.isEmpty())
+            return;
+        m_swaps.insert(frame, DevSwap{server, object->browser->url});
+    }
+    // The next sync sees an address the tab isn't on, and goes there, keeping the scroll.
+    if (entry != m_entries.end()) {
+        const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
+        if (!object || !object->browser || entry->navigated != toTabUrl(frame, object->browser->url))
+            entry->navigated = QUrl();
+    }
+    scheduleReconcile();
+    emit frameChanged(frame);
 }
 
 void BrowserViews::note(const QUuid &frame, State state)
@@ -544,6 +618,9 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
     // A tab, shown: awake, at the frame's size, on its address, streaming.
     if (entry.frozen) {
         call(entry, QStringLiteral("Page.setWebLifecycleState"), {{"state", "active"}});
+        // Freezing hid the page and "active" doesn't show it again, so it would paint no more frames; focus emulation
+        // shows it.
+        call(entry, QStringLiteral("Emulation.setFocusEmulationEnabled"), {{"enabled", true}});
         entry.frozen = false;
     }
     BrowserViews::pool()->setShown(entry.key, true);
@@ -561,6 +638,7 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
     bool waiting = false;
     Applied &done = entry.applied;
     const bool first = done.css.isEmpty();
+    const bool resized = !first && done.css != want.css;
     if (first || done.css != want.css) {
         // The frame's own size follows at once, since a resize is the point of the preview; the density waits.
         const int density = first ? want.scale : done.scale;
@@ -578,24 +656,36 @@ void BrowserViews::sync(const QUuid &frame, Entry &entry, const Want &want)
             waiting = true;
         }
     }
-    if (!sameAddress(entry.navigated, url) || entry.navigated.isEmpty()) {
-        entry.navigated = url;
+    const QUrl tabUrl = toTabUrl(frame, url);
+    if (!sameAddress(entry.navigated, tabUrl) || entry.navigated.isEmpty()) {
+        entry.navigated = tabUrl;
         entry.loading = true;
         entry.restoreScroll = !entry.scroll.isNull();
-        call(entry, QStringLiteral("Page.navigate"), {{"url", url.toString()}});
+        call(entry, QStringLiteral("Page.navigate"), {{"url", tabUrl.toString()}});
         emit frameChanged(frame);
     }
+    const auto cast = [&](QSize size) {
+        // A screencast that is running is stopped first: Chromium ignores a second start.
+        if (entry.casting)
+            call(entry, QStringLiteral("Page.stopScreencast"));
+        call(entry, QStringLiteral("Page.startScreencast"),
+             {{"format", "jpeg"}, {"quality", 80}, {"maxWidth", size.width()}, {"maxHeight", size.height()}, {"everyNthFrame", 1}});
+        entry.casting = true;
+        done.cast = size;
+    };
+    bool started = false;
     if (!entry.casting || done.cast != want.cast) {
         if (!entry.casting || now - wait.castSince >= castSettleMs) {
-            call(entry, QStringLiteral("Page.startScreencast"),
-                 {{"format", "jpeg"}, {"quality", 80}, {"maxWidth", want.cast.width()}, {"maxHeight", want.cast.height()},
-                  {"everyNthFrame", 1}});
-            entry.casting = true;
-            done.cast = want.cast;
+            cast(want.cast);
+            started = true;
         } else {
             waiting = true;
         }
     }
+    // Chromium doesn't send the reflowed page after a resize on its own: starting again asks for it, at the size the
+    // frame has been casting at until the new one settles.
+    if (resized && !started && entry.casting)
+        cast(done.cast);
     if (entry.state != State::live)
         note(frame, State::live);
     if (waiting)
@@ -610,6 +700,8 @@ void BrowserViews::pause(const QUuid &frame, Entry &entry)
         entry.applied.cast = {};
     }
     if (!entry.frozen) {
+        // A page emulating focus stays visible, and a visible page doesn't freeze.
+        call(entry, QStringLiteral("Emulation.setFocusEmulationEnabled"), {{"enabled", false}});
         call(entry, QStringLiteral("Page.setWebLifecycleState"), {{"state", "frozen"}});
         entry.frozen = true;
     }
@@ -648,6 +740,8 @@ void BrowserViews::dropEntry(const QUuid &frame)
     const auto found = m_entries.find(frame);
     if (found == m_entries.end())
         return;
+    if (LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly))
+        live->stop(frame);
     if (found->state == State::live || found->state == State::paused || found->state == State::opening)
         BrowserViews::pool()->close(found->key);
     m_frameOfKey.remove(found->key);
