@@ -1,3 +1,4 @@
+#include "../RestoreEnvironment.h"
 #include "Live/BrowserPool.h"
 #include <QDir>
 #include <QElapsedTimer>
@@ -23,6 +24,7 @@ private slots:
         file.write(QStringLiteral("#!/bin/sh\necho $$ > '%1'\nexec sleep 60\n").arg(pidFile).toUtf8());
         file.close();
         file.setPermissions(file.permissions() | QFileDevice::ExeOwner);
+        const RestoreEnvironment chromium("OMASTRATOR_CHROMIUM");
         qputenv("OMASTRATOR_CHROMIUM", script.toUtf8());
         qputenv("OMASTRATOR_RUNTIME_DIR", directory.filePath(QStringLiteral("runtime")).toUtf8());
 
@@ -47,7 +49,6 @@ private slots:
         QVERIFY2(timer.elapsed() < 5'000, qPrintable(QString::number(timer.elapsed())));
         // The process is gone (or a zombie awaiting its parent, which is the pool's own QProcess: reaped by then).
         QTRY_VERIFY_WITH_TIMEOUT(::kill(static_cast<pid_t>(pid), 0) != 0, 3'000);
-        qunsetenv("OMASTRATOR_CHROMIUM");
     }
 };
 

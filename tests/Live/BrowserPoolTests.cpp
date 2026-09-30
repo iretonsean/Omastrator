@@ -1,3 +1,4 @@
+#include "../RestoreEnvironment.h"
 #include "Agent/BrowserPoolState.h"
 #include "Live/BrowserPool.h"
 #include <QDir>
@@ -233,12 +234,12 @@ private slots:
 
     void aBrowserThatIsMissingFailsTheOpen()
     {
+        const RestoreEnvironment chromium("OMASTRATOR_CHROMIUM");
         qputenv("OMASTRATOR_CHROMIUM", "/nonexistent/chromium");
         BrowserPool pool(options());
         QSignalSpy failed(&pool, &BrowserPool::openFailed);
         pool.open(QUuid::createUuid());
         QVERIFY(failed.wait(15'000));
-        qunsetenv("OMASTRATOR_CHROMIUM");
         QVERIFY(!pool.isRunning());
         QVERIFY(!failed.first().at(1).toString().isEmpty());
     }

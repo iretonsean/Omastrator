@@ -1,6 +1,7 @@
 #include "../Agent/FakeAgents.h"
 #include "WidgetCleanup.h"
 #include "../Cloud/FakeCloud.h"
+#include "../RestoreEnvironment.h"
 #include "Agent/AgentLauncher.h"
 #include "Document/PathOperations.h"
 #include "Live/Deploy.h"
@@ -245,6 +246,7 @@ private slots:
     void aBrowserViewSharesItsNewestPicture()
     {
         // No Chromium is started: the picture is put in as if a page had streamed it a moment ago.
+        const RestoreEnvironment chromium("OMASTRATOR_CHROMIUM");
         qputenv("OMASTRATOR_CHROMIUM", "/nonexistent/chromium");
         m_cloud->addRemote(QStringLiteral("work"), QStringLiteral("drive"));
         Window w;
@@ -258,7 +260,6 @@ private slots:
         QVERIFY(w.session().document()->find(frame)->browser->picture.isNull());
         w.find<QToolButton>(QStringLiteral("shareToolbar"))->click();
         QVERIFY(w.waitShared());
-        qunsetenv("OMASTRATOR_CHROMIUM");
         const QStringList files = filesIn(m_cloud->remoteFile(QStringLiteral("work"), QStringLiteral("Omastrator Shares")));
         QCOMPARE(files.size(), 1);
         const QImage shared(m_cloud->remoteFile(QStringLiteral("work"), QStringLiteral("Omastrator Shares/") + files.front()));

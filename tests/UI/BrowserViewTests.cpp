@@ -94,6 +94,8 @@ class BrowserViewTests : public QObject {
 
 private:
     QTemporaryDir m_directory;
+    // The Chromium the run was given, put back after a test that pretends there is none.
+    QByteArray m_chromium = qgetenv("OMASTRATOR_CHROMIUM");
     StaticServer m_server;
 
     QUrl page(const QString &name) const { return QUrl(m_server.url().toString() + name); }
@@ -122,7 +124,10 @@ private slots:
         BrowserViews::setLiveOpen(false);
         BrowserViews::setPausedCloseMs(5 * 60 * 1000);
         BrowserViews::shutdownPool();
-        qunsetenv("OMASTRATOR_CHROMIUM");
+        if (m_chromium.isEmpty())
+            qunsetenv("OMASTRATOR_CHROMIUM");
+        else
+            qputenv("OMASTRATOR_CHROMIUM", m_chromium);
     }
 
     void aFrameStreamsItsPageAtTheFramesWidth()
@@ -356,6 +361,14 @@ private slots:
         for (const QPointF at : {QPointF(box.left() + 10, box.bottom() - 10), QPointF(box.center().x(), box.bottom() - 10), QPointF(box.right() - 40, box.bottom() - 10)}) {
             const QColor pixel = drawn.pixelColor(at.toPoint());
             QVERIFY2(pixel.red() > 180 && pixel.green() < 100 && pixel.blue() < 100, qPrintable(QStringLiteral("the canvas isn't drawing the narrow layout: %1 at %2,%3").arg(pixel.name()).arg(at.x()).arg(at.y())));
+        }
+        // And the canvas widget itself, through its own live-picture wiring (mid-height: the sign-in notice sits at the bottom).
+        const QImage grabbed = rig.canvas.grab().toImage();
+        const qreal ratio = grabbed.devicePixelRatio();
+        for (const QPointF at : {QPointF(box.left() + 30, box.center().y()), box.center(), QPointF(box.right() - 60, box.center().y())}) {
+            const QPointF view = rig.canvas.documentToView().map(at) * ratio;
+            const QColor pixel = grabbed.pixelColor(view.toPoint());
+            QVERIFY2(pixel.red() > 180 && pixel.green() < 100 && pixel.blue() < 100, qPrintable(QStringLiteral("the canvas widget isn't showing the narrow layout: %1 at %2,%3").arg(pixel.name()).arg(at.x()).arg(at.y())));
         }
         rig.session.cancelInteraction();
     }

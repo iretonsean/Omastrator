@@ -1,3 +1,4 @@
+#include "../RestoreEnvironment.h"
 #include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
 #include "Document/BrowserAddress.h"
@@ -7,7 +8,6 @@
 #include <QFile>
 #include <QLineEdit>
 #include <QProcess>
-#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -609,14 +609,8 @@ private slots:
         file.write("#!/bin/sh\nexit 1\n");
         file.close();
         QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
-        const QByteArray before = qgetenv("OMASTRATOR_CHROMIUM");
+        const RestoreEnvironment chromium("OMASTRATOR_CHROMIUM");
         qputenv("OMASTRATOR_CHROMIUM", script.toUtf8());
-        const auto restore = qScopeGuard([&before] {
-            if (before.isEmpty())
-                qunsetenv("OMASTRATOR_CHROMIUM");
-            else
-                qputenv("OMASTRATOR_CHROMIUM", before);
-        });
         BrowserPool::Options options;
         options.profile = QDir(m_directory.path()).filePath(QStringLiteral("profile"));
         options.cache = Browser::Cache::minimal;
@@ -654,6 +648,7 @@ private slots:
         file.write("#!/bin/sh\necho \"$@\" > \"$0.arguments\"\nsleep 1\n");
         file.close();
         QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        const RestoreEnvironment chromium("OMASTRATOR_CHROMIUM");
         qputenv("OMASTRATOR_CHROMIUM", script.toUtf8());
         BrowserPool::Options options;
         options.profile = directory.filePath(QStringLiteral("profile"));
@@ -687,7 +682,6 @@ private slots:
         QVERIFY(views->state(rig.frame) != BrowserViews::State::liveOpen);
         BrowserViews::setSignInAnswered(false);
         BrowserViews::shutdownPool();
-        qunsetenv("OMASTRATOR_CHROMIUM");
     }
 };
 
