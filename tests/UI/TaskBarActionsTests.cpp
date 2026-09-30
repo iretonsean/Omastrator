@@ -251,26 +251,6 @@ private slots:
         qputenv("FAKE_AGENT", "sh");
     }
 
-    // The tray light and `omastrator island ask` send show_window with focus = ask: the window comes forward and Ask AI… has the keyboard.
-    void showWindowCanFocusTheAskField()
-    {
-        Window w;
-        w.box(20);
-        auto *ask = w.item<QLineEdit>(QStringLiteral("taskBarAsk"));
-        QVERIFY(ask && ask->isEnabled());
-        w.canvas().setFocus();
-        QTRY_VERIFY(QApplication::focusWidget() != ask);
-        w.view.agent()->tools().call(QStringLiteral("show_window"), {{"raise", true}, {"focus", "ask"}});
-        QTRY_COMPARE(QApplication::focusWidget(), ask);
-        // Without focus, a shown window keeps its keyboard where it was.
-        w.canvas().setFocus();
-        w.view.agent()->tools().call(QStringLiteral("show_window"), {{"raise", true}});
-        QCOMPARE(QApplication::focusWidget(), &w.canvas());
-        // The window's own method, the one the app's stub names.
-        w.view.focusAsk();
-        QTRY_COMPARE(QApplication::focusWidget(), ask);
-    }
-
     void moreOpensTheSelectionsMenu()
     {
         Window w;

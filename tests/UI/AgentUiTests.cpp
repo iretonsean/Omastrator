@@ -169,6 +169,33 @@ private slots:
         QTRY_COMPARE(QApplication::focusWidget(), static_cast<QWidget *>(window.findChild<ContextBar *>(QStringLiteral("contextBar"))->askField()));
     }
 
+    // `omastrator island ask` and the tray light send show_window with focus = ask.
+    void showWindowCanFocusTheAskField()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        workspace.createDocument(QSizeF(200, 200));
+        QVERIFY(QTest::qWaitForWindowActive(&window));
+        QWidget *ask = window.findChild<ContextBar *>(QStringLiteral("contextBar"))->askField();
+        window.content()->canvas().setFocus();
+        QTRY_VERIFY(QApplication::focusWidget() != ask);
+        window.agent()->tools().call(QStringLiteral("show_window"), {{"raise", true}, {"focus", "ask"}});
+        QTRY_COMPARE(QApplication::focusWidget(), ask);
+        // Without focus, a shown window keeps its keyboard where it was.
+        window.content()->canvas().setFocus();
+        window.agent()->tools().call(QStringLiteral("show_window"), {{"raise", true}});
+        QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(&window.content()->canvas()));
+        // Only "ask" is a field to focus.
+        bool refused = false;
+        try {
+            window.agent()->tools().call(QStringLiteral("show_window"), {{"focus", "layers"}});
+        } catch (const AgentProtocol::Error &failure) {
+            refused = failure.code == AgentProtocol::invalidParams;
+        }
+        QVERIFY(refused);
+    }
+
     // Hold the mic: pw-record fills a WAV, voxtype transcribes it, and the grammar runs it.
     void theMicRecordsTranscribesAndRuns()
     {
