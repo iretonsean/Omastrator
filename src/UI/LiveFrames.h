@@ -59,8 +59,10 @@ public:
     QList<QUuid> frames() const { return m_frames.keys(); }
     Snapshot snapshot(const QUuid &frame) const;
 
-    // Runs `command` on the session, on the pool's thread; `done` gets its result on this thread.
-    void run(const QUuid &frame, std::function<QString(LiveSession &)> command, Done done = {});
+    // Runs `command` on the session, on the pool's thread; `done` gets its result on this thread. With a `context`, `done` is not
+    // called once that object has gone: a `done` that captures its owner passes the owner, as a tab switch ends the timeline
+    // and its editor while a seek is still in flight.
+    void run(const QUuid &frame, std::function<QString(LiveSession &)> command, Done done = {}, QObject *context = nullptr);
     void edit(const QUuid &frame, const QString &selector, const QString &property, const QString &value, Done done = {});
     void undo(const QUuid &frame, Done done = {});
     void redo(const QUuid &frame, Done done = {});

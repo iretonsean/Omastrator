@@ -729,6 +729,11 @@ void Menus::watchFront(EditorCanvas *canvas)
             synchronize();
         });
         m_timelineChanged = connect(timeline, &MotionTimeline::closed, this, &Menus::synchronize);
+        // A visible inspector was bound to the tab that went: it follows the front document's timeline.
+        if (m_motionPanel.isVisible())
+            showMotion();
+    } else if (m_motionPanel.isVisible()) {
+        m_motionPanel.close();
     }
     if (m_typeStyles)
         m_typeStyles->follow();

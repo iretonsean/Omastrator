@@ -321,7 +321,9 @@
       const end = anim.effect.getComputedTiming().endTime;
       finished = anim.playState === "finished" || (isFinite(end) && typeof anim.currentTime === "number" && anim.currentTime >= end);
     } catch (e) { /* not a keyframe effect */ }
-    records.set(anim, { offset, finished });
+    // One the page paused itself stays paused when the hold ends: the page's own choice, not Omastrator's.
+    const wasPaused = anim.playState === "paused";
+    records.set(anim, { offset, finished, wasPaused });
     try {
       anim.pause();
       if (late) {
@@ -457,7 +459,9 @@
       chain++;
       scheduled = false;
       const all = animations();
-      const starts = all.filter((a) => !scrollKind(a) && typeof a.startTime === "number").map((a) => a.startTime);
+      // Only what is still running sets the zero: a load animation that ended minutes ago and is kept by fill: forwards would
+      // stretch the ruler back to it.
+      const starts = all.filter((a) => !scrollKind(a) && typeof a.startTime === "number" && a.playState !== "finished").map((a) => a.startTime);
       base = starts.length ? Math.min(...starts) : 0;
       for (const anim of all) adopt(anim, false);
       let reached = 0;
@@ -481,6 +485,7 @@
       chain++;
       scheduled = false;
       for (const [anim, record] of records) {
+        if (record.wasPaused) continue;
         try {
           const end = anim.effect.getComputedTiming().endTime;
           if (record.finished || (isFinite(end) && anim.currentTime >= end)) anim.finish(); else anim.play();
@@ -549,7 +554,12 @@
       const before = getComputedStyle(element).getPropertyValue(property).trim();
       const styleBefore = element.getAttribute("style") || "";
       // An empty value takes the property off the element, so the rule's own (or the group's) applies again.
-      if (value === "") element.style.removeProperty(property); else element.style.setProperty(property, value);
+      if (value === "") {
+        element.style.removeProperty(property);
+        // The rule may hold one itself (saved in an earlier session): the page keeps showing it until the code is written and
+        // reloaded, so the group's timing (no extra delay) is set inline for the preview.
+        if (property === "--delay-extra" && getComputedStyle(element).getPropertyValue(property).trim() !== "") element.style.setProperty(property, "0ms");
+      } else element.style.setProperty(property, value);
       return { before, styleBefore, styleAfter: element.getAttribute("style") || "", classes: element.getAttribute("class") || "" };
     },
     // Where the elements are, as boxes in the page's px: {selector: {x, y, width, height}}; a gone element is left out.

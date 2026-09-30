@@ -120,6 +120,9 @@ BrowserViews::~BrowserViews()
     instances().removeAll(this);
     // A preview shown here goes with the document: its server and worktree, and nothing was written.
     if (m_agent) {
+        // Discarding announces itself to this object's own slot, which reads the session that is going: this object is told
+        // nothing about it.
+        disconnect(m_agent, nullptr, this, nullptr);
         const QStringList folders = m_previewed.values();
         for (const QString &folder : folders)
             m_agent->discardPreview(folder);

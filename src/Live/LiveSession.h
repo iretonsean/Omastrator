@@ -117,7 +117,8 @@ public:
     QJsonObject status() const;
 
     // Runs `expression` in the page and returns its value.
-    QJsonValue evaluate(const QString &expression, QString *error = nullptr);
+    // `timeoutMs` 0 is the connection's own wait; leaving a frame passes a short one.
+    QJsonValue evaluate(const QString &expression, QString *error = nullptr, int timeoutMs = 0);
     // The bar's path for one edit: snap, apply, record. Returns why it failed, or empty.
     QString edit(const QString &selector, const QString &property, const QString &value);
     // Live's own undo: each edit put back as it was, per session. Both return why they couldn't, or empty.

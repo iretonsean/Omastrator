@@ -1,6 +1,8 @@
 #include "Live/Motion.h"
 #include "Live/MotionCode.h"
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -290,6 +292,45 @@ private slots:
         QVERIFY(!found[0].reducedMotion);
         QVERIFY(MotionCode::blocks(QString()).isEmpty());
         QVERIFY(MotionCode::blocks(directory.filePath(QStringLiteral("missing"))).isEmpty());
+    }
+    void aBlockMentionsAnAnimationAsAWholeWord()
+    {
+        MotionCode::Block block;
+        block.text = QStringLiteral("@keyframes nl-sunrise { from { opacity: 0; } }\n.a { animation: nl-sunrise 1s, nl-rise-2 2s; }");
+        QVERIFY(!MotionCode::mentions(block, QStringLiteral("rise")));
+        QVERIFY(!MotionCode::mentions(block, QStringLiteral("nl-rise")));
+        QVERIFY(MotionCode::mentions(block, QStringLiteral("nl-sunrise")));
+        QVERIFY(MotionCode::mentions(block, QStringLiteral("nl-rise-2")));
+        QVERIFY(!MotionCode::mentions(block, QString()));
+        block.text += QStringLiteral(" .b { animation-name: rise; }");
+        QVERIFY(MotionCode::mentions(block, QStringLiteral("rise")));
+    }
+
+    void theCodeTabNeverEntersNodeModulesAndReadsAgainOnlyWhenAFileChanged()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto write = [&](const QString &path, const QByteArray &text) {
+            QDir().mkpath(QFileInfo(directory.filePath(path)).absolutePath());
+            QFile file(directory.filePath(path));
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write(text);
+        };
+        write(QStringLiteral("src/one.css"), "/* omastrator:motion one */\na{}\n/* omastrator:motion end */\n");
+        // A hundred files under node_modules would spend the limit if the walk went in.
+        for (int i = 0; i < 120; ++i)
+            write(QStringLiteral("node_modules/pkg/f%1.css").arg(i), "a{}\n");
+        write(QStringLiteral("node_modules/pkg/zz.css"), "/* omastrator:motion inside */\na{}\n/* omastrator:motion end */\n");
+        write(QStringLiteral("src/zz.css"), "b{}\n");
+        const QList<MotionCode::Block> first = MotionCode::blocks(directory.path(), 10);
+        QCOMPARE(first.size(), 1);
+        QCOMPARE(first[0].name, QStringLiteral("one"));
+        // The same files: the answer is the same, and a file that changed is read again.
+        QCOMPARE(MotionCode::blocks(directory.path(), 10).size(), 1);
+        write(QStringLiteral("src/zz.css"), "/* omastrator:motion two */\nb{}\n/* omastrator:motion end */\n");
+        const QList<MotionCode::Block> second = MotionCode::blocks(directory.path(), 10);
+        QCOMPARE(second.size(), 2);
+        QCOMPARE(second[1].name, QStringLiteral("two"));
     }
 };
 

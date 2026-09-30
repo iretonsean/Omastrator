@@ -161,6 +161,48 @@ private slots:
         BrowserViews::shutdownPool();
     }
 
+    void aCommandsAnswerNeverReachesAnOwnerThatHasGone()
+    {
+        // No frame runs Live here, so every command is answered with an error through the queue: what an owner that went (a tab
+        // switch ends the timeline while its seek is in flight) must never receive.
+        EditorSession session;
+        LiveFrames *frames = LiveFrames::of(session);
+        const QUuid frame = QUuid::createUuid();
+        int answers = 0;
+        const auto command = [](LiveSession &) { return QString(); };
+        auto owner = std::make_unique<QObject>();
+        frames->run(frame, command, [&answers](const QString &) { ++answers; }, owner.get());
+        owner.reset();
+        QTest::qWait(50);
+        QCOMPARE(answers, 0);
+        // An owner that stays is answered, and so is a call with no owner, as before.
+        QObject stays;
+        frames->run(frame, command, [&answers](const QString &) { ++answers; }, &stays);
+        QTRY_COMPARE_WITH_TIMEOUT(answers, 1, 2000);
+        frames->run(frame, command, [&answers](const QString &) { ++answers; });
+        QTRY_COMPARE_WITH_TIMEOUT(answers, 2, 2000);
+    }
+
+    void aTimelineThatGoesWithItsTabGivesBackTheStreamingRate()
+    {
+        NEEDS_CHROMIUM;
+        EditorSession session;
+        Hosted hosted(session, page(m_server, QStringLiteral("/index.html")));
+        BrowserViews *views = BrowserViews::of(session);
+        auto timeline = std::make_unique<MotionTimeline>(session, hosted.canvas);
+        openAndWait(session, *timeline, hosted.frame);
+        QVERIFY(views->scrubbed(hosted.frame));
+        // Playing keeps a seek in flight almost all the time.
+        timeline->play();
+        QTest::qWait(150);
+        // A tab switch deletes the editor without closing its timeline first.
+        timeline.reset();
+        QVERIFY(!views->scrubbed(hosted.frame));
+        // The answers of what was in flight arrive after it: they reach nobody, and the page goes on.
+        QTest::qWait(600);
+        QVERIFY(LiveFrames::of(session)->active(hosted.frame));
+    }
+
     void siblingsMergeIntoOneRowPerParentAndTheHeaderReadsTheTrigger()
     {
         NEEDS_CHROMIUM;

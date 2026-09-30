@@ -48,6 +48,7 @@ public:
     void notePicture(const QUuid &frame, const QImage &image);
     // The timeline is open on this frame: it streams every picture, as a browsed frame does (docs/MOTION.md, section 2).
     void setScrubbed(const QUuid &frame, bool scrubbed);
+    bool scrubbed(const QUuid &frame) const { return m_scrubbed.contains(frame); }
 
     // Record (docs/MOTION.md, section 8): the frame's page as it paints now, as JPEG bytes. It waits for two animation frames (or
     // a quarter of a second, for a page nobody is looking at), so a seek has painted. The size is the frame's on screen, but at most
@@ -97,6 +98,9 @@ public:
     // Animate (docs/MOTION.md, section 4): asks the agent to write motion for the elements picked on the frame, and previews it
     // from a worktree before anything is saved. Returns why it can't ask; the rest reports through `notice`.
     QString animate(const QUuid &frame, const QString &instruction, bool reducedMotion = true);
+    // Stop before the agent was launched (the page's motion is being read first): nothing is asked after it. `animateEnded` says a
+    // frame's ask is over without the agent taking it up (stopped, or it couldn't start), so a sheet that said "Writing…" resets.
+    void stopAnimate(const QUuid &frame);
     // A second Animate while a preview is open asks; the answer is Keep (nothing starts), Discard (the preview goes, the ask
     // starts) or Cancel (nothing starts). Tests answer it in place of the dialog.
     enum class PreviewAnswer { keep, discard, cancel };
@@ -152,6 +156,8 @@ signals:
     void previewStateChanged(const QUuid &frame);
     // Something the page tried that Browser View refuses, said once to the user.
     void notice(const QString &text);
+    // An Animate ask ended before the agent took it up: stopped, or it couldn't start.
+    void animateEnded(const QUuid &frame);
     // A frame's Browser View switch went on or off, by any door (the switch, a command, undo, an agent, deleting it). The
     // island shows Live controls for a selected frame that is on.
     void browserViewChanged(const QUuid &frame, bool on);
@@ -337,6 +343,8 @@ private:
     void endPreview(const QUuid &frame);
     QPointer<AgentBridge> m_agent;
     QHash<QUuid, std::shared_ptr<Generation>> m_generations;
+    // Frames whose Animate is reading the page's motion before it asks the agent.
+    QSet<QUuid> m_animating;
     QHash<QUuid, Generated> m_generated;
     // When each project last deployed, from the bridge's state (ms since the epoch).
     QHash<QString, qint64> m_deployedAt;

@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 
+class BrowserViews;
 class EditorCanvas;
 class EditorSession;
 class LiveFrames;
@@ -195,12 +196,16 @@ private:
     EditorCanvas &m_canvas;
     QUuid m_frame;
     QPointer<LiveFrames> m_live;
+    // The streaming rate this timeline raised for its frame, put back when it closes or goes with its tab.
+    QPointer<BrowserViews> m_views;
     Motion::Timeline m_timeline;
     QJsonObject m_lastList;
     QString m_status;
     QString m_selected;
     // The states held on the page for the selected row, by selector.
     QStringList m_forced;
+    // Whether the last snapshot said the page was held: a hold that begins again (after a reload) starts with no state forced.
+    bool m_wasHeld = false;
 
     double m_time = 0;
     double m_scroll = 0;

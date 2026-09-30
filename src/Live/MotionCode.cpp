@@ -2,10 +2,11 @@
 #include "Live/CssRules.h"
 #include "Live/MotionWrite.h"
 #include <QDir>
-#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QRegularExpression>
+#include <algorithm>
 
 namespace MotionCode {
 namespace {
@@ -69,28 +70,57 @@ void read(const QString &folder, const QString &path, QList<Block> &out)
 }
 }
 
+namespace {
+// The readable files under `folder`, without ever entering a skipped folder (node_modules alone can hold a hundred thousand).
+void walk(const QDir &dir, int limit, QList<QFileInfo> &files)
+{
+    const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QFileInfo &info : entries) {
+        if (files.size() >= limit)
+            return;
+        if (info.isDir()) {
+            if (!skipped(info.fileName()) && !info.isSymLink())
+                walk(QDir(info.absoluteFilePath()), limit, files);
+        } else if (readable(info.suffix())) {
+            files.append(info);
+        }
+    }
+}
+
+struct Cached {
+    QString signature;
+    QList<Block> blocks;
+};
+}
+
 QList<Block> blocks(const QString &folder, int limit)
 {
     QList<Block> out;
     if (folder.isEmpty() || !QFileInfo(folder).isDir())
         return out;
-    int seen = 0;
-    QDirIterator it(folder, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-    // Folders that are skipped are still entered by the iterator; their files are left by their path.
-    while (it.hasNext() && seen < limit) {
-        const QString path = it.next();
-        const QString relative = QDir(folder).relativeFilePath(path);
-        const QStringList parts = relative.split(QLatin1Char('/'));
-        bool inside = false;
-        for (const QString &part : parts)
-            inside = inside || skipped(part);
-        if (inside || it.fileInfo().isDir() || !readable(it.fileInfo().suffix()))
-            continue;
-        ++seen;
-        read(folder, path, out);
-    }
+    QList<QFileInfo> files;
+    walk(QDir(folder), limit, files);
+    // The Code tab asks on every motion list and every row picked; the files are read again only when one has changed.
+    static QHash<QString, Cached> cache;
+    QString signature;
+    for (const QFileInfo &info : std::as_const(files))
+        signature += QStringLiteral("%1|%2|%3\n").arg(info.absoluteFilePath()).arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch());
+    const QString key = QStringLiteral("%1|%2").arg(folder).arg(limit);
+    if (const auto found = cache.constFind(key); found != cache.constEnd() && found->signature == signature)
+        return found->blocks;
+    for (const QFileInfo &info : std::as_const(files))
+        read(folder, info.absoluteFilePath(), out);
     std::sort(out.begin(), out.end(), [](const Block &a, const Block &b) { return a.file == b.file ? a.firstLine < b.firstLine : a.file < b.file; });
+    cache.insert(key, {signature, out});
     return out;
+}
+
+bool mentions(const Block &block, const QString &name)
+{
+    if (name.isEmpty())
+        return false;
+    const QRegularExpression named(QStringLiteral(R"((?<![\w-])%1(?![\w-]))").arg(QRegularExpression::escape(name)));
+    return block.text.contains(named);
 }
 
 QList<QPair<QString, QString>> tokens(const Block &block)
@@ -111,6 +141,7 @@ Bindings bindings(const Block &block, const QString &animation)
     static const QRegularExpression easing(QStringLiteral(R"(var\(\s*(--ease-[\w-]+))"));
     static const QRegularExpression stagger(QStringLiteral(R"(var\(\s*(--stagger-[\w-]+))"));
     static const QRegularExpression index(QStringLiteral(R"(var\(\s*--i\b)"));
+    static const QRegularExpression extra(QStringLiteral(R"(var\(\s*--delay-extra\b)"));
     const std::vector<CssRules::Rule> rules = CssRules::scan(block.text);
     for (const CssRules::Rule &rule : rules) {
         if (rule.prelude.startsWith(QLatin1Char('@')))
@@ -135,6 +166,8 @@ Bindings bindings(const Block &block, const QString &animation)
                     found.stagger = stagger.match(value).captured(1);
                 if (QLatin1String(property) != QLatin1String("animation-duration") && index.match(value).hasMatch())
                     found.indexed = true;
+                if (extra.match(value).hasMatch())
+                    found.extraDelay = true;
             }
         }
         return found;

@@ -26,6 +26,9 @@ struct Block {
 // are read, so a big project is never walked in full.
 QList<Block> blocks(const QString &folder, int limit = 600);
 
+// Whether the block is about the animation `name`, as a whole word: "rise" is not "sunrise" or "nl-rise-2".
+bool mentions(const Block &block, const QString &name);
+
 // A block's motion tokens, "--duration-reveal: 480ms" as {"--duration-reveal", "480ms"}, for the inspector.
 QList<QPair<QString, QString>> tokens(const Block &block);
 
@@ -37,6 +40,8 @@ struct Bindings {
     QString stagger;
     // The rule's `animation-delay` reads each element's `--i`: a group whose order is the indices, which Order can rewrite.
     bool indexed = false;
+    // The rule's delay reads `--delay-extra`, so one element's extra delay changes the page (and Save has somewhere to put it).
+    bool extraDelay = false;
 };
 Bindings bindings(const Block &block, const QString &animation);
 

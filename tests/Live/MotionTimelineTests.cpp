@@ -347,6 +347,39 @@ private slots:
         QCOMPARE(opacity("#headline > span:nth-of-type(5)"), 1.0);
     }
 
+    void anAnimationThePageItselfPausedStaysPausedWhenTheHoldEnds()
+    {
+        openPage(QStringLiteral("/index.html"));
+        // The page's own choice: one animation paused before anything is held, one running.
+        eval(QStringLiteral("window.__mine = document.getElementById('lede').animate([{ marginLeft: '0px' }, { marginLeft: '40px' }], { duration: 600000, id: 'mine' });"
+                            "window.__mine.pause();"
+                            "window.__yours = document.getElementById('primary').animate([{ marginLeft: '0px' }, { marginLeft: '40px' }], { duration: 600000, id: 'yours' }); true"));
+        QVERIFY2(hold().isEmpty(), "held");
+        QCOMPARE(eval(QStringLiteral("window.__yours.playState")).toString(), QStringLiteral("paused"));
+        QString failure;
+        onPool([&] { failure = m_live->motionRelease(); });
+        QVERIFY2(failure.isEmpty(), qPrintable(failure));
+        // The timeline lets go of what it paused, and only that.
+        QCOMPARE(eval(QStringLiteral("window.__yours.playState")).toString(), QStringLiteral("running"));
+        QCOMPARE(eval(QStringLiteral("window.__mine.playState")).toString(), QStringLiteral("paused"));
+    }
+
+    void anOldAnimationKeptByItsFillDoesNotMoveTheZeroOfTheRuler()
+    {
+        openPage(QStringLiteral("/index.html"));
+        // The load animations end and are kept by their fill; a new one starts a moment later.
+        QTRY_VERIFY_WITH_TIMEOUT(eval(QStringLiteral("document.getAnimations().filter(a => a.constructor.name === 'CSSAnimation' && !(a.timeline instanceof ScrollTimeline)).every(a => a.playState === 'finished')")).toBool(), 10'000);
+        QTest::qWait(700);
+        eval(QStringLiteral("document.getElementById('lede').animate([{ marginLeft: '0px' }, { marginLeft: '40px' }], { duration: 600000, id: 'young' }); true"));
+        QVERIFY2(hold().isEmpty(), "held");
+        double offset = -1;
+        for (const QJsonObject &each : entries(list(), QStringLiteral("script")))
+            if (each["name"].toString() == QLatin1String("young"))
+                offset = each["offset"].toDouble(-1);
+        // Its own start is the zero, not the load animation's, which was more than half a second earlier.
+        QVERIFY2(offset >= 0 && offset < 50, qPrintable(QString::number(offset)));
+    }
+
     void releasingPlaysAnUnfinishedAnimationOnFromWhereItWas()
     {
         openPage(QStringLiteral("/index.html"));

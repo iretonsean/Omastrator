@@ -200,7 +200,13 @@ MotionTimeline::MotionTimeline(EditorSession &session, EditorCanvas &canvas, QWi
 
 MotionTimeline::~MotionTimeline()
 {
-    registry().remove(&m_session);
+    // A tab switch ends this without close(): the frame goes back to its own streaming rate. The pointer is null when the
+    // session is going too.
+    if (!m_frame.isNull() && m_views)
+        m_views->setScrubbed(m_frame, false);
+    // The registry names this timeline for its session only while it is this one.
+    if (registry().value(&m_session) == this)
+        registry().remove(&m_session);
     // The page plays on when the editor goes away; a Live that has ended has let it go already.
     if (!m_frame.isNull() && m_live && m_live->active(m_frame))
         m_live->run(m_frame, [](LiveSession &session) { return session.motionRelease(); });
@@ -260,7 +266,8 @@ QString MotionTimeline::open(const QUuid &frame)
     }
     m_live = LiveFrames::of(m_session);
     connect(m_live, &LiveFrames::changed, this, &MotionTimeline::onLiveChanged, Qt::UniqueConnection);
-    BrowserViews::of(m_session)->setScrubbed(frame, true);
+    m_views = BrowserViews::of(m_session);
+    m_views->setScrubbed(frame, true);
     m_canEncode = !FrameRecorder::ffmpeg().isEmpty();
     m_recordedText.clear();
     m_wantHold = true;
@@ -298,7 +305,8 @@ void MotionTimeline::close()
     m_selectedBar = -1;
     if (m_live && m_live->active(frame))
         m_live->run(frame, [](LiveSession &session) { return session.motionRelease(); });
-    BrowserViews::of(m_session)->setScrubbed(frame, false);
+    if (m_views)
+        m_views->setScrubbed(frame, false);
     m_timeline = {};
     m_lastList = {};
     m_selected.clear();
@@ -327,6 +335,10 @@ void MotionTimeline::onLiveChanged(const QUuid &frame)
         return;
     }
     const LiveFrames::Snapshot snapshot = m_live->snapshot(frame);
+    // A reload drops the states the session had forced; the same row, picked again, forces its state again.
+    if (snapshot.motionHeld && !m_wasHeld)
+        m_forced.clear();
+    m_wasHeld = snapshot.motionHeld;
     if (snapshot.state == LiveSession::State::running)
         m_status = m_previewReduced ? tr("No motion when reduced.") : tr("No motion on this page yet.");
     else
@@ -374,7 +386,7 @@ void MotionTimeline::hold()
                 });
         }
         syncHeader();
-    });
+    }, this);
 }
 
 void MotionTimeline::refresh(const QJsonObject &list)
@@ -489,7 +501,7 @@ void MotionTimeline::pump()
         if (!error.isEmpty())
             emit notice(error);
         sent();
-    });
+    }, this);
 }
 
 // The seek was answered and its picture arrived (or the wait ran out): the next one may go.
@@ -666,7 +678,7 @@ void MotionTimeline::selectBar(const QString &id, int bar)
     }, [this, frame](const QString &error) {
         if (frame == m_frame && !error.isEmpty())
             emit notice(error);
-    });
+    }, this);
     m_tracks->update();
     if (m_code)
         rebuildCode();

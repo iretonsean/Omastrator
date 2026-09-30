@@ -165,19 +165,28 @@ LiveFrames::Snapshot LiveFrames::snapshot(const QUuid &frame) const
     return found == m_frames.constEnd() ? Snapshot{} : found->snapshot;
 }
 
-void LiveFrames::run(const QUuid &frame, std::function<QString(LiveSession &)> command, Done done)
+void LiveFrames::run(const QUuid &frame, std::function<QString(LiveSession &)> command, Done done, QObject *context)
 {
+    const QPointer<QObject> guard(context);
+    const bool guarded = context != nullptr;
     const auto found = m_frames.constFind(frame);
     if (found == m_frames.constEnd() || !alive(found->pool)) {
         if (done)
-            QMetaObject::invokeMethod(this, [done] { done(QStringLiteral("Live isn't running on that frame.")); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(this, [done, guard, guarded] {
+                if (!guarded || guard)
+                    done(QStringLiteral("Live isn't running on that frame."));
+            }, Qt::QueuedConnection);
         return;
     }
-    found->pool->run([session = QPointer<LiveSession>(found->session), command = std::move(command), done = std::move(done), owner = QPointer<LiveFrames>(this)] {
+    found->pool->run([session = QPointer<LiveSession>(found->session), command = std::move(command), done = std::move(done), owner = QPointer<LiveFrames>(this), guard, guarded] {
         // A session that has gone still answers, so whatever waits on the answer (a clearPending's bookkeeping) is let go.
         const QString result = session ? command(*session) : QStringLiteral("Live isn't running on that frame.");
         if (done && owner)
-            QMetaObject::invokeMethod(owner.data(), [done, result] { done(result); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(owner.data(), [done, result, guard, guarded] {
+                // The owner of `done` may have gone while the command ran.
+                if (!guarded || guard)
+                    done(result);
+            }, Qt::QueuedConnection);
     });
 }
 

@@ -470,7 +470,7 @@ QJsonObject LiveSession::status() const
             {"extension", m_link && m_link->isConnected()}};
 }
 
-QJsonValue LiveSession::evaluate(const QString &expression, QString *error)
+QJsonValue LiveSession::evaluate(const QString &expression, QString *error, int timeoutMs)
 {
     if (!m_page) {
         if (error)
@@ -480,7 +480,7 @@ QJsonValue LiveSession::evaluate(const QString &expression, QString *error)
     QString failure;
     const QJsonObject result = call(cdp(), QStringLiteral("Runtime.evaluate"),
                                     {{"expression", expression}, {"returnByValue", true}, {"awaitPromise", true}},
-                                    m_page->sessionId, &failure);
+                                    m_page->sessionId, &failure, timeoutMs > 0 ? timeoutMs : 15'000);
     if (failure.isEmpty() && result.contains("exceptionDetails"))
         failure = result["exceptionDetails"].toObject()["exception"].toObject()["description"].toString();
     if (error)

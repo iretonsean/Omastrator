@@ -37,10 +37,13 @@ QString LiveSession::motionHold()
 
 QString LiveSession::motionRelease()
 {
-    m_motionHeld = false;
-    if (!m_page)
+    if (!m_page) {
+        m_motionHeld = false;
         return {};
+    }
+    // Still held while it lets go, or there is nothing to put back.
     motionLetGo(15'000);
+    m_motionHeld = false;
     m_motion = {};
     emit motionChanged();
     return {};
@@ -49,13 +52,14 @@ QString LiveSession::motionRelease()
 // The page plays on, and every forced state ends. Best effort: the page may be gone.
 void LiveSession::motionLetGo(int timeoutMs)
 {
-    if (!m_page)
+    // Nothing held, forced or emulated: leaving a frame has nothing to put back, and asks the page nothing.
+    if (!m_page || (!m_motionHeld && m_forced.isEmpty() && !m_agentsOn && !m_reducedEmulated))
         return;
     // Every wait below runs this thread's events, and the tab may go in one of them: the page is looked at again after each.
     const QString session = m_page->sessionId;
     if (!m_forced.isEmpty()) {
         // The overlay learns first, so it drops the transitions back that letting go starts.
-        evaluate(QStringLiteral("window.__oma && window.__oma.motion && window.__oma.motion.setForced([])"));
+        evaluate(QStringLiteral("window.__oma && window.__oma.motion && window.__oma.motion.setForced([])"), nullptr, timeoutMs);
         const QStringList selectors = m_forced.keys();
         m_forced.clear();
         for (const QString &selector : selectors) {
@@ -77,7 +81,7 @@ void LiveSession::motionLetGo(int timeoutMs)
         m_reducedEmulated = false;
         call(cdp(), QStringLiteral("Emulation.setEmulatedMedia"), {{"features", QJsonArray()}}, session, nullptr, timeoutMs);
     }
-    evaluate(QStringLiteral("window.__oma && window.__oma.motion && window.__oma.motion.release()"));
+    evaluate(QStringLiteral("window.__oma && window.__oma.motion && window.__oma.motion.release()"), nullptr, timeoutMs);
 }
 
 QString LiveSession::motionSeek(double ms)
