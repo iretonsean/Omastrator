@@ -108,7 +108,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   pick a row to select its elements. Window ▸ Motion shows what the row does
   (start, easing, duration, stagger, keyframes) and the Code tab reads the
   marked block in your project's code. Esc leaves Edit Page and lets the page
-  play on.
+  play on. Record MP4 in the timeline's header records the frame, not the
+  screen: the timeline plays the motion by seeking, one step per picture at 30
+  frames a second, and ffmpeg makes the file. Its ⋯ has Record GIF…, Record MP4
+  at 60 fps… and Save Frames as PNG…. Nothing is written until you name the
+  file; Stop and Esc end the file where it is. Without ffmpeg (`sudo pacman -S
+  ffmpeg`) Record is off, and the PNG frames still work.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.
