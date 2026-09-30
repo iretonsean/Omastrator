@@ -30,6 +30,16 @@ void StaticServer::stop()
     m_server.close();
 }
 
+void StaticServer::setPaused(bool paused)
+{
+    if (!m_server.isListening())
+        return;
+    if (paused)
+        m_server.pauseAccepting();
+    else
+        m_server.resumeAccepting();
+}
+
 QUrl StaticServer::url() const
 {
     return QUrl(QStringLiteral("http://127.0.0.1:%1/").arg(m_server.serverPort()));

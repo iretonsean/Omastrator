@@ -205,18 +205,41 @@ QString DevServer::install(const QString &folder)
     return {};
 }
 
+void DevServer::setPaused(bool paused)
+{
+    if (m_paused == paused)
+        return;
+    m_paused = paused;
+    m_static.setPaused(paused);
+    const qint64 group = m_process.state() == QProcess::NotRunning ? 0 : m_process.processId();
+    if (group > 0)
+        ::kill(-pid_t(group), paused ? SIGSTOP : SIGCONT);
+}
+
 void DevServer::stop()
 {
     m_static.stop();
     if (m_process.state() != QProcess::NotRunning) {
         const qint64 group = m_process.processId();
-        if (group > 0)
+        if (group > 0) {
             ::kill(-pid_t(group), SIGTERM);
+            // A frozen server only sees the SIGTERM once it runs again.
+            ::kill(-pid_t(group), SIGCONT);
+        }
         if (!m_process.waitForFinished(5000)) {
             if (group > 0)
                 ::kill(-pid_t(group), SIGKILL);
             m_process.waitForFinished(2000);
         }
+        // What the script started may outlive it; the group's id can't be reused while any of them is left.
+        for (int waited = 0; group > 0 && ::kill(-pid_t(group), 0) == 0; waited += 50) {
+            if (waited >= 2000) {
+                ::kill(-pid_t(group), SIGKILL);
+                break;
+            }
+            ::usleep(50'000);
+        }
     }
+    m_paused = false;
     m_url.clear();
 }

@@ -12,6 +12,8 @@ public:
     // Returns why it could not listen, or empty.
     QString serve(const QString &folder);
     void stop();
+    // Frozen: connections wait unanswered until it resumes (Browser View off).
+    void setPaused(bool paused);
     QUrl url() const;
     static QByteArray mimeType(const QString &path);
 

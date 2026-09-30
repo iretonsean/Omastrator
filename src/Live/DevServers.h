@@ -43,6 +43,14 @@ public:
     // Stops everything and waits.
     void stopAll();
 
+    // A frozen lease (its Browser View is off). The server is frozen while every lease on it is (DevServer::setPaused), and
+    // wakes as soon as one isn't, or a new one joins. Frozen while it starts, it freezes once it answers. Releasing a frozen
+    // lease, stopAll and quitting wake the server before they stop it, so none is left stopped.
+    void setPaused(quint64 lease, bool paused);
+    bool paused(const QString &folder) const;
+    // The server's process (its group's leader), or 0 for a static site, one still starting, or none.
+    qint64 processId(const QString &folder) const;
+
     int holders(const QString &folder) const;
     bool running(const QString &folder) const;
 
@@ -68,12 +76,18 @@ private:
         bool stopRequested = false;
         bool ready = false;
         std::vector<quint64> leases;
+        std::vector<quint64> pausedLeases;
+        // Whether the server is (or is about to be) frozen, under the mutex; the server's thread applies it.
+        bool paused = false;
+        qint64 pid = 0;
         std::vector<Waiter> waiters;
         Result result;
     };
     using EntryPtr = std::shared_ptr<Entry>;
 
     void runStart(const EntryPtr &entry);
+    // Freezes or wakes the server to match its leases. Called with the mutex held.
+    void applyPause(const EntryPtr &entry);
     // Takes the entry out of use and stops its server on its own thread. Called with the mutex held.
     void retire(const EntryPtr &entry);
     void reap(bool all);

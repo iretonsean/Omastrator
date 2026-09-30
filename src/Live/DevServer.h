@@ -34,6 +34,12 @@ public:
     // Starts the project and waits until it answers. Returns why it couldn't, or empty.
     QString start(const QString &folder, int timeoutMs = 120'000);
     void stop();
+    // Freezes the server, or wakes it: its whole process group is stopped (SIGSTOP) and continued (SIGCONT), so it keeps
+    // its port, state and PID. A static site stops answering instead.
+    void setPaused(bool paused);
+    bool isPaused() const { return m_paused; }
+    // The process group's leader (the server's own process), or 0 for a static site or none.
+    qint64 processId() const { return m_process.state() == QProcess::NotRunning ? 0 : m_process.processId(); }
     QUrl url() const { return m_url; }
     const DevCommand &command() const { return m_command; }
     QString output() const { return QString::fromUtf8(m_output); }
@@ -53,6 +59,7 @@ private:
     DevCommand m_command;
     QUrl m_url;
     QByteArray m_output;
+    bool m_paused = false;
     // Runs the package manager's install and waits for it. Returns why it failed, or empty.
     QString install(const QString &folder);
 };

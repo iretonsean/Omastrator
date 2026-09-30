@@ -52,6 +52,8 @@ quint64 DevServers::acquire(const QString &folder, QObject *context, Done done)
         const EntryPtr entry = found->second;
         entry->leases.push_back(lease);
         m_leases.insert(lease, entry);
+        // A new holder wants a server that answers.
+        applyPause(entry);
         const Waiter waiter{lease, context, std::move(done)};
         if (entry->ready)
             deliver(waiter, entry->result);
@@ -120,10 +122,14 @@ void DevServers::runStart(const EntryPtr &entry)
                 return;
             entry->result = result;
             waiters = std::exchange(entry->waiters, {});
-            if (failure.isEmpty())
+            if (failure.isEmpty()) {
                 entry->ready = true;
-            else
+                entry->pid = server->processId();
+                // Its frame was turned off while it started.
+                applyPause(entry);
+            } else {
                 retire(entry);
+            }
         }
         for (const Waiter &waiter : waiters)
             deliver(waiter, result);
@@ -164,9 +170,12 @@ void DevServers::release(quint64 lease, bool wait)
         if (!entry)
             return;
         std::erase(entry->leases, lease);
+        std::erase(entry->pausedLeases, lease);
         std::erase_if(entry->waiters, [&](const Waiter &each) { return each.lease == lease; });
-        if (!entry->leases.empty())
+        if (!entry->leases.empty()) {
+            applyPause(entry);
             return;
+        }
         retire(entry);
         retired = entry;
     }
@@ -174,6 +183,50 @@ void DevServers::release(quint64 lease, bool wait)
     if (wait)
         reapEntry(retired);
     reap(false);
+}
+
+void DevServers::setPaused(quint64 lease, bool paused)
+{
+    QMutexLocker lock(&m_mutex);
+    const EntryPtr entry = m_leases.value(lease);
+    if (!entry)
+        return;
+    std::erase(entry->pausedLeases, lease);
+    if (paused)
+        entry->pausedLeases.push_back(lease);
+    applyPause(entry);
+}
+
+void DevServers::applyPause(const EntryPtr &entry)
+{
+    const bool wanted = entry->ready && !entry->leases.empty() && entry->pausedLeases.size() == entry->leases.size();
+    if (wanted == entry->paused)
+        return;
+    entry->paused = wanted;
+    // Queued, so it never lands inside start()'s own waiting; it reads the wish when it runs, and the last one wins.
+    QMetaObject::invokeMethod(entry->worker, [this, entry] {
+        bool freeze = false;
+        {
+            QMutexLocker lock(&m_mutex);
+            freeze = entry->paused;
+        }
+        if (entry->server && !entry->starting)
+            entry->server->setPaused(freeze);
+    }, Qt::QueuedConnection);
+}
+
+bool DevServers::paused(const QString &folder) const
+{
+    QMutexLocker lock(&m_mutex);
+    const auto found = m_entries.find(keyFor(folder));
+    return found != m_entries.end() && found->second->paused;
+}
+
+qint64 DevServers::processId(const QString &folder) const
+{
+    QMutexLocker lock(&m_mutex);
+    const auto found = m_entries.find(keyFor(folder));
+    return found == m_entries.end() || !found->second->ready ? 0 : found->second->pid;
 }
 
 void DevServers::stopAll()
