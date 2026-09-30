@@ -5,6 +5,7 @@
 #include "Agent/Island.h"
 #include "Agent/StatusStream.h"
 #include "FakeAgentHost.h"
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -77,6 +78,8 @@ private slots:
         qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
         // Nothing here may start a real Omastrator, or reach the real Hyprland.
         qputenv("OMASTRATOR_APP", "/bin/true");
+        // Nothing here may pop a notification on the real desktop.
+        qputenv("OMASTRATOR_NOTIFY", "/bin/true");
         m_hyprctl = m_directory.filePath(QStringLiteral("hyprctl"));
         QFile hyprctl(m_hyprctl);
         QVERIFY(hyprctl.open(QIODevice::WriteOnly));
@@ -139,8 +142,11 @@ private slots:
         const QJsonObject composed = StatusStream::compose({}, Island::State());
         QVERIFY(!composed["running"].toBool());
         QCOMPARE(composed["mode"].toString(), QStringLiteral("normal"));
-        for (const char *key : {"tool", "proposal", "waiting", "variations", "ready", "error", "live", "activity", "expanded"})
+        for (const char *key : {"tool", "proposal", "waiting", "variations", "ready", "error", "live", "activity"})
             QVERIFY2(composed.contains(QLatin1String(key)), key);
+        // What only the pill read is gone.
+        for (const char *key : {"expanded", "labelsSeen", "islandShow"})
+            QVERIFY2(!composed.contains(QLatin1String(key)), key);
     }
 
     void followersHearEachChangeOnce()
@@ -186,30 +192,16 @@ private slots:
         QCOMPARE(nextLine()["params"].toObject()["tool"].toString(), QStringLiteral("select"));
     }
 
-    // Interim, pending a rethink of the island: it shows only with Omastrator unless told to show always.
-    void theIslandShowsWithTheAppUnlessToldToShowAlways()
+    // The pill is gone, so is its "show it everywhere" choice.
+    void theVisibilityChoiceIsGone()
     {
-        QFile::remove(Island::visibilityPath());
-        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
-        QCOMPARE(StatusStream::compose({}, Island::State())["islandShow"].toString(), QStringLiteral("with-app"));
-        QCOMPARE(island({QStringLiteral("show"), QStringLiteral("always")}), 0);
-        QCOMPARE(Island::visibility(), QStringLiteral("always"));
-        QCOMPARE(StatusStream::compose({}, Island::State())["islandShow"].toString(), QStringLiteral("always"));
-        // It is kept in the config, not the session's runtime state, so it survives logout.
-        QVERIFY(QFileInfo::exists(Island::visibilityPath()));
-        QVERIFY(!Island::visibilityPath().startsWith(Island::runtimeDirectory()));
-        QCOMPARE(island({QStringLiteral("show"), QStringLiteral("with-app")}), 0);
-        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
-        QVERIFY(!Island::setVisibility(QStringLiteral("sometimes")).isEmpty());
-        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
-        QCOMPARE(Island::setVisibility(QStringLiteral("always")), QString());
-        // Anything unreadable falls back to the default.
-        QFile file(Island::visibilityPath());
-        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        file.write("not json");
-        file.close();
-        QCOMPARE(Island::visibility(), QStringLiteral("with-app"));
-        QFile::remove(Island::visibilityPath());
+        QString out, err;
+        for (const char *choice : {"always", "with-app"}) {
+            QCOMPARE(island({QStringLiteral("show"), QLatin1String(choice)}, &out, &err), 1);
+            QCOMPARE(err.trimmed().count(QLatin1Char('\n')), 0);
+            QVERIFY(err.contains(QLatin1String("pill is gone")));
+        }
+        QVERIFY(!QFileInfo::exists(QDir(m_directory.filePath(QStringLiteral("config"))).filePath(QStringLiteral("omastrator/island-visibility.json"))));
     }
 
     void islandCliKeepsTheMode()
@@ -217,66 +209,171 @@ private slots:
         QString out, err;
         QCOMPARE(island({QStringLiteral("state")}, &out), 0);
         QCOMPARE(line(out.toUtf8())["mode"].toString(), QStringLiteral("normal"));
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("capture")}), 0);
-        Island::State state = Island::read();
-        QCOMPARE(state.mode, QStringLiteral("capture"));
-        QVERIFY(state.expanded);
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("next")}), 0);
-        QCOMPARE(Island::read().mode, QStringLiteral("ai"));
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("next")}), 0);
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("next")}), 0);
+        QCOMPARE(Island::modes(), (QStringList{QStringLiteral("normal"), QStringLiteral("design")}));
+        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("design")}), 0);
         QCOMPARE(Island::read().mode, QStringLiteral("design"));
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("next")}), 0);
+        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("normal")}), 0);
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
-        QVERIFY(!Island::read().expanded);
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("previous")}), 0);
-        QCOMPARE(Island::read().mode, QStringLiteral("design"));
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("previous")}), 0);
-        QCOMPARE(Island::read().mode, QStringLiteral("live"));
-        QCOMPARE(island({QStringLiteral("rest")}), 0);
-        QVERIFY(!Island::read().expanded);
-        QCOMPARE(island({QStringLiteral("toggle")}), 0);
-        QVERIFY(Island::read().expanded);
+        // The state has only what still means something.
+        QCOMPARE(line(QJsonDocument(Island::read().toJson()).toJson()).keys(),
+                 (QStringList{QStringLiteral("activity"), QStringLiteral("activityId"), QStringLiteral("activitySeconds"), QStringLiteral("mode")}));
+        // A mode left in island.json by an older version reads as Normal.
+        QFile old(Island::statePath());
+        QVERIFY(old.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        old.write("{\"mode\":\"draw\",\"expanded\":true}\n");
+        old.close();
+        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
 
         QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("sideways")}, &out, &err), 1);
-        QVERIFY(err.contains(QLatin1String("normal, draw")));
+        QVERIFY(err.contains(QLatin1String("normal, design")));
         QCOMPARE(island({QStringLiteral("launch")}, &out, &err), 1);
         QCOMPARE(island({}, &out, &err), 1);
         QVERIFY(err.contains(QLatin1String("Usage")));
 
         QCOMPARE(island({QStringLiteral("activity"), QStringLiteral("Saved"), QStringLiteral("--seconds"), QStringLiteral("5")}), 0);
-        state = Island::read();
+        const Island::State state = Island::read();
         QCOMPARE(state.activity, QStringLiteral("Saved"));
         QCOMPARE(state.activitySeconds, 5);
         QVERIFY(state.activityId > 0);
-        QCOMPARE(state.mode, QStringLiteral("live"));
-
-        // First-use labels are remembered across sessions, apart from the mode.
-        QCOMPARE(island({QStringLiteral("seen"), QStringLiteral("draw")}), 0);
-        QVERIFY(Island::read().seen.contains(QStringLiteral("draw")));
-        QFile::remove(Island::statePath());
-        QCOMPARE(Island::read().mode, QStringLiteral("normal"));
-        QVERIFY(Island::read().seen.contains(QStringLiteral("draw")));
         QVERIFY(Island::statePath().startsWith(m_directory.path()));
-        QVERIFY(Island::seenPath().startsWith(m_directory.path()));
     }
 
-    void islandToolRoundTripsThroughTheSocket()
+    // Each removed verb fails with one line that says where its job went.
+    void removedVerbsSayWhereTheyWent()
     {
         QString out, err;
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("normal")}), 0);
-        QCOMPARE(island({QStringLiteral("tool"), QStringLiteral("pen")}, &out, &err), 0);
-        QCOMPARE(out.trimmed(), QStringLiteral("pen"));
-        QCOMPARE(backendTool(), Tool::pen);
-        // Choosing a tool is Draw mode.
-        QCOMPARE(Island::read().mode, QStringLiteral("draw"));
-        QCOMPARE(island({QStringLiteral("tool"), QStringLiteral("blob")}, &out, &err), 1);
-        QVERIFY(err.contains(QLatin1String("blob")));
-        QCOMPARE(island({QStringLiteral("tool"), QStringLiteral("select")}), 0);
+        struct Removed {
+            QStringList args;
+            const char *says;
+        };
+        const Removed gone[] = {
+            {{"mode", "draw"}, "Draw mode is gone: use Omastrator's toolbar."},
+            {{"mode", "capture"}, "Capture mode is gone: use the Capture tab in Omastrator, or `omastrator island capture …`."},
+            {{"mode", "ai"}, "AI mode is gone: use the Ask field in Omastrator (`omastrator island ask` focuses it), or `omastrator island ai …`."},
+            {{"mode", "live"}, "Live mode is gone: use a Browser View in Omastrator, or `omastrator island live …`."},
+            {{"mode", "next"}, "Modes no longer step: choose `omastrator island mode normal` or `mode design`."},
+            {{"mode", "previous"}, "Modes no longer step: choose `omastrator island mode normal` or `mode design`."},
+            {{"tool", "pen"}, "Draw mode is gone: use Omastrator's toolbar."},
+            {{"expand"}, "The island pill is gone, so there is nothing to expand."},
+            {{"rest"}, "The island pill is gone, so there is nothing to rest."},
+            {{"toggle"}, "The island pill is gone, so there is nothing to expand or rest."},
+            {{"seen", "draw"}, "The island pill is gone, so it shows no first-use labels."},
+            {{"show", "always"}, "The island pill is gone, so it has no place to show: notifications and Omastrator's window replace it."},
+            {{"show", "with-app"}, "The island pill is gone, so it has no place to show: notifications and Omastrator's window replace it."},
+        };
+        QVERIFY(island({QStringLiteral("mode"), QStringLiteral("normal")}) == 0);
+        const QString before = QString::fromUtf8(QJsonDocument(Island::read().toJson()).toJson());
+        onBackend([&] { m_backend->host.editor.selectTool(Tool::select); });
+        for (const Removed &each : gone) {
+            QCOMPARE(island(each.args, &out, &err), 1);
+            QCOMPARE(err.trimmed(), QString::fromUtf8(each.says));
+            QVERIFY2(out.isEmpty(), qPrintable(each.args.join(QLatin1Char(' '))));
+        }
+        // None of them changed the mode or reached the app (`tool pen` used to).
+        QCOMPARE(QString::fromUtf8(QJsonDocument(Island::read().toJson()).toJson()), before);
+        QCOMPARE(backendTool(), Tool::select);
+        // What still works still says so in the help.
+        QCOMPARE(island({QStringLiteral("--help")}, &out), 0);
+        for (const char *word : {"mode <normal|design>", "ask ", "capture color", "dictate start", "live start", "new "})
+            QVERIFY2(out.contains(QLatin1String(word)), word);
+        for (const char *word : {"expand", "seen <mode>", "always|with-app", "tool <name>", "draw|capture"})
+            QVERIFY2(!out.contains(QLatin1String(word)), word);
+    }
+
+    // `island ask` starts the app if needed, then show_window with raise and focus = ask (the tray light's click).
+    void askBringsTheWindowForwardWithAskFocused()
+    {
+        onBackend([&] {
+            m_backend->host.windowShown = 0;
+            m_backend->host.shownFocus.clear();
+            m_backend->host.shownRaise = false;
+        });
+        QString out, err;
+        QCOMPARE(island({QStringLiteral("ask")}, &out, &err), 0);
+        onBackend([&] {
+            QCOMPARE(m_backend->host.windowShown, 1);
+            QVERIFY(m_backend->host.shownRaise);
+            QCOMPARE(m_backend->host.shownFocus, QStringLiteral("ask"));
+            QVERIFY(m_backend->host.shownFiles.isEmpty());
+        });
+        // The method itself: focus is optional, and only "ask" exists.
+        onBackend([&] {
+            m_backend->tools.call(QStringLiteral("show_window"), {{"files", QJsonArray()}});
+            QVERIFY(m_backend->host.shownFocus.isEmpty());
+            bool refused = false;
+            try {
+                m_backend->tools.call(QStringLiteral("show_window"), {{"focus", "layers"}});
+            } catch (const AgentProtocol::Error &failure) {
+                refused = failure.code == AgentProtocol::invalidParams;
+            }
+            QVERIFY(refused);
+        });
+        // A refusal from the app is the command's failure.
+        onBackend([&] { m_backend->host.failure = QStringLiteral("Omastrator is showing a dialog. Try again when it's answered."); });
+        QCOMPARE(island({QStringLiteral("ask")}, &out, &err), 1);
+        QVERIFY(err.contains(QLatin1String("showing a dialog")));
+        onBackend([&] { m_backend->host.failure.clear(); });
+        // With no app to start, it says so.
+        qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("closed.sock")).toUtf8());
+        QCOMPARE(island({QStringLiteral("ask")}, &out, &err), 1);
+        QVERIFY(err.contains(QLatin1String("did not start")) || err.contains(QLatin1String("Could not start")));
+        qputenv("OMASTRATOR_SOCKET", m_path.toUtf8());
+        // The tray light's tooltip and click are the shell plugin's; here only the verb exists in the help.
+        QCOMPARE(island({QStringLiteral("--help")}, &out), 0);
+        QVERIFY(out.contains(QLatin1String("ask ")));
+    }
+
+    // Messages from commands started outside the app reach the desktop through notify-send (OMASTRATOR_NOTIFY in tests).
+    void activityIsAlsoANotification()
+    {
+        const QString log = m_directory.filePath(QStringLiteral("notify.log"));
+        const QString script = m_directory.filePath(QStringLiteral("notify"));
+        QFile::remove(log);
+        QFile program(script);
+        QVERIFY(program.open(QIODevice::WriteOnly));
+        // One line per notification: a newline inside an argument shows as "|".
+        program.write("#!/bin/sh\nfor word in \"$@\"; do printf '[%s]' \"$(printf %s \"$word\" | tr '\\n' '|')\"; done >> \"" + log.toUtf8()
+                      + "\"\nprintf '\\n' >> \"" + log.toUtf8() + "\"\n");
+        program.close();
+        program.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        qputenv("OMASTRATOR_NOTIFY", script.toUtf8());
+        auto lines = [&] {
+            QFile file(log);
+            return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts) : QStringList();
+        };
+        const QString sameCard = QStringLiteral("[-h][string:x-canonical-private-synchronous:omastrator]");
+
+        QCOMPARE(island({QStringLiteral("activity"), QStringLiteral("Saved"), QStringLiteral("--seconds"), QStringLiteral("5")}), 0);
+        QTRY_COMPARE(lines().size(), 1);
+        QCOMPARE(lines().at(0), QStringLiteral("[-a][Omastrator][-t][5000]") + sameCard + QStringLiteral("[Saved]"));
+
+        // The first line is the summary, the rest the body.
+        QCOMPARE(Island::setActivity(QStringLiteral("Live couldn't start\nThe port is busy.\nTry another."), 6), QString());
+        QTRY_COMPARE(lines().size(), 2);
+        QCOMPARE(lines().at(1), QStringLiteral("[-a][Omastrator][-t][6000]") + sameCard + QStringLiteral("[Live couldn't start][The port is busy.|Try another.]"));
+        // The line is still in the state file for anything that follows the status stream.
+        QCOMPARE(Island::read().activity, QStringLiteral("Live couldn't start\nThe port is busy.\nTry another."));
+
+        // An empty line clears the state and says nothing.
+        QCOMPARE(Island::setActivity(QString(), 3), QString());
+        QTest::qWait(300);
+        QCOMPARE(lines().size(), 2);
+
+        // A command that fails outside the app says why the same way (the app's refusal here).
+        onBackend([&] { m_backend->host.failure = QStringLiteral("Choose an agent in Omarchy → Setup → Default → Agent."); });
+        QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("roast")}), 1);
+        QTRY_COMPARE(lines().size(), 3);
+        QVERIFY(lines().at(2).endsWith(QStringLiteral("[Choose an agent in Omarchy → Setup → Default → Agent.]")));
+        onBackend([&] { m_backend->host.failure.clear(); });
+
+        // A missing program is no failure of the command.
+        qputenv("OMASTRATOR_NOTIFY", "/nonexistent/notify-send");
+        QCOMPARE(Island::setActivity(QStringLiteral("Nobody hears this")), QString());
+        qputenv("OMASTRATOR_NOTIFY", "/bin/true");
     }
 
     // Design mode everywhere (docs/ANYWHERE.md): the hotkey's `design on`, the overlay's clicks, and Esc.
-    void designModeIsTheIslandsModeAndTheAppsMethod()
+    void designModeIsTheModeFileAndTheAppsMethod()
     {
         QString output, errors;
         QTextStream out(&output), err(&errors);
@@ -289,7 +386,6 @@ private slots:
         QFile::remove(m_hyprctl + QStringLiteral(".log"));
         QCOMPARE(DesignCli::runDesign({QStringLiteral("on")}, out, err), 0);
         QCOMPARE(Island::read().mode, QStringLiteral("design"));
-        QVERIFY(Island::read().expanded);
         QCOMPARE(calls().back().first, QStringLiteral("on"));
         QCOMPARE(DesignCli::runDesign({QStringLiteral("tool"), QStringLiteral("rectangle")}, out, err), 0);
         QCOMPARE(calls().back().second["tool"].toString(), QStringLiteral("rectangle"));
@@ -312,7 +408,7 @@ private slots:
         QCOMPARE(calls().back().first, QStringLiteral("desk"));
         QCOMPARE(calls().back().second["how"].toString(), QStringLiteral("window"));
         QCOMPARE(DesignCli::runDesign({QStringLiteral("sideways")}, out, err), 1);
-        // Esc: the island goes back to Normal and Hyprland gives the keys back.
+        // Esc: the mode goes back to Normal and Hyprland gives the keys back.
         QCOMPARE(DesignCli::runDesign({QStringLiteral("off")}, out, err), 0);
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
         QFile log(m_hyprctl + QStringLiteral(".log"));
@@ -345,12 +441,12 @@ private slots:
         });
         QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("vectorize"), QStringLiteral("--mode"), QStringLiteral("sketch")}), 0);
         onBackend([&] { QVERIFY(m_backend->host.lastAi.sketch); });
-        // A sheet opening is said on the island, since the window may be elsewhere.
+        // A sheet opening is said as a notification, since the window may be elsewhere.
         QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("edit")}), 0);
         QCOMPARE(Island::read().activity, QStringLiteral("Edit with Instruction is open in Omastrator"));
         QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("fly")}, &out, &err), 1);
         QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("generate"), QStringLiteral("--count")}, &out, &err), 1);
-        // The app's refusal reaches the island as its plain reason.
+        // The app's refusal reaches the desktop as its plain reason.
         onBackend([&] { m_backend->host.failure = QStringLiteral("Choose an agent in Omarchy → Setup → Default → Agent."); });
         QCOMPARE(island({QStringLiteral("ai"), QStringLiteral("roast")}, &out, &err), 1);
         QCOMPARE(Island::read().activity, QStringLiteral("Choose an agent in Omarchy → Setup → Default → Agent."));
@@ -380,7 +476,7 @@ private slots:
         });
         QCOMPARE(island({"live", "deploy", "--github"}, &out, &err), 1);
         QCOMPARE(island({"live", "deploy", "--prod"}, &out, &err), 1);
-        // The first deploy asks in the app; the island says where.
+        // The first deploy asks in the app; the notification says where.
         onBackend([&] { m_backend->host.liveResult = {{"sheet", true}}; });
         QCOMPARE(island({"live", "deploy"}), 0);
         QCOMPARE(Island::read().activity, QStringLiteral("Confirm the deploy in Omastrator"));
@@ -408,7 +504,7 @@ private slots:
         onBackend([&] { QVERIFY(m_backend->host.liveParams["connect"].toBool()); });
         QCOMPARE(island({"live", "publish"}, &out, &err), 1);
         QVERIFY(err.contains(QLatin1String("deploy")));
-        // A refusal is said on the island.
+        // A refusal is said as a notification.
         onBackend([&] { m_backend->host.failure = QStringLiteral("A deploy is already running. Wait for it, or cancel it."); });
         QCOMPARE(island({"live", "deploy"}, &out, &err), 1);
         QCOMPARE(Island::read().activity, QStringLiteral("A deploy is already running. Wait for it, or cancel it."));
@@ -439,15 +535,15 @@ private slots:
         // The first line may come before the app answers; wait for the app's.
         QTRY_VERIFY(follower.last()["running"].toBool());
 
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("capture")}), 0);
-        QTRY_COMPARE(follower.last()["mode"].toString(), QStringLiteral("capture"));
+        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("design")}), 0);
+        QTRY_COMPARE(follower.last()["mode"].toString(), QStringLiteral("design"));
 
         AgentClient::Connection other;
         other.call(QStringLiteral("select_tool"), {{"tool", "zoom"}});
         QTRY_COMPARE(follower.last()["tool"].toString(), QStringLiteral("zoom"));
         const qsizetype lines = printed.size();
         // No change, no line.
-        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("capture")}), 0);
+        QCOMPARE(island({QStringLiteral("mode"), QStringLiteral("design")}), 0);
         QTest::qWait(200);
         QCOMPARE(printed.size(), lines);
         QCOMPARE(text.count(QLatin1Char('\n')), lines);
@@ -455,7 +551,7 @@ private slots:
         // The app closing is a change too, and its coming back.
         onBackend([&] { m_backend->server.close(); });
         QTRY_VERIFY(!follower.last()["running"].toBool());
-        QCOMPARE(follower.last()["mode"].toString(), QStringLiteral("capture"));
+        QCOMPARE(follower.last()["mode"].toString(), QStringLiteral("design"));
         QString failure;
         onBackend([&] { failure = m_backend->server.listen(m_path); });
         QVERIFY(failure.isEmpty());

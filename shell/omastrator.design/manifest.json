@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "omastrator.design",
+  "name": "Omastrator design mode",
+  "version": "0.2.0",
+  "author": "Omastrator",
+  "license": "MIT",
+  "description": "Design mode everywhere: a click-through overlay on every monitor that inspects, measures and draws on any window or page.",
+  "kinds": ["service"],
+  "entryPoints": {
+    "service": "Design.qml"
+  }
+}

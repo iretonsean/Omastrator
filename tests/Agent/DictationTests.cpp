@@ -31,6 +31,12 @@ void script(const QString &path, const QByteArray &body)
     file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 }
 
+QByteArray readAll(const QString &path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
 QString heard(const QString &text)
 {
     return Dictation::parse(Dictation::normalize(text)).description;
@@ -75,6 +81,8 @@ private slots:
         QVERIFY(m_directory.isValid());
         qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("o.sock")).toUtf8());
         qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
+        // Nothing here may pop a notification on the real desktop.
+        qputenv("OMASTRATOR_NOTIFY", "/bin/true");
         qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
         qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
         qputenv("OMASTRATOR_APP", "/bin/true");
@@ -254,6 +262,34 @@ private slots:
         qputenv("OMASTRATOR_VOXTYPE", "/nonexistent/voxtype");
         QCOMPARE(dictate({QStringLiteral("start")}, &out), 1);
         QVERIFY(out.contains(QLatin1String("omarchy voxtype install")));
+        qunsetenv("OMASTRATOR_VOXTYPE");
+    }
+
+    // What the pill showed while dictating (Listening, Heard, Cancelled) is a desktop notification now.
+    void whatWasHeardIsAlsoANotification()
+    {
+        const QString fake = m_directory.filePath(QStringLiteral("voxtype"));
+        script(fake, "[ \"$1\" = -q ] || exit 3\nprintf '\\n%s\\n' \"$FAKE_HEARD\"\n");
+        qputenv("OMASTRATOR_VOXTYPE", fake.toUtf8());
+        const QString log = m_directory.filePath(QStringLiteral("notified.log"));
+        const QString notify = m_directory.filePath(QStringLiteral("notify"));
+        QFile::remove(log);
+        script(notify, "printf '%s\\n' \"$*\" >> '" + log.toUtf8() + "'\n");
+        qputenv("OMASTRATOR_NOTIFY", notify.toUtf8());
+        const QString wav = m_directory.filePath(QStringLiteral("notified.wav"));
+        QFile touched(wav);
+        QVERIFY(touched.open(QIODevice::WriteOnly));
+        touched.close();
+
+        qputenv("FAKE_HEARD", "");
+        QCOMPARE(dictate({QStringLiteral("file"), wav}), 0);
+        QTRY_VERIFY(QString::fromUtf8(readAll(log)).contains(QLatin1String("Didn't catch that.")));
+        qputenv("FAKE_HEARD", "Use the rectangle tool");
+        QCOMPARE(dictate({QStringLiteral("file"), wav}), 0);
+        QTRY_VERIFY(QString::fromUtf8(readAll(log)).contains(QStringLiteral("Heard: “Use the rectangle tool” → ")));
+        // Notifications come from Omastrator, for a few seconds.
+        QVERIFY(QString::fromUtf8(readAll(log)).contains(QLatin1String("-a Omastrator -t ")));
+        qputenv("OMASTRATOR_NOTIFY", "/bin/true");
         qunsetenv("OMASTRATOR_VOXTYPE");
     }
 

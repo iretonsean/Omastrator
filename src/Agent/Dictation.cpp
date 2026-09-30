@@ -37,7 +37,7 @@ QString statePath()
 
 QString seenPath()
 {
-    return QFileInfo(Island::seenPath()).dir().filePath(QStringLiteral("dictation-seen.json"));
+    return QDir(Island::stateDirectory()).filePath(QStringLiteral("dictation-seen.json"));
 }
 
 QJsonObject readJson(const QString &path)
@@ -431,7 +431,7 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
     // Runs what was heard: at once when the kind has run before, else after a moment Esc can cancel.
     auto act = [&](const QString &heard) -> int {
         const QString normalized = normalize(heard);
-        Command command = parse(normalized);
+        const Command command = parse(normalized);
         if (command.kind == QLatin1String("cancel")) {
             QJsonObject state = readJson(statePath());
             state["cancelled"] = true;
@@ -442,11 +442,6 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         if (command.tier == 0) {
             Island::setActivity(QStringLiteral("Didn't catch that."), 3);
             return 0;
-        }
-        // In Live mode, requests go to the page's own agent task.
-        if (command.tier == 2 && Island::read().mode == QLatin1String("live")) {
-            command.method = QStringLiteral("live");
-            command.params = {{"action", "ask"}, {"prompt", normalized}};
         }
         const QJsonArray seen = readJson(seenPath())["kinds"].toArray();
         const bool immediate = command.tier == 1 && seen.contains(command.kind);

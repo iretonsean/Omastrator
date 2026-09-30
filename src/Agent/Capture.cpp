@@ -156,7 +156,7 @@ QString clipboardSvg(QString *error)
 int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
 {
     const QString action = args.value(0);
-    // The island shows the outcome either way; the terminal gets it too.
+    // A notification shows the outcome either way; the terminal gets it too.
     auto done = [&](const QString &message) {
         Island::setActivity(message, 4);
         out << message << '\n';

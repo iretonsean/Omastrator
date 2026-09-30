@@ -41,7 +41,7 @@ struct Monitor {
     QString specialName;
 };
 
-// A layer surface: the bar, the background, the island.
+// A layer surface: the bar, the background.
 struct Layer {
     QString name;
     QRect rect;

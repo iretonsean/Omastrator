@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-// The island's Capture mode (docs/OS-SUITE.md): tools that act on the whole
+// Capture from anywhere on screen (docs/OS-SUITE.md): tools that act on the whole
 // screen and hand the result to the running app. Each outside program can be
 // replaced for tests: $OMASTRATOR_HYPRPICKER, $OMASTRATOR_SLURP,
 // $OMASTRATOR_GRIM and $OMASTRATOR_WL_PASTE.

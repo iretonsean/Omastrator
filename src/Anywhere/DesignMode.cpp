@@ -44,7 +44,6 @@ void DesignMode::followIsland()
     if (Island::read().mode == QLatin1String("design") && state.exists() && state.lastModified().secsTo(QDateTime::currentDateTime()) > 15) {
         Island::State normal = Island::read();
         normal.mode = QStringLiteral("normal");
-        normal.expanded = false;
         Island::write(normal);
         Island::resetKeys();
     }
@@ -85,11 +84,10 @@ void DesignMode::setOn(bool on, const QString &monitor)
         m_tool = QStringLiteral("point");
         Island::resetKeys();
     }
-    // The island's mode is the switch the hotkey, the island and Esc all flip.
+    // The mode file is the switch the hotkey, the menu and Esc all flip.
     Island::State state = Island::read();
     if ((state.mode == QLatin1String("design")) != on) {
         state.mode = on ? QStringLiteral("design") : QStringLiteral("normal");
-        state.expanded = on;
         Island::write(state);
     }
     emit toggled(on);

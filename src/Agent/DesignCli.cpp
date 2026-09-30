@@ -14,7 +14,7 @@ int failed(QTextStream &err, const QString &message)
     return 1;
 }
 
-// Calls the background app, starting it first. Errors also reach the island, since the overlay's clicks have no terminal.
+// Calls the background app, starting it first. Errors also reach the desktop as notifications, since the overlay's clicks have no terminal.
 int call(const QString &method, const QJsonObject &params, QTextStream &out, QTextStream &err, bool print = false)
 {
     if (const QString failure = Island::ensureAppRunning(); !failure.isEmpty()) {
@@ -126,7 +126,7 @@ int runDesign(const QStringList &args, QTextStream &out, QTextStream &err)
         if (!option(rest, QStringLiteral("--monitor"), &monitor))
             return failed(err, QStringLiteral("--monitor needs a name."));
         const bool on = verb == QLatin1String("toggle") ? Island::read().mode != QLatin1String("design") : verb == QLatin1String("on");
-        // The island's mode is the switch; the background app follows it.
+        // The mode file is the switch; the background app follows it.
         if (const int code = Island::runCli({QStringLiteral("mode"), on ? QStringLiteral("design") : QStringLiteral("normal")}, out, err); code != 0)
             return code;
         if (!on)
@@ -291,10 +291,9 @@ int runDesk(const QStringList &args, QTextStream &out, QTextStream &err)
 
 int runReset(QTextStream &out, QTextStream &err)
 {
-    // The island and the keyboard first: they need nothing from the app.
+    // The mode and the keyboard first: they need nothing from the app.
     Island::State state = Island::read();
     state.mode = QStringLiteral("normal");
-    state.expanded = false;
     Island::write(state);
     Island::resetKeys();
     // Pages' workspaces next: the file names them, so this needs no app either.
@@ -307,7 +306,7 @@ int runReset(QTextStream &out, QTextStream &err)
             connection.call(QStringLiteral("design"), {{"action", "reset"}}, 10'000);
         } catch (const AgentProtocol::Error &failure) {
             BrowserPoolState::endLeftover();
-            return failed(err, QStringLiteral("The island is back to normal, but the app didn't answer: ") + failure.message());
+            return failed(err, QStringLiteral("Design mode is off, but the app didn't answer: ") + failure.message());
         }
     }
     // The Browser View browser stops with the app's reset; one left by a crash, or by an app that didn't answer, is ended here.

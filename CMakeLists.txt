@@ -180,7 +180,7 @@ function(oma_tests library folder)
         add_test(NAME ${name} COMMAND ${name})
         # Tests that check the repo's own files (shell plugins, fixtures) find them here.
         target_compile_definitions(${name} PRIVATE OMASTRATOR_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS ${folder})
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMASTRATOR_NOTIFY=true" LABELS ${folder})
         # The background app is started as itself.
         if(name STREQUAL "DesignModeUiTests")
             target_compile_definitions(${name} PRIVATE OMASTRATOR_BINARY="$<TARGET_FILE:omastrator>")

@@ -17,7 +17,7 @@ QString normalize(const QString &heard);
 struct Command {
     // 1: the local grammar. 2: goes to the agent. 0: nothing heard, or "cancel".
     int tier = 0;
-    // What the island shows after "Heard:": "Pen tool", "Align left", "Ask the agent: …".
+    // What is shown after "Heard:": "Pen tool", "Align left", "Ask the agent: …".
     QString description;
     // The desktop method and params that carry it out.
     QString method;

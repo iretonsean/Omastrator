@@ -15,9 +15,6 @@ Item {
   id: root
 
   required property var status
-  // The island's pill, from Island.qml: the overlay leaves it out of its input.
-  property int islandWidth: 0
-  property int islandHeight: 0
 
   readonly property var design: status.value("design", {}) || {}
   readonly property bool on: !!design.on
@@ -145,8 +142,8 @@ Item {
       readonly property bool panelsShown: barCard.visible || onboardingCard.visible || detailCard.visible || typing.visible || gapGrip.visible
       readonly property string maskMode: Logic.maskMode(root.design, place, panelsShown)
       readonly property var myArt: root.overlays.filter(function (each) { return each.monitor === window.modelData.name })
-      // Below the bar's reserved space and the island: the floating bar never covers them.
-      readonly property int topClear: (place.reservedTop || 0) + Style.gapsOut + root.islandHeight + Style.space(12)
+      // Below the bar's reserved space: the floating bar never covers it.
+      readonly property int topClear: (place.reservedTop || 0) + Style.gapsOut + Style.space(12)
 
       screen: modelData
       visible: mine || myArt.length > 0 || (root.proposal !== null && root.proposalScreen === modelData.name)
@@ -175,8 +172,6 @@ Item {
         Region { item: window.maskMode === "panels" && gapGrip.visible ? gapGrip : null }
         // A proposal left waiting keeps its own Keep and Discard, with or without design mode.
         Region { item: proposalCard.visible ? proposalCard : null }
-        // The island stays reachable over everything else: its buttons are how to change tool or leave.
-        Region { item: islandHole; intersection: Intersection.Subtract }
         // The Omarchy bar keeps its clicks under a drawing tool: its workspaces, clock and tray light.
         Region { x: 0; y: 0; width: window.width; height: window.place.reservedTop || 0; intersection: Intersection.Subtract }
       }
@@ -191,15 +186,6 @@ Item {
         id: escapeKeys
         focus: window.drawing && !typing.visible
         Keys.onEscapePressed: root.run(["design", "off"])
-      }
-
-      Item {
-        id: islandHole
-        readonly property var box: Logic.islandHole(window.place, root.islandWidth, root.islandHeight, Style.gapsOut)
-        x: box.x
-        y: box.y
-        width: box.width
-        height: box.height
       }
 
       // ------------------------------------------------------------ art
@@ -915,7 +901,7 @@ Item {
           Label {
             width: parent.width
             wrapMode: Text.Wrap
-            text: (root.onboarding.note || "") + " A few questions tune the suggestions; change them any time from the island."
+            text: (root.onboarding.note || "") + " A few questions tune the suggestions; change them any time with `omastrator design onboarding open`."
             color: O.Theme.text3
           }
 

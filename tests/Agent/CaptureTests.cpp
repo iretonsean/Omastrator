@@ -75,6 +75,8 @@ private slots:
         QVERIFY(m_directory.isValid());
         qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("o.sock")).toUtf8());
         qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
+        // Nothing here may pop a notification on the real desktop.
+        qputenv("OMASTRATOR_NOTIFY", "/bin/true");
         qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
         qputenv("XDG_DATA_HOME", m_directory.filePath(QStringLiteral("data")).toUtf8());
         qputenv("OMASTRATOR_APP", "/bin/true");

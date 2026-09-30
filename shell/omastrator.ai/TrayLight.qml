@@ -2,10 +2,10 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "../omastrator-ui" as O
-import "../omastrator.island/OverlayLogic.js" as Logic
+import "../omastrator.design/OverlayLogic.js" as Logic
 
 // The tray light (docs/OS-SUITE.md): one glyph in the bar with four states.
-// A click opens the island in AI mode; there is never a second AI menu.
+// A click brings Omastrator forward with the Ask field focused; there is never a second AI menu.
 BarWidget {
   id: root
 
@@ -68,6 +68,6 @@ BarWidget {
         anchors.topMargin: -width / 3
       }
     }
-    onPressed: function (mouseButton) { status.run(["island", "mode", "ai"]) }
+    onPressed: function (mouseButton) { status.run(["island", "ask"]) }
   }
 }

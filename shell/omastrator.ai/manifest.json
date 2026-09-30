@@ -5,14 +5,14 @@
   "version": "0.1.0",
   "author": "Omastrator",
   "license": "MIT",
-  "description": "A light for Omastrator's agent work: idle, working, results ready or error. Click it to open the island in AI mode.",
+  "description": "A light for Omastrator's agent work: idle, working, results ready or error. Click it to open Omastrator with the Ask field focused.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "TrayLight.qml"
   },
   "barWidget": {
     "displayName": "Omastrator AI",
-    "description": "Idle, working, results ready or error for Omastrator's agent tasks. Click for the island's AI mode.",
+    "description": "Idle, working, results ready or error for Omastrator's agent tasks. Click to ask in Omastrator.",
     "category": "AI",
     "aliases": ["omastrator"],
     "allowMultiple": false,

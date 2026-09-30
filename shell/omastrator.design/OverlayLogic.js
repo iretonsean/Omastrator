@@ -22,21 +22,11 @@ function maskMode(design, screen, panelsShown) {
   return panelsShown ? "panels" : "none"
 }
 
-// Where the island's pill sits in the overlay's coordinates on `screen`: centred under the bar's reserved space.
-// The overlay leaves this out of its input so the island stays reachable, and stops drawing, over it.
-function islandHole(screen, pillWidth, pillHeight, gapsOut) {
-  if (!screen || pillWidth <= 0 || pillHeight <= 0)
-    return { x: 0, y: 0, width: 0, height: 0 }
-  var margin = 6
-  return { x: Math.round(screen.width / 2 - pillWidth / 2) - margin, y: (screen.reservedTop || 0) + gapsOut - margin,
-           width: pillWidth + 2 * margin, height: pillHeight + 2 * margin }
-}
-
-// What the island says when design mode turns on. Esc only leaves where setup's Hyprland keys are loaded
+// What design mode says when it turns on. Esc only leaves where setup's Hyprland keys are loaded
 // (or under a drawing tool, where the overlay takes the keyboard), so without them it names the click instead.
 function designOnLine(design) {
   var tail = design && design.keysLoaded === false && !isDrawingTool(design.tool)
-      ? "click the island's Leave (or run `omastrator reset`) to leave" : "Esc leaves"
+      ? "run `omastrator reset` to leave" : "Esc leaves"
   return "Design mode: point at anything. Clicks still reach the app; " + tail
 }
 
@@ -64,24 +54,6 @@ function barShownOn(bar, screen) {
   return !!bar && !!bar.bounds && onScreen(bar.bounds, screen)
 }
 
-// Interim, pending a rethink of the island: it shows while an Omastrator window is focused, and the island is a way
-// out, so it also stays while design mode is on, dictation is listening, transcribing or showing what it heard, an
-// agent is being waited on (Stop is on the island), Live is starting or running or deploying (its tools are island-only),
-// or a proposal or result waits for Keep/Discard. islandShow "always" (Preferences, `omastrator island show always`) shows it everywhere.
-var ownClasses = ["io.github.iretonsean.omastrator", "omastrator"]
-function islandShown(status, activeClass) {
-  var s = status || {}
-  if (s.islandShow === "always") return true
-  if (ownClasses.indexOf(String(activeClass || "").toLowerCase()) >= 0) return true
-  var design = s.design || {}
-  if (design.on || design.proposal) return true
-  if (s.dictation === "listening" || s.dictation === "transcribing" || s.dictation === "heard") return true
-  if (s.waiting) return true
-  var live = s.live || {}
-  if (live.state === "running" || live.state === "starting" || (live.deploy && live.deploy.running)) return true
-  return !!s.ready || !!s.proposal
-}
-
 // The floating bar next to `bounds`: centred under it, above when there's no room, inside the screen.
 function barPosition(bounds, barWidth, barHeight, screen, gap, topClear) {
   var top = Math.max(gap, topClear || 0)
@@ -99,7 +71,7 @@ function barPosition(bounds, barWidth, barHeight, screen, gap, topClear) {
   return { x: Math.round(x), y: Math.round(y) }
 }
 
-// Keeps the bar on the screen and below the bar and island (topClear).
+// Keeps the bar on the screen and below the Omarchy bar (topClear).
 function clampBar(x, y, barWidth, barHeight, screen, topClear) {
   var margin = 4
   return { x: Math.round(Math.max(margin, Math.min(x, screen.width - barWidth - margin))),
@@ -216,8 +188,8 @@ function liftText(lift) {
 
 // The tray light's tooltip (shell/omastrator.ai) when its state is "ready": `status` is the
 // whole status stream object. An overlay proposal (design mode's Ask) is kept and discarded with
-// the bar's own chips, not the keyboard, so it needs its own wording — the same one the island's
-// own activity line uses for it (Island.qml's designLine). An app-window proposal really is
+// the bar's own chips, not the keyboard, so it needs its own wording — the same one design mode's
+// own line uses for it. An app-window proposal really is
 // Enter and Esc, since ContentView and AgentPanels bind those directly.
 function readyTooltip(status) {
   var overlay = status.design && status.design.proposal

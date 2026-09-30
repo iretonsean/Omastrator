@@ -106,6 +106,8 @@ private slots:
         writeExecutable(m_directory.filePath(QStringLiteral("omarchy")), fakeOmarchy);
         qputenv("OMASTRATOR_OMARCHY", m_directory.filePath(QStringLiteral("omarchy")).toUtf8());
         qputenv("OMASTRATOR_RCLONE", "/bin/false");
+        // Nothing here may pop a notification on the real desktop.
+        qputenv("OMASTRATOR_NOTIFY", "/bin/true");
         qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
         qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("app.sock")).toUtf8());
         qputenv("OMASTRATOR_THEME_DIR", m_directory.filePath(QStringLiteral("no-theme")).toUtf8());
@@ -197,7 +199,7 @@ private slots:
         QCOMPARE(overlays.save(), QString());
         QVERIFY(QFileInfo::exists(m_directory.filePath(QStringLiteral("data/omastrator/overlays.omai"))));
 
-        // Esc: design mode ends and the island says so; the art stays on show.
+        // Esc: design mode ends and the mode file says so; the art stays on show.
         app.call(QStringLiteral("off"));
         QVERIFY(!app.design().mode().isOn());
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
@@ -228,7 +230,7 @@ private slots:
     // Audit leftover: the escape hatch when setup never ran --apply (Hyprland has no Omastrator
     // binds loaded) and the user's attention has moved to another monitor since. The author's
     // rule: Omastrator never takes over the computer without a way out, Super+Alt+Escape and
-    // `omastrator reset` work in every state, and nothing sits over the bar or the island.
+    // `omastrator reset` work in every state, and nothing sits over the bar.
     void resetIsTheEscapeHatchWithoutHyprlandKeysAndAcrossMonitors()
     {
         App app;
@@ -657,7 +659,7 @@ private slots:
         QVERIFY(!error.isEmpty());
         app.call(QStringLiteral("onboarding"), {{"finish", true}});
         QVERIFY(!AnywhereSettings::needsOnboarding());
-        // It doesn't open by itself again; the island's help opens it.
+        // It doesn't open by itself again; the overlay's onboarding action opens it.
         app.call(QStringLiteral("off"));
         app.call(QStringLiteral("on"));
         // Hover only inspects with Inspect chosen; design mode starts on Point.

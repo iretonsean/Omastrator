@@ -40,30 +40,66 @@ QString writeJson(const QString &path, const QJsonObject &json)
     return {};
 }
 
+// A desktop notification through notify-send. One shared id-like hint makes a newer line replace the last where the daemon
+// honours it (mako and dunst do), so "Listening…" then "Heard: …" is one card, not a stack.
+void notify(const QString &text, int seconds)
+{
+    if (text.trimmed().isEmpty())
+        return;
+    const QString overridden = qEnvironmentVariable("OMASTRATOR_NOTIFY");
+    const QString program = overridden.isEmpty() ? QStringLiteral("notify-send") : overridden;
+    const qsizetype newline = text.indexOf(QLatin1Char('\n'));
+    const QString summary = (newline < 0 ? text : text.left(newline)).trimmed();
+    const QString body = newline < 0 ? QString() : text.mid(newline + 1).trimmed();
+    QStringList arguments{QStringLiteral("-a"), QStringLiteral("Omastrator"), QStringLiteral("-t"), QString::number(seconds * 1000),
+                          QStringLiteral("-h"), QStringLiteral("string:x-canonical-private-synchronous:omastrator"), summary};
+    if (!body.isEmpty())
+        arguments << body;
+    // Nobody waits for it, and a missing notify-send is no failure of the command.
+    QProcess::startDetached(program, arguments);
+}
+
 QString stateHome()
 {
     const QString given = qEnvironmentVariable("XDG_STATE_HOME");
     return given.isEmpty() ? QDir::home().filePath(QStringLiteral(".local/state")) : given;
 }
 
-// "draw", or the mode `step` places away from `from`.
-QString resolveMode(const QString &asked, const QString &from)
+// What a removed mode's name says now, or empty for a mode that still exists.
+QString removedMode(const QString &mode)
 {
-    const QStringList &all = Island::modes();
-    if (asked == QLatin1String("next") || asked == QLatin1String("previous")) {
-        const qsizetype at = std::max<qsizetype>(0, all.indexOf(from));
-        const qsizetype step = asked == QLatin1String("next") ? 1 : all.size() - 1;
-        return all[(at + step) % all.size()];
-    }
-    return all.contains(asked) ? asked : QString();
+    if (mode == QLatin1String("draw"))
+        return QStringLiteral("Draw mode is gone: use Omastrator's toolbar.");
+    if (mode == QLatin1String("capture"))
+        return QStringLiteral("Capture mode is gone: use the Capture tab in Omastrator, or `omastrator island capture …`.");
+    if (mode == QLatin1String("ai"))
+        return QStringLiteral("AI mode is gone: use the Ask field in Omastrator (`omastrator island ask` focuses it), or `omastrator island ai …`.");
+    if (mode == QLatin1String("live"))
+        return QStringLiteral("Live mode is gone: use a Browser View in Omastrator, or `omastrator island live …`.");
+    if (mode == QLatin1String("next") || mode == QLatin1String("previous"))
+        return QStringLiteral("Modes no longer step: choose `omastrator island mode normal` or `mode design`.");
+    return {};
+}
+
+// The verbs that only served the pill, with where their job went.
+QString removedVerb(const QString &verb, const QString &argument)
+{
+    if (verb == QLatin1String("tool"))
+        return QStringLiteral("Draw mode is gone: use Omastrator's toolbar.");
+    if (verb == QLatin1String("expand") || verb == QLatin1String("rest") || verb == QLatin1String("toggle"))
+        return QStringLiteral("The island pill is gone, so there is nothing to %1.").arg(verb == QLatin1String("toggle") ? QStringLiteral("expand or rest") : verb);
+    if (verb == QLatin1String("seen"))
+        return QStringLiteral("The island pill is gone, so it shows no first-use labels.");
+    if (verb == QLatin1String("show") && (argument == QLatin1String("always") || argument == QLatin1String("with-app")))
+        return QStringLiteral("The island pill is gone, so it has no place to show: notifications and Omastrator's window replace it.");
+    return {};
 }
 }
 
 namespace Island {
 const QStringList &modes()
 {
-    static const QStringList all{QStringLiteral("normal"), QStringLiteral("draw"), QStringLiteral("capture"), QStringLiteral("ai"),
-                                 QStringLiteral("live"), QStringLiteral("design")};
+    static const QStringList all{QStringLiteral("normal"), QStringLiteral("design")};
     return all;
 }
 
@@ -83,38 +119,14 @@ QString statePath()
     return QDir(runtimeDirectory()).filePath(QStringLiteral("island.json"));
 }
 
-QString seenPath()
+QString stateDirectory()
 {
-    return QDir(stateHome()).filePath(QStringLiteral("omastrator/island-seen.json"));
-}
-
-QString visibilityPath()
-{
-    const QString given = qEnvironmentVariable("XDG_CONFIG_HOME");
-    const QString config = given.isEmpty() ? QDir::home().filePath(QStringLiteral(".config")) : given;
-    return QDir(config).filePath(QStringLiteral("omastrator/island-visibility.json"));
-}
-
-QString visibility()
-{
-    return readJson(visibilityPath())["show"].toString() == QLatin1String("always") ? QStringLiteral("always") : QStringLiteral("with-app");
-}
-
-QString setVisibility(const QString &mode)
-{
-    if (mode != QLatin1String("always") && mode != QLatin1String("with-app"))
-        return QStringLiteral("Choose always or with-app.");
-    return writeJson(visibilityPath(), {{"show", mode}});
+    return QDir(stateHome()).filePath(QStringLiteral("omastrator"));
 }
 
 QJsonObject State::toJson() const
 {
-    return {{"mode", mode},
-            {"expanded", expanded},
-            {"activity", activity},
-            {"activityId", activityId},
-            {"activitySeconds", activitySeconds},
-            {"labelsSeen", QJsonArray::fromStringList(seen)}};
+    return {{"mode", mode}, {"activity", activity}, {"activityId", activityId}, {"activitySeconds", activitySeconds}};
 }
 
 State State::fromJson(const QJsonObject &json)
@@ -122,33 +134,20 @@ State State::fromJson(const QJsonObject &json)
     State state;
     if (modes().contains(json["mode"].toString()))
         state.mode = json["mode"].toString();
-    state.expanded = json["expanded"].toBool();
     state.activity = json["activity"].toString();
     state.activityId = qint64(json["activityId"].toDouble());
     state.activitySeconds = json["activitySeconds"].toInt(3);
-    for (const QJsonValue &each : json["labelsSeen"].toArray())
-        state.seen << each.toString();
     return state;
 }
 
 State read()
 {
-    State state = State::fromJson(readJson(statePath()));
-    state.seen.clear();
-    for (const QJsonValue &each : readJson(seenPath())["labelsSeen"].toArray())
-        state.seen << each.toString();
-    return state;
+    return State::fromJson(readJson(statePath()));
 }
 
 QString write(const State &state)
 {
-    QJsonObject session = state.toJson();
-    session.remove(QStringLiteral("labelsSeen"));
-    if (const QString failure = writeJson(statePath(), session); !failure.isEmpty())
-        return failure;
-    if (readJson(seenPath())["labelsSeen"].toArray() != QJsonArray::fromStringList(state.seen))
-        return writeJson(seenPath(), {{"labelsSeen", QJsonArray::fromStringList(state.seen)}});
-    return {};
+    return writeJson(statePath(), state.toJson());
 }
 
 QString setActivity(const QString &text, int seconds)
@@ -157,7 +156,9 @@ QString setActivity(const QString &text, int seconds)
     state.activity = text;
     state.activityId = QDateTime::currentMSecsSinceEpoch();
     state.activitySeconds = std::clamp(seconds, 1, 60);
-    return write(state);
+    const QString failure = write(state);
+    notify(text, state.activitySeconds);
+    return failure;
 }
 
 bool appIsRunning()
@@ -213,23 +214,18 @@ QString helpText()
 {
     return QStringLiteral(
         "Usage: omastrator island <verb> [args]\n\n"
-        "Drives the Omastrator island in omarchy-shell. The island reads\n"
-        "`omastrator status --follow`; these change what it shows.\n\n"
-        "  mode <normal|draw|capture|ai|live|design|next|previous>\n"
-        "                     Switch mode. Draw and Design start Omastrator in the\n"
-        "                     background if it isn't running.\n"
-        "  tool <name>        Choose a canvas tool (pen, rectangle, …), in Draw mode.\n"
-        "  expand | rest | toggle\n"
-        "                     Show the mode's tools, or just the mode glyph.\n"
+        "Runs Omastrator's desktop commands. The pill under the bar is gone: Draw,\n"
+        "Capture, AI and Live moved into Omastrator's window (its toolbar, the\n"
+        "Capture tab, the Ask field and Browser View); these commands stay.\n\n"
+        "  mode <normal|design>\n"
+        "                     Switch design mode (docs/ANYWHERE.md) on or off. Design\n"
+        "                     starts Omastrator in the background if it isn't running.\n"
         "  activity <text> [--seconds N]\n"
-        "                     Show a line briefly, then go back.\n"
-        "  seen <mode>        Stop showing the mode's first-use label.\n"
+        "                     Show a line as a desktop notification.\n"
         "  new                Bring Omastrator forward on a new document.\n"
         "  show <swatches|variations|roast|connect-agent>\n"
         "                     Bring Omastrator forward on a panel.\n"
-        "  show <always|with-app>\n"
-        "                     Where the island shows: with-app (the default) only while\n"
-        "                     an Omastrator window is focused, or always.\n"
+        "  ask                Bring Omastrator forward with the Ask field focused.\n"
         "  ai <generate|edit|roast|vectorize|cancel> [--prompt TEXT] [--count N]\n"
         "     [--fit] [--mode logo|sketch]\n"
         "                     Start an AI flow. Without a prompt, Generate and Edit\n"
@@ -267,7 +263,7 @@ QString helpText()
         "  capture paste-svg  Paste the clipboard's SVG as editable paths.\n"
         "  capture theme-swatches\n"
         "                     Load the Omarchy theme's colours as a swatch group.\n"
-        "  state              Print the island's state as JSON.\n");
+        "  state              Print the mode and the last activity line as JSON.\n");
 }
 
 int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
@@ -291,44 +287,25 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         return 0;
     }
     if (verb == QLatin1String("mode")) {
-        const QString mode = resolveMode(args.value(1), state.mode);
-        if (mode.isEmpty())
-            return failed(QStringLiteral("Choose a mode: %1, next or previous.").arg(modes().join(QStringLiteral(", "))));
+        const QString mode = args.value(1);
+        if (const QString gone = removedMode(mode); !gone.isEmpty())
+            return failed(gone);
+        if (!modes().contains(mode))
+            return failed(QStringLiteral("Choose a mode: %1.").arg(modes().join(QStringLiteral(", "))));
         state.mode = mode;
-        // Normal rests; every other mode opens on its tools.
-        state.expanded = mode != QLatin1String("normal");
         if (const int code = save(state); code != 0)
             return code;
         // The keys follow the mode however it changed: a mode left by a click keeps none of its letters.
         holdKeysFor(mode);
         // Design mode is kept by the background app, which starts it if it isn't running.
-        if (mode == QLatin1String("draw") || mode == QLatin1String("design")) {
+        if (mode == QLatin1String("design")) {
             if (const QString failure = ensureAppRunning(); !failure.isEmpty())
                 return failed(failure);
         }
-        // Draw drives the canvas, so its window shows; Design works on the desktop without one.
-        if (mode == QLatin1String("draw")) {
-            try {
-                AgentClient::Connection connection;
-                connection.call(QStringLiteral("show_window"), {{"raise", false}});
-            } catch (const AgentProtocol::Error &) {
-                // An Omastrator without show_window already shows its window.
-            }
-        }
         return 0;
     }
-    if (verb == QLatin1String("expand") || verb == QLatin1String("rest") || verb == QLatin1String("toggle")) {
-        state.expanded = verb == QLatin1String("toggle") ? !state.expanded : verb == QLatin1String("expand");
-        return save(state);
-    }
-    if (verb == QLatin1String("seen")) {
-        const QString mode = args.value(1);
-        if (!modes().contains(mode))
-            return failed(QStringLiteral("Choose a mode: %1.").arg(modes().join(QStringLiteral(", "))));
-        if (!state.seen.contains(mode))
-            state.seen << mode;
-        return save(state);
-    }
+    if (const QString gone = removedVerb(verb, args.value(1)); !gone.isEmpty())
+        return failed(gone);
     if (verb == QLatin1String("activity")) {
         QStringList words = args.mid(1);
         int seconds = 3;
@@ -342,10 +319,16 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         const QString failure = setActivity(words.join(QLatin1Char(' ')).trimmed(), seconds);
         return failure.isEmpty() ? 0 : failed(failure);
     }
-    // `show always|with-app` is where the island shows; `show <panel>` opens a panel.
-    if (verb == QLatin1String("show") && (args.value(1) == QLatin1String("always") || args.value(1) == QLatin1String("with-app"))) {
-        const QString failure = setVisibility(args[1]);
-        return failure.isEmpty() ? 0 : failed(failure);
+    if (verb == QLatin1String("ask")) {
+        if (const QString failure = ensureAppRunning(); !failure.isEmpty())
+            return failed(failure);
+        try {
+            AgentClient::Connection connection;
+            connection.call(QStringLiteral("show_window"), {{"raise", true}, {"focus", "ask"}});
+            return 0;
+        } catch (const AgentProtocol::Error &failure) {
+            return failed(failure.message());
+        }
     }
     if (verb == QLatin1String("new") || verb == QLatin1String("show")) {
         if (verb == QLatin1String("show") && args.size() != 2)
@@ -519,25 +502,6 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         return Capture::runCli(args.mid(1), out, err);
     if (verb == QLatin1String("dictate"))
         return Dictation::runCli(args.mid(1), out, err);
-    if (verb == QLatin1String("tool")) {
-        if (args.size() != 2)
-            return failed(QStringLiteral("Name one tool, such as: omastrator island tool pen"));
-        if (const QString failure = ensureAppRunning(); !failure.isEmpty())
-            return failed(failure);
-        try {
-            AgentClient::Connection connection;
-            const QJsonObject result = connection.call(QStringLiteral("select_tool"), {{"tool", args[1]}});
-            if (state.mode != QLatin1String("draw")) {
-                state.mode = QStringLiteral("draw");
-                state.expanded = true;
-                save(state);
-            }
-            out << result["tool"].toString() << '\n';
-            return 0;
-        } catch (const AgentProtocol::Error &failure) {
-            return failed(failure.message());
-        }
-    }
     return failed(QStringLiteral("There is no island verb “%1”. Run `omastrator island --help`.").arg(verb));
 }
 }

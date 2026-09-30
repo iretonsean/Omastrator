@@ -8,8 +8,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-// Design mode's state (docs/ANYWHERE.md): it follows the island's mode, which
-// the hotkey, the island and Esc all set; it covers the monitor that had focus;
+// Design mode's state (docs/ANYWHERE.md): it follows the mode file (Island::read), which
+// the hotkey, the menu and Esc all set; it covers the monitor that had focus;
 // hover inspects windows cheaply and the accessibility tree once the pointer rests.
 class DesignModeTests : public QObject {
     Q_OBJECT
@@ -28,7 +28,7 @@ private slots:
         qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
     }
 
-    // The island says "Esc leaves" only where setup's Hyprland keys are loaded (OverlayLogic.designOnLine).
+    // Design mode says "Esc leaves" only where setup's Hyprland keys are loaded (OverlayLogic.designOnLine).
     void itReportsWhetherTheDesignKeysAreLoaded()
     {
         FakeDesktop desktop;
@@ -47,14 +47,14 @@ private slots:
         QVERIFY(mode.status()["keysLoaded"].toBool());
     }
 
-    void itFollowsTheIslandsModeBothWays()
+    void itFollowsTheModeFileBothWays()
     {
         FakeDesktop desktop;
         DesignMode mode(desktop);
         QSignalSpy toggled(&mode, &DesignMode::toggled);
         mode.followIsland();
         QVERIFY(!mode.isOn());
-        // The hotkey runs `omastrator design on`, which sets the island's mode.
+        // The hotkey runs `omastrator design on`, which sets the mode file.
         Island::State state = Island::read();
         state.mode = QStringLiteral("design");
         QCOMPARE(Island::write(state), QString());
@@ -68,7 +68,6 @@ private slots:
         QCOMPARE(Island::read().mode, QStringLiteral("normal"));
         mode.setOn(true, QStringLiteral("HDMI-A-1"));
         QCOMPARE(Island::read().mode, QStringLiteral("design"));
-        QVERIFY(Island::read().expanded);
         QCOMPARE(mode.monitor(), QStringLiteral("HDMI-A-1"));
         state = Island::read();
         state.mode = QStringLiteral("normal");

@@ -9,8 +9,9 @@
 #include <QTimer>
 
 // `omastrator status [--follow]`: the app's status_get merged with the
-// island's state, one compact JSON line each time either changes. The island
-// plugin reads it with quickshell's Process. See docs/OS-SUITE.md.
+// mode and activity state, one compact JSON line each time either changes.
+// The shell plugins (design mode's overlay, the tray light) read it with
+// quickshell's Process. See docs/OS-SUITE.md.
 namespace StatusStream {
 // Every key is present, with the app's own values when `app` is non-empty.
 QJsonObject compose(const QJsonObject &app, const Island::State &island);

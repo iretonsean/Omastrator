@@ -14,18 +14,17 @@
 namespace StatusStream {
 QJsonObject compose(const QJsonObject &app, const Island::State &island)
 {
-    // What the island reads when the app is closed: nothing waiting, nothing ready.
+    // What a reader gets when the app is closed: nothing waiting, nothing ready.
     QJsonObject status{{"running", false}, {"document", false}, {"tool", "select"}, {"proposal", ""}, {"summary", ""},
                        {"waiting", ""}, {"task", ""}, {"agent", ""}, {"variations", 0}, {"variationsId", ""},
                        {"roastId", ""}, {"offer", ""}, {"ready", false}, {"error", ""}, {"live", QJsonObject{{"state", "off"}}},
                        {"design", QJsonObject{{"on", false}, {"overlays", QJsonArray()}}}, {"window", false}};
     for (auto it = app.begin(); it != app.end(); ++it)
         status.insert(it.key(), it.value());
-    // Dictation's state, from its own file beside the island's.
+    // Dictation's state, from its own file beside the mode's.
     QFile dictation(QDir(Island::runtimeDirectory()).filePath(QStringLiteral("dictation.json")));
     const QJsonObject heard = dictation.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(dictation.readAll()).object() : QJsonObject();
     status.insert(QStringLiteral("dictation"), heard["state"].toString(QStringLiteral("idle")));
-    status.insert(QStringLiteral("islandShow"), Island::visibility());
     const QJsonObject own = island.toJson();
     for (auto it = own.begin(); it != own.end(); ++it)
         status.insert(it.key(), it.value());
@@ -58,11 +57,9 @@ Follower::~Follower()
 
 void Follower::start()
 {
-    for (const QString &path : {Island::statePath(), Island::seenPath(), Island::visibilityPath()}) {
-        const QString folder = QFileInfo(path).absolutePath();
-        QDir().mkpath(folder);
-        m_watcher.addPath(folder);
-    }
+    const QString folder = QFileInfo(Island::statePath()).absolutePath();
+    QDir().mkpath(folder);
+    m_watcher.addPath(folder);
     print();
     // Retries while the app is closed; a no-op while connected.
     m_retry.start();
@@ -120,7 +117,7 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
 {
     if (args.contains(QStringLiteral("--help")) || args.contains(QStringLiteral("-h"))) {
         out << "Usage: omastrator status [--follow]\n\n"
-               "Prints what Omastrator and its island are doing as one JSON line.\n"
+               "Prints what Omastrator is doing (with the mode and the last activity line) as one JSON line.\n"
                "With --follow, prints a new line each time it changes, until killed.\n";
         return 0;
     }
