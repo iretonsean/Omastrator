@@ -21,7 +21,8 @@ QString BrowserViews::beginEditPage(const QUuid &frame)
     if (live->active(frame) && live->snapshot(frame).state == LiveSession::State::failed)
         live->stop(frame);
     if (!live->active(frame)) {
-        const QString failure = live->start(frame);
+        // A page Generate made names its folder: its dev server's address isn't in the registry yet.
+        const QString failure = live->start(frame, generatedProject(frame));
         if (!failure.isEmpty())
             return failure;
     }

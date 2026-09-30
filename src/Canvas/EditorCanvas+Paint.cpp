@@ -103,6 +103,7 @@ void EditorCanvas::State::paint(QPainter &painter)
         painter.restore();
     }
     drawBrowserMessages(painter);
+    drawEmptyFrames(painter);
     drawArtboardLabels(painter);
     drawFrameLabels(painter);
     drawBrowserBars(painter);

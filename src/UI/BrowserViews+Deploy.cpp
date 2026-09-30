@@ -77,6 +77,8 @@ QString BrowserViews::projectOf(const QUuid &frame) const
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
     if (!object || !object->browser)
         return {};
+    if (const QString generated = generatedProject(frame); !generated.isEmpty())
+        return canonical(generated);
     const std::optional<QString> folder = ProjectRegistry::folderFor(object->browser->url);
     return folder ? canonical(*folder) : QString();
 }

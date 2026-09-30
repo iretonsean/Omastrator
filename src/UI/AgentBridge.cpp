@@ -302,6 +302,8 @@ void AgentBridge::stopWaiting()
     if (m_waiting && m_pipeline.active
         && (m_pipeline.waitingFor.contains(m_waiting->requestId) || m_pipeline.agentRequest == m_waiting->requestId))
         cancelDeploy();
+    else if (m_waiting && m_waiting->task == Task::live && m_pages.count(m_waiting->requestId))
+        stopPageJob(m_waiting->requestId);
     else if (m_waiting && m_waiting->task == Task::live)
         stopLiveJob(m_waiting->requestId);
     if (m_run)
@@ -365,6 +367,8 @@ void AgentBridge::runFinished(const QString &requestId, AgentRun &run)
         m_run = nullptr;
     m_runs.erase(requestId);
     // Live and deploy runs answer to their worktree and pipeline, whatever is waited on now.
+    if (m_pages.count(requestId))
+        return pageRunFinished(requestId, run);
     if (m_liveJobs.count(requestId))
         return liveRunFinished(requestId, run);
     if (m_pipeline.active && m_pipeline.agentRequest == requestId && m_job.running())

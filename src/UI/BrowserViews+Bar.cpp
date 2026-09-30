@@ -55,6 +55,11 @@ BrowserViewHost::Bar BrowserViews::bar(const QUuid &frame) const
             bar.devTip = snapshot.serverCommand.isEmpty() ? snapshot.serverUrl.toString()
                                                           : QStringLiteral("%1\n%2").arg(snapshot.serverUrl.toString(), snapshot.serverCommand);
     }
+    // A page made here runs from the dev server Omastrator started for it.
+    if (!bar.dev && !generatedProject(frame).isEmpty()) {
+        bar.dev = true;
+        bar.devTip = m_generated.value(frame).dev.toString();
+    }
     fillDeploy(frame, bar);
     fillBuild(frame, bar);
     return bar;
@@ -66,6 +71,9 @@ bool BrowserViews::owned(const QUuid &frame) const
     const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
     if (found == m_entries.constEnd() || !object || !object->browser || object->browser->url.isEmpty())
         return false;
+    // A page Generate made is its folder's, though its dev server's address isn't registered.
+    if (!generatedProject(frame).isEmpty())
+        return true;
     // A cache written from a const call: it only spares the registry file a read on every paint.
     auto &entry = const_cast<Entry &>(*found);
     if (entry.ownedFor != object->browser->url || m_clock.elapsed() - entry.ownedAt > ownershipCheckMs) {
@@ -116,6 +124,10 @@ void BrowserViews::act(const QUuid &frame, Action action)
 {
     if (action == Action::thisIsMySite) {
         chooseMySite(frame);
+        return;
+    }
+    if (action == Action::generatePage) {
+        runGenerateAction(frame, action);
         return;
     }
     if (action >= Action::keepEdits && action <= Action::exportCss) {

@@ -89,6 +89,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
     case Qt::Key_Escape:
         if (editPage) {
             leaveEditPage();
+        } else if (stopGenerating()) {
+            // A page being written for an empty frame stops.
         } else if (linkArmedFrom) {
             linkArmedFrom.reset();
         } else if (drag && drag->kind != DragKind::pen) {

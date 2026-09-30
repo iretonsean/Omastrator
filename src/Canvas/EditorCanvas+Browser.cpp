@@ -1,5 +1,6 @@
 #include "Canvas/EditorCanvasState.h"
 #include <QPainter>
+#include <algorithm>
 
 void EditorCanvas::setBrowserViewHost(BrowserViewHost *host)
 {
@@ -27,13 +28,15 @@ void EditorCanvas::State::drawBrowserMessages(QPainter &painter) const
     QFont font = canvas.font();
     font.setPixelSize(12);
     const QFontMetricsF metrics(font);
+    // A frame that shows its offers instead of the plain line.
+    const std::vector<EmptyLayout> offers = emptyFrames();
     painter.save();
     painter.setFont(font);
     for (const VectorObject &object : document.objects) {
         if (!object.browser || !document.isOnCurrentPage(object.id) || !document.isEffectivelyVisible(object.id))
             continue;
         const QString message = browserHost->message(object.id);
-        if (message.isEmpty())
+        if (message.isEmpty() || std::any_of(offers.begin(), offers.end(), [&](const EmptyLayout &offer) { return offer.frame == object.id; }))
             continue;
         const QRectF frame = documentToView().mapRect(document.bounds(object.id));
         if (frame.width() < 40)

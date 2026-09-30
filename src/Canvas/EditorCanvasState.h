@@ -209,6 +209,18 @@ struct EditorCanvas::State {
     void drawFrameLabels(QPainter &painter) const;
     // A Browser View's line over the frame, as "Paused by reset" (EditorCanvas+Browser.cpp).
     void drawBrowserMessages(QPainter &painter) const;
+    // An empty Browser View's three ways to fill it (EditorCanvas+EmptyFrame.cpp), in view pixels.
+    struct EmptyLayout {
+        QUuid frame;
+        QRectF title, type, generate, build, hint;
+        QString buildLine;
+    };
+    std::vector<EmptyLayout> emptyFrames() const;
+    void drawEmptyFrames(QPainter &painter) const;
+    bool emptyFramePress(QPointF view);
+    QString emptyFrameTip(QPointF view) const;
+    // Esc while a page is being written for an empty frame stops it.
+    bool stopGenerating();
     BrowserViewHost *browserHost = nullptr;
     // A Browser View's address bar and sign-in strip (EditorCanvas+BrowserBar.cpp), laid out in view pixels.
     struct BrowserBarLayout {

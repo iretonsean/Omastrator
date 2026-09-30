@@ -51,7 +51,7 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
         return;
     }
     // A Browser View's bar and sign-in strip take their presses before any tool does.
-    if (browserBarPress(view))
+    if (browserBarPress(view) || emptyFramePress(view))
         return;
     // Edit Page: a press in the frame is the page's; outside it, the mode ends and the press goes on to the tool.
     if (editPagePress(view, modifiers))
