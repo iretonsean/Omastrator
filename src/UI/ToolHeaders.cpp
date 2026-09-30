@@ -1,5 +1,6 @@
 #include "UI/ToolHeaders.h"
 #include "UI/ColorPaletteControls.h"
+#include "UI/FrameToolHeader.h"
 #include "UI/NumberField.h"
 #include <QCheckBox>
 #include <QComboBox>
@@ -59,8 +60,7 @@ ToolHeaderBar *ToolHeaders::make(EditorSession &session, Tool tool, QWidget *par
     case Tool::width: return plainBar(tool, QStringLiteral("Drag on the stroke to add or move a width point · Alt-drag moves one side · Delete removes it"), parent);
     case Tool::hand:
     case Tool::zoom: return new NavigationToolHeader(session, parent);
-    case Tool::frame:
-        return plainBar(tool, QStringLiteral("Drag to draw a frame · Inside a frame it nests · Shift squares · Alt draws from the centre"), parent);
+    case Tool::frame: return new FrameToolHeader(session, parent);
     case Tool::browse:
         return plainBar(tool, QStringLiteral("Click, type and scroll inside a Browser View · Esc returns to Selection · Drag empty canvas to pan"), parent);
     case Tool::browserView:

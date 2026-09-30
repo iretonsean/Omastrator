@@ -61,6 +61,7 @@ private slots:
     void remappedKeysReachTheCanvasAsTheirOriginals();
     void theDockFollowsItsSettings();
     void theLayoutFollowsTheWireframe();
+    void theFrameIslandDropsSizesAndSetsTheSelectedFrames();
 
 private:
     QTemporaryDir m_config;
@@ -414,6 +415,40 @@ void ContentViewTests::theLayoutFollowsTheWireframe()
     }
     Editor again;
     QCOMPARE(find<QWidget>(again.view, "layersDock").width(), widened);
+}
+
+void ContentViewTests::theFrameIslandDropsSizesAndSetsTheSelectedFrames()
+{
+    Editor editor;
+    editor.session.selectTool(Tool::frame);
+    auto &size = find<QComboBox>(editor.view, "frameSize");
+    auto &clip = find<QCheckBox>(editor.view, "frameClip");
+    QVERIFY(!clip.isEnabled());
+    // A size drops a frame of that size and hands over to Selection, as Figma does.
+    int phone = -1;
+    for (int i = 0; i < size.count(); ++i)
+        if (size.itemData(i).toSizeF().isValid() && phone < 0)
+            phone = i;
+    QVERIFY(phone > 0);
+    const QSizeF wanted = size.itemData(phone).toSizeF();
+    size.setCurrentIndex(phone);
+    emit size.activated(phone);
+    QCOMPARE(editor.session.tool(), Tool::select);
+    QCOMPARE(editor.session.selectedFrames().size(), size_t(1));
+    QCOMPARE(editor.session.selectionBounds().size(), wanted);
+    // Back on the Frame tool, the selected frame's clipping and auto layout are one click each.
+    editor.session.selectTool(Tool::frame);
+    auto &clipAgain = find<QCheckBox>(editor.view, "frameClip");
+    QVERIFY(clipAgain.isEnabled());
+    const bool clipped = editor.session.selectedFramesClip();
+    QCOMPARE(clipAgain.isChecked(), clipped);
+    clipAgain.click();
+    QCOMPARE(editor.session.selectedFramesClip(), !clipped);
+    auto &layout = find<QPushButton>(editor.view, "frameAutoLayout");
+    QCOMPARE(layout.text(), QStringLiteral("Add Auto Layout"));
+    layout.click();
+    QVERIFY(editor.session.selectedAutoLayout().has_value());
+    QCOMPARE(layout.text(), QStringLiteral("Remove Auto Layout"));
 }
 
 QTEST_MAIN(ContentViewTests)
