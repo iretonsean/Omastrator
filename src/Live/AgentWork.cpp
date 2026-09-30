@@ -189,3 +189,27 @@ QString AgentWork::handoffPrompt(const Package &package) const
     return text;
 }
 
+QString AgentWork::pagePrompt(const PageBrief &brief)
+{
+    QString text = QStringLiteral(
+                       "This is an Omastrator page task (request %1). You are writing a new web page as a small project.\n\n"
+                       "Work only in this folder: %2\n"
+                       "It already holds the starting files of the project:\n%3\n"
+                       "Don't run npm, install packages, start a server, commit, push or deploy. Omastrator shows the user every file, "
+                       "and only then creates the project, starts its dev server and commits.\n\n"
+                       "The stack: %4\n")
+                       .arg(brief.requestId, brief.staging, QStringLiteral("- ") + brief.files.join(QStringLiteral("\n- ")), brief.stack);
+    text += QStringLiteral("\nThe user asked for: %1\n").arg(brief.description);
+    if (!brief.tokenFile.isEmpty())
+        text += QStringLiteral("\nThe user's design system tokens are already in %1. Use them for colour, type and spacing, "
+                               "and don't invent new values where a token fits.\n")
+                    .arg(brief.tokenFile);
+    text += QStringLiteral(
+                "\nWrite the real page: finished copy, not lorem ipsum, and a layout that works from 390 px wide up. Keep to semantic "
+                "HTML and the stack's own styling. No scripts, fonts or images from other sites. Keep each file under about 400 lines "
+                "and add files only where the page needs them.\n\n"
+                "When you're done, run:\n  %1 agent live '{\"action\": \"agentDone\", \"requestId\": \"%2\", \"summary\": \"<one line on what the page is>\"}'\n"
+                "If you can't do it, run the same with a summary that says why, and change nothing.\n")
+                .arg(brief.command, brief.requestId);
+    return text;
+}

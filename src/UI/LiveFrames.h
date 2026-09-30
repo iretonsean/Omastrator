@@ -51,7 +51,8 @@ public:
 
     // Starts Live on the frame's tab, for the project in `folder` (else the registry's for the page's address).
     // Returns why it can't, or empty; the session reports the rest through its snapshot.
-    QString start(const QUuid &frame, const QString &folder = QString());
+    // `remember` false keeps the frame's address out of the project registry (a generated page's dev port).
+    QString start(const QUuid &frame, const QString &folder = QString(), bool remember = true);
     // Ends the frame's Live. Its own-site edits become held edits.
     void stop(const QUuid &frame);
     bool active(const QUuid &frame) const { return m_frames.contains(frame); }

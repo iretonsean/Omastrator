@@ -112,7 +112,7 @@ void LiveSession::frameProject()
         folder = m_project;
     } else if (targeted) {
         folder = m_targetFolder;
-        if (isWeb(m_url))
+        if (isWeb(m_url) && m_targetRemember)
             ProjectRegistry::remember(m_url, folder);
     } else if (isWeb(m_url)) {
         folder = ProjectRegistry::folderFor(m_url).value_or(QString());

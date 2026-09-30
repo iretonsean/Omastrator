@@ -229,7 +229,7 @@ bool EditorCanvas::event(QEvent *event)
     }
     if (event->type() == QEvent::ToolTip) {
         const auto *help = static_cast<QHelpEvent *>(event);
-        const QString tip = m_state->browserBarTip(help->pos());
+        const QString tip = m_state->browserBarTip(help->pos()).isEmpty() ? m_state->emptyFrameTip(help->pos()) : m_state->browserBarTip(help->pos());
         if (tip.isEmpty())
             QToolTip::hideText();
         else

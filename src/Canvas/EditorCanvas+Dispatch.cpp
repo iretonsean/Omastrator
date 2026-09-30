@@ -50,10 +50,11 @@ void EditorCanvas::State::press(QPointF view, Qt::KeyboardModifiers modifiers)
             beginRulerGuide(Qt::Vertical, view);
         return;
     }
-    // The Browser View switch, then a Browser View's bar and sign-in strip, take their presses before any tool does.
+    // The Browser View switch, then a Browser View's bar and sign-in strip and an empty frame's offers, take their presses
+    // before any tool does.
     if (browserSwitchPress(view))
         return;
-    if (browserBarPress(view))
+    if (browserBarPress(view) || emptyFramePress(view))
         return;
     // Edit Page: a press in the frame is the page's; outside it, the mode ends and the press goes on to the tool.
     if (editPagePress(view, modifiers))

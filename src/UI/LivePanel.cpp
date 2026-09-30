@@ -62,6 +62,7 @@ LivePanel::LivePanel(AgentBridge &bridge, QWidget *parent) : QWidget(parent), m_
     connect(&m_bridge, &AgentBridge::liveReviewChanged, this, &LivePanel::rebuild);
     connect(&m_bridge.liveSession(), &LiveSession::changed, this, &LivePanel::rebuild);
     connect(&m_bridge, &AgentBridge::waitingChanged, this, &LivePanel::rebuild);
+    connect(&m_bridge, &AgentBridge::activityChanged, this, &LivePanel::rebuild);
     rebuild();
 }
 
@@ -171,6 +172,25 @@ void LivePanel::rebuild()
     }
     if (m_bridge.waiting() && m_bridge.waiting()->task == AgentBridge::Task::live)
         column->addWidget(label(m_bridge.waitingText(), QStringLiteral("liveReviewWaiting"), self));
+    // Generate a page's steps: what Claude and the project are doing, one line each.
+    if (!m_bridge.activity().empty()) {
+        QLabel *title = label(QStringLiteral("<b>Activity</b>"), QStringLiteral("liveActivityTitle"), self);
+        title->setTextFormat(Qt::RichText);
+        column->addWidget(title);
+        for (const AgentBridge::ActivityLine &line : m_bridge.activity()) {
+            using State = AgentBridge::ActivityLine::State;
+            const QString mark = line.state == State::done ? QStringLiteral("✓") : line.state == State::running ? QStringLiteral("…")
+                : line.state == State::failed                                                                  ? QStringLiteral("✗")
+                                                                                                               : QStringLiteral("·");
+            column->addWidget(label(QStringLiteral("%1  %2").arg(mark, line.text), QStringLiteral("liveActivityLine"), self));
+        }
+        if (m_bridge.writingPage()) {
+            QPushButton *stop = button(QStringLiteral("Stop"), QStringLiteral("liveActivityStop"), self);
+            stop->setToolTip(QStringLiteral("Stop writing the page. Nothing is written to your project."));
+            column->addWidget(stop, 0, Qt::AlignLeft);
+            connect(stop, &QPushButton::clicked, this, [this] { m_bridge.stopPage(); });
+        }
+    }
 
     // Deploy first: it writes, commits, pushes and deploys in one go.
     auto *actions = new QHBoxLayout;

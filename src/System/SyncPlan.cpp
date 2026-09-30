@@ -191,6 +191,9 @@ QString execute(const SyncPlan &plan, const Confirmation &confirmation)
         return QStringLiteral("This confirmation was for another plan.");
     if (!plan.problem.isEmpty())
         return plan.problem;
+    // A new repository goes where there is none: one that appeared since the preview would take the commit.
+    if (plan.git && plan.git->create && QFileInfo::exists(QDir(plan.git->repository).filePath(QStringLiteral(".git"))))
+        return QStringLiteral("%1 became a git repository since the preview. Nothing was written.").arg(plan.git->repository);
     // Nothing is written if any file changed since the preview.
     for (const FileWrite &write : plan.writes) {
         const QString stale = QStringLiteral("%1 changed since the preview. Nothing was written.").arg(write.path);
@@ -246,6 +249,15 @@ QString execute(const SyncPlan &plan, const Confirmation &confirmation)
                 return QStringLiteral("Couldn't write %1: %2").arg(write.path, file.errorString());
         }
         written.append(write.path);
+    }
+    if (plan.git && plan.git->create && !QFileInfo::exists(QDir(plan.git->repository).filePath(QStringLiteral(".git")))) {
+        if (const QString failed = run(git(), {QStringLiteral("init"), QStringLiteral("-q")}, plan.git->repository); !failed.isEmpty())
+            return failed;
+        // Before the first commit, so it also works where `git init -b` doesn't.
+        if (const QString failed = run(git(), {QStringLiteral("symbolic-ref"), QStringLiteral("HEAD"), QStringLiteral("refs/heads/") + plan.git->branch},
+                                       plan.git->repository);
+            !failed.isEmpty())
+            return failed;
     }
     if (plan.git && plan.git->commit && !written.isEmpty()) {
         QStringList relative;

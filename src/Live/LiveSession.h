@@ -63,6 +63,9 @@ public:
         // and waits for the tab, and again after the tab is replaced. `url` is ignored; the tab's page is the page.
         QUuid frame;
         BrowserPool *pool = nullptr;
+        // False: `folder` is this frame's for the address it shows, and that address is not put in the project registry. A page
+        // Generate made runs on a dev port that belongs to no project for long (docs/MOTION.md, section 12).
+        bool remember = true;
     };
 
     explicit LiveSession(QObject *parent = nullptr);
@@ -287,6 +290,7 @@ private:
     QPointer<BrowserPool> m_pool;
     QUuid m_frame;
     QString m_targetFolder;
+    bool m_targetRemember = true;
     QString m_scriptId;
     QJsonObject m_geometry;
     bool m_pageEditing = false;

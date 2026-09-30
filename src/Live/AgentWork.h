@@ -57,6 +57,17 @@ struct AgentWork {
         std::vector<LiveEdit> pending;
         QString command;
     };
+    // Generate a page (docs/MOTION.md, section 4): a new project written into `staging`, which holds the template already.
+    struct PageBrief {
+        QString requestId;
+        QString staging;
+        QString description;
+        QString stack;
+        QStringList files;
+        QString tokenFile;
+        QString command;
+    };
+    static QString pagePrompt(const PageBrief &brief);
     // A line per edit: what the user changed on the live page.
     static QString describe(const std::vector<LiveEdit> &edits);
     QString handoffPrompt(const Package &package) const;

@@ -1,6 +1,7 @@
 #pragma once
 #include "Canvas/BrowserViewHost.h"
 #include "Live/BrowserPool.h"
+#include "Live/PageTemplates.h"
 #include <QElapsedTimer>
 #include <QHash>
 #include <QSet>
@@ -12,6 +13,7 @@
 #include <QTimer>
 #include <QWindow>
 #include <functional>
+#include <memory>
 #include <QUrl>
 #include <QUuid>
 
@@ -54,6 +56,7 @@ public:
     QString message(const QUuid &frame) const override;
     Bar bar(const QUuid &frame) const override;
     void act(const QUuid &frame, Action action) override;
+    Empty empty(const QUuid &frame) const override;
     bool signInOffered() const override;
     void signIn() override;
     void dismissSignIn() override;
@@ -98,6 +101,8 @@ public:
     QString savePreview(const QUuid &frame);
     void discardPreview(const QUuid &frame);
     AgentBridge *agent() const;
+    // The folder of a page Generate a page made, while its frame still shows the dev server it was given; empty otherwise.
+    QString generatedProject(const QUuid &frame) const;
     // Live runs the frame's project from its dev server: the tab shows the document's address on `server`, and the
     // document keeps the production address. An empty `server` puts the tab back on the production page.
     void useDevServer(const QUuid &frame, const QUrl &server);
@@ -276,6 +281,31 @@ private:
     QString startBuild(const QUuid &frame, const QString &folder, const QString &note);
     void addBuildActions(const QUuid &frame, QMenu *menu);
     bool hasDesign(const QUuid &frame) const;
+    // Generate a page in an empty frame, and Build It from one (BrowserViews+Generate.cpp): the sheet, the agent's staging folder,
+    // the plan to confirm, and the new project's dev server.
+    struct Generation;
+    struct Generated {
+        QString folder;
+        QUrl dev;
+        quint64 lease = 0;
+    };
+    static QString noPage();
+    void runGenerateAction(const QUuid &frame, Action action, const QString &note = QString());
+    QString startGenerate(const QUuid &frame, const QString &description, PageTemplates::Stack stack, const QString &folder, bool build,
+                          const QString &note);
+    void generateWritten(const QUuid &frame, bool cancelled, const QString &summary, const QString &error);
+    void confirmGenerate(const QUuid &frame, std::vector<PageTemplates::File> files);
+    void serveGenerated(const QUuid &frame);
+    void endGenerate(const QUuid &frame, const QString &notice);
+    void cancelGenerate(const QUuid &frame);
+    void stopGenerations();
+    // The document is going: a page being written stops, and nothing of the session is touched.
+    void abandonGenerations();
+    void showActivity(const QUuid &frame);
+    void releaseGenerated(const QUuid &frame);
+    QString generateLine(const QUuid &frame) const;
+    // The bar's Build slot while a page is being made for the frame; false when none is.
+    bool fillGenerating(const QUuid &frame, Bar &bar) const;
     void call(const Entry &entry, const QString &method, const QJsonObject &params = {});
     QUuid frameOf(const QUuid &key) const;
     void note(const QUuid &frame, State state);
@@ -300,6 +330,8 @@ private:
     void onPreviewChanged(const QString &folder);
     void endPreview(const QUuid &frame);
     QPointer<AgentBridge> m_agent;
+    QHash<QUuid, std::shared_ptr<Generation>> m_generations;
+    QHash<QUuid, Generated> m_generated;
     // When each project last deployed, from the bridge's state (ms since the epoch).
     QHash<QString, qint64> m_deployedAt;
     // Each own site's breakpoints, by origin, read again on every load.

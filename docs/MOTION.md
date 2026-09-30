@@ -859,3 +859,93 @@ The author took the recommended answer to each open question.
     the expected indices and Save writes each in its own rule; a group change is one undo step; an extra delay moves one element's start
     and giving it back restores it; an effect replaces the first keyframe, undoes and is written), `MotionModelTests` (the orders from
     boxes, shuffle by seed, the group's name) and `WriteBackTests`.
+
+## 12. As built: phase E, Generate a page (2026-09-30)
+
+Built on `feat/motion-e`, off `feat/motion`. Section 4 holds the design; this
+section lists what the build decided or changed.
+
+**Files.** `Live/PageTemplates` (templates, staging, collect), `System/PagePlan`,
+`UI/GeneratePageSheet`, `UI/BrowserViews+Generate.cpp`,
+`UI/AgentBridge+Generate.cpp`, `AgentWork::pagePrompt`, and
+`Canvas/EditorCanvas+EmptyFrame.cpp`. Tests: `tests/UI/GeneratePageTests.cpp`.
+
+**Changes to shared types.** `BrowserViewHost` gains `Action::generatePage` and
+`empty()` (what an empty frame offers). `SyncPlan` gains `destinationLabel`
+("Creates"), `runsAfter` and `GitTarget::create`. The dialog shows them. The
+runner makes the repository (`git init`, then `HEAD` on `main`) after it writes the
+files and before it commits.
+
+**The agent's run.** The agent starts in the staging folder with project access
+and the template already written. It is not a git worktree, and it uses no branch.
+`AgentBridge::generatePage` files the run by request id, and `agentDone` answers it.
+The bridge owns the staging folder until the run says it wrote something. Stop,
+Esc, reset and a run that ends without an answer remove it. A stopped run removes it
+after the agent process has ended. An agent in a terminal cannot be stopped from
+here: the folder goes at once, and a late `agentDone` finds no task.
+
+**Stop is this run's.** The frame's generation keeps the agent's request id, and the pill, Esc, the panel's Stop, reset and
+closing the document stop that run through `AgentBridge::stopPage(id)`, not through `stopWaiting()`. An Ask made meanwhile
+takes the agent's waiting; Stop still ends the page run and leaves the Ask alone.
+
+**Files after `agentDone`.** An agent may write or format once more before it exits. When `agentDone` arrives while the
+agent's process still runs, the bridge waits for the process to end (at most 5 s, then it stops it) before the files are
+read. An agent in a terminal has no process to wait for, and its files are read at once.
+
+**The plan and its object.** The plan's dialog runs its own event loop, and the agent's socket is answered meanwhile, so a
+reset or a closed document can end the `BrowserViews` under it. The code keeps a `QPointer` across the dialog and in the
+plan's `apply`. After a reset, Confirm still writes the project, and a notice says no server runs for it. A repository that
+appears in the folder while the plan shows stops the create ("became a git repository since the preview").
+
+**The plan waits for the reply.** `agentDone` comes through the agent socket, which
+waits for its reply. The plan opens on the next turn of the event loop, so the
+agent's command does not wait for the person to answer.
+
+**Checks before the plan.** The template's files are compared with the agent's in path order, so a refusing agent is noticed
+for every stack. The folder's name is HTML-escaped in `<title>` and `<h1>`. No description, a folder that is a file, and a folder
+that has anything in it (hidden files too) are refused in the sheet. An agent that
+left the template as it was, or wrote more than 200 files or 8 MB, gets no plan; the
+person sees why. `.git`, `node_modules`, `dist` and `.astro` in the staging folder
+are ignored, and so are links.
+
+**What "Then runs" means.** The plan lists `npm install` and `npm run dev` (or
+"Omastrator's static server, on the folder"), but the runner does not run them: a dev
+server never exits. `apply` calls `DevServers::acquire`, and the frame's address
+changes when the server answers (one "Change URL" undo step, so the frame is empty
+again after one Undo). A server that fails leaves the project in place, and the notice
+says where it is.
+
+**The dev server's life.** `BrowserViews` holds one lease per generated frame. It
+lets go when the frame goes, when the document closes, on reset, and when the frame
+is generated into again (after an Undo). Another address in the frame does not release it.
+
+**Whose page it is.** The dev origin is not registered, at Confirm or later, because a port belongs to no project for long:
+a registry entry for `http://127.0.0.1:5173` would make another project that gets that port later look like this one, and
+Save, Deploy and Build It would write into the wrong folder. The frame keeps the folder in memory
+(`BrowserViews::generatedProject`) while it shows that origin. So it is not "Not your site", the bar shows "dev", Deploy and
+Save act on the folder, and Edit Page starts Live with the folder and with `remember` off (`LiveFrames::start(frame, folder,
+false)`, `LiveSession::Target::remember`), so Live does not put the address in the registry either. The link is not saved in
+the file: a reopened document shows the address with no server behind it.
+
+**Folder suggestions.** The sheet does not list `ProjectRegistry::suggest` results.
+Every suggestion is an existing project, and Generate refuses a folder that has
+files. The field starts at `~/Projects/<name>`, made from the description
+(`PageTemplates::slug`), and follows the description until it is edited.
+
+**Build It from an empty frame.** With no address, Build It opens the same sheet
+without the description. A new or empty folder gets the starter project and the plan
+first, with no agent. Then Build It runs on it, as it does for any own site. A folder
+that already holds a project skips the plan and builds into it as it is. Cancel on
+the plan writes nothing.
+
+**Activity.** `AgentBridge::activity()` holds the lines. The Live panel opens with
+the run and lists them: ✓ done, … running, · waiting, ✗ failed. The frame shows the
+running line over its empty page, and the bar's Build pill reads "Writing with
+Claude…" and stops the run. Esc stops it too, after it has cancelled a drag or an armed link, and only for a frame on the
+page in front. The lines are: the tokens (when the
+document has any), writing the page, the commit, `npm install` (for the stacks that
+run it) and the dev server.
+
+**Design system tokens.** When the document has tokens, they go into the template's
+token file before the agent starts: `TokenFiles::writeTailwind` for Vite + Tailwind,
+`writeCss` for the other two. The prompt tells the agent where they are.

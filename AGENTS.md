@@ -107,6 +107,13 @@ Each folder builds as its own static library:
   fake omdrop and omadrop.
   Pages as Workspaces (docs/WORKSPACES.md) is `PageWorkspaces` (+Place, +Sync)
   and `PageStandIn`; its tests run a fake Hyprland, `tests/UI/FakeHyprlandWorld.h`.
+- Generate a page (docs/MOTION.md, section 4) is `Live/PageTemplates` (the stack
+  templates, the staging folder), `System/PagePlan` (the `SyncPlan` to confirm),
+  `UI/GeneratePageSheet`, `UI/BrowserViews+Generate.cpp` and
+  `UI/AgentBridge+Generate.cpp` (the agent's run), with the empty frame's buttons
+  in `Canvas/EditorCanvas+EmptyFrame.cpp`. Its tests use a fake agent,
+  `SyncConfirmDialog::setResponder` and `GeneratePageSheet::setResponder`, and a
+  fake `npm` first on PATH.
 - `src/OmastratorApp.cpp` holds `main`. `omastrator --daemon` runs the app in the
   background with no window until one is asked for (`show_window`); a second
   `omastrator` hands its files to the running one.

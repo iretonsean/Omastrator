@@ -57,7 +57,7 @@ QString LiveFrames::canonical(const QString &folder)
     return resolved.isEmpty() ? folder : resolved;
 }
 
-QString LiveFrames::start(const QUuid &frame, const QString &folder)
+QString LiveFrames::start(const QUuid &frame, const QString &folder, bool remember)
 {
     if (m_frames.contains(frame))
         return {};
@@ -98,6 +98,7 @@ QString LiveFrames::start(const QUuid &frame, const QString &folder)
     // The site the folder is for: the address the frame was opened on.
     target.url = object->browser->url;
     target.folder = folder.isEmpty() ? QString() : canonical(folder);
+    target.remember = remember;
     pool->run([session = QPointer<LiveSession>(session), target] {
         if (session)
             session->start(target);

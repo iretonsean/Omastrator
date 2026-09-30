@@ -70,6 +70,9 @@ bool BrowserViews::hasDesign(const QUuid &frame) const
 
 void BrowserViews::fillBuild(const QUuid &frame, Bar &bar) const
 {
+    // A page being made for this empty frame: the pill stops it, as Build It's does.
+    if (fillGenerating(frame, bar))
+        return;
     if (!m_agent || !hasDesign(frame))
         return;
     const QUuid building = m_agent->buildingFrame();
@@ -95,6 +98,11 @@ void BrowserViews::runBuildAction(const QUuid &frame, Action action)
 {
     if (!m_agent) {
         emit notice(QStringLiteral("Open the project's window to build."));
+        return;
+    }
+    // A page being made for an empty frame stops from the same pill.
+    if (m_generations.contains(frame) && (action == Action::buildButton || action == Action::stopBuild)) {
+        cancelGenerate(frame);
         return;
     }
     // A held breakpoint preview has the frame resized in the document: Build It is for the design, not the preview.
@@ -146,6 +154,11 @@ void BrowserViews::runBuildAction(const QUuid &frame, Action action)
     // A site that isn't yours has no folder yet, so the Hand to Agent sheet asks for it.
     const VectorObject *object = m_session.document()->find(frame);
     const QUrl page = object && object->browser ? object->browser->url : QUrl();
+    // An empty frame has no site to ask about: it gets a new project first (BrowserViews+Generate.cpp).
+    if (page.isEmpty()) {
+        runGenerateAction(frame, Action::buildIt, note);
+        return;
+    }
     AgentSheets::handoffFrom(m_canvas ? m_canvas->window() : nullptr,
                              QStringLiteral("the design on %1").arg(page.host().isEmpty() ? QStringLiteral("this page") : page.host()), QString(),
                              [this, frame, note](const QString &folder, const QString &notes) {

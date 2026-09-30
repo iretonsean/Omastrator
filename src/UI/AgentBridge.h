@@ -21,6 +21,7 @@
 #include <QRectF>
 #include <QUrl>
 #include <QTimer>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -233,6 +234,42 @@ public:
     // Packages it (render, SVG, lifted selectors, the edits as CSS) and runs the agent headlessly in a worktree of
     // `folder`; its change lands as a review. Returns why it couldn't start, or empty.
     QString handOff(const HandOff &handOff, QString *requestId = nullptr);
+    // Generate a page (docs/MOTION.md, section 4): the agent writes a new project into `staging`, which already holds the
+    // stack's template, and answers with agentDone. Until `done` says it wrote something, the bridge owns `staging` and removes it
+    // when the run is stopped or fails; after that it is the caller's.
+    struct PageRequest {
+        QString staging;
+        QString description;
+        // The stack in a sentence, and the template's files (relative), as the agent is told them.
+        QString stack;
+        QStringList files;
+        // The file the design system's tokens went into, or empty when the document has none.
+        QString tokenFile;
+    };
+    struct PageResult {
+        bool cancelled = false;
+        // The agent's one line, when it answered.
+        QString summary;
+        // Why it stopped without an answer.
+        QString error;
+    };
+    using PageDone = std::function<void(const PageResult &)>;
+    // Returns why it couldn't start, or empty; `done` is called once, later. `requestId` gets the run's id, which stopPage takes.
+    QString generatePage(const PageRequest &request, PageDone done, QString *requestId = nullptr);
+    // Stops the page run with this id (the only one when none is named), whatever else the agent is asked meanwhile.
+    void stopPage(const QString &requestId = QString());
+    // How long the agent has to exit after it says it is done, before it is stopped and its files are read (tests shorten it).
+    static void setPageDrainMs(int ms);
+    // Steps of a longer job, one line each, for the Live panel's Activity list.
+    struct ActivityLine {
+        enum class State { pending, running, done, failed };
+        QString text;
+        State state = State::pending;
+    };
+    const std::vector<ActivityLine> &activity() const { return m_activity; }
+    // The agent is writing a page.
+    bool writingPage() const { return !m_pages.empty(); }
+    void setActivity(std::vector<ActivityLine> lines);
     // The Browser View a Build It is running for, or null; and when one finished (ms since the epoch), until the next action.
     QUuid buildingFrame() const;
     QString buildingAgent() const;
@@ -352,6 +389,8 @@ signals:
     void liveReviewChanged();
     // A preview began, became ready, failed or ended for the project.
     void previewChanged(const QString &folder);
+    // The Activity list changed.
+    void activityChanged();
     // The floating bar asks for the Design System panel: on `session` (an overlay; null is the front tab),
     // with a site's scan to offer when it isn't empty.
     void designSystemRequested(EditorSession *session, const QJsonObject &siteScan, const QString &source);
@@ -367,6 +406,11 @@ private:
     void deployRunFinished(AgentRun &run);
     // Cancels a Live agent's run; its worktree goes once it has stopped. An agent in a terminal is left to finish.
     void stopLiveJob(const QString &requestId);
+    // Generate a page's side of agentDone, of a run that ended without one, and of Stop (AgentBridge+Generate.cpp).
+    QString pageAgentDone(const QString &requestId, const QString &summary);
+    void finishPage(const QString &requestId, const QString &summary);
+    void pageRunFinished(const QString &requestId, AgentRun &run);
+    void stopPageJob(const QString &requestId);
     QString quietly(const std::function<bool()> &run);
     // Follows the front tab's session, so its tool and document reach status followers.
     void watchFront();
@@ -434,6 +478,15 @@ private:
     };
     QHash<QString, Build> m_builds;
     QHash<QUuid, qint64> m_built;
+    struct PageJob {
+        PageRequest request;
+        PageDone done;
+        // The agent said it was done while its process still ran: the files are read when it ends.
+        bool answered = false;
+        QString summary;
+    };
+    std::map<QString, PageJob> m_pages;
+    std::vector<ActivityLine> m_activity;
     QString m_liveMessage;
     QString m_liveLog;
     void wireDeploy();

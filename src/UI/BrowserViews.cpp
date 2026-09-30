@@ -1,5 +1,6 @@
 #include "UI/AgentBridge.h"
 #include "UI/BrowserViews.h"
+#include "Live/DevServers.h"
 #include "Canvas/EditorCanvas.h"
 #include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
@@ -123,6 +124,10 @@ BrowserViews::~BrowserViews()
         for (const QString &folder : folders)
             m_agent->discardPreview(folder);
     }
+    abandonGenerations();
+    // A generated page's dev server stops with the document that showed it.
+    for (const Generated &generated : std::as_const(m_generated))
+        DevServers::shared().release(generated.lease, true);
     // A decode in flight posts its result to this object, so it ends first.
     m_decoder.waitForDone();
     // The session may be going too, so nothing of it is touched here.
@@ -248,7 +253,10 @@ QString BrowserViews::message(const QUuid &frame) const
         if (snapshot.startingServer || snapshot.state == LiveSession::State::failed)
             return snapshot.message;
     }
-    return object->browser->url.isEmpty() ? QStringLiteral("No page yet.") : QString();
+    // Generate a page's current step, over the empty page it is filling.
+    if (m_generations.contains(frame))
+        return generateLine(frame);
+    return object->browser->url.isEmpty() ? noPage() : QString();
 }
 
 void BrowserViews::resume(const QUuid &frame)
@@ -342,6 +350,9 @@ void BrowserViews::resetAll()
 {
     // Every frame's Live ends first, so nothing re-attaches to a tab the reset closes.
     LiveFrames::stopAll();
+    // A page being written stops, and its staging folder goes.
+    for (BrowserViews *views : std::as_const(instances()))
+        views->stopGenerations();
     for (BrowserViews *views : std::as_const(instances())) {
         for (auto it = views->m_entries.begin(); it != views->m_entries.end(); ++it) {
             views->savePicture(it.key(), *it);
@@ -765,6 +776,8 @@ void BrowserViews::dropEntry(const QUuid &frame)
         return;
     if (LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly))
         live->stop(frame);
+    cancelGenerate(frame);
+    releaseGenerated(frame);
     if (found->state == State::live || found->state == State::paused || found->state == State::opening)
         BrowserViews::pool()->close(found->key);
     m_frameOfKey.remove(found->key);

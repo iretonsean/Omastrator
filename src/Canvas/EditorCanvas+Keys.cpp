@@ -97,6 +97,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             finishPen();
         } else if (endHeldPreview()) {
             // A breakpoint button's width lets go.
+        } else if (stopGenerating()) {
+            // A page being written for an empty frame stops, after whatever Esc was cancelling first.
         } else if (session.isolatedGroup()) {
             session.exitIsolation();
         } else if (!session.pickedNodes().empty()) {

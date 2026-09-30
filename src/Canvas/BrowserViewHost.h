@@ -50,9 +50,20 @@ public:
     // Object ▸ Browser View and Ctrl+K). `deployButton` is the bar's pill (it opens Details after a failure and the site after a deploy); `deploy` and
     // `save` always start one. The rest are the bar menu's, for the frame's project; `buildButton` is the bar's Build It pill (it starts a
     // build, stops one, or opens the review of a finished one).
-    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, keepEdits, editSets, showOriginal, exportCss, deployButton, deploy, save, reviewChanges, history, stopLive, buildButton, buildIt, buildItWithNote, stopBuild };
+    enum class Action { back, forward, reload, reloadIgnoringCache, stop, thisIsMySite, keepEdits, editSets, showOriginal, exportCss, deployButton, deploy, save, reviewChanges, history, stopLive, buildButton, buildIt, buildItWithNote, stopBuild, generatePage };
     virtual Bar bar(const QUuid &frame) const;
     virtual void act(const QUuid &frame, Action action);
+
+    // An empty frame's offers (docs/MOTION.md, section 4): under "No page yet." three ways to fill it. `offered` is false once the
+    // frame has an address, and while a page is being written for it (`generating`, which Esc stops). Build It from a canvas frame
+    // is a button when the frame has design on it (`build`); otherwise `buildLine` says how to get there.
+    struct Empty {
+        bool offered = false;
+        bool build = false;
+        QString buildLine;
+        bool generating = false;
+    };
+    virtual Empty empty(const QUuid &frame) const;
 
     // A protocol command for the frame's page (the Browse tool's input). False when the page can't take it: not open yet,
     // or paused, in which case a frame that reset paused starts again.
@@ -107,6 +118,7 @@ public:
 
 inline BrowserViewHost::Bar BrowserViewHost::bar(const QUuid &) const { return {}; }
 inline void BrowserViewHost::act(const QUuid &, Action) {}
+inline BrowserViewHost::Empty BrowserViewHost::empty(const QUuid &) const { return {}; }
 inline bool BrowserViewHost::dispatch(const QUuid &, const QString &, const QJsonObject &) { return false; }
 inline QList<int> BrowserViewHost::breakpoints(const QUuid &) const { return {390, 768, 1280, 1440}; }
 inline void BrowserViewHost::browserViewSwitched(const QUuid &, bool) {}

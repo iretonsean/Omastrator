@@ -150,6 +150,7 @@ QString LiveSession::start(const Target &target)
         m_pool = target.pool;
         m_frame = target.frame;
         m_targetFolder = target.folder;
+        m_targetRemember = target.remember;
         m_targetOrigin = (target.url.scheme() == QLatin1String("http") || target.url.scheme() == QLatin1String("https")) ? EditSets::originOf(target.url) : QString();
         m_project.clear();
         setState(State::starting, QStringLiteral("Waiting for the page…"));
