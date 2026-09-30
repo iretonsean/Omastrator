@@ -198,6 +198,16 @@ void BrowserViews::notePicture(const QUuid &frame, const QImage &image)
     found->imageSaved = false;
     found->lost = 0;
     scheduleRepaint(frame);
+    emit pictureArrived(frame);
+}
+
+void BrowserViews::setScrubbed(const QUuid &frame, bool scrubbed)
+{
+    if (scrubbed)
+        m_scrubbed.insert(frame);
+    else
+        m_scrubbed.remove(frame);
+    scheduleReconcile();
 }
 
 void BrowserViews::decoded(const QUuid &frame, const QImage &image, int ack)

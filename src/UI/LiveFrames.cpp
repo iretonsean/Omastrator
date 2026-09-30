@@ -85,6 +85,7 @@ QString LiveFrames::start(const QUuid &frame, const QString &folder)
     const auto report = [this, frame, session] { publish(frame, capture(*session), session); };
     connect(session, &LiveSession::changed, session, report);
     connect(session, &LiveSession::geometryChanged, session, report);
+    connect(session, &LiveSession::motionChanged, session, report);
     // Edits left behind by a frame that browsed to another project are the owner's to hold, in the order they happened.
     connect(session, &LiveSession::editsLeft, session, [](const QString &project, const std::vector<LiveEdit> &edits) {
         // qApp, not this: hold is static, and a document that closed meanwhile must not drop them.
@@ -115,6 +116,8 @@ LiveFrames::Snapshot LiveFrames::capture(const LiveSession &session)
     snapshot.url = session.url();
     snapshot.selection = session.selection();
     snapshot.geometry = session.geometry();
+    snapshot.motion = session.motion();
+    snapshot.motionHeld = session.motionHeld();
     snapshot.edits = session.edits();
     snapshot.tokens = session.tokens().toJson();
     snapshot.canUndo = session.canUndoEdit();
@@ -204,6 +207,14 @@ void LiveFrames::setPageEditing(const QUuid &frame, bool on)
 {
     run(frame, [on](LiveSession &live) {
         live.setPageEditing(on);
+        return QString();
+    });
+}
+
+void LiveFrames::setPreview(const QUuid &frame, const QUrl &origin)
+{
+    run(frame, [origin](LiveSession &live) {
+        live.setPreviewOrigin(origin);
         return QString();
     });
 }

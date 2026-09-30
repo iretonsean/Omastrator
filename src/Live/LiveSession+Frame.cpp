@@ -104,8 +104,12 @@ void LiveSession::frameProject()
     const bool served = m_lease && !m_serverProject.isEmpty() && sameOrigin(m_url, m_serverUrl);
     // The folder the frame was opened with is for the site it was opened on; browsing to another site looks it up.
     const bool targeted = !m_targetFolder.isEmpty() && (m_targetOrigin.isEmpty() || (isWeb(m_url) && EditSets::originOf(m_url) == m_targetOrigin));
+    // Motion previewed from a worktree (docs/MOTION.md, section 4): the page is the project's page, on a server of its own.
+    const bool previewed = !m_previewOrigin.isEmpty() && !m_project.isEmpty() && isWeb(m_url) && sameOrigin(m_url, m_previewOrigin);
     if (served) {
         folder = m_serverProject;
+    } else if (previewed) {
+        folder = m_project;
     } else if (targeted) {
         folder = m_targetFolder;
         if (isWeb(m_url))
@@ -209,6 +213,9 @@ void LiveSession::tabGone()
     m_page.reset();
     m_selection = {};
     m_geometry = {};
+    m_forced.clear();
+    m_forcedNodes.clear();
+    m_agentsOn = false;
     m_scriptId.clear();
     if (m_state == State::running || m_state == State::starting)
         setState(State::starting, QStringLiteral("Waiting for the page…"));
@@ -222,6 +229,8 @@ void LiveSession::leaveFrame()
     m_pool->disconnect(this);
     if (m_page && m_pool->cdp()) {
         CdpConnection &pool = *m_pool->cdp();
+        // The page plays on and its forced states end, as they were.
+        motionLetGo(2000);
         // Short waits: leaving never hangs on a browser that has stopped answering.
         call(pool, QStringLiteral("Runtime.evaluate"), {{"expression", "window.__oma && window.__oma.leave()"}}, m_page->sessionId, nullptr, 2000);
         if (!m_scriptId.isEmpty())

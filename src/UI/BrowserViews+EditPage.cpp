@@ -33,6 +33,9 @@ QString BrowserViews::beginEditPage(const QUuid &frame)
 
 void BrowserViews::endEditPage(const QUuid &frame)
 {
+    // Leaving Edit Page (Esc) discards motion that was only being previewed: the timeline that saves it goes with the mode.
+    if (m_previewed.contains(frame))
+        discardPreview(frame);
     if (LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly); live && live->active(frame))
         live->setPageEditing(frame, false);
 }
@@ -47,6 +50,9 @@ void BrowserViews::onLiveChanged(const QUuid &frame)
         m_canvas->leaveEditPage();
     // The island's server state reads Live's snapshot.
     emit frameChanged(frame);
+    // Stop Live, reset and closing the document discard a preview: it was only ever shown, never written.
+    if (m_previewed.contains(frame) && (!live || !live->active(frame)))
+        discardPreview(frame);
 }
 
 namespace {

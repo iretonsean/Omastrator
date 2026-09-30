@@ -11,6 +11,8 @@
 #include "UI/ExportForScreensSheet.h"
 #include "UI/HistoryPanel.h"
 #include "UI/KeyboardShortcuts.h"
+#include "UI/MotionInspector.h"
+#include "UI/MotionTimeline.h"
 #include "UI/ObjectDialogs.h"
 #include "UI/PageWorkspaces.h"
 #include "UI/ShareController.h"
@@ -631,6 +633,19 @@ void Menus::buildViewAndWindow(QMenuBar &bar)
         }
     });
     add(window, QStringLiteral("showDesignSystem"), QStringLiteral("Design System"), QKeySequence(), [this] { showDesignSystem(); });
+    // The page's motion (docs/MOTION.md): the timeline under the canvas, and its inspector.
+    add(window, QStringLiteral("showTimeline"), QStringLiteral("Timeline"), QKeySequence(), [this] {
+        if (MotionTimeline *timeline = MotionTimeline::of(session()))
+            timeline->toggle();
+        // A refused open leaves the tick as the timeline is.
+        synchronize();
+    })->setCheckable(true);
+    add(window, QStringLiteral("showMotion"), QStringLiteral("Motion"), QKeySequence(), [this] {
+        if (m_motionPanel.isVisible())
+            m_motionPanel.close();
+        else
+            showMotion();
+    })->setCheckable(true);
     add(window, QStringLiteral("showSwatches"), QStringLiteral("Swatches"), QKeySequence(), [this] {
         if (m_agent)
             m_agent->showSwatchesPanel();
@@ -679,6 +694,19 @@ void Menus::showHistory()
     m_historyPanel.show(QStringLiteral("History"), new HistoryPanel(session()));
 }
 
+void Menus::showMotion()
+{
+    MotionTimeline *timeline = MotionTimeline::of(session());
+    if (!timeline)
+        return;
+    m_motionPanel.onClose = [this] {
+        m_motionPanel.close();
+        synchronize();
+    };
+    m_motionPanel.show(QStringLiteral("Motion"), new MotionInspector(*timeline));
+    synchronize();
+}
+
 void Menus::watchFront(EditorCanvas *canvas)
 {
     // The History panel follows the front document.
@@ -690,7 +718,18 @@ void Menus::watchFront(EditorCanvas *canvas)
     disconnect(m_canvasWatch);
     disconnect(m_pageWatch);
     disconnect(m_pageModeWatch);
+    disconnect(m_timelineOpened);
+    disconnect(m_timelineChanged);
     m_canvas = canvas;
+    // The inspector opens with the timeline, and the menu's tick follows it.
+    if (MotionTimeline *timeline = MotionTimeline::of(session())) {
+        m_timelineOpened = connect(timeline, &MotionTimeline::opened, this, [this] {
+            if (!m_motionPanel.isVisible())
+                showMotion();
+            synchronize();
+        });
+        m_timelineChanged = connect(timeline, &MotionTimeline::closed, this, &Menus::synchronize);
+    }
     if (m_typeStyles)
         m_typeStyles->follow();
     if (m_designSystem)

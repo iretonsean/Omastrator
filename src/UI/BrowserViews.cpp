@@ -1,3 +1,4 @@
+#include "UI/AgentBridge.h"
 #include "UI/BrowserViews.h"
 #include "Canvas/EditorCanvas.h"
 #include "Document/BrowserAddress.h"
@@ -116,6 +117,12 @@ BrowserViews::BrowserViews(EditorSession &session) : QObject(&session), m_sessio
 BrowserViews::~BrowserViews()
 {
     instances().removeAll(this);
+    // A preview shown here goes with the document: its server and worktree, and nothing was written.
+    if (m_agent) {
+        const QStringList folders = m_previewed.values();
+        for (const QString &folder : folders)
+            m_agent->discardPreview(folder);
+    }
     // A decode in flight posts its result to this object, so it ends first.
     m_decoder.waitForDone();
     // The session may be going too, so nothing of it is touched here.
@@ -510,7 +517,7 @@ BrowserViews::Want BrowserViews::wanted(const QUuid &frame, const VectorObject &
     want.scale = density > 1.5 ? 2 : 1;
     const auto rounded = [](double pixels) { return int(std::min<double>(castLimit, std::ceil(std::max(64.0, pixels) / 64) * 64)); };
     want.cast = QSize(rounded(want.view.width() * backing), rounded(want.view.height() * backing));
-    want.frameGap = m_session.isSelected(object.id) || m_browsed.contains(object.id) ? 0 : (streaming > 4 ? 66 : 33);
+    want.frameGap = m_session.isSelected(object.id) || m_browsed.contains(object.id) || m_scrubbed.contains(object.id) ? 0 : (streaming > 4 ? 66 : 33);
     return want;
 }
 

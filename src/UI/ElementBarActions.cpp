@@ -1,9 +1,13 @@
 #include "UI/ElementBarActions.h"
+#include "UI/HandsFocusBack.h"
 #include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/ElementBar.h"
 #include "ContentView.h"
 #include "UI/AgentBridge.h"
+#include "Agent/AgentLauncher.h"
+#include "UI/AnimateSheet.h"
+#include "UI/BrowserViews.h"
 #include "UI/ColorPickerSheet.h"
 #include "UI/FloatingPanel.h"
 #include "UI/LiveFrames.h"
@@ -43,6 +47,9 @@ struct Shared_ {
     std::unique_ptr<FloatingPanel> picker;
     // Padding shown for each side instead of as a pair; kept across the bar's refills.
     bool boxed = false;
+    // The Animate sheet under the bar (docs/MOTION.md, section 4), made on first use.
+    QPointer<AnimateSheet> sheet;
+    QPointer<QWidget> bar;
 
     FloatingPanel &pickerPanel()
     {
@@ -108,30 +115,6 @@ QString colorText(const QColor &color)
     return QStringLiteral("rgba(%1, %2, %3, %4)").arg(color.red()).arg(color.green()).arg(color.blue()).arg(QString::number(color.alphaF(), 'g', 3));
 }
 
-// Enter and Esc finish with a field: the canvas takes the keyboard back, so Ctrl+Z and the next Esc reach Edit Page.
-class HandsFocusBack : public QObject {
-public:
-    HandsFocusBack(EditorCanvas *canvas, QObject *parent) : QObject(parent), m_canvas(canvas) {}
-
-protected:
-    bool eventFilter(QObject *, QEvent *event) override
-    {
-        if (event->type() != QEvent::KeyPress)
-            return false;
-        const int key = static_cast<QKeyEvent *>(event)->key();
-        if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Escape) {
-            // The field's own filter runs after this one and needs the key first.
-            QMetaObject::invokeMethod(m_canvas.data(), [canvas = m_canvas] {
-                if (canvas)
-                    canvas->setFocus(Qt::OtherFocusReason);
-            }, Qt::QueuedConnection);
-        }
-        return false;
-    }
-
-private:
-    QPointer<EditorCanvas> m_canvas;
-};
 
 class Filler {
 public:
@@ -166,8 +149,10 @@ public:
         number(QStringLiteral("elementRadius"), QStringLiteral("R"), QStringLiteral("Corner radius"), {QStringLiteral("border-radius")}, true, 0, 1000, 1);
         // A site that isn't the user's has no code to change: Build It offers Hand to Agent there.
         const bool yours = signature.contains(QLatin1Char('k'));
-        if (yours)
+        if (yours) {
             ask();
+            animate(signature.contains(QLatin1Char('g')));
+        }
         more(yours);
     }
 
@@ -365,6 +350,71 @@ private:
         m_row.addWidget(button);
     }
 
+    // Animate opens the sheet under the bar; several picked elements are one group.
+    void animate(bool together)
+    {
+        auto shared = m_shared;
+        shared->bar = m_parent;
+        QToolButton *button = tool(QStringLiteral("elementAnimate"), together ? QStringLiteral("Animate together") : QStringLiteral("Animate"));
+        button->setToolTip(together ? QStringLiteral("Ask the agent for motion that moves these elements as one group")
+                                    : QStringLiteral("Ask the agent to write motion for this element as real CSS"));
+        QObject::connect(button, &QToolButton::clicked, button, [shared] { openAnimateSheet(shared); });
+        m_row.addWidget(button);
+    }
+
+    static void openAnimateSheet(const std::shared_ptr<Shared_> &shared)
+    {
+        EditorCanvas *canvas = shared->canvas;
+        if (!shared->sheet) {
+            auto *sheet = new AnimateSheet(canvas);
+            shared->sheet = sheet;
+            QObject::connect(sheet, &AnimateSheet::cancelled, sheet, &AnimateSheet::close);
+            QObject::connect(sheet, &AnimateSheet::generate, sheet, [shared, sheet](const QString &instruction, bool reduced) {
+                const std::optional<QUuid> frame = shared->canvas->editPageFrame();
+                if (!frame)
+                    return;
+                const QString failure = BrowserViews::of(shared->canvas->session())->animate(*frame, instruction, reduced);
+                if (!failure.isEmpty()) {
+                    emit shared->canvas->notice(failure);
+                    return;
+                }
+                // Writing…: the sheet says so with Stop until the motion is ready to preview, or the run ends.
+                sheet->setRunning(true);
+                sheet->setSteps({QStringLiteral("✓ Asked your agent"), QStringLiteral("… Writing the motion"), QStringLiteral("· Checking it"), QStringLiteral("· Starting the preview")});
+            });
+            QObject::connect(sheet, &AnimateSheet::stopped, sheet, [shared, sheet] {
+                // Stop, and Esc while it writes: the run ends, its worktree goes, and the sheet stays for another try.
+                if (shared->agent)
+                    shared->agent->stopWaiting();
+                sheet->setRunning(false);
+            });
+            if (shared->agent) {
+                // The run ended (a preview is ready, or nothing was written): the sheet is done.
+                const auto ended = [shared, sheet] {
+                    if (sheet->isRunning() && shared->agent && shared->agent->animatingFrame().isNull()) {
+                        sheet->setRunning(false);
+                        sheet->close();
+                    }
+                };
+                QObject::connect(shared->agent, &AgentBridge::waitingChanged, sheet, ended);
+                QObject::connect(shared->agent, &AgentBridge::previewChanged, sheet, ended);
+            }
+        }
+        QString error;
+        const QString agent = AgentLauncher::defaultAgent(&error);
+        shared->sheet->open(agent.isEmpty() ? QString() : AgentBridge::displayName(agent), int(shared->selection().size()));
+        // Under the bar, kept inside the canvas.
+        QRect where(shared->sheet->size().isValid() ? shared->sheet->geometry().topLeft() : QPoint(), shared->sheet->size());
+        if (shared->bar) {
+            where.moveTopLeft(QPoint(shared->bar->x(), shared->bar->geometry().bottom() + 6));
+            if (where.bottom() > canvas->height() - 8)
+                where.moveTop(std::max(8, shared->bar->y() - where.height() - 6));
+            where.moveLeft(std::clamp(where.left(), 8, std::max(8, canvas->width() - where.width() - 8)));
+        }
+        shared->sheet->move(where.topLeft());
+        shared->sheet->raise();
+    }
+
     void more(bool yours)
     {
         auto shared = m_shared;
@@ -478,8 +528,12 @@ ElementBar *ElementBarActions::attach(AgentBridge *agent, EditorCanvas &canvas)
     auto *bar = new ElementBar(canvas);
     bar->setFiller([shared] {
                        QString signature = ElementBarActions::signature(shared->selection());
-                       if (!signature.isEmpty() && !shared->project().isEmpty())
+                       const bool yours = !signature.isEmpty() && !shared->project().isEmpty();
+                       if (yours)
                            signature += QLatin1Char('k');
+                       // Several elements are animated together, as one group (only where there is an Animate button to say so).
+                       if (yours && shared->selection().size() > 1)
+                           signature += QLatin1Char('g');
                        if (!signature.isEmpty() && shared->boxed)
                            signature += QLatin1Char('p');
                        return signature;

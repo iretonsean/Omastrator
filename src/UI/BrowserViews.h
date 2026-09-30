@@ -44,6 +44,8 @@ public:
     void flushPictures();
     // A streamed picture as it arrives; it goes into the document at the next flush. Tests use it in place of a page.
     void notePicture(const QUuid &frame, const QImage &image);
+    // The timeline is open on this frame: it streams every picture, as a browsed frame does (docs/MOTION.md, section 2).
+    void setScrubbed(const QUuid &frame, bool scrubbed);
 
     // The pool's name for a frame's tab; tests speak to the pool's signals with it.
     QUuid poolKey(const QUuid &frame) const;
@@ -83,6 +85,19 @@ public:
     bool canRedoPageEdit(const QUuid &frame) const override;
     void undoPageEdit(const QUuid &frame) override;
     void redoPageEdit(const QUuid &frame) override;
+    // Animate (docs/MOTION.md, section 4): asks the agent to write motion for the elements picked on the frame, and previews it
+    // from a worktree before anything is saved. Returns why it can't ask; the rest reports through `notice`.
+    QString animate(const QUuid &frame, const QString &instruction, bool reducedMotion = true);
+    // A second Animate while a preview is open asks; the answer is Keep (nothing starts), Discard (the preview goes, the ask
+    // starts) or Cancel (nothing starts). Tests answer it in place of the dialog.
+    enum class PreviewAnswer { keep, discard, cancel };
+    using PreviewChooser = std::function<PreviewAnswer()>;
+    static void setPreviewChooser(PreviewChooser chooser);
+    // The frame shows the agent's motion from its worktree. Save to code writes it; Discard drops it.
+    bool previewing(const QUuid &frame) const { return m_previewed.contains(frame); }
+    QString savePreview(const QUuid &frame);
+    void discardPreview(const QUuid &frame);
+    AgentBridge *agent() const;
     // Live runs the frame's project from its dev server: the tab shows the document's address on `server`, and the
     // document keeps the production address. An empty `server` puts the tab back on the production page.
     void useDevServer(const QUuid &frame, const QUrl &server);
@@ -122,11 +137,15 @@ public:
 signals:
     // A frame's state, address or loading changed.
     void frameChanged(const QUuid &frame);
+    // A frame began or stopped showing the agent's motion as a preview.
+    void previewStateChanged(const QUuid &frame);
     // Something the page tried that Browser View refuses, said once to the user.
     void notice(const QString &text);
     // A frame's Browser View switch went on or off, by any door (the switch, a command, undo, an agent, deleting it). The
     // island shows Live controls for a selected frame that is on.
     void browserViewChanged(const QUuid &frame, bool on);
+    // A new picture of the frame's page arrived (the timeline paces its seeks by it).
+    void pictureArrived(const QUuid &frame);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -276,6 +295,10 @@ private:
         bool retired = false;
     };
     QHash<QUuid, DevSwap> m_swaps;
+    // Frames that show a preview, and the project each previews.
+    QHash<QUuid, QString> m_previewed;
+    void onPreviewChanged(const QString &folder);
+    void endPreview(const QUuid &frame);
     QPointer<AgentBridge> m_agent;
     // When each project last deployed, from the bridge's state (ms since the epoch).
     QHash<QString, qint64> m_deployedAt;
@@ -297,5 +320,7 @@ private:
     QHash<QUuid, bool> m_wasOn;
     // Frames switched on whose project's server should start once they have an address and are seen.
     QSet<QUuid> m_serveWanted;
+    // Frames whose timeline is open; they stream every frame too, until it closes.
+    QSet<QUuid> m_scrubbed;
     QElapsedTimer m_clock;
 };

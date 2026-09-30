@@ -31,6 +31,9 @@ public:
         bool canUndo = false;
         bool canRedo = false;
         bool pageEditing = false;
+        // The page's motion as the overlay last listed it (Motion::parse reads it), and whether the timeline holds the page.
+        QJsonObject motion;
+        bool motionHeld = false;
         QString serverCommand;
         QUrl serverUrl;
         // The dev server is starting, and the tab is still on the production page.
@@ -63,6 +66,9 @@ public:
     void setPageEditing(const QUuid &frame, bool on);
     // The frame's Browser View switch: off freezes the dev server its session holds, on wakes the same one (docs/BROWSER-VIEW.md).
     void setServerPaused(const QUuid &frame, bool paused);
+    // The frame's tab is about to show a preview server's page for the project (docs/MOTION.md, section 4); an empty address
+    // says it no longer will.
+    void setPreview(const QUuid &frame, const QUrl &origin);
 
     // Across every document. Pending edits of a project are its frames' and the held ones; the window's are the bridge's.
     static std::vector<LiveEdit> pendingEdits(const QString &folder);

@@ -56,6 +56,12 @@ std::optional<Token::Group> TokenSet::groupOf(const QString &property)
         return Token::Group::fontWeight;
     if (property == QLatin1String("border-radius"))
         return Token::Group::radius;
+    // A duration or a delay snaps to the duration scale, an easing to the easings. A stagger is a token's own value.
+    if (property == QLatin1String("animation-duration") || property == QLatin1String("transition-duration")
+        || property == QLatin1String("animation-delay") || property == QLatin1String("transition-delay"))
+        return Token::Group::duration;
+    if (property == QLatin1String("animation-timing-function") || property == QLatin1String("transition-timing-function"))
+        return Token::Group::easing;
     return std::nullopt;
 }
 
@@ -79,6 +85,15 @@ std::optional<double> TokenSet::pixels(const QString &value, double rootFontSize
     return match.captured(2) == QLatin1String("rem") || match.captured(2) == QLatin1String("em") ? amount * rootFontSize : amount;
 }
 
+std::optional<double> TokenSet::milliseconds(const QString &value)
+{
+    static const QRegularExpression time(QStringLiteral(R"(^\s*(-?\d*\.?\d+)\s*(ms|s)\s*$)"));
+    const auto match = time.match(value);
+    if (!match.hasMatch())
+        return std::nullopt;
+    return match.captured(2) == QLatin1String("s") ? match.captured(1).toDouble() * 1000 : match.captured(1).toDouble();
+}
+
 TokenSet TokenSet::fromScan(const QJsonObject &scan, const std::vector<std::pair<QString, QColor>> &omarchy)
 {
     TokenSet set;
@@ -88,6 +103,10 @@ TokenSet TokenSet::fromScan(const QJsonObject &scan, const std::vector<std::pair
     static const QRegularExpression textVar(QStringLiteral("^--text-([a-z0-9]+)$"));
     static const QRegularExpression weightVar(QStringLiteral("^--font-weight-(.+)$"));
     static const QRegularExpression radiusVar(QStringLiteral("^--radius-(.+)$"));
+    static const QRegularExpression durationVar(QStringLiteral("^--duration-(.+)$"));
+    static const QRegularExpression staggerVar(QStringLiteral("^--stagger-(.+)$"));
+    static const QRegularExpression easeVar(QStringLiteral("^--ease-(.+)$"));
+    static const QRegularExpression easing(QStringLiteral(R"(^(cubic-bezier\(.+\)|steps\(.+\)|linear\(.+\)|linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$)"));
     for (auto it = vars.begin(); it != vars.end(); ++it) {
         const QString name = it.key();
         const QJsonObject resolved = it.value().toObject();
@@ -97,6 +116,30 @@ TokenSet TokenSet::fromScan(const QJsonObject &scan, const std::vector<std::pair
             continue;
         }
         Token token{Token::Group::color, Token::Source::css, name, resolved["value"].toString(), {}, {}, 0};
+        // Motion values are neither colours nor lengths: the page reports them as text, and the name says what they are.
+        if (const auto match = durationVar.match(name); match.hasMatch() && milliseconds(token.value)) {
+            token.group = Token::Group::duration;
+            token.number = *milliseconds(token.value);
+            token.value = number(token.number) + QStringLiteral("ms");
+            token.suffix = match.captured(1);
+            set.m_tokens.push_back(token);
+            continue;
+        }
+        if (const auto match = staggerVar.match(name); match.hasMatch() && milliseconds(token.value)) {
+            token.group = Token::Group::stagger;
+            token.number = *milliseconds(token.value);
+            token.value = number(token.number) + QStringLiteral("ms");
+            token.suffix = match.captured(1);
+            set.m_tokens.push_back(token);
+            continue;
+        }
+        if (const auto match = easeVar.match(name); match.hasMatch() && easing.match(token.value.trimmed()).hasMatch()) {
+            token.group = Token::Group::easing;
+            token.value = token.value.trimmed();
+            token.suffix = match.captured(1);
+            set.m_tokens.push_back(token);
+            continue;
+        }
         if (kind == QLatin1String("color")) {
             token.color = QColor::fromString(resolved["rgb"].toString());
             if (!token.color.isValid())
@@ -159,7 +202,27 @@ TokenSet::Resolution TokenSet::resolve(const QString &property, const QString &v
     if (!group)
         return resolution;
     const Token *best = nullptr;
-    if (*group == Token::Group::color) {
+    if (*group == Token::Group::easing) {
+        // An easing is kept if the page has a token for exactly it, with the token named; else as typed.
+        for (const Token &token : m_tokens) {
+            if (token.group == Token::Group::easing && token.value.simplified() == resolution.value.simplified()) {
+                best = &token;
+                break;
+            }
+        }
+    } else if (*group == Token::Group::duration) {
+        const auto wanted = milliseconds(resolution.value);
+        if (!wanted)
+            return resolution;
+        // Times snap to the page's scale of durations, as lengths snap to its spacing.
+        double nearest = 1e9;
+        for (const Token &token : m_tokens) {
+            if (token.group == Token::Group::duration && std::abs(token.number - *wanted) < nearest) {
+                nearest = std::abs(token.number - *wanted);
+                best = &token;
+            }
+        }
+    } else if (*group == Token::Group::color) {
         const QColor wanted = QColor::fromString(resolution.value);
         if (!wanted.isValid())
             return resolution;
@@ -239,7 +302,7 @@ TokenSet::Resolution TokenSet::resolve(const QString &property, const QString &v
 
 QJsonObject TokenSet::toJson() const
 {
-    static const char *groups[] = {"colors", "spacing", "fontSizes", "fontWeights", "radii"};
+    static const char *groups[] = {"colors", "spacing", "fontSizes", "fontWeights", "radii", "durations", "easings", "staggers"};
     QJsonObject json;
     for (const Token &token : m_tokens) {
         const char *key = groups[int(token.group)];

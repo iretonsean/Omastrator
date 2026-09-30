@@ -85,6 +85,45 @@ private:
         return folder;
     }
 
+    // A repository whose one stylesheet is `css`, for the rules motion adds.
+    QString motionRepository(const QByteArray &css)
+    {
+        const QString folder = m_directory.filePath(QStringLiteral("repo%1").arg(++m_repos));
+        write(folder + "/index.html", "<!doctype html>\n<link rel=\"stylesheet\" href=\"src/motion.css\">\n<p id=\"guji\">Guji</p>\n");
+        write(folder + "/src/motion.css", css);
+        run(folder, {"init", "-q", "-b", "main"});
+        run(folder, {"add", "-A"});
+        run(folder, {"commit", "-q", "-m", "First"});
+        return folder;
+    }
+
+    static LiveEdit property(const QString &selector, const QString &name, const QString &value)
+    {
+        LiveEdit edit;
+        edit.selector = selector;
+        edit.property = name;
+        edit.after = value;
+        return edit;
+    }
+
+    static LiveEdit keyframe(const QString &name, const QString &frame, const QString &property, const QString &value)
+    {
+        LiveEdit edit;
+        edit.selector = QStringLiteral("@keyframes ") + name;
+        edit.property = frame + QLatin1Char(' ') + property;
+        edit.after = value;
+        return edit;
+    }
+
+    // Writes the plan and gives the stylesheet as it is then.
+    static QByteArray applied(const QString &folder, const WriteBack::Plan &plan)
+    {
+        const QString failure = WriteBack::apply(plan.changes);
+        if (!failure.isEmpty())
+            qWarning().noquote() << failure;
+        return read(folder + "/src/motion.css");
+    }
+
 private slots:
     void initTestCase()
     {
@@ -171,6 +210,152 @@ private slots:
         QCOMPARE(read(repo + "/src/style.css"), QByteArray(":root {\n  --brand: #be123c;\n  --ink: #0f172a;\n}\n"));
         brand.property = "--missing";
         QCOMPARE(WriteBack::plan(repo, {brand}).unresolved.size(), size_t(1));
+    }
+
+    // Motion (docs/MOTION.md, section 3): the two rules write-back adds, and the reduced-motion block.
+    void aScopedCustomPropertyIsWrittenInTheRuleThatNamesTheElement()
+    {
+        const QByteArray css = "#guji  { --i: 1; }\n#huila { --i: 2; }\n#nyeri { --i: 0; }\n.card { animation-delay: calc(var(--i) * 140ms); }\n";
+        const QString repo = motionRepository(css);
+        // --i is declared three times, so no one declaration is "the" --i; the rule for #huila is.
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property("#huila", "--i", "5")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(plan.changes.size(), size_t(1));
+        QCOMPARE(applied(repo, plan), QByteArray("#guji  { --i: 1; }\n#huila { --i: 5; }\n#nyeri { --i: 0; }\n.card { animation-delay: calc(var(--i) * 140ms); }\n"));
+        QCOMPARE(plan.done, QStringList{"#huila: --i to 5"});
+    }
+
+    void aScopedCustomPropertyIsAddedToTheRuleThatLacksIt()
+    {
+        const QString repo = motionRepository("#guji  { --i: 1; }\n#huila {\n  --i: 2;\n}\n");
+        WriteBack::Plan plan = WriteBack::plan(repo, {property("#guji", "--delay-extra", "200ms")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), QByteArray("#guji  { --i: 1; --delay-extra: 200ms; }\n#huila {\n  --i: 2;\n}\n"));
+        // A rule of several lines gets a line of its own, at the same indent.
+        plan = WriteBack::plan(repo, {property("#huila", "--delay-extra", "80ms")});
+        QCOMPARE(applied(repo, plan), QByteArray("#guji  { --i: 1; --delay-extra: 200ms; }\n#huila {\n  --i: 2;\n  --delay-extra: 80ms;\n}\n"));
+    }
+
+    void aRuleThatOccursTwiceIsLeftForTheAgent()
+    {
+        const QByteArray css = "#guji { --i: 1; }\n@media (min-width: 800px) { #guji { --i: 2; } }\n";
+        const QString repo = motionRepository(css);
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property("#guji", "--i", "4")});
+        QVERIFY(plan.changes.empty());
+        QCOMPARE(plan.unresolved.size(), size_t(1));
+        QCOMPARE(read(repo + "/src/motion.css"), css);
+    }
+
+    void oneElementsEditNeverLandsInAnotherElementsRule()
+    {
+        // --i is declared once, on #guji: an edit for #huila is not that declaration.
+        const QByteArray css = "#guji { --i: 1; }\n";
+        const QString repo = motionRepository(css);
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property("#huila", "--i", "4")});
+        QVERIFY(plan.changes.empty());
+        QCOMPARE(plan.unresolved.size(), size_t(1));
+        // And the same edit on #guji is that declaration.
+        QCOMPARE(WriteBack::plan(repo, {property("#guji", "--i", "4")}).changes.size(), size_t(1));
+    }
+
+    void aMotionTokenOnRootIsWrittenWhereItIsDeclared()
+    {
+        const QString repo = motionRepository(":root {\n  --duration-reveal: 480ms;\n  --ease-reveal: cubic-bezier(0.16, 1, 0.3, 1);\n}\n#guji { --i: 1; }\n#huila { --i: 2; }\n");
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property(":root", "--duration-reveal", "600ms"), property(":root", "--ease-reveal", "cubic-bezier(0.34, 1.56, 0.64, 1)")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), QByteArray(":root {\n  --duration-reveal: 600ms;\n  --ease-reveal: cubic-bezier(0.34, 1.56, 0.64, 1);\n}\n#guji { --i: 1; }\n#huila { --i: 2; }\n"));
+    }
+
+    void aKeyframeValueIsWrittenInItsOneNamedBlock()
+    {
+        const QByteArray css = "@keyframes nl-rise {\n  from { opacity: 0; translate: 0 24px; }\n  to { opacity: 1; }\n}\n@keyframes nl-fade { from { opacity: 0; } }\n.a { animation: nl-rise 1s; }\n";
+        const QString repo = motionRepository(css);
+        WriteBack::Plan plan = WriteBack::plan(repo, {keyframe("nl-rise", "from", "translate", "0 40px"), keyframe("nl-rise", "to", "opacity", "0.9")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(plan.done.size(), 2);
+        QCOMPARE(applied(repo, plan), QByteArray("@keyframes nl-rise {\n  from { opacity: 0; translate: 0 40px; }\n  to { opacity: 0.9; }\n}\n@keyframes nl-fade { from { opacity: 0; } }\n.a { animation: nl-rise 1s; }\n"));
+        // The same value in the other block is not touched, and 0% is what "from" is.
+        plan = WriteBack::plan(repo, {keyframe("nl-fade", "0%", "opacity", "0.2")});
+        QVERIFY(plan.unresolved.empty());
+        QVERIFY(applied(repo, plan).contains("@keyframes nl-fade { from { opacity: 0.2; } }"));
+    }
+
+    void aKeyframeValueIsLeftWhenItsBlockOccursTwiceOrIsNotThere()
+    {
+        const QString twice = motionRepository("@keyframes nl-rise { from { opacity: 0; } }\n@keyframes nl-rise { from { opacity: 0; } }\n");
+        QCOMPARE(WriteBack::plan(twice, {keyframe("nl-rise", "from", "opacity", "0.5")}).unresolved.size(), size_t(1));
+        QCOMPARE(read(twice + "/src/motion.css"), QByteArray("@keyframes nl-rise { from { opacity: 0; } }\n@keyframes nl-rise { from { opacity: 0; } }\n"));
+        const QString missing = motionRepository("@keyframes nl-rise { from { opacity: 0; } to { opacity: 1; } }\n");
+        // No such block, no such frame, and a property the frame doesn't have.
+        QCOMPARE(WriteBack::plan(missing, {keyframe("nl-other", "from", "opacity", "0.5")}).unresolved.size(), size_t(1));
+        QCOMPARE(WriteBack::plan(missing, {keyframe("nl-rise", "50%", "opacity", "0.5")}).unresolved.size(), size_t(1));
+        QCOMPARE(WriteBack::plan(missing, {keyframe("nl-rise", "from", "translate", "0 4px")}).unresolved.size(), size_t(1));
+        // A block that doesn't close is not one whose braces balance.
+        const QString open = motionRepository("@keyframes nl-rise { from { opacity: 0; }\n");
+        QCOMPARE(WriteBack::plan(open, {keyframe("nl-rise", "from", "opacity", "0.5")}).unresolved.size(), size_t(1));
+    }
+
+    void aKeyframeValueInAFramesListIsFoundByAnyOfItsFrames()
+    {
+        const QString repo = motionRepository("@keyframes nl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }\n");
+        const WriteBack::Plan plan = WriteBack::plan(repo, {keyframe("nl-pulse", "to", "opacity", "0.8"), keyframe("nl-pulse", "50%", "opacity", "0.2")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), QByteArray("@keyframes nl-pulse { 0%, 100% { opacity: 0.8; } 50% { opacity: 0.2; } }\n"));
+    }
+
+    void reducedMotionIsTakenOutOfItsBlockAndPutBack()
+    {
+        const QByteArray rule = "@media (prefers-reduced-motion: reduce) { .word { animation: none; } }";
+        const QByteArray css = "/* omastrator:motion reveal */\n.word { animation: nl-rise 1s both; }\n" + rule + "\n/* omastrator:motion end */\n.other { color: red; }\n";
+        const QString repo = motionRepository(css);
+        LiveEdit off;
+        off.selector = "motion:reveal";
+        off.property = "reduced-motion";
+        off.before = QString::fromUtf8(rule);
+        WriteBack::Plan plan = WriteBack::plan(repo, {off});
+        QVERIFY(plan.unresolved.empty());
+        const QByteArray without = applied(repo, plan);
+        QCOMPARE(without, QByteArray("/* omastrator:motion reveal */\n.word { animation: nl-rise 1s both; }\n/* omastrator:motion end */\n.other { color: red; }\n"));
+        QCOMPARE(plan.done, QStringList{"Reduced motion off for reveal"});
+        // Put back, it is the same text on its own line: the file is what it was.
+        LiveEdit on;
+        on.selector = "motion:reveal";
+        on.property = "reduced-motion";
+        on.after = QString::fromUtf8(rule);
+        plan = WriteBack::plan(repo, {on});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), css);
+        // Off and on again in one session nets to nothing: the code is left alone.
+        LiveEdit net;
+        net.selector = "motion:reveal";
+        net.property = "reduced-motion";
+        net.before = QString::fromUtf8(rule);
+        net.after = QString::fromUtf8(rule);
+        plan = WriteBack::plan(repo, {net});
+        QVERIFY(plan.unresolved.empty());
+        QVERIFY(plan.changes.empty());
+    }
+
+    void reducedMotionIsLeftWhenTheCodeIsNotWhatWasSeen()
+    {
+        const QByteArray rule = "@media (prefers-reduced-motion: reduce) { .word { animation: none; } }";
+        const QString repo = motionRepository("/* omastrator:motion reveal */\n.word { animation: nl-rise 1s both; }\n" + rule + "\n/* omastrator:motion end */\n");
+        LiveEdit off;
+        off.selector = "motion:reveal";
+        off.property = "reduced-motion";
+        // The text that was seen is not the text there.
+        off.before = "@media (prefers-reduced-motion: reduce) { .word { animation: paused; } }";
+        QCOMPARE(WriteBack::plan(repo, {off}).unresolved.size(), size_t(1));
+        // A block that isn't there at all.
+        off.selector = "motion:elsewhere";
+        off.before = QString::fromUtf8(rule);
+        QCOMPARE(WriteBack::plan(repo, {off}).unresolved.size(), size_t(1));
+        // Putting back a rule the block has already.
+        LiveEdit on;
+        on.selector = "motion:reveal";
+        on.property = "reduced-motion";
+        on.after = QString::fromUtf8(rule);
+        QCOMPARE(WriteBack::plan(repo, {on}).unresolved.size(), size_t(1));
     }
 
     void dirtyFilesAreNamed()

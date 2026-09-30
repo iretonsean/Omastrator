@@ -33,6 +33,10 @@ QString prefixOf(TokenKind kind)
         return QStringLiteral("shadow");
     case TokenKind::type:
         return QStringLiteral("text");
+    case TokenKind::duration:
+        return QStringLiteral("duration");
+    case TokenKind::easing:
+        return QStringLiteral("ease");
     }
     return {};
 }
@@ -45,6 +49,8 @@ bool isAlias(TokenKind kind, const QString &segment)
         {TokenKind::radius, {"radius", "radii", "rounded", "border-radius", "borderradius", "corner"}},
         {TokenKind::shadow, {"shadow", "shadows", "box-shadow", "boxshadow", "elevation"}},
         {TokenKind::type, {"text", "type", "typography", "font", "fonts", "font-size", "fontsize"}},
+        {TokenKind::duration, {"duration", "durations"}},
+        {TokenKind::easing, {"ease", "easing", "easings"}},
     };
     return aliases.at(kind).contains(segment.toLower());
 }
@@ -193,6 +199,14 @@ std::optional<DesignToken> tokenFor(const QString &variable, const QString &valu
             return prefixOf(kind);
         return prefixOf(kind) + QLatin1Char('/') + bare;
     };
+    // Motion: --duration-*, --stagger-* (a duration in a `stagger` group) and --ease-* (Tailwind's own namespace for easings).
+    if (head == QLatin1String("duration") || head == QLatin1String("stagger")) {
+        if (const auto ms = TokenFiles::parseTime(value))
+            return DesignToken::number(TokenKind::duration,
+                                       head == QLatin1String("stagger") ? QStringLiteral("stagger/") + (tail.isEmpty() ? QStringLiteral("default") : tail) : named(TokenKind::duration), *ms);
+    }
+    if ((head == QLatin1String("ease") || head == QLatin1String("easing")) && TokenFiles::isEasing(value))
+        return DesignToken::easing(named(TokenKind::easing), value);
     if (const auto colour = TokenFiles::parseColor(value))
         return DesignToken::color(named(TokenKind::color), *colour);
     if (bare.contains(QLatin1String("shadow"))) {
@@ -315,6 +329,15 @@ std::vector<std::pair<QString, QString>> variablesFor(const DesignToken &token, 
         return {{name, length(value.number, like(name))}};
     case TokenKind::shadow:
         return {{name, value.shadow.css()}};
+    case TokenKind::duration: {
+        // A file that writes seconds keeps writing seconds.
+        const QString was = like(name).trimmed();
+        if (was.endsWith(QLatin1Char('s')) && !was.endsWith(QLatin1String("ms")))
+            return {{name, numeral(value.number / 1000) + QStringLiteral("s")}};
+        return {{name, numeral(value.number) + QStringLiteral("ms")}};
+    }
+    case TokenKind::easing:
+        return {{name, value.text}};
     case TokenKind::type: {
         std::vector<std::pair<QString, QString>> list{{name, length(value.type.size, like(name))}};
         if (value.type.lineHeight)
@@ -437,6 +460,12 @@ using namespace TokenFileParts;
 namespace TokenFiles {
 QString cssVariable(const DesignToken &token)
 {
+    // A stagger is a duration named in a `stagger` group, and keeps that name: --stagger-words.
+    if (token.kind == TokenKind::duration) {
+        const QStringList parts = token.name.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        if (parts.size() > 1 && parts.front().compare(QLatin1String("stagger"), Qt::CaseInsensitive) == 0)
+            return QStringLiteral("--stagger-") + slug(parts.mid(1).join(QLatin1Char('-')));
+    }
     const QString rest = restOf(token);
     if (rest.isEmpty() || (token.kind == TokenKind::spacing && isAlias(TokenKind::spacing, token.name)))
         return QStringLiteral("--") + prefixOf(token.kind);
@@ -507,6 +536,36 @@ QString cssColor(const QColor &color)
     if (color.alpha() == 255)
         return color.name(QColor::HexRgb);
     return QStringLiteral("rgba(%1, %2, %3, %4)").arg(color.red()).arg(color.green()).arg(color.blue()).arg(numeral(color.alphaF()));
+}
+
+std::optional<double> parseTime(const QString &css)
+{
+    static const QRegularExpression pattern(QStringLiteral(R"(^(-?[0-9]*\.?[0-9]+)\s*(ms|s)$)"));
+    const auto match = pattern.match(css.trimmed());
+    if (!match.hasMatch())
+        return std::nullopt;
+    const double value = match.captured(1).toDouble();
+    return match.captured(2) == QLatin1String("s") ? value * 1000 : value;
+}
+
+bool isEasing(const QString &css)
+{
+    static const QRegularExpression pattern(QStringLiteral(R"(^(cubic-bezier\(.+\)|steps\(.+\)|linear\(.+\)|linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$)"));
+    return pattern.match(css.trimmed()).hasMatch();
+}
+
+std::optional<std::array<double, 4>> cubicBezier(const QString &css)
+{
+    static const QRegularExpression pattern(QStringLiteral(R"(^cubic-bezier\(\s*(-?[0-9]*\.?[0-9]+)\s*,\s*(-?[0-9]*\.?[0-9]+)\s*,\s*(-?[0-9]*\.?[0-9]+)\s*,\s*(-?[0-9]*\.?[0-9]+)\s*\)$)"));
+    const auto match = pattern.match(css.trimmed());
+    if (!match.hasMatch())
+        return std::nullopt;
+    return std::array<double, 4>{match.captured(1).toDouble(), match.captured(2).toDouble(), match.captured(3).toDouble(), match.captured(4).toDouble()};
+}
+
+QString cubicBezierText(const std::array<double, 4> &points)
+{
+    return QStringLiteral("cubic-bezier(%1, %2, %3, %4)").arg(numeral(points[0]), numeral(points[1]), numeral(points[2]), numeral(points[3]));
 }
 
 std::optional<double> parseLength(const QString &css)

@@ -31,6 +31,8 @@ public:
         // Live runs the page from the project's dev server; `devTip` is its address and command.
         bool dev = false;
         QString devTip;
+        // What the pill says: "dev", or "preview" while the frame shows motion the agent wrote, from its worktree (docs/MOTION.md).
+        QString devLabel = QStringLiteral("dev");
         // Deploy, for a frame running Live on the user's own site: the button's word, the stage while it runs, or its
         // result for a few seconds. Empty when there is nothing to deploy.
         QString deploy;

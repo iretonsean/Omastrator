@@ -290,6 +290,7 @@ struct EditorCanvas::State {
     // The press is the page's when it lands in the frame; outside it the mode ends and this answers false.
     bool editPagePress(QPointF view, Qt::KeyboardModifiers modifiers);
     void drawEditPage(QPainter &painter) const;
+    QList<EditorCanvas::PickBadge> pickBadges() const;
     // Where a double-click on the Browser View at `view`, with no design object under it, would begin Edit Page.
     std::optional<QUuid> editPageTargetAt(QPointF view) const;
     // The frame's design children fade while the page is being edited.

@@ -1,0 +1,17 @@
+body { margin: 0; font: 18px/1.4 sans-serif; color: #0f172a; }
+main { padding: 32px; }
+.beans { display: flex; gap: 24px; }
+.bean-card { flex: 1; padding: 32px; border-radius: 12px; background: #f1f5f9; }
+
+/* omastrator:motion beans-cascade */
+:root { --duration-cascade: 640ms; --stagger-cascade: 140ms; --ease-cascade: cubic-bezier(0.25, 1, 0.5, 1); }
+@keyframes nl-cascade { from { opacity: 0; translate: 0 44px; rotate: -3deg; } }
+#guji  { --i: 1; }
+#huila { --i: 2; }
+#nyeri { --i: 0; }
+.bean-card {
+  animation: nl-cascade var(--duration-cascade) var(--ease-cascade) both;
+  animation-delay: calc(var(--i) * var(--stagger-cascade) + var(--delay-extra, 0ms));
+}
+@media (prefers-reduced-motion: reduce) { .bean-card { animation: none; } }
+/* omastrator:motion end */

@@ -665,6 +665,9 @@
     },
     // Puts one element back as it was: {style, cls, text} with null for "no attribute" or "leave the text".
     restore(selector, was) {
+      // Motion's own states (keyframes, timing) and edits that only the code has come back through motion.js.
+      if (was && was.codeOnly) return true;
+      if (was && was.motion) return !!(api.motion && api.motion.undo(was.motion));
       let element = null;
       try { element = document.querySelector(selector); } catch (e) { return false; }
       if (!element) return false;

@@ -138,6 +138,46 @@ private slots:
         QVERIFY(!TokenSet::pixels(QStringLiteral("auto")));
     }
 
+    // Motion tokens (docs/MOTION.md, section 6): the page reports them as text, and their names say what they are.
+    void motionTokensAreGroupsOfTheSetAndSnapLikeLengthsDo()
+    {
+        const auto text = [](const char *value) { return QJsonObject{{"kind", "other"}, {"value", value}}; };
+        QJsonObject scan = tailwindScan();
+        QJsonObject vars = scan["vars"].toObject();
+        vars["--duration-quick"] = text("200ms");
+        vars["--duration-reveal"] = text("480ms");
+        vars["--duration-slow"] = text("0.9s");
+        vars["--stagger-words"] = text("60ms");
+        vars["--ease-reveal"] = text("cubic-bezier(0.16, 1, 0.3, 1)");
+        vars["--ease-out"] = text("ease-out");
+        // Not a time, not an easing: left out, and never mistaken for a length.
+        vars["--duration-note"] = text("later");
+        vars["--ease-name"] = text("bounce");
+        scan["vars"] = vars;
+        const TokenSet tokens = TokenSet::fromScan(scan);
+        const QJsonObject json = tokens.toJson();
+        QCOMPARE(json["durations"].toArray().size(), 3);
+        QCOMPARE(json["staggers"].toArray().size(), 1);
+        QCOMPARE(json["easings"].toArray().size(), 2);
+        QCOMPARE(json["staggers"].toArray().first().toObject()["value"].toString(), QStringLiteral("60ms"));
+        QCOMPARE(TokenSet::milliseconds(QStringLiteral("0.9s")), std::optional<double>(900));
+        QVERIFY(!TokenSet::milliseconds(QStringLiteral("900")));
+
+        // A duration typed for the animation snaps to the page's scale, and names the token.
+        TokenSet::Resolution snapped = tokens.resolve(QStringLiteral("animation-duration"), QStringLiteral("450ms"), {});
+        QCOMPARE(snapped.token, QStringLiteral("--duration-reveal"));
+        QCOMPARE(snapped.value, QStringLiteral("480ms"));
+        snapped = tokens.resolve(QStringLiteral("transition-delay"), QStringLiteral("0.8s"), {});
+        QCOMPARE(snapped.token, QStringLiteral("--duration-slow"));
+        QCOMPARE(tokens.resolve(QStringLiteral("animation-duration"), QStringLiteral("nonsense"), {}).token, QString());
+        // An easing is a token only when it is exactly one the page has.
+        QCOMPARE(tokens.resolve(QStringLiteral("animation-timing-function"), QStringLiteral("cubic-bezier(0.16,  1, 0.3, 1)"), {}).token, QStringLiteral("--ease-reveal"));
+        QCOMPARE(tokens.resolve(QStringLiteral("animation-timing-function"), QStringLiteral("linear"), {}).token, QString());
+        // Nothing else about tokens changed.
+        QCOMPARE(tokens.resolve(QStringLiteral("padding"), QStringLiteral("20px"), {}).value, QStringLiteral("20px"));
+        QCOMPARE(tokens.resolve(QStringLiteral("color"), QStringLiteral("#e3204a"), {}).token, QStringLiteral("--brand"));
+    }
+
     void devCommandsFollowTheProject()
     {
         if (QStandardPaths::findExecutable(QStringLiteral("npm")).isEmpty())

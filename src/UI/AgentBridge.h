@@ -19,6 +19,7 @@
 #include <QDateTime>
 #include <QPointer>
 #include <QRectF>
+#include <QUrl>
 #include <QTimer>
 #include <map>
 #include <memory>
@@ -150,6 +151,56 @@ public:
     std::vector<LiveEdit> pendingEdits(const QString &folder) const;
     // "Ask AI…" in the page: the agent changes the code in a worktree of its own.
     QString liveAsk(const QString &instruction, const QJsonArray &elements, QString *agentRequest = nullptr, const QString &folder = QString());
+    // Animate (docs/MOTION.md, section 4): the agent writes motion into a worktree of the project, and that worktree is served as a
+    // preview. The project changes only at acceptPreview (Save to code); discardPreview leaves nothing on disk.
+    struct AnimateRequest {
+        QUuid frame;
+        QString folder;
+        QString instruction;
+        // The picked elements, the page's tokens, and the motion already on those elements, as the page reports them.
+        QJsonArray elements;
+        QJsonObject tokens;
+        QJsonArray motion;
+        QStringList keyframeNames;
+        // The frame's picture, how wide it is drawn, the page's address and the site's name, for the prompt.
+        QImage picture;
+        QString width;
+        QString url;
+        QString siteName;
+        // "Animate: #guji": the name of the review Save to code makes.
+        QString title;
+        bool reducedMotion = true;
+    };
+    QString liveAnimate(const AnimateRequest &request, QString *agentRequest = nullptr);
+    // Why another ask can't start now (the agent is on something), or empty.
+    QString busyMessage() const;
+    struct Preview {
+        QUuid frame;
+        QString folder;
+        QString title;
+        QString summary;
+        QString branch;
+        // The agent that wrote it, in its own name ("Claude").
+        QString agent;
+        // What the agent changed (relative to the project), what breaks the output contract, and the line the inspector shows then.
+        QStringList files;
+        QStringList problems;
+        QString notice;
+        QStringList blocks;
+        // The preview server's address once it answers, or why it couldn't start.
+        QUrl url;
+        bool ready = false;
+        QString failure;
+    };
+    std::optional<Preview> previewOf(const QString &folder) const;
+    std::optional<Preview> previewOfFrame(const QUuid &frame) const;
+    // The Browser View an Animate is being written for, or null.
+    QUuid animatingFrame() const;
+    // Save to code: the agent's change is written and recorded, what was tuned in the preview goes on top, and both are committed
+    // (and pushed, as a Save does). Returns why not, or empty.
+    QString acceptPreview(const QString &folder);
+    // Discard: the server is let go, the worktree removed, and the edits made while previewing dropped.
+    QString discardPreview(const QString &folder);
     // Hand to agent: the front document as a mockup, for an app whose code is in `folder`.
     QString handToAgent(const QString &folder, const QString &instruction);
     // Hand to Agent from any surface (docs/ANYWHERE.md): a page that isn't yours, a lifted app, art on the overlay.
@@ -299,6 +350,8 @@ signals:
     void roastChanged();
     // Reviews, kept files, the Live message.
     void liveReviewChanged();
+    // A preview began, became ready, failed or ended for the project.
+    void previewChanged(const QString &folder);
     // The floating bar asks for the Design System panel: on `session` (an overlay; null is the front tab),
     // with a site's scan to offer when it isn't empty.
     void designSystemRequested(EditorSession *session, const QJsonObject &siteScan, const QString &source);
@@ -355,6 +408,25 @@ private:
     QString m_panelProject;
     void followFrame(const QString &folder);
     std::map<QString, AgentWork> m_liveJobs;
+    // Animate: the agent's runs by request id, and the previews by project (docs/MOTION.md, section 4).
+    struct Animation {
+        QUuid frame;
+        QString folder;
+        QString title;
+        bool reducedMotion = true;
+    };
+    QHash<QString, Animation> m_animations;
+    struct PreviewState {
+        Preview info;
+        AgentWork work;
+        quint64 lease = 0;
+        // The project's pending edits when it began: what came after was made against the preview's motion.
+        std::vector<LiveEdit> pendingBefore;
+    };
+    std::map<QString, PreviewState> m_previews;
+    QString finishAnimation(const QString &requestId, const QString &summary);
+    void startPreviewServer(const QString &folder);
+    void releasePreview(const QString &folder, bool waitForServer);
     // Build Its by request id, and when each frame's last one finished.
     struct Build {
         QUuid frame;

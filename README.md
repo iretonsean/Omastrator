@@ -102,6 +102,23 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Build It: your agent changes the code to match it on its own git branch, and
   Review Changes shows the result. Build It with a Note… adds a line for the
   agent; on a site that isn't yours it asks for the code's folder first.
+  Window ▸ Timeline shows the page's motion (CSS animations and transitions,
+  scroll-driven animations, Web Animations from scripts) as rows under the
+  canvas: drag the playhead to scrub the live page, Play, Loop or Replay it, and
+  pick a row to select its elements. Window ▸ Motion shows what the row does
+  (start, easing, duration, stagger, keyframes) and the Code tab reads the
+  marked block in your project's code. In the inspector, scrubbing a duration,
+  stagger or easing curve shows on the page as you go and makes one Live edit
+  when you let go (Ctrl+Z takes it back); Save writes motion tokens, keyframe
+  values and per-element indices into the project's CSS, and hands the rest to
+  your agent. Animate, in the element bar, asks your agent to write the motion as
+  real CSS in your project: you preview it in the frame (from a copy on its own
+  branch, the pill says "preview") and only Save to code writes it; Discard, Stop
+  and Esc leave the project as it was. Preview reduced plays the page as for
+  someone who asked for less motion. Shift-click several elements and Animate together:
+  the timeline shows them as one group that opens into a row each, and the inspector
+  sets their order (as picked, left to right, centre out, shuffle), effect and stagger,
+  and one element's extra delay. Esc leaves Edit Page and lets the page play on.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.

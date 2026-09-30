@@ -5,6 +5,7 @@
 #include "Live/DevServers.h"
 #include "Live/EditSets.h"
 #include "Live/Tokens.h"
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -149,12 +150,63 @@ public:
     // true: the page as the site made it; false: every enabled set and unkept edit back on.
     QString showOriginal(bool original);
 
+    // Motion (docs/MOTION.md, section 2): the page's animations, held and seeked from the timeline. The calls run on the
+    // session's thread like the rest; each returns why it can't, or empty.
+    // Pauses every animation and keeps pausing new ones; the list comes back through motion().
+    QString motionHold();
+    // Lets the page play on from where it is, and lets go of forced states.
+    QString motionRelease();
+    // Puts every held animation at `ms` on the timeline.
+    QString motionSeek(double ms);
+    // Scroll-driven motion: scrolls the page to `px`.
+    QString motionSeekScroll(double px);
+    // Reads the list again (a stylesheet changed, a state was forced).
+    QString motionRefresh();
+    // Holds `selector` in a pointer or focus state (hover, focus, active), with `state` empty to let it go: a transition
+    // that a state starts can then be seen and scrubbed without a pointer on it.
+    QString motionForce(const QString &selector, const QString &state);
+    // Motion edits (docs/MOTION.md, section 3). A scrub step is shown and not recorded; the edit that follows takes it off
+    // first and is one Live edit, with its undo step. Each returns why it can't, or empty.
+    QString motionPreviewProperty(const QString &selector, const QString &property, const QString &value);
+    // A custom property on an element: a motion token on :root, or --i and --delay-extra on one element.
+    QString motionSetProperty(const QString &selector, const QString &property, const QString &value);
+    // One keyframe's value ("from", "to", "40%") in the @keyframes block `name`; the running animations show it at once.
+    QString motionSetKeyframe(const QString &name, const QString &frame, const QString &property, const QString &value);
+    // Duration, delay or easing (`property` is animation-duration, -delay or -timing-function) for motion the code holds in no
+    // token: shown at once, kept as an edit on each of `selectors` for the agent to write.
+    QString motionSetTiming(const QString &name, const QStringList &selectors, const QString &property, const QString &value);
+    // Groups (docs/MOTION.md, section 5): where the elements are (selector → {x, y, width, height} in the page's px), the order
+    // they start in as each one's `--i` (one undo step), and a whole keyframe at once (an effect: "opacity: 0; scale: 0.85").
+    QJsonObject motionBoxes(const QStringList &selectors);
+    QString motionSetIndices(const QList<QPair<QString, int>> &indices);
+    QString motionSetEffect(const QString &name, const QString &frame, const QString &declarations);
+    // The block's `@media (prefers-reduced-motion: reduce)` rule taken out (`removed` is its text, `added` empty) or put back
+    // (`added` is its text): only the code has it, so it is an edit and nothing on the page.
+    QString motionSetReducedMotion(const QString &block, const QString &removed, const QString &added);
+    // The page emulates a visitor who asked for less motion (`prefers-reduced-motion: reduce`), or no longer does: what is left
+    // running shows in the list.
+    QString motionEmulateReduced(bool reduced);
+    bool motionReduced() const { return m_reducedEmulated; }
+    // What starts the row's motion (load, scroll, hover or click), as an edit for the agent: shown at once where the page can
+    // (load replays; scroll moves the running animations onto a view timeline), and kept as a description of the change for the
+    // agent otherwise.
+    QString motionSetTrigger(const QString &name, const QStringList &selectors, const QString &from, const QString &to);
+    // A preview server stands in for the project's page on this origin: the project is still the frame's project there.
+    void setPreviewOrigin(const QUrl &origin);
+    // The last list `__oma.motion.list()` gave, and whether the timeline holds the page.
+    const QJsonObject &motion() const { return m_motion; }
+    bool motionHeld() const { return m_motionHeld; }
+    // Puts the page's selection on these elements (the timeline's row click); the first replaces it, the rest add.
+    QString selectElements(const QStringList &selectors);
+
     // The overlay's source.
     static QString overlayScript();
 
 signals:
     void changed();
     void geometryChanged();
+    // The overlay reported the page's motion again (an animation began or ended while it was held).
+    void motionChanged();
     void editApplied(const LiveEdit &edit);
     // "Ask AI…" in the bar: the prompt and the selected elements.
     void askRequested(const QString &prompt, const QJsonArray &elements);
@@ -238,6 +290,20 @@ private:
     QString m_scriptId;
     QJsonObject m_geometry;
     bool m_pageEditing = false;
+    QJsonObject m_motion;
+    bool m_motionHeld = false;
+    // The elements held in a pointer or focus state, by selector, and whether the DevTools DOM and CSS agents are on.
+    QHash<QString, QString> m_forced;
+    // The protocol's node behind each forced selector: it keeps the state per node, and asking for the document again gives
+    // new nodes, so a state is let go on the node it was put on.
+    QHash<QString, int> m_forcedNodes;
+    int m_domRoot = 0;
+    bool m_agentsOn = false;
+    bool m_reducedEmulated = false;
+    QUrl m_previewOrigin;
+    void motionLetGo(int timeoutMs);
+    QString forceState(const QString &selector, const QString &state, int timeoutMs);
+    void syncForced();
     struct UndoStep {
         QString selector;
         QString property;
@@ -250,6 +316,8 @@ private:
         int group = 0;
     };
     QString applyEdit(const QString &selector, const QString &property, const QString &value);
+    // Puts a change on the list of edits, with the step that undoes it.
+    void keep(LiveEdit edit, UndoStep step);
     QString undoStep();
     QString redoStep();
     void refreshSelection();

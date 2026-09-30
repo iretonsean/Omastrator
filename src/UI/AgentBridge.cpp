@@ -206,7 +206,12 @@ QJsonObject AgentBridge::statusExtras()
     return extras;
 }
 
-AgentBridge::~AgentBridge() = default;
+AgentBridge::~AgentBridge()
+{
+    // A preview's server and its worktree go with the window; nothing was written to the project.
+    while (!m_previews.empty())
+        releasePreview(m_previews.begin()->first, false);
+}
 
 QString AgentBridge::startServer(const QString &path)
 {
@@ -416,6 +421,8 @@ void AgentBridge::liveRunFinished(const QString &requestId, AgentRun &run)
     auto job = m_liveJobs.find(requestId);
     job->second.cleanup();
     m_liveJobs.erase(job);
+    // An Animate whose agent ended without saying it was done: there is nothing to preview.
+    const Animation ended = m_animations.take(requestId);
     if (m_waiting && m_waiting->requestId == requestId) {
         m_waiting.reset();
         emit waitingChanged();
@@ -431,6 +438,8 @@ void AgentBridge::liveRunFinished(const QString &requestId, AgentRun &run)
             m_live.notice(message);
     }
     emit liveReviewChanged();
+    if (!ended.folder.isEmpty())
+        emit previewChanged(ended.folder);
 }
 
 void AgentBridge::deployRunFinished(AgentRun &run)
@@ -457,6 +466,7 @@ void AgentBridge::stopLiveJob(const QString &requestId)
     AgentWork work = job->second;
     m_liveJobs.erase(job);
     m_builds.remove(requestId);
+    m_animations.remove(requestId);
     m_runs.erase(found);
     // The agent may still be writing in the worktree until it has stopped.
     connect(run, &AgentRun::finished, run, [work]() mutable { work.cleanup(); });
