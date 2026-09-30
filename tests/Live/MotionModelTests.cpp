@@ -195,7 +195,14 @@ private slots:
 
     void theMarkedBlockIsFoundWithItsLinesAndTokens()
     {
-        const QList<MotionCode::Block> found = MotionCode::blocks(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/motion"));
+        const QList<MotionCode::Block> all = MotionCode::blocks(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/motion"));
+        // The folder has two: the headline's in style.css and the cards' in cards.css, in the order of their files.
+        QCOMPARE(all.size(), 2);
+        QCOMPARE(all.first().name, QStringLiteral("beans-cascade"));
+        QList<MotionCode::Block> found;
+        for (const MotionCode::Block &each : all)
+            if (each.name == QLatin1String("headline-reveal"))
+                found.append(each);
         QCOMPARE(found.size(), 1);
         const MotionCode::Block &block = found.first();
         QCOMPARE(block.name, QStringLiteral("headline-reveal"));
@@ -210,9 +217,25 @@ private slots:
         QCOMPARE(tokens[1].first, QStringLiteral("--stagger-words"));
         QCOMPARE(tokens[2].second, QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
         // Named by its keyframes, or all when nothing is named.
-        QCOMPARE(MotionCode::relevant(found, {QStringLiteral("nl-rise")}, {}).size(), 1);
-        QCOMPARE(MotionCode::relevant(found, {QStringLiteral("nl-elsewhere")}, {}).size(), 0);
-        QCOMPARE(MotionCode::relevant(found, {}, {}).size(), 1);
+        QCOMPARE(MotionCode::relevant(all, {QStringLiteral("nl-rise")}, {}).size(), 1);
+        QCOMPARE(MotionCode::relevant(all, {QStringLiteral("nl-cascade")}, {}).first().name, QStringLiteral("beans-cascade"));
+        QCOMPARE(MotionCode::relevant(all, {QStringLiteral("nl-elsewhere")}, {}).size(), 0);
+        QCOMPARE(MotionCode::relevant(all, {}, {}).size(), 2);
+        // The custom properties a row takes its values from, read from the rule that runs the animation.
+        const MotionCode::Bindings rise = MotionCode::bindings(block, QStringLiteral("nl-rise"));
+        QCOMPARE(rise.duration, QStringLiteral("--duration-reveal"));
+        QCOMPARE(rise.easing, QStringLiteral("--ease-reveal"));
+        QCOMPARE(rise.stagger, QStringLiteral("--stagger-words"));
+        // A lede's animation writes its time out: nothing is bound.
+        const MotionCode::Bindings fade = MotionCode::bindings(block, QStringLiteral("nl-fade"));
+        QVERIFY(fade.duration.isEmpty() && fade.easing.isEmpty() && fade.stagger.isEmpty());
+        QVERIFY(MotionCode::bindings(block, QStringLiteral("nl-elsewhere")).duration.isEmpty());
+        // The reduced-motion rule, whole; and the one a block would need when it lacks it.
+        QCOMPARE(MotionCode::reducedRule(block), QStringLiteral("@media (prefers-reduced-motion: reduce) { .word, .lede, .card { animation: none; } }"));
+        MotionCode::Block without = block;
+        without.text.remove(QStringLiteral("@media (prefers-reduced-motion: reduce) { .word, .lede, .card { animation: none; } }\n"));
+        QVERIFY(MotionCode::reducedRule(without).isEmpty());
+        QCOMPARE(MotionCode::defaultReducedRule(without), QStringLiteral("@media (prefers-reduced-motion: reduce) { .word, .lede, .card { animation: none; } }"));
     }
 
     void buildFoldersAndAMarkerWithoutItsEndAreLeftAlone()

@@ -307,6 +307,14 @@ void MotionTimeline::onLiveChanged(const QUuid &frame)
         m_lastList = snapshot.motion;
         refresh(snapshot.motion);
     }
+    // A Save writes the pending edits into the code: the marked blocks are read again when they change.
+    if (snapshot.edits.size() != m_editCount) {
+        m_editCount = snapshot.edits.size();
+        scanCode();
+        if (m_code)
+            rebuildCode();
+        emit changed();
+    }
     // The page scrolled (the wheel over the frame): the scroll playhead follows, unless it is being dragged.
     const double scrolled = snapshot.geometry["scroll"].toObject()["y"].toDouble(m_scroll);
     if (!m_scrubbing && !m_inFlight && !m_wantScroll && scrolled != m_scroll) {
@@ -649,4 +657,129 @@ void MotionTimeline::rebuildCode()
         lines << block.text.split(QLatin1Char('\n')) << QString();
     }
     view->setPlainText(lines.join(QLatin1Char('\n')));
+}
+
+MotionCode::Bindings MotionTimeline::bindings() const
+{
+    const Motion::Track *track = selectedTrack();
+    if (!track)
+        return {};
+    for (const MotionCode::Block &block : codeBlocks()) {
+        const MotionCode::Bindings found = MotionCode::bindings(block, track->name);
+        if (!found.duration.isEmpty() || !found.easing.isEmpty() || !found.stagger.isEmpty())
+            return found;
+    }
+    return {};
+}
+
+std::optional<MotionCode::Block> MotionTimeline::blockOfSelection() const
+{
+    const Motion::Track *track = selectedTrack();
+    if (!track)
+        return std::nullopt;
+    for (const MotionCode::Block &block : codeBlocks()) {
+        if (!MotionCode::bindings(block, track->name).duration.isEmpty() || block.text.contains(track->name))
+            return block;
+    }
+    return std::nullopt;
+}
+
+void MotionTimeline::setToken(const QString &property, const QString &value, bool preview)
+{
+    if (!m_live || m_frame.isNull() || !property.startsWith(QLatin1String("--")))
+        return;
+    const QUuid frame = m_frame;
+    m_live->run(frame, [property, value, preview](LiveSession &session) {
+        return preview ? session.motionPreviewProperty(QStringLiteral(":root"), property, value)
+                       : session.motionSetProperty(QStringLiteral(":root"), property, value);
+    }, [this, frame](const QString &error) {
+        if (frame == m_frame && !error.isEmpty())
+            emit notice(error);
+    });
+}
+
+void MotionTimeline::setKeyframe(const QString &frame, const QString &property, const QString &value)
+{
+    const Motion::Track *track = selectedTrack();
+    if (!m_live || m_frame.isNull() || !track || track->kind != QLatin1String("css-animation"))
+        return;
+    const QUuid key = m_frame;
+    const QString name = track->name;
+    m_live->run(key, [name, frame, property, value](LiveSession &session) { return session.motionSetKeyframe(name, frame, property, value); },
+                [this, key](const QString &error) {
+                    if (key == m_frame && !error.isEmpty())
+                        emit notice(error);
+                });
+}
+
+void MotionTimeline::setTiming(const QString &property, const QString &value)
+{
+    const Motion::Track *track = selectedTrack();
+    if (!m_live || m_frame.isNull() || !track)
+        return;
+    const QUuid key = m_frame;
+    const QString name = track->kind == QLatin1String("css-animation") ? track->name : QString();
+    const QStringList selectors = track->selectors;
+    if (name.isEmpty())
+        return;
+    m_live->run(key, [name, selectors, property, value](LiveSession &session) { return session.motionSetTiming(name, selectors, property, value); },
+                [this, key](const QString &error) {
+                    if (key == m_frame && !error.isEmpty())
+                        emit notice(error);
+                });
+}
+
+bool MotionTimeline::reducedMotionOn() const
+{
+    const std::optional<MotionCode::Block> block = blockOfSelection();
+    if (!block || !m_live || m_frame.isNull())
+        return false;
+    bool on = block->reducedMotion;
+    for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
+        if (edit.selector == QLatin1String("motion:") + block->name && edit.property == QLatin1String("reduced-motion"))
+            on = !edit.after.isEmpty();
+    return on;
+}
+
+void MotionTimeline::setReducedMotion(bool on)
+{
+    const std::optional<MotionCode::Block> block = blockOfSelection();
+    if (!m_live || m_frame.isNull() || !block || on == reducedMotionOn())
+        return;
+    // Taking it out remembers its text; putting it back uses that text, or the rule the block's animations need.
+    QString removed;
+    QString added;
+    if (!on) {
+        removed = MotionCode::reducedRule(*block);
+        if (removed.isEmpty()) {
+            // The file has none: what is pending is the one that put it back, so this cancels it.
+            for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
+                if (edit.selector == QLatin1String("motion:") + block->name && edit.property == QLatin1String("reduced-motion"))
+                    removed = edit.after;
+        }
+        if (removed.isEmpty())
+            return;
+    } else {
+        for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
+            if (edit.selector == QLatin1String("motion:") + block->name && edit.property == QLatin1String("reduced-motion") && !edit.before.isEmpty())
+                added = edit.before;
+        if (added.isEmpty())
+            added = MotionCode::defaultReducedRule(*block);
+        if (added.isEmpty())
+            return;
+    }
+    const QUuid key = m_frame;
+    const QString name = block->name;
+    m_live->run(key, [name, removed, added](LiveSession &session) { return session.motionSetReducedMotion(name, removed, added); });
+}
+
+QString MotionTimeline::pendingValue(const QString &property, const QString &fallback) const
+{
+    if (!m_live || m_frame.isNull())
+        return fallback;
+    QString value = fallback;
+    for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
+        if (edit.selector == QLatin1String(":root") && edit.property == property)
+            value = edit.after;
+    return value;
 }

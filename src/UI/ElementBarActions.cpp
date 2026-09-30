@@ -1,4 +1,5 @@
 #include "UI/ElementBarActions.h"
+#include "UI/HandsFocusBack.h"
 #include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/ElementBar.h"
@@ -108,30 +109,6 @@ QString colorText(const QColor &color)
     return QStringLiteral("rgba(%1, %2, %3, %4)").arg(color.red()).arg(color.green()).arg(color.blue()).arg(QString::number(color.alphaF(), 'g', 3));
 }
 
-// Enter and Esc finish with a field: the canvas takes the keyboard back, so Ctrl+Z and the next Esc reach Edit Page.
-class HandsFocusBack : public QObject {
-public:
-    HandsFocusBack(EditorCanvas *canvas, QObject *parent) : QObject(parent), m_canvas(canvas) {}
-
-protected:
-    bool eventFilter(QObject *, QEvent *event) override
-    {
-        if (event->type() != QEvent::KeyPress)
-            return false;
-        const int key = static_cast<QKeyEvent *>(event)->key();
-        if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Escape) {
-            // The field's own filter runs after this one and needs the key first.
-            QMetaObject::invokeMethod(m_canvas.data(), [canvas = m_canvas] {
-                if (canvas)
-                    canvas->setFocus(Qt::OtherFocusReason);
-            }, Qt::QueuedConnection);
-        }
-        return false;
-    }
-
-private:
-    QPointer<EditorCanvas> m_canvas;
-};
 
 class Filler {
 public:

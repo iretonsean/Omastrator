@@ -358,6 +358,41 @@
   addEventListener("transitionrun", started, true);
   addEventListener("animationstart", started, true);
 
+  // ------------------------------------------------------------ edits
+
+  // The inline style each element had before a scrub began, so the edit that follows records the page's own "before".
+  const scrubbed = new Map();
+
+  function elementOf(selector) {
+    try { return document.querySelector(selector); } catch (e) { return null; }
+  }
+
+  const camel = (name) => name.replace(/-([a-z])/g, (m, c) => c.toUpperCase());
+  // "from", "to" and "40%" as an offset between 0 and 1.
+  function offsetOf(frame) {
+    const text = String(frame).trim().toLowerCase();
+    if (text === "from") return 0;
+    if (text === "to") return 1;
+    const value = parseFloat(text);
+    return text.endsWith("%") && isFinite(value) ? value / 100 : NaN;
+  }
+
+  // The animations named `name` (a CSS animation's @keyframes name, or a script animation's id), on the page.
+  const withName = (name) => animations().filter((a) => (a.animationName || a.id) === name && a.effect && a.effect.getKeyframes);
+
+  function keyframeState(name) {
+    return { type: "keyframes", items: withName(name).map((a) => ({ selector: oma.selectorFor(a.effect.target), name, keyframes: a.effect.getKeyframes() })) };
+  }
+
+  function timingState(name) {
+    return { type: "timing", items: withName(name).map((a) => {
+      const t = a.effect.getTiming();
+      return { selector: oma.selectorFor(a.effect.target), name, timing: { duration: t.duration, delay: t.delay, easing: t.easing } };
+    }) };
+  }
+
+  const findAnimation = (item) => withName(item.name).find((a) => oma.selectorFor(a.effect.target) === item.selector);
+
   const gsapTimeline = () => (window.gsap && window.gsap.globalTimeline && typeof window.gsap.globalTimeline.time === "function" ? window.gsap.globalTimeline : null);
 
   oma.motion = {
@@ -436,6 +471,75 @@
       watch();
       return next.size;
     },
-    isHeld: () => held
+    isHeld: () => held,
+
+    // A scrub step: the value is shown on the element without being recorded; endPreview takes it off before the edit that
+    // records it, so its "before" is the page's.
+    previewProperty(selector, property, value) {
+      const element = elementOf(selector);
+      if (!element) return false;
+      if (!scrubbed.has(element)) scrubbed.set(element, element.getAttribute("style"));
+      element.style.setProperty(property, value);
+      return true;
+    },
+    endPreview() {
+      for (const [element, style] of scrubbed) {
+        if (style === null) element.removeAttribute("style"); else element.setAttribute("style", style);
+      }
+      scrubbed.clear();
+    },
+    // A custom property on an element (motion tokens on :root, --i and --delay-extra on an element): what it was, and the
+    // inline style and classes from before and after, for undo.
+    setProperty(selector, property, value) {
+      const element = elementOf(selector);
+      if (!element) return null;
+      oma.motion.endPreview();
+      const before = getComputedStyle(element).getPropertyValue(property).trim();
+      const styleBefore = element.getAttribute("style") || "";
+      element.style.setProperty(property, value);
+      return { before, styleBefore, styleAfter: element.getAttribute("style") || "", classes: element.getAttribute("class") || "" };
+    },
+    // One keyframe's value in every animation of that name: setKeyframes on the running animations (a preview of the
+    // @keyframes block, which write-back changes). Returns the states that put it back and do it again.
+    setKeyframe(name, frame, property, value) {
+      const offset = offsetOf(frame);
+      if (isNaN(offset)) return null;
+      const before = keyframeState(name);
+      if (!before.items.length) return null;
+      let previous = "";
+      for (const item of before.items) {
+        const target = findAnimation(item);
+        if (!target) continue;
+        const frames = item.keyframes.map((k) => Object.assign({}, k));
+        const at = frames.find((k) => Math.abs(k.computedOffset - offset) < 0.0005);
+        if (!at) return null;
+        if (!previous) previous = String(at[camel(property)]);
+        at[camel(property)] = value;
+        target.effect.setKeyframes(frames);
+      }
+      return { before: previous, was: before, now: keyframeState(name) };
+    },
+    // Duration, delay or easing of every animation of that name, for motion the page's code doesn't hold in tokens.
+    setTiming(name, changes) {
+      const before = timingState(name);
+      if (!before.items.length) return null;
+      for (const item of before.items) {
+        const target = findAnimation(item);
+        if (target) target.effect.updateTiming(changes);
+      }
+      return { was: before, now: timingState(name) };
+    },
+    // Puts a state from setKeyframe or setTiming back.
+    undo(state) {
+      let done = false;
+      for (const item of state.items || []) {
+        const target = findAnimation(item);
+        if (!target) continue;
+        if (state.type === "keyframes") target.effect.setKeyframes(item.keyframes);
+        else target.effect.updateTiming(item.timing);
+        done = true;
+      }
+      return done;
+    }
   };
 })();

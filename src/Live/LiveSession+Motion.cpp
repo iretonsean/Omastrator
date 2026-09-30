@@ -1,4 +1,5 @@
 #include "Live/LiveSession.h"
+#include "Live/Tokens.h"
 #include <QJsonDocument>
 
 // Motion (docs/MOTION.md): the timeline's calls into the page. The reading, holding and seeking are in motion.js; the
@@ -179,5 +180,153 @@ QString LiveSession::selectElements(const QStringList &selectors)
         if (!error.isEmpty())
             return error;
     }
+    return {};
+}
+
+namespace {
+// The element the edit is about, as write-back and the agent need it.
+QJsonObject described(const QString &selector, const QString &classes, const QString &path)
+{
+    return {{"selector", selector}, {"classes", classes}, {"path", path}};
+}
+}
+
+QString LiveSession::motionPreviewProperty(const QString &selector, const QString &property, const QString &value)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    const bool shown = evaluate(QStringLiteral("!!(window.__oma && window.__oma.motion && window.__oma.motion.previewProperty(%1, %2, %3))")
+                                    .arg(literal(selector), literal(property), literal(value)),
+                                &error)
+                           .toBool();
+    if (!shown)
+        return error.isEmpty() ? QStringLiteral("That element is gone from the page.") : error;
+    return {};
+}
+
+QString LiveSession::motionSetProperty(const QString &selector, const QString &property, const QString &value)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    const QJsonObject applied = evaluate(QStringLiteral("window.__oma && window.__oma.motion ? window.__oma.motion.setProperty(%1, %2, %3) : null")
+                                             .arg(literal(selector), literal(property), literal(value)),
+                                         &error)
+                                    .toObject();
+    if (applied.isEmpty())
+        return error.isEmpty() ? QStringLiteral("That element is gone from the page.") : error;
+    const QString classes = applied["classes"].toString();
+    LiveEdit edit;
+    edit.selector = selector;
+    edit.property = property;
+    edit.before = applied["before"].toString();
+    edit.after = value;
+    edit.classesBefore = classes;
+    edit.classesAfter = classes;
+    edit.path = EditSets::pathOf(m_url);
+    edit.origin = EditSets::originOf(m_url);
+    edit.element = described(selector, classes, edit.path);
+    UndoStep step;
+    step.selector = selector;
+    step.property = property;
+    step.was = {{"style", applied["styleBefore"].toString()}, {"cls", classes}, {"text", QJsonValue()}};
+    step.now = {{"style", applied["styleAfter"].toString()}, {"cls", classes}, {"text", QJsonValue()}};
+    step.group = m_group;
+    keep(edit, step);
+    return motionRefresh();
+}
+
+QString LiveSession::motionSetKeyframe(const QString &name, const QString &frame, const QString &property, const QString &value)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    const QJsonObject applied = evaluate(QStringLiteral("window.__oma && window.__oma.motion ? window.__oma.motion.setKeyframe(%1, %2, %3, %4) : null")
+                                             .arg(literal(name), literal(frame), literal(property), literal(value)),
+                                         &error)
+                                    .toObject();
+    if (applied.isEmpty())
+        return error.isEmpty() ? QStringLiteral("That keyframe isn't on the page.") : error;
+    LiveEdit edit;
+    edit.selector = QStringLiteral("@keyframes ") + name;
+    edit.property = frame + QLatin1Char(' ') + property;
+    edit.before = applied["before"].toString();
+    edit.after = value;
+    edit.path = EditSets::pathOf(m_url);
+    edit.origin = EditSets::originOf(m_url);
+    edit.element = described(edit.selector, QString(), edit.path);
+    UndoStep step;
+    step.selector = edit.selector;
+    step.property = edit.property;
+    step.was = {{"motion", applied["was"]}};
+    step.now = {{"motion", applied["now"]}};
+    step.group = m_group;
+    keep(edit, step);
+    return motionRefresh();
+}
+
+QString LiveSession::motionSetTiming(const QString &name, const QStringList &selectors, const QString &property, const QString &value)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QJsonObject changes;
+    if (property.endsWith(QLatin1String("duration")) || property.endsWith(QLatin1String("delay"))) {
+        const auto ms = TokenSet::milliseconds(value);
+        if (!ms)
+            return QStringLiteral("%1 isn't a time.").arg(value);
+        changes[property.endsWith(QLatin1String("duration")) ? QStringLiteral("duration") : QStringLiteral("delay")] = *ms;
+    } else if (property.endsWith(QLatin1String("timing-function"))) {
+        changes["easing"] = value;
+    } else {
+        return QStringLiteral("%1 isn't something the timeline changes.").arg(property);
+    }
+    QString error;
+    const QJsonObject applied = evaluate(QStringLiteral("window.__oma && window.__oma.motion ? window.__oma.motion.setTiming(%1, %2) : null").arg(literal(name), literal(changes)),
+                                         &error)
+                                    .toObject();
+    if (applied.isEmpty())
+        return error.isEmpty() ? QStringLiteral("That motion isn't on the page.") : error;
+    // One undo step for the whole row: the first restores every animation of the name, the rest have nothing more to do.
+    m_group = ++m_lastGroup;
+    bool first = true;
+    for (const QString &selector : selectors) {
+        LiveEdit edit;
+        edit.selector = selector;
+        edit.property = property;
+        edit.after = value;
+        edit.path = EditSets::pathOf(m_url);
+        edit.origin = EditSets::originOf(m_url);
+        edit.element = described(selector, QString(), edit.path);
+        UndoStep step;
+        step.selector = selector;
+        step.property = property;
+        step.was = first ? QJsonObject{{"motion", applied["was"]}} : QJsonObject{{"codeOnly", true}};
+        step.now = first ? QJsonObject{{"motion", applied["now"]}} : QJsonObject{{"codeOnly", true}};
+        step.group = m_group;
+        keep(edit, step);
+        first = false;
+    }
+    m_group = 0;
+    return motionRefresh();
+}
+
+QString LiveSession::motionSetReducedMotion(const QString &block, const QString &removed, const QString &added)
+{
+    LiveEdit edit;
+    edit.selector = QStringLiteral("motion:") + block;
+    edit.property = QStringLiteral("reduced-motion");
+    edit.before = removed;
+    edit.after = added;
+    edit.path = EditSets::pathOf(m_url);
+    edit.origin = EditSets::originOf(m_url);
+    edit.element = described(edit.selector, QString(), edit.path);
+    UndoStep step;
+    step.selector = edit.selector;
+    step.property = edit.property;
+    step.was = {{"codeOnly", true}};
+    step.now = {{"codeOnly", true}};
+    step.group = m_group;
+    keep(edit, step);
     return {};
 }

@@ -7,8 +7,11 @@
 #include "UI/MotionInspector.h"
 #include "UI/MotionTimeline.h"
 #include "UI/MotionTrackView.h"
+#include "UI/NumberField.h"
 #include <QCheckBox>
+#include <QComboBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -515,17 +518,23 @@ private slots:
         };
         QCOMPARE(text("motionInspectorName"), QStringLiteral("h1 .word × 5"));
         QCOMPARE(text("motionInspectorStarts"), QStringLiteral("On load"));
-        QVERIFY2(text("motionInspectorEasing").startsWith(QStringLiteral("Soft out")), qPrintable(text("motionInspectorEasing")));
-        QCOMPARE(text("motionInspectorDuration"), QStringLiteral("480 ms per element"));
-        QCOMPARE(text("motionInspectorStagger"), QStringLiteral("60 ms"));
-        QVERIFY2(text("motionInspectorTokens").contains(QStringLiteral("duration/reveal  480ms")), qPrintable(text("motionInspectorTokens")));
-        QVERIFY(text("motionInspectorTokens").contains(QStringLiteral("stagger/words  60ms")));
+        // The values are fields (phase B): the easing as text and a preset, the duration and stagger in ms.
+        auto *easing = inspector.findChild<QLineEdit *>(QStringLiteral("motionInspectorEasingText"));
+        QVERIFY(easing);
+        QCOMPARE(easing->text(), QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
+        QCOMPARE(inspector.findChild<QComboBox *>(QStringLiteral("motionInspectorEasingPreset"))->currentText(), QStringLiteral("Soft out"));
+        QCOMPARE(inspector.findChild<NumberField *>(QStringLiteral("motionInspectorDuration"))->value(), 480.0);
+        QCOMPARE(inspector.findChild<NumberField *>(QStringLiteral("motionInspectorStagger"))->value(), 60.0);
+        QCOMPARE(inspector.findChild<NumberField *>(QStringLiteral("motionInspectorToken:--duration-reveal"))->value(), 480.0);
+        QCOMPARE(inspector.findChild<NumberField *>(QStringLiteral("motionInspectorToken:--stagger-words"))->value(), 60.0);
+        QCOMPARE(inspector.findChild<QLineEdit *>(QStringLiteral("motionInspectorToken:--ease-reveal"))->text(), QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
         auto *reduced = inspector.findChild<QCheckBox *>(QStringLiteral("motionInspectorReduced"));
         QVERIFY(reduced);
         QVERIFY(reduced->isChecked());
-        // Phase A shows the values; they are edited in phase B.
-        QVERIFY(!reduced->isEnabled());
-        QVERIFY(!text("motionInspectorKeyframes").isEmpty());
+        QVERIFY(reduced->isEnabled());
+        auto *from = inspector.findChild<QLineEdit *>(QStringLiteral("motionInspectorKeyframe:from:opacity"));
+        QVERIFY(from);
+        QCOMPARE(from->text(), QStringLiteral("0"));
         // A script's motion says it isn't tuned here.
         timeline.selectRow(idOf(timeline, QStringLiteral("span#badge")));
         QVERIFY(inspector.findChild<QLabel *>(QStringLiteral("motionInspectorScript")));

@@ -618,6 +618,13 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
     step.now = {{"style", after["inlineStyle"].toString()}, {"cls", after["classes"].toString()},
                 {"text", isText ? QJsonValue(resolution.value) : QJsonValue()}};
     step.group = m_group;
+    keep(edit, step);
+}
+
+// Puts an edit in the list and its undo step on the stack. A second change to the same thing keeps the first one's "before".
+void LiveSession::keep(LiveEdit edit, UndoStep step)
+{
+    const QString selector = edit.selector;
     m_redo.clear();
     auto remember = [&](const LiveEdit &made) {
         step.made = made;
@@ -625,7 +632,6 @@ void LiveSession::record(const QJsonObject &element, const TokenSet::Resolution 
         if (m_undo.size() > 200)
             m_undo.erase(m_undo.begin());
     };
-    // A second change to the same thing keeps the first one's "before".
     for (LiveEdit &existing : m_edits) {
         if (existing.selector == selector && existing.property == edit.property && existing.origin == edit.origin) {
             edit.before = existing.before;
@@ -769,6 +775,9 @@ QString LiveSession::undoStep()
             m_edits.erase(found);
     }
     m_redo.push_back(step);
+    // A motion edit put back moves the rows, so the timeline reads them again.
+    if (m_motionHeld)
+        motionRefresh();
     emit changed();
     if (isMockup())
         QTimer::singleShot(0, this, &LiveSession::describeSite);
@@ -803,6 +812,8 @@ QString LiveSession::redoStep()
     else
         m_edits.push_back(step.made);
     m_undo.push_back(step);
+    if (m_motionHeld)
+        motionRefresh();
     emit changed();
     if (isMockup())
         QTimer::singleShot(0, this, &LiveSession::describeSite);

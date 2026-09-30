@@ -1,4 +1,6 @@
 #include "Live/MotionCode.h"
+#include "Live/CssRules.h"
+#include "Live/MotionWrite.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -98,6 +100,64 @@ QList<QPair<QString, QString>> tokens(const Block &block)
     for (const QRegularExpressionMatch &match : declaration.globalMatch(block.text))
         out.append({match.captured(1), match.captured(2).trimmed()});
     return out;
+}
+
+Bindings bindings(const Block &block, const QString &animation)
+{
+    Bindings found;
+    if (animation.isEmpty())
+        return found;
+    static const QRegularExpression duration(QStringLiteral(R"(var\(\s*(--duration-[\w-]+))"));
+    static const QRegularExpression easing(QStringLiteral(R"(var\(\s*(--ease-[\w-]+))"));
+    static const QRegularExpression stagger(QStringLiteral(R"(var\(\s*(--stagger-[\w-]+))"));
+    const std::vector<CssRules::Rule> rules = CssRules::scan(block.text);
+    for (const CssRules::Rule &rule : rules) {
+        if (rule.prelude.startsWith(QLatin1Char('@')))
+            continue;
+        // The rule that runs the animation names it in `animation` or `animation-name`.
+        bool runs = false;
+        for (const char *property : {"animation", "animation-name"}) {
+            for (const CssRules::Declaration &each : CssRules::declarations(block.text, rule, QLatin1String(property)))
+                runs = runs || QRegularExpression(QStringLiteral(R"((^|[\s,])%1($|[\s,;]))").arg(QRegularExpression::escape(animation)))
+                                   .match(block.text.mid(each.valueStart, each.valueEnd - each.valueStart)).hasMatch();
+        }
+        if (!runs)
+            continue;
+        for (const char *property : {"animation", "animation-duration", "animation-timing-function", "animation-delay"}) {
+            for (const CssRules::Declaration &each : CssRules::declarations(block.text, rule, QLatin1String(property))) {
+                const QString value = block.text.mid(each.valueStart, each.valueEnd - each.valueStart);
+                if (found.duration.isEmpty() && duration.match(value).hasMatch())
+                    found.duration = duration.match(value).captured(1);
+                if (found.easing.isEmpty() && easing.match(value).hasMatch())
+                    found.easing = easing.match(value).captured(1);
+                if (found.stagger.isEmpty() && stagger.match(value).hasMatch())
+                    found.stagger = stagger.match(value).captured(1);
+            }
+        }
+        return found;
+    }
+    return found;
+}
+
+QString reducedRule(const Block &block)
+{
+    // The block's own text, the markers in it: the rule is found between them.
+    const auto span = MotionWrite::reducedRule(block.text, 0, block.text.size());
+    return span ? block.text.mid(span->start, span->end - span->start).trimmed() : QString();
+}
+
+QString defaultReducedRule(const Block &block)
+{
+    QStringList selectors;
+    for (const CssRules::Rule &rule : CssRules::scan(block.text)) {
+        if (rule.prelude.startsWith(QLatin1Char('@')) || rule.depth != 0)
+            continue;
+        if (!CssRules::declarations(block.text, rule, QStringLiteral("animation")).empty() && !selectors.contains(rule.prelude))
+            selectors << rule.prelude;
+    }
+    if (selectors.isEmpty())
+        return {};
+    return QStringLiteral("@media (prefers-reduced-motion: reduce) { %1 { animation: none; } }").arg(selectors.join(QStringLiteral(", ")));
 }
 
 QList<Block> relevant(const QList<Block> &all, const QStringList &names, const QStringList &selectors)

@@ -67,6 +67,25 @@ public:
     QList<MotionCode::Block> codeBlocks() const;
     void showTab(bool code);
     bool codeShown() const { return m_code; }
+    // Edits (docs/MOTION.md, section 3). Each is shown on the page as a preview while `preview` is true, and is one Live edit,
+    // with its undo, when it is not. The inspector's fields call them. A motion token (--duration-*, --ease-*, --stagger-*) is
+    // a custom property on :root.
+    void setToken(const QString &property, const QString &value, bool preview);
+    // The selected row's @keyframes block: one keyframe ("from", "to", "40%") and one of its properties.
+    void setKeyframe(const QString &frame, const QString &property, const QString &value);
+    // The selected row's duration, delay or easing for motion the code holds in no token; the agent writes it.
+    void setTiming(const QString &property, const QString &value);
+    // The block's reduced-motion rule, taken out or put back: an edit for the code, and nothing on the page.
+    void setReducedMotion(bool on);
+    EditorCanvas &canvas() const { return m_canvas; }
+    // What a custom property will be once the pending edits are written: the pending edit's value, else `fallback`.
+    QString pendingValue(const QString &property, const QString &fallback) const;
+    // Whether the selected row's block has its reduced-motion rule once the pending edits are written.
+    bool reducedMotionOn() const;
+    // The custom properties the selected row takes its duration, easing and stagger from, read from its block.
+    MotionCode::Bindings bindings() const;
+    // The block the selected row is in, or empty.
+    std::optional<MotionCode::Block> blockOfSelection() const;
     // Seeks and answers are in flight (tests wait for them to settle).
     bool busy() const { return m_inFlight || m_wantTime || m_wantScroll; }
 
@@ -125,6 +144,8 @@ private:
     bool m_holding = false;
     bool m_wantHold = false;
     int m_holdTries = 0;
+    // The pending edits when the project's code was last read: the code is read again when they change.
+    size_t m_editCount = 0;
     bool m_scrubbing = false;
     bool m_code = false;
     QList<MotionCode::Block> m_allBlocks;

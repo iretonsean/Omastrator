@@ -162,6 +162,19 @@ public:
     // Holds `selector` in a pointer or focus state (hover, focus, active), with `state` empty to let it go: a transition
     // that a state starts can then be seen and scrubbed without a pointer on it.
     QString motionForce(const QString &selector, const QString &state);
+    // Motion edits (docs/MOTION.md, section 3). A scrub step is shown and not recorded; the edit that follows takes it off
+    // first and is one Live edit, with its undo step. Each returns why it can't, or empty.
+    QString motionPreviewProperty(const QString &selector, const QString &property, const QString &value);
+    // A custom property on an element: a motion token on :root, or --i and --delay-extra on one element.
+    QString motionSetProperty(const QString &selector, const QString &property, const QString &value);
+    // One keyframe's value ("from", "to", "40%") in the @keyframes block `name`; the running animations show it at once.
+    QString motionSetKeyframe(const QString &name, const QString &frame, const QString &property, const QString &value);
+    // Duration, delay or easing (`property` is animation-duration, -delay or -timing-function) for motion the code holds in no
+    // token: shown at once, kept as an edit on each of `selectors` for the agent to write.
+    QString motionSetTiming(const QString &name, const QStringList &selectors, const QString &property, const QString &value);
+    // The block's `@media (prefers-reduced-motion: reduce)` rule taken out (`removed` is its text, `added` empty) or put back
+    // (`added` is its text): only the code has it, so it is an edit and nothing on the page.
+    QString motionSetReducedMotion(const QString &block, const QString &removed, const QString &added);
     // The last list `__oma.motion.list()` gave, and whether the timeline holds the page.
     const QJsonObject &motion() const { return m_motion; }
     bool motionHeld() const { return m_motionHeld; }
@@ -282,6 +295,8 @@ private:
         int group = 0;
     };
     QString applyEdit(const QString &selector, const QString &property, const QString &value);
+    // Puts a change on the list of edits, with the step that undoes it.
+    void keep(LiveEdit edit, UndoStep step);
     QString undoStep();
     QString redoStep();
     void refreshSelection();
