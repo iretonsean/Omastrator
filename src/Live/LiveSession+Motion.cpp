@@ -49,20 +49,27 @@ void LiveSession::motionLetGo(int timeoutMs)
 {
     if (!m_page)
         return;
+    // Every wait below runs this thread's events, and the tab may go in one of them: the page is looked at again after each.
+    const QString session = m_page->sessionId;
     if (!m_forced.isEmpty()) {
         // The overlay learns first, so it drops the transitions back that letting go starts.
         evaluate(QStringLiteral("window.__oma && window.__oma.motion && window.__oma.motion.setForced([])"));
         const QStringList selectors = m_forced.keys();
         m_forced.clear();
-        for (const QString &selector : selectors)
+        for (const QString &selector : selectors) {
+            if (!m_page)
+                break;
             forceState(selector, {}, timeoutMs);
+        }
     }
-    if (m_agentsOn) {
-        call(cdp(), QStringLiteral("CSS.disable"), {}, m_page->sessionId, nullptr, timeoutMs);
-        call(cdp(), QStringLiteral("DOM.disable"), {}, m_page->sessionId, nullptr, timeoutMs);
-        m_agentsOn = false;
-        m_forcedNodes.clear();
+    if (m_page && m_agentsOn) {
+        call(cdp(), QStringLiteral("CSS.disable"), {}, session, nullptr, timeoutMs);
+        call(cdp(), QStringLiteral("DOM.disable"), {}, session, nullptr, timeoutMs);
     }
+    m_agentsOn = false;
+    m_forcedNodes.clear();
+    if (!m_page)
+        return;
     evaluate(QStringLiteral("window.__oma && window.__oma.motion && window.__oma.motion.release()"));
 }
 
@@ -126,6 +133,8 @@ QString LiveSession::motionForce(const QString &selector, const QString &state)
 
 QString LiveSession::forceState(const QString &selector, const QString &state, int timeoutMs)
 {
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
     QString error;
     const QString session = m_page->sessionId;
     if (!m_agentsOn) {
