@@ -102,3 +102,10 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   the server state ("No server", "Starting…", "Running", "Frozen", "Failed", or "Type a URL" with no page yet), Edit
   Page, Reload, Changes, History, Deploy and Stop Live, each running the same host action as Object ▸ Browser View.
   Keep Edits, Build It and the rest stay in the bar menu and Object ▸ Browser View.
+- [Mac mini] **Frames on the canvas follow Figma** (the frame text fix, 81d6bee): resizing a frame never scales
+  what's inside (children keep their size and follow their constraints; area text gets a wider box, point text
+  keeps its size), including imported, flipped and grouped cases. Objects drawn with the shape, Pen, Pencil and
+  Type tools go into the topmost frame under the press; a Selection-tool move that ends over a frame drops the
+  object into it (and out, when it ends outside every frame), in the same undo step. Dragging a whole frame onto
+  another frame nests it. The Scale tool still scales everything. Rotated frames and group-based instances still
+  scale as a whole (not changed).
