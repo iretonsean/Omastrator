@@ -58,3 +58,29 @@ island goes, and every workflow it started gets a place in the window. Read with
   by tool; Frame's Browser View switch and the server lifecycle. Capture's action buttons work.
 - **Phase B:** Design over…; Capture's window thumbnails; removing the desktop island plugin, its
   Hyprland keys and submaps, and its setup steps.
+
+## Decided without the author (review)
+
+The author asked for these to be decided and logged overnight (2026-09-29/30). Each can be changed.
+
+- [Mac mini] **The island is the tool's bar.** Row 4 is the per-tool bar that existed (`ToolHeaderBar`), moved under
+  the selection/AI row; each tool shows its own options there.
+- [Mac mini] **The agent's state lives in row 3.** Waiting, then Keep/Discard/Cancel (`ProposalBar`) moved there from
+  above the canvas.
+- [Mac mini] **Ask** runs Edit with Instruction on the selection (the whole document when nothing is selected). One
+  request at a time: Ask and the mic are off while an agent works, while a proposal waits, and without a document.
+- [Mac mini] **The mic is push-to-talk.** Hold it; release transcribes. A local-grammar command ("rectangle tool",
+  "align left") runs at once, with no confirm delay; anything else fills Ask and waits for Enter. Without an icon
+  theme's microphone, the button reads "Mic".
+- [Mac mini] **Capture tab, phase A:** Region, Fill Colour, Stroke Colour, Swatch, Paste SVG, Theme Swatches. A region
+  or a colour first switches to the previous workspace (the window usually covers what's wanted) and comes back after.
+  Capturing a whole window waits for the window thumbnails (phase B), since "the focused window" is now Omastrator.
+- [Mac mini] **The Frame tool's island:** "Drop a size…" (the built-in presets; drops a frame in the middle of the view
+  and switches to Selection, as Figma does), Clip content and Add/Remove Auto Layout for the selected frames, and a
+  short hint.
+- [Mac mini] **Side panels:** Layers is 240 px by default, 220–400 px by dragging its edge, remembered. Window ▸ Layers
+  hides the left panel; Window ▸ Properties hides the whole right dock, Capture included.
+- [Mac mini] **Row 3's selection text:** "Hero · 480 × 320" for one object (its name, else its kind), "3 objects", or
+  "Nothing selected".
+- [Mac mini] **Suggested, not done yet:** remove the floating task bar's own "Ask AI…" field (row 3 has Ask now) and
+  the Frame presets list in Properties while the Frame tool is on (the island has "Drop a size…").
