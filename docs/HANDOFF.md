@@ -553,11 +553,31 @@ with what's here and sets the build order. The first item, frames, is built:
     vertical ones are the same.
   - They're `LayoutItem::horizontal` and `vertical`, set in the Layout
     section, via `VectorDocument::resizeFrame`.
+  - Type never changes size: point type keeps its size, area type gets a new
+    box. A group a frame resizes scales its children into its new box one by
+    one, so its type does the same (`Layouter::resize`).
+  - An imported frame whose box sits at the origin, moved by its placement,
+    has the translation folded into its box on its first resize
+    (`LiveRectangle::upright`). A handle pulled past the opposite side
+    resizes the box normalised, flipping nothing. A rotated frame still
+    scales as a whole.
+  - A child selected along with its frame moves and resizes once, with the
+    frame (`EditorSession::transformRoots`). Transform Again repeats a box
+    resize as one.
   - The Scale tool and Transform ▸ Scale still scale everything.
+- **Drawing and dropping into frames**, as Figma: the Rectangle, Ellipse,
+  Line, Pen, Pencil and Type tools put what they draw in the topmost open
+  frame under the press (`EditorSession::drawingParent`); drawn outside every
+  frame, it goes on the page even when the selection is in a frame. A move
+  with the Selection tool ends with the selection joining the frame the
+  pointer let go over, or leaving its frame, just above it, when let go
+  outside every frame (`EditorSession::previewDropAt`), in the same "Move"
+  step. Only a frame's or a layer's own children change hands: a group keeps
+  its children, auto layout frames place their own, and nothing goes into an
+  instance. Inside an entered group nothing changes hands.
 
 Other things still to do for frames:
 
-- moving objects into or out of a frame by dragging;
 - a Clip content checkbox in the Properties panel;
 - frames in the agent tools and the lift;
 - a frame preset list (phone, desktop), as Figma's Frame tool has.
