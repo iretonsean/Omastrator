@@ -111,7 +111,11 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   stagger or easing curve shows on the page as you go and makes one Live edit
   when you let go (Ctrl+Z takes it back); Save writes motion tokens, keyframe
   values and per-element indices into the project's CSS, and hands the rest to
-  your agent. Esc leaves Edit Page and lets the page play on.
+  your agent. Animate, in the element bar, asks your agent to write the motion as
+  real CSS in your project: you preview it in the frame (from a copy on its own
+  branch, the pill says "preview") and only Save to code writes it; Discard, Stop
+  and Esc leave the project as it was. Preview reduced plays the page as for
+  someone who asked for less motion. Esc leaves Edit Page and lets the page play on.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.

@@ -1,4 +1,4 @@
-# Motion in Browser View (design, 2026-09-30; phases A and B built, the rest not yet)
+# Motion in Browser View (design, 2026-09-30; phases A to C built, the rest not yet)
 
 The live page in a Browser View is the artboard for motion. The designer asks
 the agent for an animation, sees it as tracks on a timeline, tunes it with
@@ -7,7 +7,7 @@ truth: the agent writes plain CSS (or the project's own stack) into the
 project, and Omastrator reads that code back and edits it.
 
 This builds on Live inside the frame (LIVE-IN-FRAME.md): Edit Page, the element
-bar, Live's undo, write-back, Save, Deploy and Build It. Phases A (the read-only timeline) and B (inspector edits, write-back and motion tokens) are built; "Decided while building" at the end says how. The rest is not.
+bar, Live's undo, write-back, Save, Deploy and Build It. Phases A (the read-only timeline), B (inspector edits, write-back and motion tokens) and C (Animate through the agent, and reduced motion) are built; "Decided while building" at the end says how. The rest is not.
 
 The three flows (the approved prototype):
 
@@ -769,3 +769,62 @@ The author took the recommended answer to each open question.
     the page and records one edit; the curve and a keyframe undo and redo; Save writes the token, the curve, the keyframe and the
     scoped `--i` into a temporary git repository and nothing else; reduced motion off, on, off; a duration the code holds in no
     token goes to the agent). The fixture `tests/Live/fixtures/motion/cards.html` and `cards.css` is the design's group block.
+
+- **Phase C (Animate through the agent, and reduced motion, `feat/motion-c`).**
+  - **The ask.** Animate is a button in the element bar after Ask…, on the user's own sites only; with several elements picked it reads
+    Animate together (the signature gains a `g`, so the bar refills when the count crosses one). It opens `AnimateSheet` under the bar
+    (a field, the four chips, "Your default agent: Claude", ⋯ with the reduced-motion switch, Cancel and Generate, and the line about a
+    branch and the preview). Return writes and Shift+Return is a new line; Esc closes the sheet first, then leaves Edit Page. While the
+    agent writes, Generate says "Writing…", Cancel says Stop, and the sheet lists three steps that are Omastrator's own (asked, writing,
+    checking and previewing), since the agent reports none. `BrowserViews::animate` checks what it can at once (an agent, a picked element,
+    the user's own site, a busy agent) and returns why not; it then reads the page's motion fresh (`motionRefresh`) and asks, so the
+    agent starts a moment later and a launch failure arrives as a notice.
+  - **The prompt** is `MotionPrompt::animate`: the request and worktree, the selection as `info()` reports it, the page's tokens (the
+    motion ones among them), `MotionStack::detect`'s stack line ("Vite + Tailwind v4", "Astro", "Plain HTML and CSS"), the style file and
+    the file the tokens go in, the motion libraries in `package.json`, the motion already on the picked elements, every `@keyframes` name in
+    use, the frame's picture as a PNG, how wide the page is drawn and the site's breakpoints, and the output contract (plain CSS in the style
+    file, tokens as `--duration-*`, `--ease-*`, `--stagger-*` in `@theme` or `:root`, a new keyframes name starting with the site's short name,
+    per-element timing through `--i` and `--delay-extra`, the markers, the reduced-motion rule unless the run turned it off, no commit or
+    server). It ends with `agentDone`.
+  - **The contract check** (`MotionContract::check`, after `agentDone`): the blocks that differ from the project's are the agent's; each
+    must be closed, every `var(--duration-*|--ease-*|--stagger-*)` in them must be declared somewhere in the worktree, each `@keyframes` name
+    must be written once, and a block that moves something must have a `prefers-reduced-motion` rule when one was asked for. A result that
+    breaks it is still previewed, and the inspector says "Some of this motion isn't tunable here. Ask to fix it, or edit it in code."
+  - **The preview.** `AgentBridge::liveAnimate` starts the agent in a worktree like any Live run, and `liveAgentDone` for an Animate run
+    collects the diff and does not apply it. The worktree is served with `DevServers::acquire(worktree)` for every stack: its own dev script,
+    an `omastrator.json` command, or, for a plain page, the static server `DevCommand::detect` already falls back to. A project with
+    `node_modules` has it hard-linked into the worktree first (`cp -al`), so there is no install and no network. When the server answers,
+    `BrowserViews` sends the frame's tab there with `useDevServer`, so the document keeps its own address; the bar's pill says "preview"
+    and its tooltip names the branch; the timeline opens on the frame and plays the new page from 0 (`openAndPlay`: it waits for the list
+    of a page on another origin than the old one); and a notice says "Claude wrote the motion into cards.css. Preview only until you
+    save." The session is told the preview's origin first (`LiveSession::setPreviewOrigin`), so that page is still the project's page:
+    what is tuned there is pending edits of the project, not a mock-up's.
+  - **Save to code** (the timeline's header, and the API) collects the agent's change again against the project as it is now (what the
+    designer changed meanwhile is merged around it), writes it, records one Review named "Animate: article#guji", lets the preview go,
+    then writes the pending edits on top through the existing write-back and commits everything through the existing Save (which pushes
+    where a Save pushes). **Discard** (the header, the inspector, leaving Edit Page with Esc, Stop Live, reset, closing the document)
+    releases the server, removes the worktree and its branch, and drops the edits made since the preview began; nothing was written.
+    Edits made before Animate are still pending and are saved on top, but they aren't shown on the preview page (its origin is not the
+    one they were made on).
+  - **One preview per project.** A second Animate while one is open asks "Keep or discard the motion you're previewing first?" with
+    Keep, Discard and Cancel (tests answer it with `BrowserViews::setPreviewChooser`); Discard starts the new ask, the others start
+    nothing. **Stop** during "Writing…" is `stopWaiting`: the agent is cancelled, its worktree removed once it has stopped, and the
+    Animate is forgotten; a run that ends without answering is forgotten the same way.
+  - **Preview reduced** is a switch at the top of the inspector, on while the timeline is open: `Emulation.setEmulatedMedia` with
+    `prefers-reduced-motion: reduce`, so the page's own rules apply and the rows show what is left ("No motion when reduced." when nothing
+    is). Letting go of the page (closing the timeline, Stop Live) puts the emulation back. The **warning** ("This motion plays for people who
+    asked for less motion.", with Ask…) shows for a selected row when the page has no `prefers-reduced-motion` rule at all (the overlay scans
+    the style sheets); Ask… hands the agent that one job through `liveAsk`.
+  - **Starts** is a segmented control in the inspector (Load, Scroll, Hover, Click) for rows made by CSS animations. Picking one is an edit
+    for the agent on each element (property `motion-trigger`, from and to), described to it in words ("Change #guji (the animation
+    nl-cascade) to start as it scrolls into view (it starts when the page loads now)"). Scroll is also shown on the page, best effort: the
+    running animations move onto a `ViewTimeline` of each element (`setStarts`), and Load moves them back; undo puts them back on the clock.
+    Hover and Click have nothing to show until the agent writes them. A row keeps its id when it moves between time and scrolling, so it stays
+    picked. `__oma.motion.trigger` (a Click trigger run from the code's class) is not built.
+  - **Tests:** `MotionAnimateUnitTests` (the stack, the prompt's contents, the contract), `AnimateTests` (Chromium, fake agent: the sheet,
+    the prompt with selection, tokens, stack and existing motion, a result that is a preview with the project unchanged and the document's
+    address kept, the pill, the notice and the timeline; Save to code makes one Review and one commit with the tuning on top; Discard leaves
+    git clean, removes the worktree and drops the tuning; Stop; a second Animate asks; a broken contract still previews with its line; the
+    element bar's button opens the sheet and Generate starts the agent) and `ReducedMotionTests` (Chromium: Preview reduced leaves no
+    running animation for the fixture's block and comes back; the warning shows with no rule and not with one; Starts is an edit and Scroll
+    shows and undoes).
