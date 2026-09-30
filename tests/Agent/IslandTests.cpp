@@ -331,9 +331,9 @@ private slots:
         QFile::remove(log);
         QFile program(script);
         QVERIFY(program.open(QIODevice::WriteOnly));
-        // One line per notification: a newline inside an argument shows as "|".
-        program.write("#!/bin/sh\nfor word in \"$@\"; do printf '[%s]' \"$(printf %s \"$word\" | tr '\\n' '|')\"; done >> \"" + log.toUtf8()
-                      + "\"\nprintf '\\n' >> \"" + log.toUtf8() + "\"\n");
+        // One line per notification, written at once so a reader never sees half of one; a newline inside an argument shows as "|".
+        program.write("#!/bin/sh\nline=$(for word in \"$@\"; do printf '[%s]' \"$(printf %s \"$word\" | tr '\\n' '|')\"; done)\nprintf '%s\\n' \"$line\" >> \""
+                      + log.toUtf8() + "\"\n");
         program.close();
         program.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         qputenv("OMASTRATOR_NOTIFY", script.toUtf8());
