@@ -674,11 +674,25 @@ Esc, reset and a run that ends without an answer remove it. A stopped run remove
 after the agent process has ended. An agent in a terminal cannot be stopped from
 here: the folder goes at once, and a late `agentDone` finds no task.
 
+**Stop is this run's.** The frame's generation keeps the agent's request id, and the pill, Esc, the panel's Stop, reset and
+closing the document stop that run through `AgentBridge::stopPage(id)`, not through `stopWaiting()`. An Ask made meanwhile
+takes the agent's waiting; Stop still ends the page run and leaves the Ask alone.
+
+**Files after `agentDone`.** An agent may write or format once more before it exits. When `agentDone` arrives while the
+agent's process still runs, the bridge waits for the process to end (at most 5 s, then it stops it) before the files are
+read. An agent in a terminal has no process to wait for, and its files are read at once.
+
+**The plan and its object.** The plan's dialog runs its own event loop, and the agent's socket is answered meanwhile, so a
+reset or a closed document can end the `BrowserViews` under it. The code keeps a `QPointer` across the dialog and in the
+plan's `apply`. After a reset, Confirm still writes the project, and a notice says no server runs for it. A repository that
+appears in the folder while the plan shows stops the create ("became a git repository since the preview").
+
 **The plan waits for the reply.** `agentDone` comes through the agent socket, which
 waits for its reply. The plan opens on the next turn of the event loop, so the
 agent's command does not wait for the person to answer.
 
-**Checks before the plan.** No description, a folder that is a file, and a folder
+**Checks before the plan.** The template's files are compared with the agent's in path order, so a refusing agent is noticed
+for every stack. The folder's name is HTML-escaped in `<title>` and `<h1>`. No description, a folder that is a file, and a folder
 that has anything in it (hidden files too) are refused in the sheet. An agent that
 left the template as it was, or wrote more than 200 files or 8 MB, gets no plan; the
 person sees why. `.git`, `node_modules`, `dist` and `.astro` in the staging folder
@@ -692,16 +706,16 @@ again after one Undo). A server that fails leaves the project in place, and the 
 says where it is.
 
 **The dev server's life.** `BrowserViews` holds one lease per generated frame. It
-lets go when the frame goes, when the document closes, and on reset. Another address
-in the frame does not release it.
+lets go when the frame goes, when the document closes, on reset, and when the frame
+is generated into again (after an Undo). Another address in the frame does not release it.
 
-**Whose page it is.** The dev origin is not registered when the project is made,
-because a port belongs to no project for long. The frame keeps the folder in memory
-(`BrowserViews::generatedProject`) while it shows that origin. So it is not "Not your
-site", the bar shows "dev", Deploy and Save act on the folder, and Edit Page starts
-Live with the folder. Live then registers the origin, as it does for any frame it
-starts with a folder. The link is not saved in the file: a reopened document shows
-the address with no server behind it.
+**Whose page it is.** The dev origin is not registered, at Confirm or later, because a port belongs to no project for long:
+a registry entry for `http://127.0.0.1:5173` would make another project that gets that port later look like this one, and
+Save, Deploy and Build It would write into the wrong folder. The frame keeps the folder in memory
+(`BrowserViews::generatedProject`) while it shows that origin. So it is not "Not your site", the bar shows "dev", Deploy and
+Save act on the folder, and Edit Page starts Live with the folder and with `remember` off (`LiveFrames::start(frame, folder,
+false)`, `LiveSession::Target::remember`), so Live does not put the address in the registry either. The link is not saved in
+the file: a reopened document shows the address with no server behind it.
 
 **Folder suggestions.** The sheet does not list `ProjectRegistry::suggest` results.
 Every suggestion is an existing project, and Generate refuses a folder that has
@@ -717,7 +731,8 @@ the plan writes nothing.
 **Activity.** `AgentBridge::activity()` holds the lines. The Live panel opens with
 the run and lists them: ✓ done, … running, · waiting, ✗ failed. The frame shows the
 running line over its empty page, and the bar's Build pill reads "Writing with
-Claude…" and stops the run. Esc stops it too. The lines are: the tokens (when the
+Claude…" and stops the run. Esc stops it too, after it has cancelled a drag or an armed link, and only for a frame on the
+page in front. The lines are: the tokens (when the
 document has any), writing the page, the commit, `npm install` (for the stacks that
 run it) and the dev server.
 

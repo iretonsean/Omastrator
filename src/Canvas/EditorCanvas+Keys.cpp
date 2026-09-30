@@ -89,8 +89,6 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
     case Qt::Key_Escape:
         if (editPage) {
             leaveEditPage();
-        } else if (stopGenerating()) {
-            // A page being written for an empty frame stops.
         } else if (linkArmedFrom) {
             linkArmedFrom.reset();
         } else if (drag && drag->kind != DragKind::pen) {
@@ -99,6 +97,8 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
             finishPen();
         } else if (endHeldPreview()) {
             // A breakpoint button's width lets go.
+        } else if (stopGenerating()) {
+            // A page being written for an empty frame stops, after whatever Esc was cancelling first.
         } else if (session.isolatedGroup()) {
             session.exitIsolation();
         } else if (!session.pickedNodes().empty()) {

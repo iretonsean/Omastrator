@@ -20,8 +20,10 @@ QByteArray text(const QString &content)
 
 const QString gitignore = QStringLiteral("node_modules\ndist\n.astro\n*.log\n.DS_Store\n");
 
-std::vector<File> vite(const QString &name)
+std::vector<File> vite(const QString &given)
 {
+    // The name goes into markup: a folder called "A&B" is "A&amp;B" there.
+    const QString name = given.toHtmlEscaped();
     return {
         {QStringLiteral("index.html"),
          text(QStringLiteral("<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n"
@@ -35,7 +37,7 @@ std::vector<File> vite(const QString &name)
          text(QStringLiteral("{\n  \"name\": \"%1\",\n  \"private\": true,\n  \"version\": \"0.0.0\",\n  \"type\": \"module\",\n"
                              "  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"vite build\",\n    \"preview\": \"vite preview\"\n  },\n"
                              "  \"devDependencies\": {\n    \"@tailwindcss/vite\": \"^4.1.0\",\n    \"tailwindcss\": \"^4.1.0\",\n    \"vite\": \"^6.0.0\"\n  }\n}\n")
-                  .arg(slug(name).isEmpty() ? QStringLiteral("page") : slug(name)))},
+                  .arg(slug(given).isEmpty() ? QStringLiteral("page") : slug(given)))},
         {QStringLiteral("vite.config.js"),
          text(QStringLiteral("import { defineConfig } from 'vite'\nimport tailwindcss from '@tailwindcss/vite'\n\n"
                              "export default defineConfig({\n  plugins: [tailwindcss()],\n})\n"))},
@@ -43,8 +45,9 @@ std::vector<File> vite(const QString &name)
     };
 }
 
-std::vector<File> plain(const QString &name)
+std::vector<File> plain(const QString &given)
 {
+    const QString name = given.toHtmlEscaped();
     return {
         {QStringLiteral("index.html"),
          text(QStringLiteral("<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n"
@@ -57,8 +60,9 @@ std::vector<File> plain(const QString &name)
     };
 }
 
-std::vector<File> astro(const QString &name)
+std::vector<File> astro(const QString &given)
 {
+    const QString name = given.toHtmlEscaped();
     return {
         {QStringLiteral("src/pages/index.astro"),
          text(QStringLiteral("---\nimport '../styles/global.css';\n---\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n"
@@ -71,7 +75,7 @@ std::vector<File> astro(const QString &name)
          text(QStringLiteral("{\n  \"name\": \"%1\",\n  \"private\": true,\n  \"version\": \"0.0.0\",\n  \"type\": \"module\",\n"
                              "  \"scripts\": {\n    \"dev\": \"astro dev\",\n    \"build\": \"astro build\",\n    \"preview\": \"astro preview\"\n  },\n"
                              "  \"dependencies\": {\n    \"astro\": \"^5.0.0\"\n  }\n}\n")
-                  .arg(slug(name).isEmpty() ? QStringLiteral("page") : slug(name)))},
+                  .arg(slug(given).isEmpty() ? QStringLiteral("page") : slug(given)))},
         {QStringLiteral("astro.config.mjs"),
          text(QStringLiteral("import { defineConfig } from 'astro/config';\n\nexport default defineConfig({});\n"))},
         {QStringLiteral(".gitignore"), text(gitignore)},

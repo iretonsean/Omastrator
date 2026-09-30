@@ -191,6 +191,9 @@ QString execute(const SyncPlan &plan, const Confirmation &confirmation)
         return QStringLiteral("This confirmation was for another plan.");
     if (!plan.problem.isEmpty())
         return plan.problem;
+    // A new repository goes where there is none: one that appeared since the preview would take the commit.
+    if (plan.git && plan.git->create && QFileInfo::exists(QDir(plan.git->repository).filePath(QStringLiteral(".git"))))
+        return QStringLiteral("%1 became a git repository since the preview. Nothing was written.").arg(plan.git->repository);
     // Nothing is written if any file changed since the preview.
     for (const FileWrite &write : plan.writes) {
         const QString stale = QStringLiteral("%1 changed since the preview. Nothing was written.").arg(write.path);

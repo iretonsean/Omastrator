@@ -166,8 +166,10 @@ bool EditorCanvas::State::stopGenerating()
 {
     if (!browserHost || !session.hasDocument())
         return false;
-    for (const VectorObject &object : session.document()->objects) {
-        if (object.browser && browserHost->empty(object.id).generating) {
+    const VectorDocument &document = *session.document();
+    for (const VectorObject &object : document.objects) {
+        // Only a frame on the page in front: another page's run has its own pill and panel.
+        if (object.browser && document.isOnCurrentPage(object.id) && browserHost->empty(object.id).generating) {
             browserHost->act(object.id, BrowserViewHost::Action::stopBuild);
             canvas.update();
             return true;

@@ -188,7 +188,7 @@ void LivePanel::rebuild()
             QPushButton *stop = button(QStringLiteral("Stop"), QStringLiteral("liveActivityStop"), self);
             stop->setToolTip(QStringLiteral("Stop writing the page. Nothing is written to your project."));
             column->addWidget(stop, 0, Qt::AlignLeft);
-            connect(stop, &QPushButton::clicked, this, [this] { m_bridge.stopWaiting(); });
+            connect(stop, &QPushButton::clicked, this, [this] { m_bridge.stopPage(); });
         }
     }
 

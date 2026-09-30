@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QTimer>
+#include <algorithm>
 
 // Generate a page in an empty Browser View, and Build It from one (docs/MOTION.md, section 4). The agent writes a new project
 // into a staging folder; the plan lists the real files; Confirm creates the folder, its repository and one commit, and starts
@@ -21,6 +22,8 @@ using Line = AgentBridge::ActivityLine;
 struct BrowserViews::Generation {
     QString folder;
     QString staging;
+    // The agent's run, so Stop ends this run and no other task.
+    QString requestId;
     PageTemplates::Stack stack = PageTemplates::Stack::viteTailwind;
     QString description;
     // Build It from an empty frame: no agent writes the page; the design is built into the new project once its page is up.
@@ -194,6 +197,8 @@ QString BrowserViews::startGenerate(const QUuid &frame, const QString &descripti
         return problem;
     if (m_agent->waiting())
         return QStringLiteral("The agent is still working on another change.");
+    // A page made here earlier (and undone) still holds its dev server: this run replaces it.
+    releaseGenerated(frame);
 
     auto generation = std::make_shared<Generation>();
     generation->folder = where;
@@ -202,6 +207,8 @@ QString BrowserViews::startGenerate(const QUuid &frame, const QString &descripti
     generation->build = build;
     generation->note = note;
     generation->starting = PageTemplates::files(stack, titleOf(QFileInfo(where).fileName()));
+    // collect() lists files by path, and "the agent changed nothing" compares the two.
+    std::sort(generation->starting.begin(), generation->starting.end(), [](const PageTemplates::File &a, const PageTemplates::File &b) { return a.path < b.path; });
     // The design system's tokens go into the template's own token file, the way Sync would write them.
     const VectorDocument &document = *m_session.document();
     bool tokens = false;
@@ -261,6 +268,7 @@ QString BrowserViews::startGenerate(const QUuid &frame, const QString &descripti
     request.tokenFile = tokens ? PageTemplates::tokenFile(stack) : QString();
     const QPointer<BrowserViews> guard(this);
     const QString staging = generation->staging;
+    QString requestId;
     const QString failure = m_agent->generatePage(request, [guard, frame, staging](const AgentBridge::PageResult &result) {
         if (guard && guard->m_generations.contains(frame)) {
             guard->generateWritten(frame, result.cancelled, result.summary, result.error);
@@ -268,13 +276,14 @@ QString BrowserViews::startGenerate(const QUuid &frame, const QString &descripti
         }
         // Nobody is waiting for the files any more.
         QDir(staging).removeRecursively();
-    });
+    }, &requestId);
     if (!failure.isEmpty()) {
         QDir(generation->staging).removeRecursively();
         m_generations.remove(frame);
         return failure;
     }
     generation->agentRunning = true;
+    generation->requestId = requestId;
     // Where the steps show; the frame carries the current one over its empty page.
     m_agent->showLivePanel(false);
     showActivity(frame);
@@ -344,14 +353,24 @@ void BrowserViews::confirmGenerate(const QUuid &frame, std::vector<PageTemplates
         return;
     }
     SyncPlan plan = PagePlan::make(generation->folder, generation->stack, files, object->name);
-    plan.apply = [this, frame] {
-        serveGenerated(frame);
+    // The dialog runs its own event loop, and the agent's socket is answered meanwhile: a reset or a closed document can end this
+    // object under it. Nothing below reads it without the guard.
+    const QPointer<BrowserViews> guard(this);
+    const QString folder = generation->folder;
+    plan.apply = [guard, frame, folder] {
+        if (!guard)
+            return QString();
+        if (!guard->m_generations.contains(frame)) {
+            // Confirm was pressed after the run had ended (a reset): the files are written, and nothing is running.
+            emit guard->notice(QStringLiteral("The project is in %1, but the page was reset while you were confirming, so no server is running for it.").arg(folder));
+            return QString();
+        }
+        guard->serveGenerated(frame);
         return QString();
     };
     bool confirmed = false;
-    const QString failure = SyncConfirmDialog::run(plan, m_canvas ? m_canvas->window() : nullptr, &confirmed);
-    // The dialog is modal: the frame may have gone while it was open.
-    if (!m_generations.contains(frame))
+    const QString failure = SyncConfirmDialog::run(plan, guard && m_canvas ? m_canvas->window() : nullptr, &confirmed);
+    if (!guard || !m_generations.contains(frame))
         return;
     if (!confirmed) {
         if (m_agent)
@@ -457,8 +476,9 @@ void BrowserViews::cancelGenerate(const QUuid &frame)
         return;
     const std::shared_ptr<Generation> generation = *found;
     if (generation->agentRunning && m_agent) {
-        // The bridge ends the run, removes the staging folder and answers with cancelled.
-        m_agent->stopWaiting();
+        // The bridge ends this run, removes the staging folder and answers with cancelled. Another task the agent was given
+        // meanwhile is not this run's to stop.
+        m_agent->stopPage(generation->requestId);
         return;
     }
     // Serving: the project exists, and only the wait for its server ends.
@@ -470,13 +490,15 @@ void BrowserViews::cancelGenerate(const QUuid &frame)
 
 void BrowserViews::abandonGenerations()
 {
-    bool writing = false;
+    QStringList writing;
     for (const std::shared_ptr<Generation> &generation : std::as_const(m_generations))
-        writing = writing || generation->agentRunning;
+        if (generation->agentRunning)
+            writing << generation->requestId;
     // With no generation left, the agent's answer only removes the staging folder.
     m_generations.clear();
-    if (writing && m_agent)
-        m_agent->stopWaiting();
+    if (m_agent)
+        for (const QString &id : std::as_const(writing))
+            m_agent->stopPage(id);
 }
 
 void BrowserViews::stopGenerations()

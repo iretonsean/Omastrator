@@ -132,6 +132,31 @@ private:
         return text;
     }
 
+    // The fake agents with `mode` (hang: it never answers), first on PATH. Returns the old PATH for the caller's guard.
+    QByteArray useFakeAgents(const char *mode)
+    {
+        const QString fakes = FakeAgents::install(m_directory.filePath(QStringLiteral("agents")));
+        const QString out = m_directory.filePath(QStringLiteral("agents/out"));
+        QDir().mkpath(out);
+        const QByteArray path = qgetenv("PATH");
+        qputenv("PATH", (fakes + QLatin1Char(':') + QString::fromLocal8Bit(path)).toUtf8());
+        qputenv("FAKE_OUT", out.toUtf8());
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", mode);
+        return path;
+    }
+
+    // A `claude` that writes `late.txt` a second after it starts and then exits, as an agent that formats once more after
+    // it has said it is done.
+    QByteArray useLateAgent()
+    {
+        write(m_directory.filePath(QStringLiteral("late/claude")), "#!/bin/sh\nsleep 1\nprintf 'late\\n' > late.txt\nexit 0\n", true);
+        const QByteArray path = qgetenv("PATH");
+        qputenv("PATH", (m_directory.filePath(QStringLiteral("late")) + QLatin1Char(':') + QString::fromLocal8Bit(path)).toUtf8());
+        qputenv("FAKE_AGENT", "claude");
+        return path;
+    }
+
     // What the sheet answers with.
     void answer(const QString &description, PageTemplates::Stack stack, const QString &where)
     {
@@ -169,6 +194,9 @@ private slots:
         qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
         qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
         qputenv("XDG_CACHE_HOME", m_directory.filePath(QStringLiteral("cache")).toUtf8());
+        // A path that defaults to ~/Projects lands in the test's own home.
+        QDir().mkpath(m_directory.filePath(QStringLiteral("home")));
+        qputenv("HOME", m_directory.filePath(QStringLiteral("home")).toUtf8());
         qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
         qunsetenv("HYPRLAND_INSTANCE_SIGNATURE");
         qputenv("OMASTRATOR_THEME_DIR", m_directory.filePath(QStringLiteral("no-theme")).toUtf8());
@@ -200,6 +228,7 @@ private slots:
     {
         GeneratePageSheet::setResponder({});
         SyncConfirmDialog::setResponder({});
+        AgentBridge::setPageDrainMs(5000);
         BrowserViews::shutdownPool();
         QDir(stagingRoot()).removeRecursively();
     }
@@ -367,9 +396,19 @@ private slots:
         QCOMPARE(host.acts.size(), size_t(2));
         QCOMPARE(int(host.acts.back().second), int(BrowserViewHost::Action::buildIt));
 
-        // While a page is being written, Esc stops it.
+        // While a page is being written, Esc stops it, but only after it has cancelled what Esc was meant for: a drag in progress.
         host.offer = {};
         host.offer.generating = true;
+        session.deselectAll();
+        const QPoint inside = box.center().toPoint();
+        const QRectF before = session.document()->bounds(frame);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, inside);
+        QTest::mouseMove(&canvas, inside + QPoint(40, 30));
+        QTest::mouseMove(&canvas, inside + QPoint(60, 50));
+        QTest::keyClick(&canvas, Qt::Key_Escape);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, inside + QPoint(60, 50));
+        QCOMPARE(host.acts.size(), size_t(2));
+        QCOMPARE(session.document()->bounds(frame), before);
         QTest::keyClick(&canvas, Qt::Key_Escape);
         QCOMPARE(host.acts.size(), size_t(3));
         QCOMPARE(int(host.acts.back().second), int(BrowserViewHost::Action::stopBuild));
@@ -629,8 +668,18 @@ private slots:
         QVERIFY(!QFileInfo::exists(prompt()));
     }
 
+    void anAgentThatChangedNothingWritesNoPlan_data()
+    {
+        QTest::addColumn<int>("stack");
+        // The Vite and Astro templates aren't in path order, which is the order the agent's files come back in.
+        QTest::newRow("vite") << int(PageTemplates::Stack::viteTailwind);
+        QTest::newRow("html") << int(PageTemplates::Stack::plainHtml);
+        QTest::newRow("astro") << int(PageTemplates::Stack::astro);
+    }
+
     void anAgentThatChangedNothingWritesNoPlan()
     {
+        QFETCH(int, stack);
         ProjectWorkspace workspace;
         ProjectWorkspaceView window(workspace);
         EditorSession &session = workspace.current().session;
@@ -640,7 +689,7 @@ private slots:
         AgentBridge &bridge = *window.agent();
         views->setAgent(&bridge);
         QVERIFY(bridge.startServer().isEmpty());
-        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, folder());
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack(stack), folder());
         Confirm state;
         confirm(state);
         QSignalSpy notices(views, &BrowserViews::notice);
@@ -783,6 +832,289 @@ private slots:
         QVERIFY(!bridge.waiting());
     }
 
+    void stopEndsThePageRunEvenWhenAnotherTaskTookTheWaiting()
+    {
+        const QByteArray path = useFakeAgents("hang");
+        const auto restore = qScopeGuard([&] {
+            qputenv("PATH", path);
+            qunsetenv("FAKE_OUT");
+        });
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, folder());
+
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.writingPage(), 10'000);
+        // An Ask made meanwhile takes the agent's waiting: it launches without looking at what was waited on.
+        QVERIFY(bridge.editWithInstruction(QStringLiteral("Make it blue")).isEmpty());
+        QVERIFY(bridge.waiting() && bridge.waiting()->task == AgentBridge::Task::edit);
+        QVERIFY(bridge.writingPage());
+
+        // Stop on the frame's pill ends the page run, and the Ask goes on.
+        views->act(frame, BrowserViewHost::Action::buildButton);
+        QVERIFY(!bridge.writingPage());
+        QVERIFY(bridge.waiting() && bridge.waiting()->task == AgentBridge::Task::edit);
+        QTRY_VERIFY_WITH_TIMEOUT(stagingEmpty(), 10'000);
+        QVERIFY(views->empty(frame).offered && !views->empty(frame).generating);
+
+        // The panel's Stop is the page run's too: a second run, another Ask, and the panel button.
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        QCOMPARE(views->bar(frame).buildBusy, false);
+        bridge.stopWaiting();
+        QTRY_VERIFY(!bridge.waiting());
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.writingPage(), 10'000);
+        QVERIFY(bridge.editWithInstruction(QStringLiteral("Make it green")).isEmpty());
+        window.findChild<QPushButton *>(QStringLiteral("liveActivityStop"))->click();
+        QVERIFY(!bridge.writingPage());
+        QVERIFY(bridge.waiting() && bridge.waiting()->task == AgentBridge::Task::edit);
+        QTRY_VERIFY_WITH_TIMEOUT(stagingEmpty(), 10'000);
+        bridge.stopWaiting();
+    }
+
+    void filesTheAgentWritesAfterItSaysDoneAreInThePlan()
+    {
+        const QByteArray path = useLateAgent();
+        const auto restore = qScopeGuard([&] { qputenv("PATH", path); });
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, folder());
+        Confirm state;
+        state.answer = false;
+        confirm(state);
+
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.writingPage(), 10'000);
+        QVERIFY(bridge.liveAgentDone(bridge.waiting()->requestId, QStringLiteral("A page")).isEmpty());
+        // Its process still runs: the plan waits for it to end, and the run still counts as writing.
+        QTest::qWait(150);
+        QCOMPARE(state.asked, 0);
+        QVERIFY(bridge.writingPage());
+        QTRY_COMPARE_WITH_TIMEOUT(state.asked, 1, 15'000);
+        QVERIFY2(state.said.contains(QStringLiteral("/late.txt (new, 1 lines)")), qPrintable(state.said));
+        QVERIFY(!bridge.writingPage());
+        QTRY_VERIFY(stagingEmpty());
+    }
+
+    void anAgentThatDoesNotExitAfterItsAnswerIsStoppedAndItsFilesAreRead()
+    {
+        const QByteArray path = useFakeAgents("hang");
+        const auto restore = qScopeGuard([&] {
+            qputenv("PATH", path);
+            qunsetenv("FAKE_OUT");
+        });
+        AgentBridge::setPageDrainMs(300);
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, folder());
+        Confirm state;
+        state.answer = false;
+        confirm(state);
+
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.writingPage(), 10'000);
+        const QStringList staged = QDir(stagingRoot()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        QCOMPARE(staged.size(), 1);
+        write(QDir(stagingRoot()).filePath(staged.front() + QStringLiteral("/index.html")), "<h1>Done</h1>\n");
+        QVERIFY(bridge.liveAgentDone(bridge.waiting()->requestId, QStringLiteral("A page")).isEmpty());
+        // The hung process is stopped after the wait, and what it wrote is the plan.
+        QTRY_COMPARE_WITH_TIMEOUT(state.asked, 1, 15'000);
+        QVERIFY(state.said.contains(QStringLiteral("/index.html (new, 1 lines)")));
+        QVERIFY(!bridge.writingPage());
+        QTRY_VERIFY(stagingEmpty());
+    }
+
+    void aResetWhileThePlanIsOpenStillWritesTheProjectAndSaysNothingRuns()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+        const QString where = folder();
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, where);
+        qputenv("FAKE_WRITE", "1");
+        int asked = 0;
+        // The agent's socket is answered while the dialog runs: a reset comes in, then Confirm.
+        SyncConfirmDialog::setResponder([&](SyncConfirmDialog &) {
+            ++asked;
+            BrowserViews::resetAll();
+            return true;
+        });
+        QSignalSpy notices(views, &BrowserViews::notice);
+
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        const QString text = promptText();
+        QVERIFY(bridge.liveAgentDone(requestOf(text), QStringLiteral("A page")).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(asked, 1, 10'000);
+        QTRY_VERIFY(QFileInfo(where + "/index.html").isFile());
+        QCOMPARE(git(where, {"rev-list", "--count", "HEAD"}), QStringLiteral("1"));
+        // Nothing runs for it, and the person is told.
+        QVERIFY(!DevServers::shared().running(where));
+        QCOMPARE(DevServers::shared().holders(where), 0);
+        QVERIFY(session.document()->find(frame)->browser->url.isEmpty());
+        bool said = false;
+        for (const QList<QVariant> &each : notices)
+            said = said || (each.at(0).toString().contains(QStringLiteral("was reset while you were confirming")) && each.at(0).toString().contains(where));
+        QVERIFY(said);
+    }
+
+    void aDocumentClosedWhileThePlanIsOpenLeavesNoDanglingCall()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.startServer().isEmpty());
+        // The window holds the plan's dialog, as in the app; the document's canvas and session go under it.
+        QWidget host;
+        auto session = std::make_unique<EditorSession>();
+        auto canvas = std::make_unique<EditorCanvas>(*session, &host);
+        const QUuid frame = frameFor(*session, *canvas);
+        BrowserViews *views = BrowserViews::of(*session);
+        views->setAgent(&bridge);
+        const QString where = folder();
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, where);
+        qputenv("FAKE_WRITE", "1");
+        int asked = 0;
+        // The document goes while the dialog is open, then Confirm.
+        SyncConfirmDialog::setResponder([&](SyncConfirmDialog &) {
+            ++asked;
+            canvas.reset();
+            session.reset();
+            return true;
+        });
+
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        const QString text = promptText();
+        QVERIFY(bridge.liveAgentDone(requestOf(text), QStringLiteral("A page")).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(asked, 1, 10'000);
+        QVERIFY(!session);
+        // The confirmed project is written as the plan said, and nothing serves it.
+        QTRY_VERIFY(QFileInfo(where + "/index.html").isFile());
+        QCOMPARE(git(where, {"rev-list", "--count", "HEAD"}), QStringLiteral("1"));
+        QTest::qWait(200);
+        QCOMPARE(DevServers::shared().holders(where), 0);
+        QVERIFY(!bridge.writingPage() && !bridge.waiting());
+    }
+
+    void aRepositoryThatAppearsWhileThePlanIsOpenStopsTheCreate()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+        const QString where = folder();
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, where);
+        qputenv("FAKE_WRITE", "1");
+        SyncConfirmDialog::setResponder([&](SyncConfirmDialog &) {
+            // Someone ran git init in the folder while the plan was showing.
+            QDir().mkpath(where);
+            git(where, {"init", "-q"});
+            return true;
+        });
+        QSignalSpy notices(views, &BrowserViews::notice);
+
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        const QString text = promptText();
+        QVERIFY(bridge.liveAgentDone(requestOf(text), QStringLiteral("A page")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!notices.isEmpty(), 10'000);
+        QVERIFY2(notices.last().at(0).toString().endsWith(QStringLiteral("became a git repository since the preview. Nothing was written.")),
+                 qPrintable(notices.last().at(0).toString()));
+        QVERIFY(!QFileInfo::exists(where + "/index.html"));
+        QVERIFY(git(where, {"log", "--oneline"}).isEmpty());
+        QVERIFY(session.document()->find(frame)->browser->url.isEmpty());
+    }
+
+    void undoThenAnotherGenerateLetsTheFirstServerGo()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        EditorSession &session = workspace.current().session;
+        EditorCanvas canvas(session);
+        const QUuid frame = frameFor(session, canvas);
+        BrowserViews *views = BrowserViews::of(session);
+        AgentBridge &bridge = *window.agent();
+        views->setAgent(&bridge);
+        QVERIFY(bridge.startServer().isEmpty());
+        qputenv("FAKE_WRITE", "1");
+        Confirm state;
+        confirm(state);
+        const QString first = folder();
+        const QString second = folder();
+
+        answer(QStringLiteral("A landing page"), PageTemplates::Stack::plainHtml, first);
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        QVERIFY(bridge.liveAgentDone(requestOf(promptText()), QStringLiteral("A page")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!session.document()->find(frame)->browser->url.isEmpty(), 20'000);
+        QCOMPARE(DevServers::shared().holders(first), 1);
+        const QUrl firstUrl = session.document()->find(frame)->browser->url;
+
+        // Undo empties the frame, which offers Generate again; the first project's server is still held.
+        session.undo();
+        QVERIFY(session.document()->find(frame)->browser->url.isEmpty());
+        QVERIFY(views->empty(frame).offered);
+        QCOMPARE(DevServers::shared().holders(first), 1);
+        QFile::remove(prompt());
+        answer(QStringLiteral("A portfolio"), PageTemplates::Stack::plainHtml, second);
+        views->act(frame, BrowserViewHost::Action::generatePage);
+        const QString text = promptText();
+        QVERIFY(!text.isEmpty());
+        // The new run let it go: nothing else would have.
+        QCOMPARE(DevServers::shared().holders(first), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(!DevServer::answers(firstUrl, 300), 10'000);
+
+        QVERIFY(bridge.liveAgentDone(requestOf(text), QStringLiteral("A page")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!session.document()->find(frame)->browser->url.isEmpty(), 20'000);
+        QCOMPARE(DevServers::shared().holders(second), 1);
+        QCOMPARE(DevServers::shared().holders(first), 0);
+        QCOMPARE(views->generatedProject(frame), QFileInfo(second).canonicalFilePath());
+    }
+
+    void aFolderNameWithMarkupIsEscapedInThePage()
+    {
+        for (const PageTemplates::Stack stack : PageTemplates::stacks()) {
+            const std::vector<PageTemplates::File> files = PageTemplates::files(stack, QStringLiteral("Ana&Bo <x>"));
+            QString all;
+            for (const PageTemplates::File &file : files)
+                all += QString::fromUtf8(file.bytes);
+            QVERIFY2(all.contains(QStringLiteral("<title>Ana&amp;Bo &lt;x&gt;</title>")), qPrintable(PageTemplates::label(stack)));
+            QVERIFY(!all.contains(QStringLiteral("Ana&Bo <x>")));
+            // The package's name is the folder's slug, not markup.
+            if (stack != PageTemplates::Stack::plainHtml)
+                QVERIFY(all.contains(QStringLiteral("\"name\": \"ana-bo-x\"")));
+        }
+    }
+
     // Into Edit Page ------------------------------------------------------------------------------------------------
 
     void aGeneratedPageGoesIntoEditPageAsItsFoldersOwn()
@@ -820,7 +1152,13 @@ private slots:
         QCOMPARE(QFileInfo(frames->snapshot(frame).project).canonicalFilePath(), QFileInfo(where).canonicalFilePath());
         QVERIFY(!frames->snapshot(frame).mockup);
         QCOMPARE(views->generatedProject(frame), QFileInfo(where).canonicalFilePath());
+        // The dev port is nobody's for long: Live did not put it in the registry, so another project on that port is not this one's.
+        const QUrl url = session.document()->find(frame)->browser->url;
+        QVERIFY(!ProjectRegistry::owns(url));
+        QVERIFY(!ProjectRegistry::folderFor(url));
+        QVERIFY2(!read(ProjectRegistry::path()).contains(QByteArray::number(url.port())), qPrintable(QString::fromUtf8(read(ProjectRegistry::path()))));
         frames->stop(frame);
+        QVERIFY(!ProjectRegistry::owns(url));
     }
 
     // Build It from an empty frame -----------------------------------------------------------------------------------

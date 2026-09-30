@@ -203,8 +203,12 @@ public:
         QString error;
     };
     using PageDone = std::function<void(const PageResult &)>;
-    // Returns why it couldn't start, or empty; `done` is called once, later.
-    QString generatePage(const PageRequest &request, PageDone done);
+    // Returns why it couldn't start, or empty; `done` is called once, later. `requestId` gets the run's id, which stopPage takes.
+    QString generatePage(const PageRequest &request, PageDone done, QString *requestId = nullptr);
+    // Stops the page run with this id (the only one when none is named), whatever else the agent is asked meanwhile.
+    void stopPage(const QString &requestId = QString());
+    // How long the agent has to exit after it says it is done, before it is stopped and its files are read (tests shorten it).
+    static void setPageDrainMs(int ms);
     // Steps of a longer job, one line each, for the Live panel's Activity list.
     struct ActivityLine {
         enum class State { pending, running, done, failed };
@@ -351,6 +355,7 @@ private:
     void stopLiveJob(const QString &requestId);
     // Generate a page's side of agentDone, of a run that ended without one, and of Stop (AgentBridge+Generate.cpp).
     QString pageAgentDone(const QString &requestId, const QString &summary);
+    void finishPage(const QString &requestId, const QString &summary);
     void pageRunFinished(const QString &requestId, AgentRun &run);
     void stopPageJob(const QString &requestId);
     QString quietly(const std::function<bool()> &run);
@@ -404,6 +409,9 @@ private:
     struct PageJob {
         PageRequest request;
         PageDone done;
+        // The agent said it was done while its process still ran: the files are read when it ends.
+        bool answered = false;
+        QString summary;
     };
     std::map<QString, PageJob> m_pages;
     std::vector<ActivityLine> m_activity;
