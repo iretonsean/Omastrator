@@ -71,6 +71,24 @@ Result customProperty(const Files &files, const QString &selector, const QString
         return Result::ambiguous;
     QString &text = *rules.front().text;
     const CssRules::Rule &rule = rules.front().rule;
+    if (value.isEmpty()) {
+        const auto found = CssRules::declarations(text, rule, property);
+        if (found.size() > 1)
+            return Result::ambiguous;
+        if (found.empty())
+            return Result::written;
+        // The declaration and the space before it; a line of its own goes with its newline.
+        qsizetype from = found.front().start;
+        qsizetype to = found.front().end;
+        while (from > rule.open + 1 && (text[from - 1] == QLatin1Char(' ') || text[from - 1] == QLatin1Char('\t')))
+            --from;
+        const bool lineBefore = from > 0 && text[from - 1] == QLatin1Char('\n');
+        const bool lineAfter = to >= text.size() || text[to] == QLatin1Char('\n');
+        if (lineBefore && lineAfter && to < text.size())
+            ++to;
+        text.remove(from, to - from);
+        return Result::written;
+    }
     const Result replaced = replaceIn(text, rule, property, value);
     if (replaced == Result::none) {
         text = CssRules::append(text, rule, property, value);
@@ -101,6 +119,52 @@ Result keyframeValue(const Files &files, const QString &name, const QString &fra
     if (matching.size() != 1)
         return matching.empty() ? Result::none : Result::ambiguous;
     return replaceIn(text, matching.front(), property, value);
+}
+
+Result keyframeBody(const Files &files, const QString &name, const QString &frame, const QString &declarations)
+{
+    const QString wanted = QStringLiteral("@keyframes ") + simplified(name);
+    std::vector<Placed> blocks;
+    for (QString *text : files)
+        for (const CssRules::Rule &rule : CssRules::scan(*text))
+            if (rule.prelude == wanted)
+                blocks.push_back({text, rule});
+    if (blocks.empty())
+        return Result::none;
+    if (blocks.size() != 1)
+        return Result::ambiguous;
+    QString &text = *blocks.front().text;
+    const std::vector<CssRules::Rule> all = CssRules::scan(text);
+    std::vector<CssRules::Rule> matching;
+    for (const CssRules::Rule &child : CssRules::children(all, blocks.front().rule))
+        if (isFrame(child.prelude, frame))
+            matching.push_back(child);
+    if (matching.size() != 1)
+        return matching.empty() ? Result::none : Result::ambiguous;
+    const CssRules::Rule &rule = matching.front();
+    const QString old = text.mid(rule.open + 1, rule.close - rule.open - 1);
+    QString body;
+    if (old.contains(QLatin1Char('\n'))) {
+        // The lines keep the indent they had, and the brace its own.
+        const qsizetype first = old.indexOf(QLatin1Char('\n')) + 1;
+        qsizetype end = first;
+        while (end < old.size() && (old[end] == QLatin1Char(' ') || old[end] == QLatin1Char('\t')))
+            ++end;
+        const QString indent = old.mid(first, end - first);
+        const qsizetype lastBreak = old.lastIndexOf(QLatin1Char('\n'));
+        const QString outer = old.mid(lastBreak + 1);
+        body = QStringLiteral("\n");
+        for (const QString &part : declarations.split(QLatin1Char(';'), Qt::SkipEmptyParts))
+            body += indent + part.trimmed() + QStringLiteral(";\n");
+        body += outer;
+    } else {
+        QStringList parts;
+        for (const QString &part : declarations.split(QLatin1Char(';'), Qt::SkipEmptyParts))
+            parts << part.trimmed() + QLatin1Char(';');
+        body = QLatin1Char(' ') + parts.join(QLatin1Char(' ')) + QLatin1Char(' ');
+    }
+    text.replace(rule.open + 1, rule.close - rule.open - 1, body);
+    return Result::written;
 }
 
 std::optional<Span> reducedRule(const QString &text, qsizetype from, qsizetype to)

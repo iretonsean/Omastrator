@@ -220,8 +220,11 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
             // A value inside one named @keyframes block: "from opacity" is the frame and the property.
             const QString frame = edit.property.section(QLatin1Char(' '), 0, 0);
             const QString property = edit.property.section(QLatin1Char(' '), 1);
+            // "from *" is the whole frame at once: an effect (Rise, Grow, Flip).
             const bool written = !property.isEmpty()
-                && MotionWrite::keyframeValue(styleTexts, edit.selector.mid(11), frame, property, edit.after) == MotionWrite::Result::written;
+                && (property == QLatin1String("*") ? MotionWrite::keyframeBody(styleTexts, edit.selector.mid(11), frame, edit.after)
+                                                   : MotionWrite::keyframeValue(styleTexts, edit.selector.mid(11), frame, property, edit.after))
+                    == MotionWrite::Result::written;
             if (written)
                 result.done << describe(edit);
             else

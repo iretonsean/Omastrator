@@ -290,6 +290,7 @@ void MotionTimeline::close()
     m_scrubbing = false;
     m_previewReduced = false;
     m_replayWhen = false;
+    m_selectedBar = -1;
     if (m_live && m_live->active(frame))
         m_live->run(frame, [](LiveSession &session) { return session.motionRelease(); });
     BrowserViews::of(m_session)->setScrubbed(frame, false);
@@ -383,10 +384,7 @@ void MotionTimeline::refresh(const QJsonObject &list)
     } else {
         m_time = std::clamp(m_time, 0.0, m_timeline.duration);
     }
-    const int rows = std::max(2, int(m_timeline.tracks.size()));
-    const int body = std::clamp(m_tracks->contentHeight(), MotionTrackView::rulerHeight + MotionTrackView::rowHeight * std::min(rows, 2), 230);
-    setFixedHeight(headerHeight + body);
-    m_tracks->updateGeometry();
+    fit();
     m_tracks->update();
     if (m_code)
         rebuildCode();
@@ -396,6 +394,14 @@ void MotionTimeline::refresh(const QJsonObject &list)
         QTimer::singleShot(0, this, &MotionTimeline::replay);
     }
     emit changed();
+}
+
+// The dock is as tall as its rows, between two and about eight of them.
+void MotionTimeline::fit()
+{
+    const int body = std::clamp(m_tracks->contentHeight(), MotionTrackView::rulerHeight + MotionTrackView::rowHeight * 2, 260);
+    setFixedHeight(headerHeight + body);
+    m_tracks->updateGeometry();
 }
 
 void MotionTimeline::syncHeader()
@@ -591,14 +597,28 @@ void MotionTimeline::tick()
 
 void MotionTimeline::selectRow(const QString &id)
 {
+    selectBar(id, -1);
+}
+
+void MotionTimeline::selectBar(const QString &id, int bar)
+{
     const Motion::Track *track = m_timeline.find(id);
     if (!track || !m_live || m_frame.isNull())
         return;
+    if (bar >= track->bars.size())
+        bar = -1;
     m_selected = id;
+    m_selectedBar = bar;
     QStringList selectors;
-    for (const QString &selector : track->selectors)
-        if (!selector.isEmpty())
-            selectors << selector;
+    if (bar >= 0) {
+        // One element of a group: only it is picked on the page.
+        if (!track->bars[bar].selector.isEmpty())
+            selectors << track->bars[bar].selector;
+    } else {
+        for (const QString &selector : track->selectors)
+            if (!selector.isEmpty())
+                selectors << selector;
+    }
     const QUuid frame = m_frame;
     // A transition that a pointer starts is held in its state, so it can be seen and scrubbed; any other row lets go.
     const QString state = track->state();
@@ -689,211 +709,4 @@ void MotionTimeline::rebuildCode()
         lines << block.text.split(QLatin1Char('\n')) << QString();
     }
     view->setPlainText(lines.join(QLatin1Char('\n')));
-}
-
-MotionCode::Bindings MotionTimeline::bindings() const
-{
-    const Motion::Track *track = selectedTrack();
-    if (!track)
-        return {};
-    for (const MotionCode::Block &block : codeBlocks()) {
-        const MotionCode::Bindings found = MotionCode::bindings(block, track->name);
-        if (!found.duration.isEmpty() || !found.easing.isEmpty() || !found.stagger.isEmpty())
-            return found;
-    }
-    return {};
-}
-
-std::optional<MotionCode::Block> MotionTimeline::blockOfSelection() const
-{
-    const Motion::Track *track = selectedTrack();
-    if (!track)
-        return std::nullopt;
-    for (const MotionCode::Block &block : codeBlocks()) {
-        if (!MotionCode::bindings(block, track->name).duration.isEmpty() || block.text.contains(track->name))
-            return block;
-    }
-    return std::nullopt;
-}
-
-void MotionTimeline::setToken(const QString &property, const QString &value, bool preview)
-{
-    if (!m_live || m_frame.isNull() || !property.startsWith(QLatin1String("--")))
-        return;
-    const QUuid frame = m_frame;
-    m_live->run(frame, [property, value, preview](LiveSession &session) {
-        return preview ? session.motionPreviewProperty(QStringLiteral(":root"), property, value)
-                       : session.motionSetProperty(QStringLiteral(":root"), property, value);
-    }, [this, frame](const QString &error) {
-        if (frame == m_frame && !error.isEmpty())
-            emit notice(error);
-    });
-}
-
-void MotionTimeline::setKeyframe(const QString &frame, const QString &property, const QString &value)
-{
-    const Motion::Track *track = selectedTrack();
-    if (!m_live || m_frame.isNull() || !track || track->kind != QLatin1String("css-animation"))
-        return;
-    const QUuid key = m_frame;
-    const QString name = track->name;
-    m_live->run(key, [name, frame, property, value](LiveSession &session) { return session.motionSetKeyframe(name, frame, property, value); },
-                [this, key](const QString &error) {
-                    if (key == m_frame && !error.isEmpty())
-                        emit notice(error);
-                });
-}
-
-void MotionTimeline::setTiming(const QString &property, const QString &value)
-{
-    const Motion::Track *track = selectedTrack();
-    if (!m_live || m_frame.isNull() || !track)
-        return;
-    const QUuid key = m_frame;
-    const QString name = track->kind == QLatin1String("css-animation") ? track->name : QString();
-    const QStringList selectors = track->selectors;
-    if (name.isEmpty())
-        return;
-    m_live->run(key, [name, selectors, property, value](LiveSession &session) { return session.motionSetTiming(name, selectors, property, value); },
-                [this, key](const QString &error) {
-                    if (key == m_frame && !error.isEmpty())
-                        emit notice(error);
-                });
-}
-
-bool MotionTimeline::reducedMotionOn() const
-{
-    const std::optional<MotionCode::Block> block = blockOfSelection();
-    if (!block || !m_live || m_frame.isNull())
-        return false;
-    bool on = block->reducedMotion;
-    for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
-        if (edit.selector == QLatin1String("motion:") + block->name && edit.property == QLatin1String("reduced-motion"))
-            on = !edit.after.isEmpty();
-    return on;
-}
-
-void MotionTimeline::setReducedMotion(bool on)
-{
-    const std::optional<MotionCode::Block> block = blockOfSelection();
-    if (!m_live || m_frame.isNull() || !block || on == reducedMotionOn())
-        return;
-    // Taking it out remembers its text; putting it back uses that text, or the rule the block's animations need.
-    QString removed;
-    QString added;
-    if (!on) {
-        removed = MotionCode::reducedRule(*block);
-        if (removed.isEmpty()) {
-            // The file has none: what is pending is the one that put it back, so this cancels it.
-            for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
-                if (edit.selector == QLatin1String("motion:") + block->name && edit.property == QLatin1String("reduced-motion"))
-                    removed = edit.after;
-        }
-        if (removed.isEmpty())
-            return;
-    } else {
-        for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
-            if (edit.selector == QLatin1String("motion:") + block->name && edit.property == QLatin1String("reduced-motion") && !edit.before.isEmpty())
-                added = edit.before;
-        if (added.isEmpty())
-            added = MotionCode::defaultReducedRule(*block);
-        if (added.isEmpty())
-            return;
-    }
-    const QUuid key = m_frame;
-    const QString name = block->name;
-    m_live->run(key, [name, removed, added](LiveSession &session) { return session.motionSetReducedMotion(name, removed, added); });
-}
-
-QString MotionTimeline::pendingValue(const QString &property, const QString &fallback) const
-{
-    if (!m_live || m_frame.isNull())
-        return fallback;
-    QString value = fallback;
-    for (const LiveEdit &edit : m_live->snapshot(m_frame).edits)
-        if (edit.selector == QLatin1String(":root") && edit.property == property)
-            value = edit.after;
-    return value;
-}
-
-QString MotionTimeline::openAndPlay(const QUuid &frame)
-{
-    // The page shown now is the one before the preview; the one from another origin is what plays.
-    LiveFrames *frames = m_live ? m_live.data() : LiveFrames::of(m_session);
-    const QString before = !frame.isNull() && frames->active(frame) ? originOf(frames->snapshot(frame).url.toString()) : QString();
-    const QString failure = open(frame);
-    if (!failure.isEmpty())
-        return failure;
-    m_replayOrigin = before;
-    m_replayWhen = true;
-    return {};
-}
-
-bool MotionTimeline::previewing() const
-{
-    return !m_frame.isNull() && BrowserViews::of(m_session)->previewing(m_frame);
-}
-
-void MotionTimeline::saveToCode()
-{
-    if (m_frame.isNull())
-        return;
-    const QString failure = BrowserViews::of(m_session)->savePreview(m_frame);
-    if (!failure.isEmpty())
-        emit notice(failure);
-}
-
-void MotionTimeline::discardPreview()
-{
-    if (!m_frame.isNull())
-        BrowserViews::of(m_session)->discardPreview(m_frame);
-}
-
-void MotionTimeline::setPreviewReduced(bool on)
-{
-    if (!m_live || m_frame.isNull() || on == m_previewReduced)
-        return;
-    m_previewReduced = on;
-    const QUuid frame = m_frame;
-    m_live->run(frame, [on](LiveSession &session) { return session.motionEmulateReduced(on); }, [this, frame](const QString &error) {
-        if (frame == m_frame && !error.isEmpty())
-            emit notice(error);
-    });
-    emit changed();
-}
-
-void MotionTimeline::setStarts(const QString &trigger)
-{
-    const Motion::Track *track = selectedTrack();
-    if (!m_live || m_frame.isNull() || !track || track->kind != QLatin1String("css-animation") || trigger == track->trigger)
-        return;
-    const QUuid frame = m_frame;
-    const QString name = track->name;
-    const QStringList selectors = track->selectors;
-    const QString from = track->trigger;
-    m_live->run(frame, [name, selectors, from, trigger](LiveSession &session) { return session.motionSetTrigger(name, selectors, from, trigger); },
-                [this, frame](const QString &error) {
-                    if (frame == m_frame && !error.isEmpty())
-                        emit notice(error);
-                });
-}
-
-QString MotionTimeline::askAgent(const QString &prompt)
-{
-    if (!m_live || m_frame.isNull())
-        return tr("Open the timeline on a page first.");
-    AgentBridge *agent = BrowserViews::of(m_session)->agent();
-    const LiveFrames::Snapshot snapshot = m_live->snapshot(m_frame);
-    if (!agent)
-        return tr("Open the project's window to ask.");
-    if (snapshot.project.isEmpty() || snapshot.mockup)
-        return tr("This page isn't one of your sites, so there's no code to change.");
-    return agent->liveAsk(prompt, snapshot.selection, nullptr, snapshot.project);
-}
-
-QString MotionTimeline::previewNotice() const
-{
-    AgentBridge *agent = BrowserViews::of(m_session)->agent();
-    const auto preview = agent && !m_frame.isNull() ? agent->previewOfFrame(m_frame) : std::nullopt;
-    return preview ? preview->notice : QString();
 }

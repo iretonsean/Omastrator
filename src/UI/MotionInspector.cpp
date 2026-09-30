@@ -164,11 +164,40 @@ void MotionInspector::rebuild()
         return;
     }
 
-    auto *name = label(track->label, QStringLiteral("motionInspectorName"), m_body);
+    // A row of several elements is a group; one of its elements can be picked on its own.
+    const int picked = m_timeline.selectedBar();
+    const QString groupTitle = Motion::groupName(*track);
+    auto *name = label(picked >= 0 && picked < track->bars.size() ? track->bars[picked].label : groupTitle.isEmpty() ? track->label : groupTitle,
+                       QStringLiteral("motionInspectorName"), m_body);
     QFont bold = name->font();
     bold.setBold(true);
     name->setFont(bold);
     column->addWidget(name);
+    if (picked >= 0 && picked < track->bars.size()) {
+        // One card of the group: its own delay on top of the group's, which the others keep.
+        const Motion::Bar &bar = track->bars[picked];
+        auto *extra = timeField(QStringLiteral("motionInspectorExtra"), bar.extra, m_timeline, m_body, [this](double ms, bool preview) {
+            if (!preview)
+                m_timeline.setExtraDelay(ms);
+        });
+        extra->setToolTip(tr("Extra delay for this one; the others keep the group's timing"));
+        auto *extraForm = new QFormLayout;
+        extraForm->setContentsMargins(0, 0, 0, 0);
+        extraForm->addRow(tr("Extra delay"), extra);
+        column->addLayout(extraForm);
+        auto *back = new QToolButton(m_body);
+        back->setObjectName(QStringLiteral("motionInspectorUseGroupTiming"));
+        back->setText(tr("Use the group's timing"));
+        back->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        back->setFocusPolicy(Qt::NoFocus);
+        back->setEnabled(bar.extra != 0);
+        connect(back, &QToolButton::clicked, back, [this] { m_timeline.useGroupTiming(); });
+        column->addWidget(back, 0, Qt::AlignLeft);
+        column->addWidget(label(tr("Its start is %1 in the group, and the rest of its timing is the group's.").arg(bar.index >= 0 ? tr("number %1").arg(bar.index + 1) : tr("unnumbered")),
+                                QStringLiteral("motionInspectorPlace"), m_body, true));
+        column->addStretch(1);
+        return;
+    }
     const bool script = track->kind == QLatin1String("script") || track->kind == QLatin1String("gsap");
     if (script)
         column->addWidget(label(tr("Motion from a script (not shown here). It can be scrubbed, and the agent edits it."),
@@ -208,6 +237,51 @@ void MotionInspector::rebuild()
     starts->setToolTip(animation ? tr("What starts this motion. Load and Scroll show here; your agent writes any change when you save.")
                                  : tr("Motion your agent wrote or the page made itself: ask your agent to change what starts it."));
     form->addRow(tr("Starts"), starts);
+
+    // A group: the order its elements start in, and what they start from.
+    if (!groupTitle.isEmpty() && timed) {
+        auto *orders = new QWidget(m_body);
+        orders->setObjectName(QStringLiteral("motionInspectorOrder"));
+        auto *ordersRow = new QHBoxLayout(orders);
+        ordersRow->setContentsMargins(0, 0, 0, 0);
+        ordersRow->setSpacing(2);
+        for (const auto &mode : {std::pair<QString, Motion::Order>{QStringLiteral("picked"), Motion::Order::picked},
+                                 {QStringLiteral("leftToRight"), Motion::Order::leftToRight},
+                                 {QStringLiteral("centreOut"), Motion::Order::centreOut},
+                                 {QStringLiteral("shuffle"), Motion::Order::shuffle}}) {
+            auto *button = new QToolButton(orders);
+            button->setObjectName(QStringLiteral("motionInspectorOrder:") + mode.first);
+            button->setText(Motion::orderName(mode.second));
+            button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            button->setFocusPolicy(Qt::NoFocus);
+            // The order is each element's `--i`, which the row's delay has to read.
+            button->setEnabled(bound.indexed);
+            const Motion::Order order = mode.second;
+            connect(button, &QToolButton::clicked, button, [this, order] {
+                const QString failure = m_timeline.setOrder(order);
+                if (!failure.isEmpty())
+                    emit m_timeline.notice(failure);
+            });
+            ordersRow->addWidget(button);
+        }
+        ordersRow->addStretch(1);
+        orders->setToolTip(bound.indexed ? tr("The order the elements start in") : tr("This motion doesn't number its elements (--i). Ask your agent to regroup it."));
+        form->addRow(tr("Order"), orders);
+        if (animation && !track->keyframes.isEmpty()) {
+            auto *effect = new QComboBox(m_body);
+            effect->setObjectName(QStringLiteral("motionInspectorEffect"));
+            effect->setFocusPolicy(Qt::NoFocus);
+            effect->addItem(tr("Rise"), QStringLiteral("rise"));
+            effect->addItem(tr("Grow"), QStringLiteral("grow"));
+            effect->addItem(tr("Flip"), QStringLiteral("flip"));
+            const QString now = m_timeline.effectOf();
+            if (now == QLatin1String("custom"))
+                effect->addItem(tr("Custom"), QStringLiteral("custom"));
+            effect->setCurrentIndex(std::max(0, effect->findData(now)));
+            connect(effect, &QComboBox::activated, effect, [this, effect](int index) { m_timeline.setEffect(effect->itemData(index).toString()); });
+            form->addRow(tr("Effect"), effect);
+        }
+    }
 
     if (!track->easing.isEmpty() && timed) {
         const QString css = track->easing;

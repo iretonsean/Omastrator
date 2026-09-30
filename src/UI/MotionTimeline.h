@@ -3,7 +3,9 @@
 #include "Live/MotionCode.h"
 #include <QElapsedTimer>
 #include <QJsonObject>
+#include <QHash>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 #include <QUuid>
 #include <QWidget>
@@ -70,6 +72,23 @@ public:
     QList<MotionCode::Block> codeBlocks() const;
     void showTab(bool code);
     bool codeShown() const { return m_code; }
+    // Groups (docs/MOTION.md, section 5): a row of several elements opens into one row per element. Picking a row selects its
+    // elements on the page; picking one element's row selects that one.
+    bool isExpanded(const QString &id) const { return m_expanded.contains(id); }
+    void setExpanded(const QString &id, bool open);
+    // The element picked inside the selected group row, or -1 for the group itself.
+    int selectedBar() const { return m_selectedBar; }
+    void selectBar(const QString &id, int bar);
+    // The order a group starts in: each element's `--i`, from the pick order or the boxes, as one undo step. Returns why not.
+    QString setOrder(Motion::Order mode);
+    // One element's own delay on top of the group's (ms), and giving it back: `--delay-extra` in that element's rule.
+    void setExtraDelay(double ms);
+    void useGroupTiming();
+    // The effect the group starts from ("rise", "grow", "flip"): the first keyframe's declarations, replaced.
+    void setEffect(const QString &effect);
+    static QString effectDeclarations(const QString &effect);
+    // Which effect the selected row's first keyframe is: "rise", "grow", "flip" or "custom".
+    QString effectOf() const;
     // Save to code and Discard, while the frame shows the agent's motion as a preview (docs/MOTION.md, section 4).
     bool previewing() const;
     // The line the inspector shows when what the agent wrote breaks the output contract; empty when it holds.
@@ -130,6 +149,7 @@ private:
     void tick();
     void syncHeader();
     void rebuildCode();
+    void fit();
     void scanCode();
     void forceRows();
 
@@ -168,6 +188,10 @@ private:
     // Play the new page from 0 when its list arrives from another origin than `m_replayOrigin`.
     bool m_replayWhen = false;
     QString m_replayOrigin;
+    QSet<QString> m_expanded;
+    int m_selectedBar = -1;
+    // How many times Shuffle has been pressed on each row: each press is a different, fixed order.
+    QHash<QString, int> m_shuffles;
     bool m_code = false;
     QList<MotionCode::Block> m_allBlocks;
     QString m_project;

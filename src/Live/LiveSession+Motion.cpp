@@ -272,6 +272,56 @@ QString LiveSession::motionSetKeyframe(const QString &name, const QString &frame
     return motionRefresh();
 }
 
+QJsonObject LiveSession::motionBoxes(const QStringList &selectors)
+{
+    if (!m_page)
+        return {};
+    return evaluate(QStringLiteral("window.__oma && window.__oma.motion ? window.__oma.motion.boxes(%1) : null").arg(literal(QJsonArray::fromStringList(selectors)))).toObject();
+}
+
+QString LiveSession::motionSetIndices(const QList<QPair<QString, int>> &indices)
+{
+    // One change to the group: one undo step, however many elements took a new index.
+    m_group = ++m_lastGroup;
+    QString failure;
+    for (const auto &[selector, index] : indices) {
+        const QString error = motionSetProperty(selector, QStringLiteral("--i"), QString::number(index));
+        if (failure.isEmpty())
+            failure = error;
+    }
+    m_group = 0;
+    return failure;
+}
+
+QString LiveSession::motionSetEffect(const QString &name, const QString &frame, const QString &declarations)
+{
+    if (!m_page)
+        return QStringLiteral("Live isn't running.");
+    QString error;
+    const QJsonObject applied = evaluate(QStringLiteral("window.__oma && window.__oma.motion ? window.__oma.motion.setEffect(%1, %2, %3) : null")
+                                             .arg(literal(name), literal(frame), literal(declarations)),
+                                         &error)
+                                    .toObject();
+    if (applied.isEmpty())
+        return error.isEmpty() ? QStringLiteral("That keyframe isn't on the page.") : error;
+    LiveEdit edit;
+    edit.selector = QStringLiteral("@keyframes ") + name;
+    edit.property = frame + QStringLiteral(" *");
+    edit.before = applied["before"].toString();
+    edit.after = declarations;
+    edit.path = EditSets::pathOf(m_url);
+    edit.origin = EditSets::originOf(m_url);
+    edit.element = described(edit.selector, QString(), edit.path);
+    UndoStep step;
+    step.selector = edit.selector;
+    step.property = edit.property;
+    step.was = {{"motion", applied["was"]}};
+    step.now = {{"motion", applied["now"]}};
+    step.group = m_group;
+    keep(edit, step);
+    return motionRefresh();
+}
+
 QString LiveSession::motionSetTiming(const QString &name, const QStringList &selectors, const QString &property, const QString &value)
 {
     if (!m_page)

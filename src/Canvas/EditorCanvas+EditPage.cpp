@@ -46,6 +46,30 @@ protected:
 };
 }
 
+QList<EditorCanvas::PickBadge> EditorCanvas::editPageBadges() const
+{
+    return m_state->pickBadges();
+}
+
+QList<EditorCanvas::PickBadge> EditorCanvas::State::pickBadges() const
+{
+    QList<PickBadge> badges;
+    if (!editPage || !browserHost)
+        return badges;
+    const BrowserViewHost::EditBoxes boxes = browserHost->editBoxes(*editPage);
+    // One picked element needs no number.
+    if (boxes.selection.size() < 2)
+        return badges;
+    const QRectF frame = browseBox(*editPage);
+    const QTransform toView = documentToView();
+    int number = 1;
+    for (const BrowserViewHost::EditBox &each : boxes.selection) {
+        const QRectF rect = toView.mapRect(each.rect.translated(frame.topLeft()));
+        badges.append({number++, QRectF(rect.left() + 3, rect.top() + 3, 16, 16)});
+    }
+    return badges;
+}
+
 std::optional<QRectF> EditorCanvas::editPageSelectionRect() const
 {
     if (!m_state->editPage || !m_state->browserHost)
@@ -331,6 +355,14 @@ void EditorCanvas::State::drawEditPage(QPainter &painter) const
         painter.drawRoundedRect(pill, 3, 3);
         painter.setPen(Qt::white);
         painter.drawText(pill, Qt::AlignCenter, label);
+    }
+    // Several picked: each shows its number, the order they were picked in, which is the order "As picked" starts them in.
+    for (const PickBadge &badge : pickBadges()) {
+        painter.setPen(QPen(Qt::white, 1));
+        painter.setBrush(color);
+        painter.drawEllipse(badge.rect);
+        painter.setPen(Qt::white);
+        painter.drawText(badge.rect, Qt::AlignCenter, QString::number(badge.number));
     }
     painter.restore();
 }

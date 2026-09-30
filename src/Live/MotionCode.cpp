@@ -110,6 +110,7 @@ Bindings bindings(const Block &block, const QString &animation)
     static const QRegularExpression duration(QStringLiteral(R"(var\(\s*(--duration-[\w-]+))"));
     static const QRegularExpression easing(QStringLiteral(R"(var\(\s*(--ease-[\w-]+))"));
     static const QRegularExpression stagger(QStringLiteral(R"(var\(\s*(--stagger-[\w-]+))"));
+    static const QRegularExpression index(QStringLiteral(R"(var\(\s*--i\b)"));
     const std::vector<CssRules::Rule> rules = CssRules::scan(block.text);
     for (const CssRules::Rule &rule : rules) {
         if (rule.prelude.startsWith(QLatin1Char('@')))
@@ -132,6 +133,8 @@ Bindings bindings(const Block &block, const QString &animation)
                     found.easing = easing.match(value).captured(1);
                 if (found.stagger.isEmpty() && stagger.match(value).hasMatch())
                     found.stagger = stagger.match(value).captured(1);
+                if (QLatin1String(property) != QLatin1String("animation-duration") && index.match(value).hasMatch())
+                    found.indexed = true;
             }
         }
         return found;

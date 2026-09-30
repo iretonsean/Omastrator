@@ -13,6 +13,8 @@ struct MotionTrackView::Layout {
         QString id;
         int top = 0;
         bool scroll = false;
+        // -1 for a track's own row; else the element of an open group that this row is.
+        int bar = -1;
     };
     QList<Row> rows;
     int timeRuler = -1;
@@ -68,8 +70,14 @@ MotionTrackView::Layout MotionTrackView::layout() const
         for (const Motion::Track &track : timeline.tracks) {
             if (track.isScroll())
                 continue;
-            out.rows.append({track.id, y, false});
+            out.rows.append({track.id, y, false, -1});
             y += rowHeight;
+            if (m_owner.isExpanded(track.id) && track.bars.size() > 1) {
+                for (int bar = 0; bar < track.bars.size(); ++bar) {
+                    out.rows.append({track.id, y, false, bar});
+                    y += rowHeight;
+                }
+            }
         }
         out.timeBottom = y;
     }
@@ -81,8 +89,14 @@ MotionTrackView::Layout MotionTrackView::layout() const
         for (const Motion::Track &track : timeline.tracks) {
             if (!track.isScroll())
                 continue;
-            out.rows.append({track.id, y, true});
+            out.rows.append({track.id, y, true, -1});
             y += rowHeight;
+            if (m_owner.isExpanded(track.id) && track.bars.size() > 1) {
+                for (int bar = 0; bar < track.bars.size(); ++bar) {
+                    out.rows.append({track.id, y, true, bar});
+                    y += rowHeight;
+                }
+            }
         }
         out.scrollBottom = y;
     }
@@ -154,28 +168,46 @@ QRect MotionTrackView::rulerRect(bool scroll) const
 QRect MotionTrackView::rowRect(const QString &id) const
 {
     for (const Layout::Row &row : layout().rows)
-        if (row.id == id)
+        if (row.id == id && row.bar < 0)
             return QRect(0, row.top, width(), rowHeight);
     return {};
 }
 
-QRect MotionTrackView::barRect(const QString &id, int bar) const
+QRect MotionTrackView::childRect(const QString &id, int bar) const
+{
+    for (const Layout::Row &row : layout().rows)
+        if (row.id == id && row.bar == bar && bar >= 0)
+            return QRect(0, row.top, width(), rowHeight);
+    return {};
+}
+
+QRect MotionTrackView::expanderRect(const QString &id) const
+{
+    const Motion::Track *track = m_owner.timeline().find(id);
+    if (!track || track->bars.size() < 2)
+        return {};
+    const QRect row = rowRect(id);
+    return row.isValid() ? QRect(2, row.top() + 6, 14, 18) : QRect();
+}
+
+QRect MotionTrackView::barRect(const QString &id, int bar, bool inChild) const
 {
     const Layout out = layout();
     const Motion::Track *track = m_owner.timeline().find(id);
     if (!track || bar < 0 || bar >= track->bars.size())
         return {};
     for (const Layout::Row &row : out.rows) {
-        if (row.id != id)
+        // A track's own row holds every bar; an element's row holds only its own.
+        if (row.id != id || (inChild ? row.bar != bar : row.bar >= 0))
             continue;
         const Motion::Bar &each = track->bars[bar];
         const int left = row.scroll ? xForScroll(each.start) : xForTime(each.start);
         const int right = row.scroll ? xForScroll(each.start + each.length) : xForTime(each.start + each.length);
         // Bars stack thinly, so a stagger reads at a glance; a row holds at most ten before they overlap.
-        const int count = std::min<int>(track->bars.size(), 10);
+        const int count = row.bar >= 0 ? 1 : std::min<int>(track->bars.size(), 10);
         const int inner = rowHeight - 10;
         const int height = std::max(3, std::min(12, inner / count));
-        const int at = std::min(bar, count - 1);
+        const int at = row.bar >= 0 ? 0 : std::min(bar, count - 1);
         const int top = row.top + 5 + (count == 1 ? (inner - height) / 2 : at * (inner - height) / std::max(1, count - 1));
         return QRect(left, top, std::max(3, right - left), height);
     }
@@ -239,26 +271,42 @@ void MotionTrackView::paintEvent(QPaintEvent *)
         const Motion::Track *track = timeline.find(row.id);
         if (!track)
             continue;
+        const bool child = row.bar >= 0;
         const QRect area(0, row.top, width(), rowHeight);
-        if (row.id == m_owner.selectedId()) {
+        const bool picked = row.id == m_owner.selectedId() && (child ? m_owner.selectedBar() == row.bar : m_owner.selectedBar() < 0);
+        if (picked) {
             QColor plate = accent;
             plate.setAlphaF(0.16f);
             painter.fillRect(area, plate);
         }
         painter.setPen(line);
         painter.drawLine(0, row.top + rowHeight - 1, width(), row.top + rowHeight - 1);
-        painter.setFont(bold);
+        painter.setFont(child ? small : bold);
         painter.setPen(text);
-        const QFontMetrics metrics(bold);
-        painter.drawText(QRect(gutter, row.top + 3, labelWidth - gutter - 8, 14), Qt::AlignLeft | Qt::AlignVCenter,
-                         metrics.elidedText(track->label, Qt::ElideRight, labelWidth - gutter - 8));
-        painter.setFont(small);
-        painter.setPen(dim);
-        const QString detail = track->potential ? tr("hover to preview") : track->detail;
-        painter.drawText(QRect(gutter, row.top + 15, labelWidth - gutter - 8, 12), Qt::AlignLeft | Qt::AlignVCenter,
-                         QFontMetrics(small).elidedText(detail, Qt::ElideRight, labelWidth - gutter - 8));
-        for (int i = 0; i < track->bars.size(); ++i) {
-            const QRect bar = barRect(row.id, i);
+        const int indent = child ? gutter + 14 : gutter + (track->bars.size() > 1 ? 8 : 0);
+        const QFontMetrics metrics(child ? small : bold);
+        if (child) {
+            painter.drawText(QRect(indent, row.top + 3, labelWidth - indent - 8, rowHeight - 6), Qt::AlignLeft | Qt::AlignVCenter,
+                             metrics.elidedText(track->bars[row.bar].label, Qt::ElideRight, labelWidth - indent - 8));
+        } else {
+            painter.drawText(QRect(indent, row.top + 3, labelWidth - indent - 8, 14), Qt::AlignLeft | Qt::AlignVCenter,
+                             metrics.elidedText(track->label, Qt::ElideRight, labelWidth - indent - 8));
+            // A group opens into its elements.
+            if (track->bars.size() > 1) {
+                painter.setFont(small);
+                painter.setPen(dim);
+                painter.drawText(expanderRect(row.id), Qt::AlignCenter, m_owner.isExpanded(row.id) ? QStringLiteral("▾") : QStringLiteral("▸"));
+            }
+            painter.setFont(small);
+            painter.setPen(dim);
+            const QString detail = track->potential ? tr("hover to preview") : track->detail;
+            painter.drawText(QRect(indent, row.top + 15, labelWidth - indent - 8, 12), Qt::AlignLeft | Qt::AlignVCenter,
+                             QFontMetrics(small).elidedText(detail, Qt::ElideRight, labelWidth - indent - 8));
+        }
+        const int first = child ? row.bar : 0;
+        const int last = child ? row.bar + 1 : int(track->bars.size());
+        for (int i = first; i < last; ++i) {
+            const QRect bar = barRect(row.id, i, child);
             QColor fill = track->kind == QLatin1String("gsap") ? dim : accent;
             if (track->potential) {
                 painter.setPen(QPen(fill, 1, Qt::DashLine));
@@ -317,7 +365,11 @@ void MotionTrackView::mousePressEvent(QMouseEvent *event)
     }
     for (const Layout::Row &row : out.rows) {
         if (at.y() >= row.top && at.y() < row.top + rowHeight) {
-            m_owner.selectRow(row.id);
+            if (row.bar < 0 && expanderRect(row.id).contains(at)) {
+                m_owner.setExpanded(row.id, !m_owner.isExpanded(row.id));
+                return;
+            }
+            m_owner.selectBar(row.id, row.bar);
             return;
         }
     }

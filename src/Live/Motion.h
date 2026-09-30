@@ -2,6 +2,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 
@@ -12,6 +13,11 @@ namespace Motion {
 // One element's animation on a row.
 struct Bar {
     QString selector;
+    // The element as the designer would call it ("article#guji"), its index in the group (`--i`, -1 when it has none), and the
+    // extra delay it takes on its own (`--delay-extra`, ms; 0 when it keeps the group's timing).
+    QString label;
+    int index = -1;
+    double extra = 0;
     // Milliseconds on the timeline, or px on the scroll axis for a scroll row. The delay is inside `start`.
     double start = 0;
     double length = 0;
@@ -81,6 +87,19 @@ struct Timeline {
 
 // A list from the overlay, as rows. An empty or unrelated object gives no rows.
 Timeline parse(const QJsonObject &list);
+
+// The order a group's elements start in (docs/MOTION.md, section 5): each gets an index, 0 to n-1, that its rule turns into a delay.
+enum class Order { picked, leftToRight, centreOut, shuffle };
+struct Element {
+    QString selector;
+    QRectF box;
+};
+// The index each of `elements` gets, in the order they are given (the order they were picked in). Left to right sorts by the box's
+// middle, centre out by its distance from the middle of them all (ties go left to right), and shuffle is a permutation fixed by `seed`.
+QList<int> order(Order mode, const QList<Element> &elements, quint32 seed = 0);
+QString orderName(Order mode);
+// "Group · 5 words" for a row of several elements (a class name read as words, in the plural); empty for one element.
+QString groupName(const Track &track);
 
 // "1.40 s" for a time in ms; "820 ms" under a second is not used: the header always reads in seconds, as the prototype does.
 QString seconds(double ms);

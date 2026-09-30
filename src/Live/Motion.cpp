@@ -1,6 +1,8 @@
 #include "Live/Motion.h"
 #include <algorithm>
 #include <QSet>
+#include <numeric>
+#include <random>
 #include <cmath>
 #include <limits>
 
@@ -68,6 +70,9 @@ Bar barOf(const QJsonObject &each, double &delay, double &duration)
 {
     Bar bar;
     bar.selector = each["selector"].toString();
+    bar.label = shortName(each);
+    bar.index = each["index"].isDouble() ? int(each["index"].toDouble()) : -1;
+    bar.extra = each["extra"].toDouble();
     if (each["timeline"].toString() != QLatin1String("document")) {
         const QJsonObject range = each["range"].toObject();
         bar.start = range["from"].toDouble();
@@ -135,6 +140,73 @@ QString triggerText(const QString &trigger)
     if (trigger == QLatin1String("script"))
         return QStringLiteral("From a script");
     return trigger.isEmpty() ? QString() : QStringLiteral("On change");
+}
+
+QString orderName(Order mode)
+{
+    switch (mode) {
+    case Order::picked:
+        return QStringLiteral("As picked");
+    case Order::leftToRight:
+        return QStringLiteral("Left → right");
+    case Order::centreOut:
+        return QStringLiteral("Centre out");
+    case Order::shuffle:
+        return QStringLiteral("Shuffle");
+    }
+    return {};
+}
+
+QList<int> order(Order mode, const QList<Element> &elements, quint32 seed)
+{
+    const int count = int(elements.size());
+    QList<int> ranks(count, 0);
+    if (count == 0)
+        return ranks;
+    QList<int> sorted(count);
+    std::iota(sorted.begin(), sorted.end(), 0);
+    const auto middle = [&](int at) { return elements[at].box.center(); };
+    if (mode == Order::leftToRight) {
+        std::stable_sort(sorted.begin(), sorted.end(), [&](int a, int b) {
+            return middle(a).x() != middle(b).x() ? middle(a).x() < middle(b).x() : middle(a).y() < middle(b).y();
+        });
+    } else if (mode == Order::centreOut) {
+        QPointF centre;
+        for (int i = 0; i < count; ++i)
+            centre += middle(i) / count;
+        const auto distance = [&](int at) { return std::hypot(middle(at).x() - centre.x(), middle(at).y() - centre.y()); };
+        std::stable_sort(sorted.begin(), sorted.end(), [&](int a, int b) {
+            const double da = std::round(distance(a) * 100) / 100, db = std::round(distance(b) * 100) / 100;
+            return da != db ? da < db : middle(a).x() < middle(b).x();
+        });
+    } else if (mode == Order::shuffle) {
+        // Fisher–Yates over the standard Mersenne twister, whose sequence is fixed: the same seed is the same order anywhere.
+        std::mt19937 random(seed);
+        for (int i = count - 1; i > 0; --i)
+            std::swap(sorted[i], sorted[int(random() % quint32(i + 1))]);
+    }
+    for (int rank = 0; rank < count; ++rank)
+        ranks[sorted[rank]] = rank;
+    return ranks;
+}
+
+QString groupName(const Track &track)
+{
+    QSet<QString> elements;
+    for (const Bar &bar : track.bars)
+        elements.insert(bar.selector);
+    if (elements.size() < 2)
+        return {};
+    // The class of the row's label ("h1 .word × 5") read as words, in the plural.
+    QString noun = track.label.section(QLatin1Char(' '), -3, -3);
+    if (!noun.startsWith(QLatin1Char('.')))
+        noun = track.label.section(QLatin1Char(' '), 0, 0);
+    noun = noun.startsWith(QLatin1Char('.')) ? noun.mid(1) : noun;
+    noun.replace(QLatin1Char('-'), QLatin1Char(' '));
+    noun.replace(QLatin1Char('_'), QLatin1Char(' '));
+    if (!noun.endsWith(QLatin1Char('s')))
+        noun += QLatin1Char('s');
+    return QStringLiteral("Group · %1 %2").arg(elements.size()).arg(noun);
 }
 
 QString seconds(double ms)
@@ -256,7 +328,10 @@ Timeline parse(const QJsonObject &list)
         track.start = gsap["start"].toDouble();
         track.end = gsap["end"].toDouble();
         track.duration = track.end - track.start;
-        track.bars.append({QString(), track.start, track.duration, false});
+        Bar whole;
+        whole.start = track.start;
+        whole.length = track.duration;
+        track.bars.append(whole);
         timeline.tracks.append(track);
     }
 

@@ -1,4 +1,4 @@
-# Motion in Browser View (design, 2026-09-30; phases A to C built, the rest not yet)
+# Motion in Browser View (design, 2026-09-30; phases A to D built, E and F are built on their own branches)
 
 The live page in a Browser View is the artboard for motion. The designer asks
 the agent for an animation, sees it as tracks on a timeline, tunes it with
@@ -7,7 +7,7 @@ truth: the agent writes plain CSS (or the project's own stack) into the
 project, and Omastrator reads that code back and edits it.
 
 This builds on Live inside the frame (LIVE-IN-FRAME.md): Edit Page, the element
-bar, Live's undo, write-back, Save, Deploy and Build It. Phases A (the read-only timeline), B (inspector edits, write-back and motion tokens) and C (Animate through the agent, and reduced motion) are built; "Decided while building" at the end says how. The rest is not.
+bar, Live's undo, write-back, Save, Deploy and Build It. Phases A (the read-only timeline), B (inspector edits, write-back and motion tokens) C (Animate through the agent, and reduced motion) and D (groups) are built; "Decided while building" at the end says how. The rest is not.
 
 The three flows (the approved prototype):
 
@@ -828,3 +828,34 @@ The author took the recommended answer to each open question.
     element bar's button opens the sheet and Generate starts the agent) and `ReducedMotionTests` (Chromium: Preview reduced leaves no
     running animation for the fixture's block and comes back; the warning shows with no rule and not with one; Starts is an edit and Scroll
     shows and undoes).
+
+- **Phase D (groups and multi-selection, `feat/motion-d`).**
+  - **A group is a row of several elements.** Animate together (phase C) sends the picked elements in one prompt, which asks for one rule
+    for the shared class and one index per element (`#guji { --i: 1; }`). The page then reports each element's `--i` and `--delay-extra`
+    (computed custom properties), and the model keeps them on each bar (`Bar::index`, `Bar::extra`, `Bar::label`).
+  - **Numbers on the page.** With two or more elements picked, the canvas draws a numbered badge in each one's corner in the order they
+    were picked (`EditorCanvas::editPageBadges`, which the paint and the tests both use); one pick has none.
+  - **The row opens.** A row of several elements has a triangle (`▸`/`▾`); open, it shows one row per element, labelled like `article#guji`,
+    each with its own bar. Picking the group row picks all its elements on the page, picking an element's row picks that one; the row's id does
+    not change while it is open. The dock grows to fit, up to about eight rows, and scrolls past that.
+  - **The inspector with a group picked** is "Group · 3 bean cards" (the class read as words, in the plural), with **Order** (As picked,
+    Left → right, Centre out, Shuffle), **Effect** (Rise, Grow, Flip) and the group's Duration and Stagger tokens. **Order** needs the
+    row's `animation-delay` to read `var(--i)`; when it doesn't the buttons are off, with a tooltip. The indices come from
+    `Motion::order`: as picked uses the order the elements were picked in (the picked ones that are in the row first, then the rest in
+    the page's order), left to right sorts by each box's middle, centre out by the distance from the middle of them all (ties go left),
+    and shuffle is a Fisher–Yates over the standard Mersenne twister, fixed by the elements and by how often it was pressed (so a
+    reload gives the same order, and pressing again gives another). The boxes are read from the page when the order is asked for. Each
+    element's `--i` is set inline for the preview and recorded as one edit, all three as one undo step; write-back puts each in its own rule.
+  - **Effect** replaces the first keyframe's declarations (Rise: `opacity: 0; translate: 0 44px`, Grow: `opacity: 0; scale: 0.85`,
+    Flip: `opacity: 0; rotate: y 70deg`): one edit with selector `@keyframes nl-cascade` and property `from *`, previewed with
+    `setKeyframes` on the running animations and written by `MotionWrite::keyframeBody`, which keeps the frame's one-line or many-line shape.
+  - **One element's own timing.** Picking an element's row shows "Extra delay" (ms) and "Use the group's timing". The field writes
+    `--delay-extra` in that element's rule (added when the rule lacks it), and giving it back is an edit with an empty value: the preview
+    takes the property off the element, and write-back takes the declaration out of the rule (and leaves the rest of it). Only that
+    element's start moves. Off and on in one session nets to nothing to write.
+  - **Not built:** a group made of elements that share no rule (each element's own delay and the order then go to the agent, as
+    write-back finds no rule to write `--i` in); the sheet's Animate together has no separate group options.
+  - **Tests:** `MotionGroupTests` (Chromium: the numbers in pick order; the row opens and each element can be picked; each order writes
+    the expected indices and Save writes each in its own rule; a group change is one undo step; an extra delay moves one element's start
+    and giving it back restores it; an effect replaces the first keyframe, undoes and is written), `MotionModelTests` (the orders from
+    boxes, shuffle by seed, the group's name) and `WriteBackTests`.

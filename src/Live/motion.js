@@ -242,6 +242,12 @@
     const entry = { id: kind + ":" + name + ":" + selector, kind, name, timeline: timeline || "document", selector,
       ...shortOf(target), parent: parent ? { selector: oma.selectorFor(parent), ...shortOf(parent) } : null,
       properties, keyframes, ...timing, easing, state: anim.playState, pseudo: effect.pseudoElement || "" };
+    // The element's place in a group and the extra delay it takes on its own, from the custom properties its rule sets.
+    const style = getComputedStyle(target);
+    const place = parseInt(style.getPropertyValue("--i"), 10);
+    entry.index = isNaN(place) ? null : place;
+    const extra = style.getPropertyValue("--delay-extra").trim();
+    entry.extra = extra ? (extra.endsWith("ms") ? parseFloat(extra) : extra.endsWith("s") ? parseFloat(extra) * 1000 : 0) || 0 : 0;
     if (timeline) {
       entry.range = rangeOf(anim, timeline);
       entry.trigger = "scroll";
@@ -542,8 +548,47 @@
       oma.motion.endPreview();
       const before = getComputedStyle(element).getPropertyValue(property).trim();
       const styleBefore = element.getAttribute("style") || "";
-      element.style.setProperty(property, value);
+      // An empty value takes the property off the element, so the rule's own (or the group's) applies again.
+      if (value === "") element.style.removeProperty(property); else element.style.setProperty(property, value);
       return { before, styleBefore, styleAfter: element.getAttribute("style") || "", classes: element.getAttribute("class") || "" };
+    },
+    // Where the elements are, as boxes in the page's px: {selector: {x, y, width, height}}; a gone element is left out.
+    boxes(selectors) {
+      const out = {};
+      for (const selector of selectors || []) {
+        const element = elementOf(selector);
+        if (!element) continue;
+        const r = element.getBoundingClientRect();
+        out[selector] = { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height };
+      }
+      return out;
+    },
+    // A whole keyframe at once (an effect: what the elements start from): `declarations` is "opacity: 0; scale: 0.85". The
+    // running animations take it; returns the states that put it back and do it again, and what the frame was.
+    setEffect(name, frame, declarations) {
+      const offset = offsetOf(frame);
+      if (isNaN(offset)) return null;
+      const before = keyframeState(name);
+      if (!before.items.length) return null;
+      const props = {};
+      for (const part of String(declarations).split(";")) {
+        const at = part.indexOf(":");
+        if (at > 0) props[camel(part.slice(0, at).trim())] = part.slice(at + 1).trim();
+      }
+      let previous = "";
+      for (const item of before.items) {
+        const target = findAnimation(item);
+        if (!target) continue;
+        const frames = item.keyframes.map((k) => Object.assign({}, k));
+        const at = frames.find((k) => Math.abs(k.computedOffset - offset) < 0.0005);
+        if (!at) return null;
+        const own = Object.keys(at).filter((key) => !notProperty.has(key));
+        if (!previous) previous = own.map((key) => kebab(key) + ": " + at[key]).join("; ");
+        for (const key of own) delete at[key];
+        Object.assign(at, props);
+        target.effect.setKeyframes(frames);
+      }
+      return { before: previous, was: before, now: keyframeState(name) };
     },
     // One keyframe's value in every animation of that name: setKeyframes on the running animations (a preview of the
     // @keyframes block, which write-back changes). Returns the states that put it back and do it again.

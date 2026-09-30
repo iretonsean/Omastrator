@@ -172,6 +172,11 @@ public:
     // Duration, delay or easing (`property` is animation-duration, -delay or -timing-function) for motion the code holds in no
     // token: shown at once, kept as an edit on each of `selectors` for the agent to write.
     QString motionSetTiming(const QString &name, const QStringList &selectors, const QString &property, const QString &value);
+    // Groups (docs/MOTION.md, section 5): where the elements are (selector → {x, y, width, height} in the page's px), the order
+    // they start in as each one's `--i` (one undo step), and a whole keyframe at once (an effect: "opacity: 0; scale: 0.85").
+    QJsonObject motionBoxes(const QStringList &selectors);
+    QString motionSetIndices(const QList<QPair<QString, int>> &indices);
+    QString motionSetEffect(const QString &name, const QString &frame, const QString &declarations);
     // The block's `@media (prefers-reduced-motion: reduce)` rule taken out (`removed` is its text, `added` empty) or put back
     // (`added` is its text): only the code has it, so it is an edit and nothing on the page.
     QString motionSetReducedMotion(const QString &block, const QString &removed, const QString &added);

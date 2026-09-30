@@ -22,8 +22,14 @@ enum class Result {
 // declared once per element.
 Result customProperty(const Files &files, const QString &selector, const QString &property, const QString &value);
 
+// An empty `value` takes the declaration off the rule instead (the element goes back to the group's timing): `written` when it was
+// taken out or was never there, `ambiguous` when it is declared twice in the rule.
+
 // The value of `property` inside the keyframe `frame` ("from", "to", "40%") of the one `@keyframes name` block.
 Result keyframeValue(const Files &files, const QString &name, const QString &frame, const QString &property, const QString &value);
+
+// Every declaration of the keyframe `frame`, replaced by `declarations` ("opacity: 0; scale: 0.85;"): an effect such as Rise or Grow.
+Result keyframeBody(const Files &files, const QString &name, const QString &frame, const QString &declarations);
 
 // The `@media (prefers-reduced-motion: reduce)` rule of the marked block `block`: `removed` is its text, cut out when `added`
 // is empty; `added` is put back at the end of the block when it has none. A rule that isn't the text that was removed is left.

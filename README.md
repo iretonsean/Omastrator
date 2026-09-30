@@ -115,7 +115,10 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   real CSS in your project: you preview it in the frame (from a copy on its own
   branch, the pill says "preview") and only Save to code writes it; Discard, Stop
   and Esc leave the project as it was. Preview reduced plays the page as for
-  someone who asked for less motion. Esc leaves Edit Page and lets the page play on.
+  someone who asked for less motion. Shift-click several elements and Animate together:
+  the timeline shows them as one group that opens into a row each, and the inspector
+  sets their order (as picked, left to right, centre out, shuffle), effect and stagger,
+  and one element's extra delay. Esc leaves Edit Page and lets the page play on.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.

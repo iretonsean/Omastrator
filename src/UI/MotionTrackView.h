@@ -21,7 +21,11 @@ public:
     // Geometry as painted, for hit tests and for tests.
     QRect rulerRect(bool scroll) const;
     QRect rowRect(const QString &id) const;
-    QRect barRect(const QString &id, int bar) const;
+    // The row of one element of an open group, and the triangle that opens and closes a group's row.
+    QRect childRect(const QString &id, int bar) const;
+    QRect expanderRect(const QString &id) const;
+    // `inChild`: the bar as drawn in that element's own row of an open group, else on the track's row.
+    QRect barRect(const QString &id, int bar, bool inChild = false) const;
     int xForTime(double ms) const;
     double timeAtX(int x) const;
     int xForScroll(double px) const;

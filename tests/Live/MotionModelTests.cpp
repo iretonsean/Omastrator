@@ -183,6 +183,36 @@ private slots:
         QVERIFY(Motion::parse({{"animations", QJsonArray()}}).trigger().isEmpty());
     }
 
+    void everyOrderGivesEachElementAnIndexFromTheBoxes()
+    {
+        // Picked huila, guji, nyeri; laid out guji, huila, nyeri from left to right.
+        const QList<Motion::Element> elements{{"#huila", QRectF(200, 0, 100, 50)}, {"#guji", QRectF(0, 0, 100, 50)}, {"#nyeri", QRectF(400, 0, 100, 50)}};
+        QCOMPARE(Motion::order(Motion::Order::picked, elements), (QList<int>{0, 1, 2}));
+        QCOMPARE(Motion::order(Motion::Order::leftToRight, elements), (QList<int>{1, 0, 2}));
+        // The middle one first; the other two are the same distance away, so the left one goes first.
+        QCOMPARE(Motion::order(Motion::Order::centreOut, elements), (QList<int>{0, 1, 2}));
+        // Shuffle: a permutation, the same for the same seed on any machine, and another order for another seed.
+        QList<int> a = Motion::order(Motion::Order::shuffle, elements, 1);
+        QCOMPARE(a, Motion::order(Motion::Order::shuffle, elements, 1));
+        QList<int> sorted = a;
+        std::sort(sorted.begin(), sorted.end());
+        QCOMPARE(sorted, (QList<int>{0, 1, 2}));
+        bool differs = false;
+        for (quint32 seed = 2; seed < 12 && !differs; ++seed)
+            differs = Motion::order(Motion::Order::shuffle, elements, seed) != a;
+        QVERIFY(differs);
+        QVERIFY(Motion::order(Motion::Order::picked, {}).isEmpty());
+        QCOMPARE(Motion::orderName(Motion::Order::centreOut), QStringLiteral("Centre out"));
+    }
+
+    void aGroupIsNamedForItsElementsClass()
+    {
+        Motion::Timeline timeline = Motion::parse(words(5));
+        QCOMPARE(Motion::groupName(timeline.tracks.first()), QStringLiteral("Group · 5 words"));
+        QVERIFY(Motion::groupName(Motion::parse(words(1)).tracks.first()).isEmpty());
+        QCOMPARE(timeline.tracks.first().bars[2].label, QStringLiteral("span.word"));
+    }
+
     void timesReadInSecondsAndEasingsHaveNames()
     {
         QCOMPARE(Motion::seconds(1400), QStringLiteral("1.40 s"));

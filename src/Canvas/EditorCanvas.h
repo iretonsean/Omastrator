@@ -57,6 +57,13 @@ public:
     bool enterEditPage(const QUuid &frame);
     void leaveEditPage();
     std::optional<QUuid> editPageFrame() const;
+    // The numbers drawn on the picked elements when there are several (docs/MOTION.md, section 5): their pick order, from 1, and
+    // each badge's box in view pixels.
+    struct PickBadge {
+        int number = 0;
+        QRectF rect;
+    };
+    QList<PickBadge> editPageBadges() const;
     // The picked elements' union in view pixels, and the part of the frame the canvas shows; nothing outside Edit Page.
     std::optional<QRectF> editPageSelectionRect() const;
     std::optional<QRectF> editPageVisibleRect() const;

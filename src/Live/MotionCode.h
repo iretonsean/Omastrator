@@ -35,6 +35,8 @@ struct Bindings {
     QString duration;
     QString easing;
     QString stagger;
+    // The rule's `animation-delay` reads each element's `--i`: a group whose order is the indices, which Order can rewrite.
+    bool indexed = false;
 };
 Bindings bindings(const Block &block, const QString &animation);
 
