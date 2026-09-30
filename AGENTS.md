@@ -88,7 +88,10 @@ Each folder builds as its own static library:
   that aren't yours, This Is My Site), `BrowserViews+Deploy.cpp` (Deploy, Save,
   Review Changes, History) and `BrowserViews+Build.cpp` (Build It) on top of
   `AgentBridge`. `DevServers` (in `src/Live`) starts a project's dev server
-  for the window and the frames. Share with client
+  for the window and the frames. The Frame tool's Browser View switch
+  (docs/BROWSER-VIEW.md, section 10) is `BrowserViews+Switch.cpp` and
+  `Canvas/EditorCanvas+BrowserSwitch.cpp`: on runs the dev server, off freezes
+  it (SIGSTOP), and quitting ends it. Share with client
   (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and
   `SharePanels`; its tests use the fake rclone and a fake `gh`. Send to a device
   (AirDrop) is `DeviceSend` and `ShareController+Device.cpp`, tested against a

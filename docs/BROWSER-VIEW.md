@@ -7,6 +7,10 @@ island (phase 4), and Duplicate at Breakpoints, pinning and Clean Session
 (phase 5), are out of scope. The seams for them are named where they fall.
 Nothing here is built.
 
+**Since 2026-09-29 the Browser View tool is gone:** the Frame tool's Browser
+View switch turns a frame's page on and off, and runs or freezes the project's
+dev server behind it. See section 10 at the end.
+
 ## 1. The model
 
 A Browser View is a **frame** (`ObjectKind::frame`) with a URL. It is not a new
@@ -228,9 +232,10 @@ No new Properties section is added. Transform's W and H set the design width
 and height (undoable). Layout gains the "Fixed while previewing" checkbox for
 children of a Browser View (section 6).
 
-**The tool.** `Tool::browserView` is appended to `Tool`, and `toolInfo` grows.
-It sits in the rail's Frame group, `{frame, browserView, artboard}`, with no
-default key (it can be remapped).
+**The tool.** *Replaced on 2026-09-29 by the Frame tool's Browser View switch
+(section 10). What follows is how it was built.* `Tool::browserView` is appended
+to `Tool`, and `toolInfo` grows. It sat in the rail's Frame group,
+`{frame, browserView, artboard}`, with no default key (it can be remapped).
 
 - Dragging draws the frame. A click drops a 1280 × 800 one, and the Frame
   presets section works for it as for Frame.
@@ -677,3 +682,101 @@ The tests:
 - **Test isolation.** The Chromium tests don't set `HOME`, and Chromium can
   still touch `~/.pki/nssdb` with a custom `--user-data-dir`. The Live tests
   do the same.
+
+## 10. The Browser View switch (2026-09-29)
+
+The author, 2026-09-29 (WINDOW-LAYOUT.md): "The frame tool can just handle the
+browser view. There should just be some toggle UI around the frame to turn
+Browser View on or off. Turn Browser View on: it spins up the localhost server
+with the live code. Turn it off: the localhost server is frozen until Browser
+View is back on or until the app is closed. When the app closes, the localhost
+shuts down."
+
+**The tools.** There is no Browser View tool. The rail's Frame group is split:
+`{frame}` and `{artboard}` (artboards are parked for removal in
+backlog/FRAMES-ONLY.md). `Tool::browserView` stays in the enum and in
+`toolInfo` so old names still read, but it's out of `allTools` (the rail,
+Ctrl+K, the agent's tool list), and `selectTool(Tool::browserView)` picks Frame.
+Browse stays in the Selection slot, and Edit Page is still the double-click.
+
+**The model.** `BrowserView::on`, default true. The codec writes
+`"browserView": {…, "on": false}` only when it's off, so older files load with
+their views on and an older build reads an off view as on.
+`VectorObject::showsPage()` is `browser && browser->on`: the bar, streaming,
+Browse, Edit Page, the width preview and the sign-in strip all ask it. An off
+frame keeps its address and last picture, draws that picture, wears the plain
+frame label, and resizes as a plain frame does (a real, undoable resize).
+
+**The switch.**
+
+- A Browser View has it in its bar, after back, forward and reload: a small
+  track, always shown (unless the frame is locked).
+- Any other frame, and an off Browser View, shows it as a pill at its top-right
+  ("Browser View" and the track) while it's selected or under the pointer
+  (the innermost frame, its name's row included).
+- `EditorSession::setBrowserViewOn(frame, on)` is one undo step, "Turn On
+  Browser View" or "Turn Off Browser View". On makes a plain frame a Browser
+  View with no page yet, rounded to whole CSS px; off keeps everything.
+- A plain frame turned on opens the address field ("Type a URL"), as a new
+  Browser View always has. The address says which project runs: an address in
+  `projects.json` (This Is My Site…) is the user's own.
+- The same switch is Object ▸ Browser View ▸ Turn On/Off Browser View (its
+  words follow the state) and in Ctrl+K. Browser View has no agent methods of
+  its own; agents reach the switch through the object JSON (`browserView.on`),
+  and the server follows as below.
+
+**The server.**
+
+- **On** (the switch, the menu or Ctrl+K: `BrowserViewHost::browserViewSwitched`)
+  asks for the page to run. Once the frame has an address and can be seen, an
+  own-site, non-local address starts Live on the frame (`LiveFrames::start`),
+  which acquires the project's dev server from `DevServers` and moves the tab
+  onto it, as the first Edit Page used to. Somebody else's site, or a
+  `localhost` page, has nothing of ours to start.
+- **Off** freezes it. `LiveSession::setServerPaused` marks its lease frozen;
+  `DevServers` freezes a server when every lease on it is frozen (a window's
+  Live or another frame on the same project keeps it running), by SIGSTOP to its
+  process group, so it keeps its port, state and PID. A static site stops
+  answering (`QTcpServer::pauseAccepting`). The tab pauses as an off-screen one
+  does, and the frame shows its last picture.
+- **On again** wakes the same process (SIGCONT) and the stream. A server frozen
+  while it was still starting freezes once it answers.
+- **Undo and redo** change only the document. `BrowserViews` follows every
+  change of `on` it sees (the switch, undo, redo, an agent) the same way, so
+  history can freeze or wake a server but never start a second one or leave one
+  behind. Undoing "Turn On" on what was a plain frame removes the Browser View,
+  which ends its Live and lets its server go.
+- **Opening a file never starts a server** (no `npm install` on open): a view
+  saved on shows its page, and its server starts when it's switched on (or on
+  the first Edit Page, as before).
+- **Quitting** ends every server: `DevServers::stopAll` on `aboutToQuit` wakes a
+  frozen group before it sends SIGTERM (SIGTERM, then SIGCONT, then SIGKILL
+  after 5 s), and then waits up to 2 s for anything the script started that
+  outlived it before killing the group. The headless browser stops with the
+  pool.
+- **The background app** (`omastrator --daemon`, ANYWHERE.md) keeps running
+  when its window closes. To the user the app has closed, so
+  `BrowserViews::stopServers()` runs then: every frame's Live ends (its server
+  with it) and the headless browser stops. A frame still switched on starts its
+  server again when its canvas is next seen. Live's own window keeps its server.
+- **Known gap:** if Omastrator crashes while a server is frozen, the server's
+  death signal (`PR_SET_PDEATHSIG`) waits until something continues it; `kill
+  -CONT` on it lets it end.
+
+**For the island bar** (WINDOW-LAYOUT.md): `BrowserViews::browserViewChanged(frame,
+on)` fires on every change by any door, and on a frame first seen on;
+`BrowserViews::browserViewOn(frame)` (or `EditorSession::browserViewOn`) and
+`BrowserViews::server(frame)` (`none`, `starting`, `running`, `paused`,
+`failed`) answer for a selected frame (`EditorSession::selectedFrame()`);
+`BrowserViews::setBrowserViewOn(frame, on)` is the island's switch.
+
+**Tests.** `DevServersTests` (freezing a group and waking the same PID, only
+when every lease is frozen, freezing a server that's still starting, stopAll
+ending frozen and running servers and their helpers, a static site),
+`BrowserSwitchTests` (Chromium and python3: on runs one server, off freezes it,
+on wakes the same PID, undo and redo, quitting ends it; a file opening starts
+none; the last window closing stops them and showing it restarts them),
+`BrowserBarTests` (the pill and the bar's switch, undo steps, a locked
+document, the old tool name), `DocumentCodecTests` (`on` round-trips, old
+files read as on), `MenusTests`, `CommandPaletteTests` and `ContentViewTests`
+(the rail).

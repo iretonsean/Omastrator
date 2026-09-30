@@ -10,9 +10,12 @@ replaces the island's Live mode once it ships. Read it alongside VISION.md
    "New Page" claims a workspace and opens the canvas there, full screen,
    with the Omarchy bar and the island left visible. Super+number, or a
    swipe, moves between pages the same way it moves between workspaces.
-2. **Draw a Browser View** with the Browser View frame tool. It's a frame
-   with a browser's controls on top: an **editable address bar** for any URL,
-   back, forward, reload and breakpoint buttons.
+2. **Draw a frame and turn its Browser View on.** The Frame tool (F) does it:
+   a frame's Browser View switch (2026-09-29, BROWSER-VIEW.md "The Browser
+   View switch") makes it a frame with a browser's controls on top: an
+   **editable address bar** for any URL, back, forward, reload and breakpoint
+   buttons. On runs the project's localhost server with the live code; off
+   freezes it until it's back on or the app closes.
 3. **It shows the live site.** Design inside it: draw over the site, or paste
    content lifted from another browser window.
 4. **Resize it to check breakpoints.** The site reflows at the frame's width,
@@ -180,7 +183,8 @@ The test ruled out the first choice, and the author approved this instead:
    workspaces on a live desktop is still to be checked by hand.
 3. **The Browser View frame:** the tool, the frame controls, streaming, the
    Browse tool, breakpoint buttons and resize-as-preview. **Built** (the
-   Object ▸ Browser View menu and the Frame flyout's Browser View tool; the
+   Object ▸ Browser View menu and, since 2026-09-29, the Frame tool's Browser
+   View switch in place of a separate tool; the
    design and what was decided while building are in BROWSER-VIEW.md).
 4. **Live inside the frame:** the element bar, tokens, Review changes,
    History, Deploy, and "Build it" through the agent. **Built**, apart from

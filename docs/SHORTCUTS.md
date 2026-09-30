@@ -78,6 +78,13 @@ Illustrator's key wins wherever the app already had it.
 | C, S, A | Comment, Slice, Frame | Scissors, Scale, Direct Selection | conflicts: Illustrator's |
 | B | Paint bucket | (no tool) | not built |
 
+F also makes Browser Views: a frame's **Browser View switch** (on the canvas,
+Object ▸ Browser View ▸ Turn On/Off Browser View, and Ctrl+K) turns its live
+page on and off (BROWSER-VIEW.md, "The Browser View switch"). The separate
+Browser View tool is gone; it never had a key, and an old remapping or agent
+that asks for it gets Frame. The Browse tool (the arrow in the Selection slot)
+still has no key and ends with Esc.
+
 ### Selection
 
 | Figma | Action | Before | Now |

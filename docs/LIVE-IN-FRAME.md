@@ -77,7 +77,9 @@ pool key) and `pool`. A frame session:
 
 **Live starts on the first Edit Page, not when the frame opens.** Viewing a
 page costs nothing new, and opening a file never runs `npm install`. Live stays
-on after Edit Page ends, so the edits stay visible and deployable.
+on after Edit Page ends, so the edits stay visible and deployable. Since
+2026-09-29, turning a frame's Browser View switch on starts it too, and off
+freezes its dev server (BROWSER-VIEW.md, section 10).
 
 **Your own site** (`ProjectRegistry::folderFor` of the frame's document URL):
 
