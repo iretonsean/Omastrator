@@ -70,7 +70,12 @@ void EditorCanvas::State::syncRulers()
     rulers->update();
 }
 
-EditorCanvas::~EditorCanvas() = default;
+EditorCanvas::~EditorCanvas()
+{
+    // An open address field calls back into the state when it loses focus, and the state goes before the widget does.
+    delete m_state->addressEdit.data();
+    delete m_state->pageTextEdit.data();
+}
 
 bool EditorCanvas::isBrowsing() const
 {

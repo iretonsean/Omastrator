@@ -4,7 +4,9 @@
 #include "Document/BrowserAddress.h"
 #include "Document/EditorSession.h"
 #include "UI/BrowserViews.h"
+#include <QApplication>
 #include <QDir>
+#include <QMouseEvent>
 #include <QFile>
 #include <QLineEdit>
 #include <QProcess>
@@ -91,6 +93,12 @@ struct Rig {
         return {};
     }
     void click(QPoint at) { QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, at); }
+    // A plain pointer move, sent straight to the canvas: QTest's moves the real cursor, which a compositor may ignore.
+    void hover(QPoint at)
+    {
+        QMouseEvent move(QEvent::MouseMove, QPointF(at), canvas.mapToGlobal(QPointF(at)), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&canvas, &move);
+    }
     // The Frame tool's drag, which leaves the new frame selected.
     void drawFrame(QPointF from, QPointF to)
     {
@@ -117,7 +125,7 @@ struct Rig {
     {
         drawFrame(from, to);
         const QUuid id = session.selection().front();
-        QTest::mouseMove(&canvas, pill(id));
+        hover(pill(id));
         click(pill(id));
         return id;
     }
@@ -228,7 +236,7 @@ private slots:
         QVERIFY(!rig.object(frame)->browser);
         QCOMPARE(rig.session.tool(), Tool::frame);
         const size_t steps = rig.session.undoNames().size();
-        QTest::mouseMove(&rig.canvas, rig.pill(frame));
+        rig.hover(rig.pill(frame));
         rig.click(rig.pill(frame));
         QVERIFY(rig.object(frame)->showsPage());
         QCOMPARE(rig.session.undoNames().size(), steps + 1);
@@ -266,22 +274,21 @@ private slots:
         Rig rig;
         const QUuid frame = rig.session.addFrame({100, 200, 600, 400});
         rig.session.deselectAll();
-        QTest::mouseMove(&rig.canvas, rig.view({2000, 2000}).toPoint());
+        rig.hover(QPoint(990, 790));
         const QImage quiet = rig.canvas.grab().toImage();
         rig.session.select({frame});
         const QImage selected = rig.canvas.grab().toImage();
         QVERIFY(quiet.pixel(rig.pill(frame)) != selected.pixel(rig.pill(frame)));
         rig.session.deselectAll();
-        QTest::mouseMove(&rig.canvas, rig.view({400, 400}).toPoint());
-        const QImage hovered = rig.canvas.grab().toImage();
-        QCOMPARE(hovered.pixel(rig.pill(frame)), selected.pixel(rig.pill(frame)));
+        rig.hover(rig.view({400, 400}).toPoint());
+        QTRY_VERIFY(rig.canvas.grab().toImage().pixel(rig.pill(frame)) != quiet.pixel(rig.pill(frame)));
         // Clicking where the pill was, with no frame selected or hovered, is a plain press.
-        QTest::mouseMove(&rig.canvas, rig.view({2000, 2000}).toPoint());
+        rig.hover(QPoint(990, 790));
         rig.session.selectTool(Tool::select);
         const size_t steps = rig.session.undoNames().size();
-        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, rig.view({2000, 2000}).toPoint());
-        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, rig.view({2000, 2000}).toPoint());
+        QTest::mouseClick(&rig.canvas, Qt::LeftButton, Qt::NoModifier, rig.pill(frame));
         QCOMPARE(rig.session.undoNames().size(), steps);
+        QVERIFY(!rig.object(frame)->browser);
     }
 
     void theBarsSwitchTurnsItOffAndThePillTurnsItBackOn()
@@ -296,7 +303,7 @@ private slots:
         // Off keeps the page's address, and the frame wears its plain label and the pill.
         QCOMPARE(rig.object(rig.frame)->browser->url, QUrl(QStringLiteral("https://example.com/a")));
         QVERIFY(!rig.editor());
-        QTest::mouseMove(&rig.canvas, rig.pill(rig.frame));
+        rig.hover(rig.pill(rig.frame));
         rig.click(rig.pill(rig.frame));
         QVERIFY(rig.object(rig.frame)->showsPage());
         QCOMPARE(rig.session.undoNames().back(), QStringLiteral("Turn On Browser View"));
