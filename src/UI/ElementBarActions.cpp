@@ -528,10 +528,11 @@ ElementBar *ElementBarActions::attach(AgentBridge *agent, EditorCanvas &canvas)
     auto *bar = new ElementBar(canvas);
     bar->setFiller([shared] {
                        QString signature = ElementBarActions::signature(shared->selection());
-                       if (!signature.isEmpty() && !shared->project().isEmpty())
+                       const bool yours = !signature.isEmpty() && !shared->project().isEmpty();
+                       if (yours)
                            signature += QLatin1Char('k');
-                       // Several elements are animated together, as one group.
-                       if (!signature.isEmpty() && shared->selection().size() > 1)
+                       // Several elements are animated together, as one group (only where there is an Animate button to say so).
+                       if (yours && shared->selection().size() > 1)
                            signature += QLatin1Char('g');
                        if (!signature.isEmpty() && shared->boxed)
                            signature += QLatin1Char('p');

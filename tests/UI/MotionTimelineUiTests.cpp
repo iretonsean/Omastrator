@@ -516,7 +516,7 @@ private slots:
             auto *label = inspector.findChild<QLabel *>(QString::fromLatin1(name));
             return label ? label->text() : QString();
         };
-        QCOMPARE(text("motionInspectorName"), QStringLiteral("h1 .word × 5"));
+        QCOMPARE(text("motionInspectorName"), QStringLiteral("Group · 5 words"));
         // What starts it is a segmented control; this one starts on load.
         QVERIFY(inspector.findChild<QToolButton *>(QStringLiteral("motionInspectorStarts:load"))->isChecked());
         QVERIFY(!inspector.findChild<QToolButton *>(QStringLiteral("motionInspectorStarts:scroll"))->isChecked());

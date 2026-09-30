@@ -176,7 +176,8 @@ QList<int> order(Order mode, const QList<Element> &elements, quint32 seed)
             centre += middle(i) / count;
         const auto distance = [&](int at) { return std::hypot(middle(at).x() - centre.x(), middle(at).y() - centre.y()); };
         std::stable_sort(sorted.begin(), sorted.end(), [&](int a, int b) {
-            const double da = std::round(distance(a) * 100) / 100, db = std::round(distance(b) * 100) / 100;
+            // Offsets are whole px, so two elements the same way out can differ by one: count within 4 px as a tie.
+            const double da = std::round(distance(a) / 4), db = std::round(distance(b) / 4);
             return da != db ? da < db : middle(a).x() < middle(b).x();
         });
     } else if (mode == Order::shuffle) {

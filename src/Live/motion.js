@@ -558,8 +558,11 @@
       for (const selector of selectors || []) {
         const element = elementOf(selector);
         if (!element) continue;
-        const r = element.getBoundingClientRect();
-        out[selector] = { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height };
+        // Where layout puts it, not where an animation has moved it to (a held one is mid-flight): the offsets, summed up the chain.
+        let x = 0;
+        let y = 0;
+        for (let node = element; node; node = node.offsetParent) { x += node.offsetLeft; y += node.offsetTop; }
+        out[selector] = { x, y, width: element.offsetWidth, height: element.offsetHeight };
       }
       return out;
     },
