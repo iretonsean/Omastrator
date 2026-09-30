@@ -1,5 +1,6 @@
 #pragma once
-// Generated from src/Live/overlay.js by CMake; edit that file instead.
+// Generated from src/Live/overlay.js and src/Live/motion.js by CMake; edit those files instead.
 namespace OmastratorLive {
 inline constexpr const char overlay[] = R"oma_overlay(@OVERLAY_SOURCE@)oma_overlay";
+inline constexpr const char motion[] = R"oma_motion(@MOTION_SOURCE@)oma_motion";
 }

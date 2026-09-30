@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Motion fixture</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1 id="headline"><span class="word" style="--i: 0">Coffee</span> <span class="word" style="--i: 1">worth</span> <span class="word" style="--i: 2">a</span> <span class="word" style="--i: 3">slow</span> <span class="word" style="--i: 4">morning</span></h1>
+    <p class="lede" id="lede">Small lots, roasted the week they ship.</p>
+    <p><a id="primary" href="#buy">Buy beans</a> <span id="badge">New</span></p>
+    <div class="gap"></div>
+    <section class="cards">
+      <article class="card" id="guji">Guji</article>
+      <article class="card" id="huila">Huila</article>
+      <article class="card" id="nyeri">Nyeri</article>
+    </section>
+    <div class="end"></div>
+  </main>
+  <script>
+    // Motion made by a script, as the Motion library makes it: a Web Animation with no CSS behind it.
+    document.getElementById('badge').animate(
+      [{ opacity: 0, transform: 'scale(0.8)' }, { opacity: 1, transform: 'scale(1)' }],
+      { duration: 600, delay: 100, easing: 'ease-out', fill: 'both', id: 'badge-in' });
+  </script>
+</body>
+</html>

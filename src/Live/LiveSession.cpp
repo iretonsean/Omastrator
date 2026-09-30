@@ -125,7 +125,7 @@ QJsonObject LiveSession::call(CdpConnection &connection, const QString &method, 
 
 QString LiveSession::overlayScript()
 {
-    return QString::fromUtf8(OmastratorLive::overlay);
+    return QString::fromUtf8(OmastratorLive::overlay) + QLatin1Char('\n') + QString::fromUtf8(OmastratorLive::motion);
 }
 
 QString LiveSession::frameOverlayScript()
@@ -528,6 +528,9 @@ void LiveSession::handle(const QJsonObject &message)
     } else if (type == QLatin1String("geometry")) {
         m_geometry = message;
         emit geometryChanged();
+    } else if (type == QLatin1String("motion")) {
+        m_motion = message;
+        emit motionChanged();
     } else if (type == QLatin1String("edit")) {
         const QJsonObject element = message["element"].toObject();
         const QString property = message["property"].toString();
@@ -908,12 +911,23 @@ void LiveSession::pageLoaded()
             return;
     }
     m_original = false;
+    // A page that began loading before the session attached never ran the script that comes with each new document.
+    if (m_pool && !evaluate(QStringLiteral("!!window.__oma")).toBool())
+        evaluate(frameOverlayScript());
     rescanTokens();
     // A frame's page is reloaded and replaced under its session, so its edits go back on every load.
     if (isMockup() || m_pool)
         evaluate(QStringLiteral("window.__oma && window.__oma.applyEdits(%1)").arg(json(EditSets::toJson(editsShown()))));
     if (m_pool)
         evaluate(QStringLiteral("window.__oma && window.__oma.enable(%1)").arg(m_pageEditing ? "true" : "false"));
+    // A new page starts with its own states, and the timeline still holds: the new page's motion is held too. A load
+    // event for the page that is already held (its overlay says so) changes nothing.
+    if (m_pool && m_motionHeld && !evaluate(QStringLiteral("!!(window.__oma && window.__oma.motion && window.__oma.motion.isHeld())")).toBool()) {
+        m_forced.clear();
+        m_forcedNodes.clear();
+        m_agentsOn = false;
+        motionHold();
+    }
     describeSite();
 }
 

@@ -5,6 +5,7 @@
 #include "Live/DevServers.h"
 #include "Live/EditSets.h"
 #include "Live/Tokens.h"
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -146,12 +147,35 @@ public:
     // true: the page as the site made it; false: every enabled set and unkept edit back on.
     QString showOriginal(bool original);
 
+    // Motion (docs/MOTION.md, section 2): the page's animations, held and seeked from the timeline. The calls run on the
+    // session's thread like the rest; each returns why it can't, or empty.
+    // Pauses every animation and keeps pausing new ones; the list comes back through motion().
+    QString motionHold();
+    // Lets the page play on from where it is, and lets go of forced states.
+    QString motionRelease();
+    // Puts every held animation at `ms` on the timeline.
+    QString motionSeek(double ms);
+    // Scroll-driven motion: scrolls the page to `px`.
+    QString motionSeekScroll(double px);
+    // Reads the list again (a stylesheet changed, a state was forced).
+    QString motionRefresh();
+    // Holds `selector` in a pointer or focus state (hover, focus, active), with `state` empty to let it go: a transition
+    // that a state starts can then be seen and scrubbed without a pointer on it.
+    QString motionForce(const QString &selector, const QString &state);
+    // The last list `__oma.motion.list()` gave, and whether the timeline holds the page.
+    const QJsonObject &motion() const { return m_motion; }
+    bool motionHeld() const { return m_motionHeld; }
+    // Puts the page's selection on these elements (the timeline's row click); the first replaces it, the rest add.
+    QString selectElements(const QStringList &selectors);
+
     // The overlay's source.
     static QString overlayScript();
 
 signals:
     void changed();
     void geometryChanged();
+    // The overlay reported the page's motion again (an animation began or ended while it was held).
+    void motionChanged();
     void editApplied(const LiveEdit &edit);
     // "Ask AI…" in the bar: the prompt and the selected elements.
     void askRequested(const QString &prompt, const QJsonArray &elements);
@@ -234,6 +258,18 @@ private:
     QString m_scriptId;
     QJsonObject m_geometry;
     bool m_pageEditing = false;
+    QJsonObject m_motion;
+    bool m_motionHeld = false;
+    // The elements held in a pointer or focus state, by selector, and whether the DevTools DOM and CSS agents are on.
+    QHash<QString, QString> m_forced;
+    // The protocol's node behind each forced selector: it keeps the state per node, and asking for the document again gives
+    // new nodes, so a state is let go on the node it was put on.
+    QHash<QString, int> m_forcedNodes;
+    int m_domRoot = 0;
+    bool m_agentsOn = false;
+    void motionLetGo(int timeoutMs);
+    QString forceState(const QString &selector, const QString &state, int timeoutMs);
+    void syncForced();
     struct UndoStep {
         QString selector;
         QString property;

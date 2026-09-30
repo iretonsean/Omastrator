@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GSAP stand-in</title>
+  <style>body { margin: 0; height: 2000px; } #box { width: 40px; height: 40px; background: #e11d48; }</style>
+</head>
+<body>
+  <div id="box"></div>
+  <script>
+    // Stands in for GSAP's global timeline with the calls Omastrator makes and no library, which the tests don't ship.
+    (() => {
+      let time = 0.3;
+      let paused = false;
+      const calls = [];
+      const tweens = [
+        { startTime: () => 0.1, totalDuration: () => 1.4, timeScale: () => 1 },
+        { startTime: () => 0.5, totalDuration: () => 1.1, timeScale: () => 1 }
+      ];
+      window.gsap = {
+        globalTimeline: {
+          getChildren: () => tweens,
+          pause() { paused = true; calls.push('pause'); },
+          resume() { paused = false; calls.push('resume'); },
+          paused: () => paused,
+          time(t) { if (t === undefined) return time; time = t; calls.push('time:' + t); }
+        }
+      };
+      window.gsapCalls = calls;
+    })();
+  </script>
+</body>
+</html>

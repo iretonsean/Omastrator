@@ -102,9 +102,10 @@ target_compile_definitions(oma_agent PRIVATE OMASTRATOR_SHELL_SOURCE="${CMAKE_CU
 # Live web editing: the browser over the DevTools Protocol, dev servers, tokens.
 oma_library(oma_live src/Live/*.cpp)
 target_link_libraries(oma_live PUBLIC oma_agent Qt6::Network)
-# The page overlay is compiled in; editing overlay.js reconfigures.
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/overlay.js)
+# The page overlay and its motion module are compiled in; editing either reconfigures.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/overlay.js ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/motion.js)
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/overlay.js OVERLAY_SOURCE)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/Live/motion.js MOTION_SOURCE)
 configure_file(cmake/OverlayScript.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/Live/OverlayScript.h @ONLY)
 target_include_directories(oma_live PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
