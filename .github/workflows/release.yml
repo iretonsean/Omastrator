@@ -55,6 +55,12 @@ jobs:
       # the type tests measure real glyphs, so it gets DejaVu (fontconfig's default sans).
       - name: Install build and test dependencies
         run: |
+          # The aarch64 runner's container can't apply pacman 7's download sandbox (Landlock, the alpm user):
+          # "switching to sandbox user 'alpm' failed!". Downloads run unsandboxed there; packages are still signed.
+          if [ "$(uname -m)" = aarch64 ]; then
+            sed -i 's/^DownloadUser/#DownloadUser/' /etc/pacman.conf
+            grep -q '^DisableSandbox' /etc/pacman.conf || sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
+          fi
           pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq ttf-dejavu
           useradd -m builder
 
