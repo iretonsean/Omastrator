@@ -1,7 +1,7 @@
 #include "Document/PathOperations.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/ProjectWorkspaceView.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include <QtTest>
 #include <QApplication>
 #include <QLabel>

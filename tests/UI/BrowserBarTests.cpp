@@ -153,6 +153,8 @@ private slots:
         qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
         qputenv("XDG_DATA_HOME", m_directory.filePath(QStringLiteral("data")).toUtf8());
         qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
+        QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, m_directory.filePath(QStringLiteral("config")));
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_directory.filePath(QStringLiteral("config")));
     }
 
     void settingsLiveInTheTemporaryFolder()
@@ -278,10 +280,12 @@ private slots:
         const QImage quiet = rig.canvas.grab().toImage();
         rig.session.select({frame});
         const QImage selected = rig.canvas.grab().toImage();
-        QVERIFY(quiet.pixel(rig.pill(frame)) != selected.pixel(rig.pill(frame)));
+        // The pill's fill can match the canvas behind it under some palettes, so compare the whole pill with its outline and word.
+        const QRect around = QRect(rig.pill(frame) - QPoint(40, 12), QSize(80, 24));
+        QVERIFY(quiet.copy(around) != selected.copy(around));
         rig.session.deselectAll();
         rig.hover(rig.view({400, 400}).toPoint());
-        QTRY_VERIFY(rig.canvas.grab().toImage().pixel(rig.pill(frame)) != quiet.pixel(rig.pill(frame)));
+        QTRY_VERIFY(rig.canvas.grab().toImage().copy(around) != quiet.copy(around));
         // Clicking where the pill was, with no frame selected or hovered, is a plain press.
         rig.hover(QPoint(990, 790));
         rig.session.selectTool(Tool::select);

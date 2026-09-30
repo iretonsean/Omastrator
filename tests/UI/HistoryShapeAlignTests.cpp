@@ -4,7 +4,7 @@
 #include "UI/NumberField.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "UI/PropertiesPanel.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include <QDoubleSpinBox>
 #include <QListWidget>
 #include <QRadioButton>

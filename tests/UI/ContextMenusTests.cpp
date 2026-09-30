@@ -9,7 +9,7 @@
 #include "UI/NativeLayerList.h"
 #include "UI/ObjectDialogs.h"
 #include "UI/ProjectWorkspaceView.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include <QContextMenuEvent>
 #include <QDialog>
 #include <QDoubleSpinBox>

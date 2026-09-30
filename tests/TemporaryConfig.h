@@ -3,6 +3,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 
+// Every test executable already runs this before main() (tests/TestConfigIsolation.cpp); calling it again is harmless.
 // Windows and welcome tabs read presets.json; a test must never reach the user's own config.
 inline void useTemporaryConfig()
 {

@@ -1,6 +1,6 @@
 #include "Document/FontFeatures.h"
 #include "IO/ProjectStore.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include "UI/NumberField.h"
 #include "UI/ObjectDialogs.h"
 #include "UI/ProjectWorkspaceView.h"

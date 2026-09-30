@@ -1,4 +1,4 @@
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include "Canvas/BrowserViewHost.h"
 #include "Canvas/EditorCanvas.h"
 #include "Canvas/ElementBar.h"

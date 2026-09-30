@@ -180,6 +180,12 @@ function(oma_tests library folder)
     foreach(test ${tests})
         get_filename_component(name ${test} NAME_WE)
         add_executable(${name} ${test})
+        # TestConfigIsolation.cpp points QSettings and XDG_CONFIG_HOME at a per-process temporary directory before main().
+        # These two start themselves again as a child (a fake hyprctl, a preset probe) with an XDG_CONFIG_HOME they chose,
+        # which that file would replace. They use no QSettings.
+        if(NOT name MATCHES "^(SetupTests|PresetIsolationTests)$")
+            target_sources(${name} PRIVATE tests/TestConfigIsolation.cpp)
+        endif()
         target_link_libraries(${name} PRIVATE ${library} Qt6::Test)
         add_test(NAME ${name} COMMAND ${name})
         # Tests that check the repo's own files (shell plugins, fixtures) find them here.

@@ -1,4 +1,4 @@
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include "UI/ColorPickerSheet.h"
 #include <QPushButton>
 #include <QSettings>

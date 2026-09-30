@@ -1,6 +1,6 @@
 #include "Agent/WorkspaceClaims.h"
 #include "FakeHyprlandWorld.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include "UI/ProjectWorkspaceView.h"
 #include <QDir>
 #include <QLocalServer>

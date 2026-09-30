@@ -2,7 +2,7 @@
 #include "UI/OmarchyTheme.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/ProjectWorkspaceView.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include <QApplication>
 #include <QDir>
 #include <QFontDatabase>

@@ -3,7 +3,7 @@
 #include "UI/NewDocumentSheet.h"
 #include "UI/PropertiesPanel.h"
 #include "UI/PresetStore.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>

@@ -8,7 +8,7 @@
 #include "UI/NumberField.h"
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspaceView.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include <QImage>
 #include <QLineEdit>
 #include <QMenu>

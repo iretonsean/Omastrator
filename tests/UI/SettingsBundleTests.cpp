@@ -1,6 +1,6 @@
 #include "../Cloud/FakeCloud.h"
 #include "WidgetCleanup.h"
-#include "TemporaryConfig.h"
+#include "../TemporaryConfig.h"
 #include "UI/CloudBrowser.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/PresetStore.h"
