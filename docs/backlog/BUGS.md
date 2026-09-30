@@ -122,6 +122,25 @@ picture it had when the frame came back.
   The pause turns it off before the freeze. The details are in
   docs/LIVE-IN-FRAME.md ("The stale picture, found").
 
+## 8. [ ] Edit Page reports a pick of several elements one element at a time (found 2026-09-30)
+
+**Seen in tests, not yet by a user.** The page overlay sends one "select" message per element, so a pick of
+several elements reaches the app as a run of partial selections. For a moment the element bar and the timeline
+show only the first elements. `MotionGroupTests` now waits for the full pick (d2ff8f0), so this is the product
+behaviour left over: the overlay should send the whole pick in one message.
+
+## 9. [ ] An early motion hold can fail with "Cannot read properties of null (reading 'scrollHeight')" (found 2026-09-30)
+
+**Seen in test logs.** A hold that runs before the page's body is ready fails with that script error. The
+timeline retries it after 150 ms, so nothing breaks, but the error is logged and the first try is wasted: the
+hold should wait for the page to be ready.
+
+## 10. [ ] "Not your site" flashes while Live starts on the user's own site (found 2026-09-30)
+
+**Seen in tests.** Until the page's first load names the project, the session reports "Not your site" for
+the user's own registered site. The motion timeline relied on the project too early because of this
+(3eb223c fixed the timeline). The state should read "Starting…" until the project is known.
+
 ## Not bugs (checked)
 
 - **Zoom counts device pixels.** At a device pixel ratio of 2, "100%" is

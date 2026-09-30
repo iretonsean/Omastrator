@@ -35,15 +35,14 @@ here" just below.** Everything under "Earlier notes" is history.
   Mac mini did nothing until 7:18 AM, so the video moved to the Intel machine. Fixed on the Mac mini: the user
   manager's `DefaultOOMPolicy=continue`, and a 7.7 GB zram swap (it had none). The recorder's unbounded write
   buffer is reported to the video's owner.
-- **Open on the Mac mini:** `fix/motion-tests-arm64`. On arm64 with Chromium 153 the motion tests
-  (`MotionEditTests`, `MotionGroupTests`, `MotionTimelineUiTests`, `GeneratePageTests`) are slow and fail at
-  random, alone on an idle machine too; they pass on x86 with Chromium 152. Until it lands, check.sh on the
-  Mac mini isn't a merge gate for motion: run it on the Intel machine.
+- **Motion tests on arm64 (fixed, `fd8f8c3`):** a timeline race (no code blocks when the page's rows came
+  before the project was known), a use-after-free in Generate's Stop, and two tests waiting on the wrong state.
+  check.sh passes on both machines again. Three product quirks it showed are BUGS.md items 8 to 10.
 - **Not done there:** the announcement video (the Intel machine records it), "Design over…" (phase B), and
   the two suggestions at the end of the [Mac mini] decisions (the task bar's own Ask AI field; the Frame
   presets list in Properties).
-- **Worktrees on the Mac mini:** main, the two reusable slots at main, and `Omastrator-flicker` for the
-  motion test fix. The old local branches there are the pre-rewrite history, kept in the private bundle.
+- **Worktrees on the Mac mini:** main and the two reusable slots at main. The old local branches there are the
+  pre-rewrite history, kept in the private bundle.
 
 ### The desktop island is removed (`feat/remove-desktop-island`, 2026-09-29 night)
 - **What changed:** the pill and its plugin `omastrator.island` are gone. Draw,
