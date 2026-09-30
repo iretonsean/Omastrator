@@ -383,7 +383,7 @@ and Cancel.
   page.
 
 This order (the agent writes first, then the plan lists the real files) is not
-the prototype's (the plan first). See the open questions.
+the prototype's (the plan first). The author chose it on 2026-09-30 (section 11).
 
 **Build It from a canvas frame** is the existing Build It. From an empty frame
 it needs a folder, so it asks for one as Hand to Agent does on a site that isn't
@@ -633,22 +633,19 @@ server, runs with temporary `XDG_*`, `HOME` and `OMASTRATOR_RUNTIME_DIR`, uses
   written. One test with the real ffmpeg, skipped without it, checks the file
   with `ffprobe`.
 
-## 11. Open questions for the author
+## 11. Decided by the author (2026-09-30)
 
-1. **Generate a page: agent first, or plan first?** The prototype confirms the
-   files before Claude writes. But the `SyncPlan` rule says the plan lists every
-   file, and only the template's files are known before the agent runs.
-   *Recommended:* the agent writes into a staging folder first, then the plan
-   lists the real files, and Confirm creates the project. The steps look the
-   same; only the Confirm comes after "Writing the page".
-2. **The Animate preview: a second dev server on the worktree?** It's the only
-   way the preview shows the agent's markup and stack changes without writing
-   to the project. It costs a second server per preview and a hard-linked
-   `node_modules`. *Recommended:* yes, one preview per project at a time.
-3. **Where the timeline and Motion inspector live.** *Recommended:* the
-   timeline as a panel docked under the canvas, and the inspector as a
-   floating panel, so Properties stays the document's (PANELS.md). The
-   alternative is a Motion section in Properties while Edit Page is on.
-4. **Record: stepped (frame by frame) or real time?** *Recommended:* stepped,
-   at 30 fps, so the file is smooth on any machine; real time would also
-   capture script-driven motion that can't be seeked.
+The author took the recommended answer to each open question.
+
+1. **Generate a page: the agent writes first.** The agent writes into a staging
+   folder, then the `SyncPlan` lists the real files, and Confirm creates the
+   project. The prototype's steps stay; only Confirm comes after "Writing the
+   page" (section 4).
+2. **The Animate preview runs a second dev server on the worktree,** with a
+   hard-linked `node_modules`, and one preview per project at a time
+   (section 4).
+3. **The timeline is a panel docked under the canvas, and the Motion inspector
+   is a floating panel.** Properties gains no section (sections 2 and 3).
+4. **Record is stepped,** frame by frame at 30 fps (60 in the ⋯). Motion that a
+   script drives with its own clock isn't recorded unless it can be seeked
+   (GSAP's global timeline can) (section 8).
