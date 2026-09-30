@@ -41,13 +41,13 @@ enum class Tool {
     zoom,            // Z
     artboard,        // Shift+O; kept last so toolInfo's index stays stable for old code
     frame,           // F: Figma's frame, after the artboard for the same reason
-    browserView,     // no key: a frame that shows a web page (docs/BROWSER-VIEW.md)
+    browserView,     // retired: the Frame tool's Browser View switch does it; kept so old names and settings still read
     browse,          // no key: clicks, keys and the wheel go to a Browser View's page
 };
 inline constexpr std::array allTools{Tool::select, Tool::directSelect, Tool::pen, Tool::pencil, Tool::text, Tool::typeOnPath, Tool::line,
                                      Tool::rectangle, Tool::roundedRectangle, Tool::ellipse, Tool::polygon, Tool::star,
                                      Tool::shapeBuilder, Tool::scissors, Tool::rotate, Tool::scale, Tool::gradient, Tool::width,
-                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame, Tool::browserView, Tool::browse};
+                                     Tool::eyedropper, Tool::hand, Tool::zoom, Tool::artboard, Tool::frame, Tool::browse};
 QString rawValue(Tool tool);
 // The tool whose rawValue is `raw`.
 std::optional<Tool> toolNamed(const QString &raw);
@@ -99,7 +99,7 @@ public:
     // no undo step is made (a scroll alone marks nothing), and the recorded steps follow the new address so an undo doesn't
     // send the tab back. Locked documents take it too, since it isn't an edit.
     void setBrowserLocation(const QUuid &frame, const QUrl &url, QPointF scroll);
-    // The Browser View tool: a frame over `rect` showing `url` (or "no page yet"), nested as addFrame nests. Selected.
+    // A Browser View frame over `rect` showing `url` (or "no page yet"), nested as addFrame nests. Selected.
     QUuid addBrowserView(const QRectF &rect, const QUrl &url = QUrl());
     // "Change URL": the address the user typed, one undo step. Undo goes back to the page before.
     void setBrowserUrl(const QUuid &frame, const QUrl &url);
@@ -123,6 +123,14 @@ public:
     std::optional<QUuid> selectedBrowserView() const;
     // The last picture, refreshed silently: not unsaved, not a step, no signal.
     void setBrowserPicture(const QUuid &frame, const QImage &picture);
+    // The frame's Browser View switch, one undo step ("Turn On Browser View", "Turn Off Browser View"). On makes a plain
+    // frame a Browser View with no page yet, at whole CSS px; off keeps its address and last picture. Streaming and the dev
+    // server follow the document (BrowserViews), so undo can never leave a server behind.
+    void setBrowserViewOn(const QUuid &frame, bool on);
+    // Whether the frame's switch is on: a Browser View that streams.
+    bool browserViewOn(const QUuid &frame) const;
+    // The one selected frame, plain or Browser View, for the switch's command.
+    std::optional<QUuid> selectedFrame() const;
 
     // Artboards (EditorSession+Artboards.cpp) ---------------------------------
     // The Artboard tool, the list, next/previous and select() all set this.

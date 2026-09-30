@@ -359,6 +359,8 @@ struct BrowserView {
     QPointF scroll;
     // The last picture at 1x the frame's size: view state kept in the file, refreshed silently.
     QImage picture;
+    // The frame's Browser View switch: off keeps the page and its last picture, but nothing streams and its server is frozen.
+    bool on = true;
     // The size the page is laid out at: whole CSS px, at least 1 × 1.
     static QSizeF wholeSize(const QSizeF &size) { return {std::max(1.0, std::round(size.width())), std::max(1.0, std::round(size.height()))}; }
     // `wanted` with a whole size, keeping the edge the user isn't moving: `rightStays` and `bottomStays` name the right and
@@ -419,6 +421,8 @@ struct VectorObject {
     std::optional<AutoLayout> autoLayout;
     // Frames: a web page it shows (Browser View).
     std::optional<BrowserView> browser;
+    // A Browser View whose switch is on: its page streams (docs/BROWSER-VIEW.md, "The Browser View switch").
+    bool showsPage() const { return browser && browser->on; }
     // Its own sizing, and its place in an auto-layout parent's flow.
     LayoutItem layout;
     // Lifted objects: where they came from (a page element's CSS selector, an app widget's accessible path), for

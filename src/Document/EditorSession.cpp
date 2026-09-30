@@ -168,6 +168,9 @@ void EditorSession::setArtboardBackground(const QColor &color)
 
 void EditorSession::selectTool(Tool tool)
 {
+    // The Browser View tool is the Frame tool's switch now; an old shortcut or agent asking for it gets Frame.
+    if (tool == Tool::browserView)
+        tool = Tool::frame;
     if (m_tool == tool)
         return;
     if (m_interaction && m_tool == Tool::pen && m_document) {

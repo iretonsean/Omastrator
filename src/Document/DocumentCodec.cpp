@@ -564,9 +564,14 @@ QJsonObject encode(const VectorObject &object)
         json["layout"] = layout;
     }
     // Additive, optional key: the page a Browser View shows. Its picture is a child (encode of the list).
-    if (object.kind == ObjectKind::frame && object.browser)
-        json["browserView"] = QJsonObject{{"url", object.browser->url.toString(QUrl::FullyEncoded)},
-                                          {"scroll", QJsonArray{object.browser->scroll.x(), object.browser->scroll.y()}}};
+    if (object.kind == ObjectKind::frame && object.browser) {
+        QJsonObject view{{"url", object.browser->url.toString(QUrl::FullyEncoded)},
+                         {"scroll", QJsonArray{object.browser->scroll.x(), object.browser->scroll.y()}}};
+        // Written only when off, so files from before the switch read as on.
+        if (!object.browser->on)
+            view["on"] = false;
+        json["browserView"] = view;
+    }
     if (!object.tokenRefs.empty()) {
         QJsonObject refs;
         for (const auto &[key, token] : object.tokenRefs)
@@ -657,6 +662,7 @@ VectorObject decodeObject(const QJsonObject &json)
         const QJsonArray scroll = read["scroll"].toArray();
         if (scroll.size() == 2)
             view.scroll = QPointF(std::max(0.0, scroll[0].toDouble()), std::max(0.0, scroll[1].toDouble()));
+        view.on = read["on"].toBool(true);
         object.browser = view;
     }
     if (json.contains("layout")) {

@@ -56,6 +56,40 @@ private slots:
         QCOMPARE(back, fixture.document);
     }
 
+    // The Browser View switch: "on": false only when off, so files from before the switch load with their views on.
+    void theSwitchRoundTripsAndOldFilesReadAsOn()
+    {
+        Fixture fixture;
+        QJsonObject site = find(DocumentCodec::encode(fixture.document)["objects"].toArray(), QStringLiteral("Site"));
+        QVERIFY(!site["browserView"].toObject().contains("on"));
+        fixture.document.find(fixture.frame)->browser->on = false;
+        const QJsonObject json = DocumentCodec::encode(fixture.document);
+        site = find(json["objects"].toArray(), QStringLiteral("Site"));
+        QCOMPARE(site["browserView"].toObject()["on"], QJsonValue(false));
+        const VectorDocument back = DocumentCodec::decode(json);
+        QVERIFY(back.find(fixture.frame)->browser);
+        QVERIFY(!back.find(fixture.frame)->browser->on);
+        QVERIFY(!back.find(fixture.frame)->showsPage());
+        // Its address and last picture stay while it's off.
+        QCOMPARE(back.find(fixture.frame)->browser->url, QUrl(QStringLiteral("https://example.com/pricing?a=1")));
+        QCOMPARE(back.find(fixture.frame)->browser->picture.size(), QSize(400, 300));
+        QCOMPARE(back, fixture.document);
+        // A file written before the switch existed: no "on" key, so the view is on.
+        QJsonObject old = json;
+        QJsonArray objects = old["objects"].toArray();
+        for (qsizetype i = 0; i < objects.size(); ++i) {
+            QJsonObject object = objects[i].toObject();
+            if (object["name"].toString() != QLatin1String("Site"))
+                continue;
+            QJsonObject view = object["browserView"].toObject();
+            view.remove("on");
+            object["browserView"] = view;
+            objects[i] = object;
+        }
+        old["objects"] = objects;
+        QVERIFY(DocumentCodec::decode(old).find(fixture.frame)->showsPage());
+    }
+
     void thePreviewRuleRoundTripsAndDefaultsAreNotWritten()
     {
         Fixture fixture;

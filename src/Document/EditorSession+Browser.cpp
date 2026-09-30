@@ -70,6 +70,43 @@ void EditorSession::setBrowserUrl(const QUuid &frame, const QUrl &url)
     });
 }
 
+void EditorSession::setBrowserViewOn(const QUuid &frame, bool on)
+{
+    const VectorObject *object = m_document ? m_document->find(frame) : nullptr;
+    if (!object || object->kind != ObjectKind::frame || object->showsPage() == on || (!on && !object->browser))
+        return;
+    edit(on ? QStringLiteral("Turn On Browser View") : QStringLiteral("Turn Off Browser View"), [&](VectorDocument &document) {
+        VectorObject &target = *document.find(frame);
+        if (!on) {
+            target.browser->on = false;
+            return;
+        }
+        if (target.browser) {
+            target.browser->on = true;
+            return;
+        }
+        target.browser = BrowserView{};
+        // A page lays out at whole CSS px, so the design width is whole too.
+        const QRectF box = document.bounds(frame);
+        if (BrowserView::wholeSize(box.size()) != box.size())
+            document.resizeFrame(frame, BrowserView::wholeBox(box));
+    });
+}
+
+bool EditorSession::browserViewOn(const QUuid &frame) const
+{
+    const VectorObject *object = m_document ? m_document->find(frame) : nullptr;
+    return object && object->showsPage();
+}
+
+std::optional<QUuid> EditorSession::selectedFrame() const
+{
+    if (!m_document || m_selection.size() != 1)
+        return std::nullopt;
+    const VectorObject *object = m_document->find(m_selection.front());
+    return object && object->kind == ObjectKind::frame ? std::optional(object->id) : std::nullopt;
+}
+
 std::optional<QUuid> EditorSession::selectedBrowserView() const
 {
     if (!m_document || m_selection.size() != 1)
