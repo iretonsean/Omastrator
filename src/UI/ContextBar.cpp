@@ -62,7 +62,9 @@ ContextBar::ContextBar(EditorSession &session, AgentBridge *agent, QWidget *pare
         m_mic = new QToolButton(this);
         m_mic->setObjectName(QStringLiteral("askMic"));
         m_mic->setText(QStringLiteral("Mic"));
+        // The icon theme may not have a microphone; the word stands in.
         m_mic->setIcon(QIcon::fromTheme(QStringLiteral("audio-input-microphone")));
+        m_mic->setToolButtonStyle(m_mic->icon().isNull() ? Qt::ToolButtonTextOnly : Qt::ToolButtonIconOnly);
         m_mic->setToolTip(QStringLiteral("Hold to speak (Super+Alt+V)"));
         m_mic->setAccessibleName(QStringLiteral("Hold to speak"));
         m_mic->setCheckable(true);

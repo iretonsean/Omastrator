@@ -30,18 +30,20 @@ FrameToolHeader::FrameToolHeader(EditorSession &session, QWidget *parent)
                         QVariant::fromValue(preset.size));
         m_size->setItemData(m_size->count() - 1, QString::fromUtf8(preset.name), Qt::UserRole + 1);
     }
-    row->addWidget(m_size);
+    // After the title, before the stretch that ends the row, as every tool bar has them.
+    int at = 1;
+    row->insertWidget(at++, m_size);
     m_clip->setObjectName(QStringLiteral("frameClip"));
     m_clip->setFont(ToolHeaderStyle::controlFont());
     m_clip->setToolTip(QStringLiteral("Show the selected frames' children only inside their box"));
-    row->addWidget(m_clip);
+    row->insertWidget(at++, m_clip);
     m_autoLayout->setObjectName(QStringLiteral("frameAutoLayout"));
     m_autoLayout->setFont(ToolHeaderStyle::controlFont());
-    row->addWidget(m_autoLayout);
+    row->insertWidget(at++, m_autoLayout);
     auto *hint = new QLabel(QStringLiteral("Drag to draw · Inside a frame it nests · Shift squares"), this);
     hint->setFont(ToolHeaderStyle::controlFont());
     hint->setForegroundRole(QPalette::PlaceholderText);
-    row->addWidget(hint);
+    row->insertWidget(at++, hint);
     connect(m_size, &QComboBox::activated, this, [this](int index) {
         const QSizeF size = m_size->itemData(index).toSizeF();
         m_size->setCurrentIndex(0);
