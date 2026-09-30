@@ -47,7 +47,10 @@ Each folder builds as its own static library:
   `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, `EditSets` (edits to
   sites that aren't yours, kept per origin), write-back
   (`WriteBack`, `AgentWork`), and Deploy (`Deploy`, `DeployJob`, `History`,
-  with GitHub through `gh`). Browser View's Chromium (docs/BROWSER-VIEW.md) is
+  with GitHub through `gh`), and motion (docs/MOTION.md): `motion.js` (the page
+  side, run after the overlay, compiled in like it), `Motion` (the timeline's
+  rows from the page's list) and `MotionCode` (the marked blocks in a project's
+  code). Browser View's Chromium (docs/BROWSER-VIEW.md) is
   `BrowserPool` (its own thread, tabs, idle stop, the cap) and `Breakpoints`
   (the widths a site's stylesheets name). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
@@ -87,7 +90,9 @@ Each folder builds as its own static library:
   (in `Canvas`) and `ElementBarActions`, and `BrowserViews+Site.cpp` (sites
   that aren't yours, This Is My Site), `BrowserViews+Deploy.cpp` (Deploy, Save,
   Review Changes, History) and `BrowserViews+Build.cpp` (Build It) on top of
-  `AgentBridge`. `DevServers` (in `src/Live`) starts a project's dev server
+  `AgentBridge`. The timeline under the canvas (docs/MOTION.md) is
+  `MotionTimeline` (with `MotionTrackView`, the drawing) and `MotionInspector`.
+  `DevServers` (in `src/Live`) starts a project's dev server
   for the window and the frames. Share with client
   (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and
   `SharePanels`; its tests use the fake rclone and a fake `gh`. Send to a device

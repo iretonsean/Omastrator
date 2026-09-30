@@ -102,6 +102,13 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Build It: your agent changes the code to match it on its own git branch, and
   Review Changes shows the result. Build It with a Note… adds a line for the
   agent; on a site that isn't yours it asks for the code's folder first.
+  Window ▸ Timeline shows the page's motion (CSS animations and transitions,
+  scroll-driven animations, Web Animations from scripts) as rows under the
+  canvas: drag the playhead to scrub the live page, Play, Loop or Replay it, and
+  pick a row to select its elements. Window ▸ Motion shows what the row does
+  (start, easing, duration, stagger, keyframes) and the Code tab reads the
+  marked block in your project's code. Esc leaves Edit Page and lets the page
+  play on.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.

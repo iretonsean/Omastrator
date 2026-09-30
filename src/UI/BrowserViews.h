@@ -43,6 +43,8 @@ public:
     void flushPictures();
     // A streamed picture as it arrives; it goes into the document at the next flush. Tests use it in place of a page.
     void notePicture(const QUuid &frame, const QImage &image);
+    // The timeline is open on this frame: it streams every picture, as a browsed frame does (docs/MOTION.md, section 2).
+    void setScrubbed(const QUuid &frame, bool scrubbed);
 
     // The pool's name for a frame's tab; tests speak to the pool's signals with it.
     QUuid poolKey(const QUuid &frame) const;
@@ -111,6 +113,8 @@ signals:
     void frameChanged(const QUuid &frame);
     // Something the page tried that Browser View refuses, said once to the user.
     void notice(const QString &text);
+    // A new picture of the frame's page arrived (the timeline paces its seeks by it).
+    void pictureArrived(const QUuid &frame);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -272,5 +276,7 @@ private:
     std::vector<QUuid> m_lastSelection;
     // Frames the Browse tool has sent input to; they stream every frame.
     QSet<QUuid> m_browsed;
+    // Frames whose timeline is open; they stream every frame too, until it closes.
+    QSet<QUuid> m_scrubbed;
     QElapsedTimer m_clock;
 };

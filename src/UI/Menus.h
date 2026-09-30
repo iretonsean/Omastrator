@@ -67,6 +67,11 @@ private:
     FloatingPanel m_historyPanel{QStringLiteral("historyPanel"), m_window};
     // Window ▸ History, following the front document.
     void showHistory();
+    // Window ▸ Timeline and Motion, following the front document (docs/MOTION.md).
+    FloatingPanel m_motionPanel{QStringLiteral("motionPanel"), m_window};
+    QMetaObject::Connection m_timelineOpened;
+    QMetaObject::Connection m_timelineChanged;
+    void showMotion();
     // Window ▸ Type Styles, following the front tab.
     FloatingPanel m_typeStylesPanel{QStringLiteral("typeStylesPanel"), m_window};
     QPointer<TextStylesPanel> m_typeStyles;

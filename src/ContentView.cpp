@@ -7,6 +7,7 @@
 #include "UI/IsolationBar.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
+#include "UI/MotionTimeline.h"
 #include "UI/NewDocumentSheet.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/PropertiesPanel.h"
@@ -368,6 +369,10 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     // Isolation mode's breadcrumb, above the art it isolates.
     canvasColumn->addWidget(new IsolationBar(session, canvas));
     canvasColumn->addLayout(m_canvasSlot, 1);
+    // The timeline docks under the art (docs/MOTION.md, section 2); it stays hidden until a Browser View's page is opened in it.
+    m_timeline = new MotionTimeline(session, *m_canvas, canvas);
+    canvasColumn->addWidget(m_timeline);
+    connect(m_timeline, &MotionTimeline::notice, this, &ContentView::flash);
     m_canvasSlot->setContentsMargins(0, 0, 0, 0);
     // The welcome sits over the canvas.
     m_canvasSlot->addWidget(m_canvas, 0, 0);

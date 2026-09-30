@@ -504,7 +504,7 @@ BrowserViews::Want BrowserViews::wanted(const QUuid &frame, const VectorObject &
     want.scale = density > 1.5 ? 2 : 1;
     const auto rounded = [](double pixels) { return int(std::min<double>(castLimit, std::ceil(std::max(64.0, pixels) / 64) * 64)); };
     want.cast = QSize(rounded(want.view.width() * backing), rounded(want.view.height() * backing));
-    want.frameGap = m_session.isSelected(object.id) || m_browsed.contains(object.id) ? 0 : (streaming > 4 ? 66 : 33);
+    want.frameGap = m_session.isSelected(object.id) || m_browsed.contains(object.id) || m_scrubbed.contains(object.id) ? 0 : (streaming > 4 ? 66 : 33);
     return want;
 }
 

@@ -2,6 +2,7 @@
 #include "UI/AgentBridge.h"
 #include "UI/LiveFrames.h"
 #include "UI/Menus.h"
+#include "UI/MotionTimeline.h"
 #include "UI/PageWorkspaces.h"
 #include "UI/ShareController.h"
 #include "Canvas/TaskBar.h"
@@ -216,6 +217,11 @@ void Menus::synchronize()
     pageWorkspaces->setEnabled(onHyprland);
     pageWorkspaces->setToolTip(onHyprland ? QStringLiteral("Each page of a document with two or more pages gets its own Hyprland workspace")
                                           : QStringLiteral("Needs Hyprland"));
+    const MotionTimeline *timeline = MotionTimeline::of(session());
+    action(QStringLiteral("showTimeline"))->setEnabled(drawn);
+    action(QStringLiteral("showTimeline"))->setChecked(timeline && timeline->isOpen());
+    action(QStringLiteral("showMotion"))->setEnabled(drawn);
+    action(QStringLiteral("showMotion"))->setChecked(m_motionPanel.isVisible());
     action(QStringLiteral("showLayers"))->setChecked(ContentView::showsPanel(ContentView::layersKey));
     action(QStringLiteral("showProperties"))->setChecked(ContentView::showsPanel(ContentView::propertiesKey));
 }

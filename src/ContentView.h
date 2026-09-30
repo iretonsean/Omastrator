@@ -11,6 +11,7 @@
 
 class AgentBridge;
 class LayersPanel;
+class MotionTimeline;
 class ProposalBar;
 class PropertiesPanel;
 class ProjectWorkspace;
@@ -101,6 +102,7 @@ private:
     std::vector<ToolSlot *> m_toolSlots;
     QGridLayout *const m_canvasSlot;
     EditorCanvas *const m_canvas;
+    MotionTimeline *m_timeline = nullptr;
     PropertiesPanel *const m_propertiesPanel;
     LayersPanel *const m_layersPanel;
     QWidget *m_dock = nullptr;

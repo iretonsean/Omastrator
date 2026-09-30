@@ -31,6 +31,9 @@ public:
         bool canUndo = false;
         bool canRedo = false;
         bool pageEditing = false;
+        // The page's motion as the overlay last listed it (Motion::parse reads it), and whether the timeline holds the page.
+        QJsonObject motion;
+        bool motionHeld = false;
         QString serverCommand;
         QUrl serverUrl;
         // The dev server is starting, and the tab is still on the production page.

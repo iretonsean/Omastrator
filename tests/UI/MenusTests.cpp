@@ -4,6 +4,7 @@
 #include "Document/PathOperations.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
+#include "UI/MotionTimeline.h"
 #include "UI/NumberField.h"
 #include "UI/ProjectTabs.h"
 #include "UI/ProjectWorkspaceView.h"
@@ -64,6 +65,7 @@ private slots:
     void groupingFollowsTheSession();
     void viewTogglesAreChecked();
     void windowTogglesThePanels();
+    void windowHasTheTimelineAndMotionEntries();
     void exportArtboardIsACheckedToggleOnTheActiveArtboard();
     void remappedKeysReachTheEntries();
     void aFocusedFieldKeepsUndo();
@@ -268,6 +270,33 @@ void MenusTests::exportArtboardIsACheckedToggleOnTheActiveArtboard()
     toggle->trigger();
     QVERIFY(session.document()->artboard(1).exported);
     QVERIFY(toggle->isChecked());
+}
+
+void MenusTests::windowHasTheTimelineAndMotionEntries()
+{
+    ProjectWorkspace workspace;
+    ProjectWorkspaceView window(workspace);
+    Menus &menus = *window.menus();
+    QVERIFY(menus.action("showTimeline")->isCheckable());
+    QVERIFY(menus.action("showMotion")->isCheckable());
+    workspace.createDocument(QSizeF(400, 300));
+    QVERIFY(menus.action("showTimeline")->isEnabled());
+    MotionTimeline *timeline = MotionTimeline::of(workspace.current().session);
+    QVERIFY(timeline);
+    QVERIFY(!timeline->isOpen());
+    // With no Browser View there is nothing to open, and it says so instead of failing quietly.
+    QSignalSpy notice(timeline, &MotionTimeline::notice);
+    menus.action("showTimeline")->trigger();
+    QCOMPARE(notice.size(), 1);
+    QVERIFY(notice.first().first().toString().contains(QStringLiteral("no Browser View")));
+    QVERIFY(!timeline->isOpen());
+    QVERIFY(!menus.action("showTimeline")->isChecked());
+    // Motion is the inspector's own panel.
+    QVERIFY(!menus.action("showMotion")->isChecked());
+    menus.action("showMotion")->trigger();
+    QVERIFY(menus.action("showMotion")->isChecked());
+    menus.action("showMotion")->trigger();
+    QVERIFY(!menus.action("showMotion")->isChecked());
 }
 
 void MenusTests::windowTogglesThePanels()
