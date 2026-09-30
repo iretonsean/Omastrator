@@ -5,6 +5,28 @@ here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
+### The desktop island is removed (`feat/remove-desktop-island`, 2026-09-29 night)
+- **What changed:** the pill and its plugin `omastrator.island` are gone. Draw,
+  Capture, AI and Live modes move into the app window (toolbar, Capture tab,
+  Ask field, Browser View); design mode stays until "Design over…" replaces it,
+  now as the plugin `omastrator.design`. Activity lines are desktop
+  notifications (`OMASTRATOR_NOTIFY` replaces `notify-send` in tests). The tray
+  light's click runs `omastrator island ask`. See docs/OS-SUITE.md, component 1.
+- **`omastrator setup` cleans an old install** (design plugin in, island plugin,
+  its `shell.json` entry, `island-visibility.json`, `island-seen.json` and the
+  removed keys out); a second run changes nothing. Run it on the real desktop
+  after the merge: it is the one step no test can do.
+- **Merge order:** `feat/window-layout` adds the real `focusAsk()`
+  (`ContextBar`'s `askField()`); this branch has a stub with the same name and
+  signature in `ProjectWorkspaceView` that focuses the task bar's "Ask AI…"
+  field. Keep the window-layout version on conflict.
+- **Known gap:** design mode's drawing tools were buttons on the pill. Until
+  "Design over…", choose them with `omastrator design tool …`; Esc leaves.
+- **The author tests on the real desktop:** the tray light click brings the
+  window forward with Ask focused; a notification appears for `omastrator
+  island capture color fill` with hyprpicker cancelled; design mode still turns
+  on with Super+Alt+O and Esc leaves.
+
 ### State (2026-09-29 ~6 PM Pacific, the Intel machine)
 - **Phase 4 is merged and pushed** (9c5a487). `main` holds Browser View
   phases 1–4, and all 147 tests passed on the merged code, Chromium included.

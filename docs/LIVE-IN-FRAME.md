@@ -389,6 +389,13 @@ Review named "Build it: <frame name>".
 
 ## The island step (not in this phase)
 
+> **2026-09-29, `feat/remove-desktop-island`:** the whole desktop island is
+> removed, Live row included. What this step still leaves: Live's own window
+> (`setLiveOpen` and the sheet), and the seam below. `omastrator island live …`,
+> `AgentBridge::startLive` and `deployProject()` are unchanged, so scripts and
+> keys keep working; the notifications for their messages replace the island's
+> activity line.
+
 The island reaches Live only through `AgentBridge::startLive` (the `live start`
 action) and the status stream's `live` key. The step would:
 

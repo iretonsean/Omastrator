@@ -28,15 +28,17 @@ Each folder builds as its own static library:
   throwaway config and skips without it.
 - `src/Agent` → `oma_agent`. The agent socket, CLI and MCP bridge
   (docs/AI-DESIGN.md), plus the desktop-wide commands in docs/OS-SUITE.md:
-  `Cli` dispatches every GUI-less command, `Island` keeps the island's mode
-  file and `omastrator island …`, `StatusStream` is `omastrator status
+  `Cli` dispatches every GUI-less command, `Island` keeps the mode
+  file (normal or design), the last activity line (also a desktop notification)
+  and `omastrator island …`, `StatusStream` is `omastrator status
   --follow`, `Capture` runs hyprpicker, slurp, grim and wl-paste, `Setup` is
   `omastrator setup`, `Dictation` is push-to-talk (normalising, the grammar,
   Heard), `Vocabulary` is dictation's word list, `Hyprland` reads windows,
   monitors and the pointer from Hyprland's socket and runs dispatchers, and
   `DesignCli` is `omastrator design`, `desk` and `daemon`.
-- `shell/` → the omarchy-shell plugins, QML: `omastrator.island` (the island),
-  `omastrator.ai` (the tray light) and `omastrator-ui` (what they share).
+- `shell/` → the omarchy-shell plugins, QML: `omastrator.design` (design mode's
+  overlay; the desktop island's pill is gone), `omastrator.ai` (the tray light)
+  and `omastrator-ui` (what they share).
   Setup copies them to `~/.config/omarchy/plugins/`. To try a change without
   touching the user's shell, run a throwaway `quickshell -p` config that loads
   the plugin, with `OMASTRATOR_SOCKET` and `OMASTRATOR_RUNTIME_DIR` pointed at a
@@ -53,7 +55,7 @@ Each folder builds as its own static library:
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
   tests run the fixtures in `tests/Live/fixtures` and skip without Chromium.
 - `src/Anywhere` → `oma_anywhere`. Design mode everywhere (docs/ANYWHERE.md):
-  `DesignMode` (on and off with the island's Design mode, hover, Alt distances),
+  `DesignMode` (on and off with the mode file's Design mode, hover, Alt distances),
   `DesktopSource` (Hyprland, AT-SPI and grim; tests use
   `tests/Anywhere/FakeDesktop.h`), `Inspect` (the web inspector script, the
   AT-SPI helper, distances), `Overlays` (`overlays.omai`, a layer per surface),
@@ -64,7 +66,7 @@ Each folder builds as its own static library:
   `FakeDesktop::trees` or `OMASTRATOR_ATSPI_TREE`) and `AnywhereSettings`
   (onboarding, destinations, in `anywhere.json`). The app side is
   `src/UI/DesignController` behind the `design` method. The overlay itself is
-  `shell/omastrator.island/Overlay.qml`; its decisions are in
+  `shell/omastrator.design/Overlay.qml`; its decisions are in
   `OverlayLogic.js`, which `ShellPluginTests` runs in a `QJSEngine`.
 - `src/System` → `oma_system`. Design systems (docs/DESIGN-SYSTEMS.md):
   `TokenFiles` (W3C tokens.json, Tailwind v4 and v3, CSS variables),
@@ -128,7 +130,9 @@ Each folder builds as its own static library:
   `OMASTRATOR_WL_PASTE`, `OMASTRATOR_OMARCHY`, `OMASTRATOR_OMARCHY_SHELL`,
   `OMASTRATOR_OMDROP`, `OMASTRATOR_OMADROP`, `OMASTRATOR_APP`, `OMASTRATOR_GH`, `OMASTRATOR_TERMINAL`, `OMASTRATOR_RCLONE`,
   `OMASTRATOR_HYPRCTL` (every Hyprland query and dispatch), `OMASTRATOR_HYPRLAND_EVENTS` (the event socket's path), `OMASTRATOR_HYPRLAND` (the `Hyprland --verify-config` check), `OMASTRATOR_ATSPI`,
-  `OMASTRATOR_ATSPI_TREE`, `OMASTRATOR_WL_COPY` and `OMASTRATOR_GIT`. Design
+  `OMASTRATOR_ATSPI_TREE`, `OMASTRATOR_WL_COPY`, `OMASTRATOR_GIT` and `OMASTRATOR_NOTIFY` (a program run instead of `notify-send`, which
+  `Island::setActivity` calls; ctest sets it to `true`, and a test that checks a
+  notification points it at a logging script). Design
   system tests use temporary projects, a temporary `HOME` for themes and
   libraries, and a fake Omarchy command. Unset `HYPRLAND_INSTANCE_SIGNATURE` in
   tests that

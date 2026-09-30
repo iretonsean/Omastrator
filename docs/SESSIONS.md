@@ -4,6 +4,18 @@ Brainstormed with the author on 2026-09-27, after a day of design-mode traps
 (see "Why" below). **Status: agreed direction. Nothing is built yet.** Read
 `docs/VISION.md` and `docs/ANYWHERE.md` first.
 
+> **Update, 2026-09-29: the desktop island is removed.** This note was written
+> for the island as the session's one switch and one row of tools. That switch
+> moves into the app window ("Design over…" replaces design mode), so wherever
+> this file says "the island", read "the session's control in the app": the
+> on/off switch, the tool row and the "Designing · 4 changes on 3 surfaces"
+> score. The session itself (nothing taken over on entry, Save & close, Discard
+> & close, Review, a journal after a crash, one undo stack per surface, and a way
+> out that never asks) is unchanged. Until "Design over…" ships, design mode
+> works as before with the island's role gone: Super+Alt+O or `omastrator
+> island mode design` turns it on, Esc leaves, and tools are `omastrator design
+> tool …`. See OS-SUITE.md, component 1.
+
 ## The idea
 
 The island is one on/off switch for a **design session**. While a session is

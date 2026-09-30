@@ -5,6 +5,18 @@ Decided with the author on 2026-09-27 in an interview, and read alongside
 toolbar exists everywhere in the OS, and every tool works on whatever you're
 looking at.
 
+> **Update, 2026-09-29: Omastrator is app-first now.** The desktop island (the
+> pill under the bar) is removed, and this file's premise changes with it: the
+> window is where Omastrator lives (its toolbar, the Ask field, the Capture tab
+> and Browser View frames are the island's Draw, AI, Capture and Live modes),
+> and the desktop layer is a companion to it. **Design mode is kept as it is
+> until "Design over…" in the app replaces it.** It is still turned on with
+> Super+Alt+O, `omastrator design on`, `omastrator island mode design` or the
+> Omarchy menu's Design Mode, and its overlay is now the shell plugin
+> `omastrator.design` (see OS-SUITE.md, component 1). Its tool row lived on the
+> pill, so its drawing tools are chosen with `omastrator design tool …` for now;
+> the sections below that say "the island" describe the pill as it was.
+
 ## The idea
 
 Omastrator is not an app you switch to. **There's no window by default.** It is
@@ -42,11 +54,11 @@ don't own.
 
 - **Click-through by default.** Overlays and the art on them are visible but
   don't steal clicks: you keep using the app underneath. You work on the art
-  after selecting it, from the island or the floating bar (or its layer in the
+  after selecting it, from the floating bar (or its layer in the
   Desk).
 - **The toolbar follows you. All three of these, together:**
-  - **The island** holds the mode and the tools, and acts on the focused
-    surface.
+  - **The island** (removed 2026-09-29) held the mode and the tools. Design
+    mode's tools are `omastrator design tool …` until "Design over…".
   - **A hotkey** enters design mode on the current surface; Esc leaves.
   - **A floating contextual bar** appears next to whatever you hover or
     select on the window design mode started on (it sticks to its app; see
@@ -64,7 +76,7 @@ don't own.
 
 - **The Desk** is one global, infinite canvas. It lives on its own Hyprland
   workspace (with a hotkey to jump there) and can also be opened as a normal
-  window from the island or the launcher. Everything captured, drawn or lifted
+  window from the launcher or the Omarchy menu. Everything captured, drawn or lifted
   on any surface can land there as a frame labelled with its source (app, URL
   and time).
 - **You choose each time** where a piece of work goes:
@@ -144,10 +156,10 @@ everywhere) on 2026-09-27.
   the documents, the agent socket, the overlays and the Desk. Setup's
   Hyprland file starts it with Hyprland (`hl.on("hyprland.start", …)`, or
   `exec-once` in hyprlang). Anything that needs it and finds nothing on the
-  socket (the island, `omastrator design`, `desk`) starts it the same way.
+  socket (`omastrator island …`, `omastrator design`, `desk`) starts it the same way.
 - **The window opens only when asked**: the Desk, a document sent from a
   surface, a panel or sheet (Variations, Roast, Live, Generate…), Draw mode,
-  canvas work from the island (Capture, Paste SVG, voice commands), or a plain
+  canvas work from the desktop (Capture, Paste SVG, voice commands), `omastrator island ask`, or a plain
   `omastrator [files]`. A second `omastrator` hands its files to the one
   running (`show_window`) and ends; `--daemon` with one running ends quietly.
   In the background, closing the window only hides it, with every document
@@ -159,32 +171,36 @@ everywhere) on 2026-09-27.
 
 ### Design mode and its keys
 
-- **Design is the island's sixth mode.** The island's mode file is the one
-  switch: the hotkey runs `omastrator design on`, which sets the mode, and the
-  app follows the file. So the island, the hotkey, Esc and the arrows can't
-  disagree. Leaving it from anywhere resets Hyprland's submap.
+- **Design is one of the mode file's two modes** (`normal` and `design`; the
+  pill's Draw, Capture, AI and Live are gone). The mode file
+  (`island.json`) is the one switch: the hotkey runs `omastrator design on`,
+  which sets the mode, and the app follows the file. So the menu, the hotkey and
+  Esc can't disagree. Leaving it from anywhere resets Hyprland's submap.
 - **Super+Alt+O** enters design mode on the focused monitor and holds a small
   submap: **Escape** (or Super+Alt+O again) leaves, and **Alt**, held,
   measures (`Alt_L` pressed and released). Every other key reaches the apps;
-  Hyprland's own shortcuts wait until Esc, as in the island's other modes.
+  Hyprland's own shortcuts wait until Esc.
   **Super+Alt+W** toggles the Desk. Neither is bound by Omarchy's defaults
   (checked against `/usr/share/omarchy/default/hypr/bindings`, and by a test).
   Both can be remapped with `"keys": {"design": "…", "desk": "…"}` in
   `~/.config/omastrator/anywhere.json`, then `omastrator setup`; anything that
   isn't a plain key combination is ignored. Both generated files pass
   `Hyprland --verify-config`.
-- Design mode covers the monitor that had focus when it started. On the island
-  its row holds Inspect, the drawing tools, Undo, the Desk, the questions
-  (help) and Done.
+- Design mode covers the monitor that had focus when it started. Its tools were
+  a row on the island (Inspect, the drawing tools, Undo, the Desk, the questions
+  and Done); with the island gone they are `omastrator design tool …`, `undo`,
+  `desk show`, `onboarding open` and `off`, until "Design over…". Under a
+  drawing tool the overlay takes the pointer and the keyboard, so Esc leaves.
 
 ### The overlay
 
-- **Quickshell, inside the island plugin.** The overlay is `Overlay.qml` in
-  `omastrator.island`: a `PanelWindow` per screen on the `Overlay` layer,
+- **Quickshell, in the design plugin.** The overlay is `Overlay.qml` in
+  `omastrator.design` (whose `Design.qml` makes it, with the status stream): a `PanelWindow` per screen on the `Overlay` layer,
   exclusion `Ignore`, namespace `omastrator-overlay`. A Qt layer-shell window
   from the app would need LayerShellQt, which Omarchy doesn't install. The
-  island already has the status stream, the theme and the focused monitor, and
-  setup already installs the plugin, so nothing new has to be enabled.
+  plugin has the status stream, the theme and the focused monitor, and
+  setup installs it, so nothing new has to be enabled. (It lived in the island's
+  plugin until 2026-09-29; setup replaces that plugin with this one.)
 - **Click-through by default.** The window's input mask is empty. The
   floating bar, Inspect's card, onboarding and the text box join it only while
   they're shown, and a drawing tool takes the whole monitor until Inspect gives
@@ -208,7 +224,7 @@ everywhere) on 2026-09-27.
   the last 48 by id, so the bar acts on what it showed even after the pointer
   has moved on.
 - Art is selected from the bar (it offers the art's own actions and Deselect),
-  from the island (Undo) or in the Desk, never by clicking through. A new
+  with `omastrator design undo` or in the Desk, never by clicking through. A new
   drawing is selected, so the bar at once offers what to do with it.
 
 ### Inspect and measure
@@ -298,11 +314,11 @@ with the program". This is what it did, and what it does now.
   become held edits), releases the dev servers, ends Edit Page and stops a
   Build It agent; Esc leaves Edit Page in one press; and Edit Page never sends
   keys to the page.
-- **The escape hatches don't depend on the bar.** Esc, the island's Leave,
+- **The escape hatches don't depend on the bar.** Esc,
   `omastrator reset` and Super+Alt+Escape work whether the bar is showing,
   hidden with its window, or on another monitor. The bar is only drawn on the
   monitor its target is on, and never above the topmost clear space, so it is
-  never over the Omarchy bar or the island (`OverlayLogic.barPosition`,
+  never over the Omarchy bar (`OverlayLogic.barPosition`,
   `clampBar` and `barShownOn`, tested in a JavaScript engine).
 - **Reset gives the pages' workspaces back** and turns View ▸ Pages as
   Workspaces off (WORKSPACES.md): `omastrator reset` returns them from the
@@ -322,34 +338,19 @@ Keep and Discard sit on the floating bar, and the bar hides while its home
 window is off screen. So a proposal (or an agent being waited on) that the bar
 can't show gets its own small card at the bottom of the design monitor,
 without the bar's home rule: the overlay shows it whenever the bar isn't up
-(`proposalCard` in `Overlay.qml`), and its clicks join the input mask. The
-island is not used for this: it is hidden with other apps, and a card at the
+(`proposalCard` in `Overlay.qml`), and its clicks join the input mask. A card at the
 screen the user was designing on is where they look. Tested in
 `DesignModeUiTests` (the proposal stays in the status with the bar hidden) and
 `ShellPluginTests` (the card's condition).
 
-### The island shows only with Omastrator (interim)
+### The island is gone
 
-Alpha testers didn't want the island on screen everywhere. Until the island's
-UX is rethought (scrap it, or change what it does), this is the default,
-**pending a rethink of the island**:
-
-- The island shows while an Omastrator window is focused (Hyprland's active
-  window class is `io.github.iretonsean.Omastrator`), and is hidden otherwise.
-- It is a way out, so it stays while design mode is on, while dictation is
-  listening, transcribing or showing what it heard, while an agent is being
-  waited on (Stop is on the island), while Live is starting or running or a
-  deploy is running (Stop Live, Changes and Deploy are island-only, and Live's
-  browser is not an Omastrator window), and while a proposal or result waits
-  for Keep or Discard (`OverlayLogic.islandShown`, tested in a JavaScript
-  engine). The tray light is always there as the entry.
-- The focused class is read from the Wayland app id (`toplevel.wayland.appId`)
-  first, since Hyprland's own record is only filled after a refresh, then from
-  Hyprland's record, refreshed on every focus change for XWayland windows.
-- **To show it always**: Preferences, "Show the island on every window", or
-  `omastrator island show always` (`with-app` goes back). It is kept as `show`
-  in `~/.config/omastrator/island-visibility.json`, and the status stream carries
-  it as `islandShow`.
+The interim rule that showed the island only while an Omastrator window was
+focused, with its Preferences choice ("Show the island on every window"),
+`omastrator island show always|with-app`, `island-visibility.json` and the
+status stream's `islandShow`, went with the pill on 2026-09-29. Setup deletes
+the old file. What the pill showed as activity lines is a desktop notification
+now (OS-SUITE.md, component 1), and the tray light stays in the bar.
 
 ### The floating bar and Ask
 
@@ -398,7 +399,7 @@ UX is rethought (scrap it, or change what it does), this is the default,
   in front.
 - **Its workspace** is the named special workspace `special:omastrator-desk`,
   so no workspace number can clash; `"deskWorkspace"` in `anywhere.json`
-  changes it. `omastrator desk show` (Super+Alt+W, the island) shows the
+  changes it. `omastrator desk show` (Super+Alt+W) shows the
   workspace, then maps the window again so it opens there. `desk window` (the
   launcher's "The Desk" action and the Omarchy menu) opens it where you are.
   On Omarchy 4's Lua config, dispatches go through `hyprctl eval`; on
@@ -407,7 +408,7 @@ UX is rethought (scrap it, or change what it does), this is the default,
 ### Onboarding
 
 - It opens by itself the first time design mode starts, until it's answered
-  or skipped, and from the island's help button after that. There are three
+  or skipped, and from `omastrator design onboarding open` after that. There are three
   questions, each optional, and the answers are kept in `anywhere.json` under
   `onboarding`. It first says that captures stay on this machine and that
   nothing goes to an agent unless asked.
@@ -415,8 +416,8 @@ UX is rethought (scrap it, or change what it does), this is the default,
 ### Limits in phase 1
 
 - Hyprland's own shortcuts pause while design mode holds Esc and Alt, as with
-  the island's other submaps. Choosing Design on the island takes no keys, and
-  Done leaves.
+  the other submaps. Choosing Design from the Omarchy menu or the CLI takes no
+  keys, and `omastrator design off` leaves.
 - AT-SPI coverage depends on the app: GTK and Qt apps expose their widgets,
   Flutter and Electron apps coarse panels, and terminals none. The window's
   bounds and the pixel colour always work.
@@ -681,9 +682,9 @@ Made while building phase 4's sites, Hand to Agent and lifted write-back on
   Every change is a real DOM or CSS change in Omastrator's browser.
 - **Said plainly.** The page shows a small strip, bottom right: "Not your
   site: changes stay on this machine." The Live panel says the same in place
-  of the project, the island's activity line adds it to the address, and the
-  status stream's `live.site` carries it. Deploy and Save are hidden on the
-  island and in the panel while such a page is open; `liveDeploy` refuses.
+  of the project, the notification adds it to the address, and the
+  status stream's `live.site` carries it. Deploy and Save are hidden in the
+  panel while such a page is open; `liveDeploy` refuses.
 - **Edit sets.** Keep Edits saves the edits not kept yet as a named set for
   the origin (the name field, else "Edits 1", "Edits 2"…), in
   `$XDG_DATA_HOME/omastrator/edit-sets.json`, never in the site or the

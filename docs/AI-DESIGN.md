@@ -181,7 +181,7 @@ UUID strings.
   notification each time that answer changes. `omastrator status --follow`
   uses it; see [OS-SUITE.md](OS-SUITE.md).
 
-**Desktop** (the island's Capture mode; see [OS-SUITE.md](OS-SUITE.md))
+**Desktop** (the Capture tab and `omastrator island capture …`; see [OS-SUITE.md](OS-SUITE.md))
 
 These are the user's own actions, so each is a normal undo step, not a
 proposal. `tools/list` leaves them out and `tools/call` refuses them, so an
@@ -208,7 +208,7 @@ it only reads.
   task (Deploy with agent): where it's live, and a command to deploy with next
   time, which must not contain a secret.
 - `ai_start {flow: generate|edit|roast|vectorize|cancel, prompt?, count?,
-  fitToSelection?, mode?: logo|sketch}`: the island's AI mode. Generate and
+  fitToSelection?, mode?: logo|sketch}`: the Ask field and `omastrator island ai …`. Generate and
   Edit open their sheet unless a prompt is given; Vectorize takes the selected
   image, else the screenshot Capture last traced.
 - `design {action, …}`: design mode everywhere ([ANYWHERE.md](ANYWHERE.md)).

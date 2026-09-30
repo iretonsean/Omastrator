@@ -1,5 +1,5 @@
 post_install() {
-    echo ':: Run `omastrator setup` to wire up the island and tray light in'
+    echo ':: Run `omastrator setup` to wire up design mode and the tray light in'
     echo '   omarchy-shell, the Hyprland keys, the Omarchy menu entries and the'
     echo '   Chromium extension. It shows every change first and asks before'
     echo '   making it.'

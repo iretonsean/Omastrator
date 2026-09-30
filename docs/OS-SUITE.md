@@ -1,9 +1,15 @@
 # Omastrator across Omarchy: spec and build plan
 
 Written 2026-09-26 from a brainstorm with the user. Omastrator stops being only
-a window and becomes a design layer for the whole desktop: a floating island
-with modes, capture tools that work anywhere on screen, voice commands, and
-live editing of websites and apps whose code is on this machine.
+a window and becomes a design layer for the whole desktop: capture tools that
+work anywhere on screen, voice commands, and live editing of websites and apps
+whose code is on this machine.
+
+**Update, 2026-09-29: the desktop island is gone.** The pill under the bar (this
+file's component 1) moved into the app window: Omastrator is app-first now. Each
+of its jobs has a new home, listed in component 1. This file keeps its build
+log (Build plan, Decisions) as it was written; wherever it says "the island",
+read "the pill that was removed".
 
 **Audience: any Omarchy user.** Nothing may assume one person's stack, host,
 agent or config. The user's own setup (Claude Code, Vercel, a Graphite shell)
@@ -15,8 +21,8 @@ is one case among many.
    undo and proposals. Everything new is a client that talks to it through the
    agent socket (`omastrator agent …`, see AI-DESIGN.md) or through new
    methods added there.
-2. **Built on Omarchy's own surfaces.** The island and the tray light are
-   `omarchy-shell` plugins, QML run by quickshell with the same
+2. **Built on Omarchy's own surfaces.** Design mode's overlay and the tray light
+   are `omarchy-shell` plugins, QML run by quickshell with the same
    `manifest.json` contract as `/usr/share/omarchy/shell/plugins` and
    `~/.config/omarchy/plugins/graphite.dock`. That gives layer-shell
    behaviour (always on top, never tiled, no stolen focus) and the theme for
@@ -31,79 +37,93 @@ is one case among many.
    only in a dedicated profile, only for the session the user starts, and only
    on localhost. Setup never edits the user's Hyprland or shell config without
    showing the change and asking.
-5. **Humor rules still apply** (HUMOR.md). The island is chrome: labels stay
-   literal.
+5. **Humor rules still apply** (HUMOR.md). Notifications and shell plugins are
+   chrome: labels stay literal.
 
 ## Components
 
-### 1. The island (`omastrator.island`, omarchy-shell plugin, kind `service`)
+### 1. The island (removed 2026-09-29)
 
-- A pill centred at the top of the focused monitor, under the bar. It follows
-  the focused monitor.
-- **Interim, pending a rethink of the island:** it shows only while an
-  Omastrator window is focused, and stays while design mode is on, dictation is
-  listening or a proposal or result waits. `omastrator island show always`
-  (or Preferences) shows it everywhere. The tray light is always there. See
-  ANYWHERE.md.
-- **Three states:**
-  - *resting*: small, shows the mode glyph
-  - *expanded*: the mode's tools
-  - *activity*: "Listening…", "Heard: …", "Working with Claude…", "3
-    variations ready", "Saved · Preview deploying". It shows briefly, then
-    returns to the previous state.
-- **Modes**, switched by the arrow glyphs on the island or by keybinds. Each
-  mode has a visible text label on first use and in tooltips.
-  - **Normal:** the computer as usual. The island rests, and no keys are
-    intercepted.
-  - **Draw:** Figma-like tools that drive the Omastrator canvas: move, direct
-    select, pen, pencil, rectangle, ellipse, polygon, star, shape builder, line, text,
-    eyedropper, hand, zoom. They mirror `Tool` in EditorSession, and a new
-    `select_tool` agent method keeps the island and the app in sync both
-    ways. If Omastrator isn't running, choosing Draw starts it.
-  - **Capture:** tools that act on the whole screen:
-    - Pick Colour (hyprpicker) becomes the fill or stroke, or a new swatch
-    - Screenshot Region (grim + slurp) opens in Omastrator and runs Image
-      Trace; *Vectorize with AI* is offered next
-    - Paste SVG pastes clipboard SVG as editable paths
-    - Theme Swatches loads the current Omarchy theme's colours as a swatch
-      group
-  - **AI:** Generate…, Edit with Instruction…, Roast My Design, Vectorize with
-    AI, Dictate. These are the existing flows in AI-DESIGN.md; the island only
-    triggers them.
-  - **Live:** live editing of web projects (component 5).
-- **The contextual rule.** The island holds what is true about the session:
-  the mode, the tools, agent status. Tools that depend on the current selection
-  stay anchored to the canvas (in the Omastrator window) or to the element (in
-  Live mode). The island never grows a second contextual toolbar.
-- **Status stream.** The island reads `omastrator status --follow`, a new CLI
-  command that prints one JSON line per change: app running, tool, mode,
-  waiting task and agent, proposal title, variations ready, live session state.
-  It reads it with quickshell's `Process` and a line parser, in the same style
-  as `omarchy voxtype status`. Actions go through `omastrator agent <method>`
-  or new `omastrator island …` subcommands.
-- **Keybinds.** Setup writes `~/.config/omastrator/hyprland.conf` with a
-  Hyprland submap per mode (suggested: Super+Alt+D Draw, Super+Alt+C Capture,
-  Super+Alt+A AI, Super+Alt+L Live, Escape back to Normal). Setup prints the
-  `source =` line and only appends it to the user's config with `--apply`.
-  Tool letters (V, A, P…) work inside the Draw submap.
+The pill centred under the bar, with its Normal, Draw, Capture, AI, Live and
+Design modes, is gone, and with it the plugin `omastrator.island`. The author
+moved the island into the app window. What each of its jobs became:
+
+| The pill's job | Where it lives now |
+|---|---|
+| **Draw** (canvas tools) | Omastrator's own toolbar. `omastrator island tool …` and `mode draw` are gone. |
+| **Capture** (colour, screenshot, window, SVG paste, theme swatches) | The Capture tab in the app's right dock, which runs `omastrator island capture …`. The verbs stay for scripts, keys and the Omarchy menu's Capture group. |
+| **AI** (Generate, Edit, Roast, Vectorize, Hand to Agent, Stop) | The Ask field in the app. `omastrator island ai …` stays. The tray light's click and `omastrator island ask` bring the window forward with Ask focused. |
+| **Dictate** | A mic in the Ask field. `omastrator island dictate …` and the Super+Alt+V hold stay. |
+| **Live** (open, select, deploy, changes, history, stop) | A Browser View in the app (LIVE-IN-FRAME.md). `omastrator island live …` stays. |
+| **Design** | Kept as it was, until "Design over…" in the app replaces it: `omastrator island mode design` (or `omastrator design on`, Super+Alt+O, or the Omarchy menu's Design Mode) turns it on, and the overlay is now the service plugin `omastrator.design`. Its tool row lived on the pill, so a drawing tool is chosen with `omastrator design tool …`; Esc leaves. |
+| **Activity lines** ("Listening…", "Heard: …", errors of commands started outside the app) | Desktop notifications: `Island::setActivity` runs `notify-send -a Omastrator` (first line the summary, the rest the body, the seconds as `-t`). `$OMASTRATOR_NOTIFY` replaces the program, for tests. Design mode's own lines (it turning on, its messages, a proposal on the overlay) are notified by the design plugin. Messages about the app's own state (variations ready, a proposal waiting) need nothing: the app shows them. |
+| **Where the pill showed** ("Show the island on every window") | Nothing. Preferences no longer has the choice; `island-visibility.json` is deleted by setup. |
+
+- **What stays of `omastrator island`.** It is the name of the desktop-wide CLI:
+  `state`, `mode normal|design`, `activity`, `new`, `show <panel>`, `ask`,
+  `ai …`, `live …`, `capture …` and `dictate …`. A removed verb (`mode
+  draw|capture|ai|live|next|previous`, `tool`, `expand`, `rest`, `toggle`,
+  `seen`, `show always|with-app`) fails with one line saying where its job went,
+  for example "Draw mode is gone: use Omastrator's toolbar."
+- **State.** `island.json` in the runtime directory holds the mode (`normal` or
+  `design`) and the last activity line. The status stream (`omastrator status
+  --follow`) no longer has `expanded`, `labelsSeen` or `islandShow`.
+- **Keys.** Setup writes Super+Alt+V (dictation, with the `omastrator-heard`
+  submap), Super+Alt+O (design mode, with the `omastrator-design` submap and its
+  Escape), Super+Alt+W (the Desk) and Super+Alt+Escape (the reset hatch). Super+Alt+D,
+  C, A and L and the submaps `omastrator-draw`, `-capture`, `-ai` and `-live`
+  are gone.
+- **Menu.** The Omarchy menu's "Island Mode ▸" group is gone; "Design Mode" is an
+  entry of its own beside "The Desk".
+- **Upgrading.** `omastrator setup` brings an old install to this state, with
+  its usual diffs and backup: it installs `omastrator.design`, takes
+  `omastrator.island` out of `shell.json`, deletes the old plugin folder,
+  `island-visibility.json` and `island-seen.json`, and rewrites Omastrator's key
+  file without the removed keys. A second run changes nothing.
+- **The design plugin** (`shell/omastrator.design/`, kind `service`, entry
+  `Design.qml`) makes the status stream and the click-through overlay
+  (`Overlay.qml`, `OverlayLogic.js`, `GapHandle.qml`, moved from the island's
+  plugin). The overlay no longer leaves a hole in its input for the pill.
+
+### 1a. What the pill was (historical)
+
+- A pill centred at the top of the focused monitor, under the bar, that rested
+  on the mode glyph, expanded to the mode's tools and briefly showed activity.
+  The rest of this component describes it as built.
+- **Modes**, switched by the arrow glyphs on the island or by keybinds.
+  **Normal**, **Draw** (Figma-like tools that drive the canvas, mirroring `Tool`
+  in EditorSession, with `select_tool` keeping the two in sync), **Capture**
+  (Pick Colour with hyprpicker, Screenshot Region with grim and slurp then Image
+  Trace, Paste SVG, Theme Swatches), **AI** (the flows in AI-DESIGN.md) and
+  **Live** (component 5).
+- **The contextual rule.** The island held what is true about the session: the
+  mode, the tools, agent status. Tools that depend on the selection stayed
+  anchored to the canvas or to the element. The island never grew a second
+  contextual toolbar. The app-first layout keeps the rule: the selection's
+  tools sit with the selection.
+- **Status stream.** The island read `omastrator status --follow`, which prints
+  one JSON line per change: app running, tool, mode, waiting task and agent,
+  proposal title, variations ready, live session state. The stream stays; the
+  design plugin and the tray light read it with quickshell's `Process`.
 
 ### 2. The tray light (`omastrator.ai`, omarchy-shell plugin, kind `bar-widget`)
 
 - A small glyph for the bar's right section, with four states: idle, working,
   results ready, error.
-- Clicking it opens the island in AI mode, and hovering shows the status text.
-  It never opens a second AI menu.
+- Clicking it brings Omastrator's window forward with the Ask field focused
+  (`omastrator island ask`, which starts the app if it isn't running), and
+  hovering shows the status text. It never opens a second AI menu.
 - Setup offers to add it to `~/.config/omarchy/shell.json`: it shows the change
   and asks. Otherwise it prints the snippet.
 
 ### 3. Omarchy menu entries
 
 User extension entries in `~/.config/omarchy/extensions/omarchy-menu.jsonc`,
-under an "Omastrator" group: New Document, Island Mode ▸ …, Capture ▸ …,
-Roast My Design, Connect an Agent. Setup merges them in and never overwrites
+under an "Omastrator" group: New Document, Design Mode, The Desk, Capture ▸ …,
+Generate…, Roast My Design, Hand to Agent…, Connect an Agent. Setup merges them in and never overwrites
 the user's other entries.
 
-### 4. Dictation (the island's Dictate tool)
+### 4. Dictation (a mic in the Ask field, and the Super+Alt+V hold)
 
 - **Engine: voxtype**, Omarchy's built-in dictation, installed by
   `omarchy voxtype install`. Omastrator does not install it. If it's missing,
@@ -124,7 +144,8 @@ the user's other entries.
     arrange, group/ungroup, undo/redo, zoom, fill and stroke colour, stroke
     weight, opacity, "delete", "duplicate". Parsed into agent methods.
   - **Everything else** goes to Edit with Instruction as a proposal.
-- The island shows "Heard: …" with the parsed action before running it. It runs
+- Omastrator shows "Heard: …" (a desktop notification when dictation runs from
+  the key; the Ask field's mic shows it in the app) with the parsed action before running it. It runs
   after a short delay unless cancelled (Esc, or saying "cancel"), and
   immediately for tier-1 commands after the first use.
 
@@ -277,8 +298,9 @@ reloading it or opening a second browser.
 
 ### 7. Setup (`omastrator setup`)
 
-- Installs the plugins by copying from the repo's `shell/` folder into
-  `~/.config/omarchy/plugins/`.
+- Installs the plugins (`omastrator.design`, `omastrator.ai`, `omastrator-ui`) by
+  copying from the repo's `shell/` folder into `~/.config/omarchy/plugins/`, and
+  removes the old desktop island's plugin, settings and key file entries.
 - Writes the Hyprland conf, the menu entries and the default dictation
   vocabulary.
 - Offers the bar widget, the Hyprland `source` line and voxtype.
@@ -291,13 +313,17 @@ reloading it or opening a second browser.
   it would put back, asks (or `--yes`), copies what it is about to replace as
   a new backup, and restores; `--list-backups` lists them.
 - Never takes a key you already use: it reads Hyprland's live binds and your
-  config, skips that key and says so ("Super+Alt+C is already yours:
+  config, skips that key and says so ("Super+Alt+O is already yours:
   skipped"). `--no-keys` installs with no global keys at all.
 - Checks for the needed tools (hyprpicker, grim, slurp, wl-clipboard,
   chromium, voxtype) and names each missing one with the Omarchy or pacman
   command to add it.
 
 ## Build plan
+
+*Historical: the phases below built the pill, which was removed on 2026-09-29
+(component 1). Phases 0, 2 and 3 to 8 left the CLI, the capture tools, the
+tray light, setup, the flows, Live and dictation, which stay.*
 
 Each phase ends green: the full ctest suite with `-DOMASTRATOR_WERROR=ON`, and
 the phase's acceptance checks. Commit and push per phase to the `os-suite`
@@ -332,7 +358,8 @@ branch.
 
 ## Decisions
 
-Choices the spec left open, made while building it, in build order.
+Choices the spec left open, made while building it, in build order. *Historical
+where they describe the pill: it was removed on 2026-09-29 (component 1).*
 
 ### Phase 0: status, tools and mode
 

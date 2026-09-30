@@ -5,9 +5,9 @@ Omastrator is a pro vector and interface design app built into
 tool (pen, shapes, image trace, smart guides, type) and the speed of modern
 interface design (frames, auto layout, constraints, a dense Properties panel,
 the keys designers already know). It follows your Omarchy theme and lives in
-your desktop rather than in a window: an island under the bar, a hotkey away
-from anything, with design mode over every window and live website, so you
-can inspect, measure, mark up and edit what's on screen.
+your desktop: a tray light in the bar, a hotkey away from anything, with
+design mode over every window and live website, so you can inspect, measure,
+mark up and edit what's on screen.
 
 AI is at the core. Your own agent names layers, proposes changes on the real
 page (Enter keeps one, Esc throws it away), roasts a design, and ships a site,
@@ -344,15 +344,16 @@ described in [docs/HUMOR.md](docs/HUMOR.md).
 Omastrator also works outside its window, through Omarchy's own shell
 ([docs/OS-SUITE.md](docs/OS-SUITE.md)):
 
-- **The island**: a pill under the bar with modes. *Draw* holds the canvas
-  tools; *Capture* picks a colour anywhere on screen, traces a screenshot
-  region, pastes clipboard SVG as paths, or loads your theme's colours as
-  swatches. *AI* starts Generate…, Edit with Instruction…, Roast My Design and
-  Vectorize with AI, and shows when your agent is working. For now, and
-  pending a rethink of the island, it shows only while an Omastrator window is
-  focused (and while design mode, dictation or a waiting result needs it); the
-  tray light is always there. Preferences, or `omastrator island show always`,
-  shows it everywhere.
+- **Omastrator's window is where the work is.** The island, a pill under the
+  bar with Draw, Capture, AI and Live modes, is gone: the canvas tools are in
+  the toolbar, the Ask field starts Generate…, Edit with Instruction…, Roast My
+  Design and Vectorize with AI, the Capture tab picks a colour anywhere on
+  screen, traces a screenshot region, pastes clipboard SVG as paths, or loads
+  your theme's colours as swatches, and Live runs in a Browser View. What
+  Omastrator says while you work in another window (a capture's result, an
+  agent that can't start, what dictation heard) is a desktop notification.
+  The same actions are `omastrator island capture …`, `ai …`, `live …`,
+  `dictate …` and `ask`, for scripts and keys.
 - **Live**: open a web page, or a project folder on this machine, in
   Omastrator's own Chromium. Click an element to select it (Shift-click adds),
   then change its text, colour, spacing, size, type or radius from a bar beside
@@ -373,16 +374,16 @@ Omastrator also works outside its window, through Omarchy's own shell
   brings the focused app into Omastrator to redesign, and **File ▸ Hand to
   Agent…** gives your agent the mockup and the app's source folder; its change
   is written into the source, with its diff under Review changes.
-- **Dictate**: hold the island's microphone (or Super+Alt+V) and speak. "Select
+- **Dictate**: hold the microphone in the Ask field (or Super+Alt+V) and speak. "Select
   the pen tool", "align left", "fill hash F F six six zero zero" run at once;
-  anything else goes to your agent as an instruction. The island shows what it
+  anything else goes to your agent as an instruction. Omastrator shows what it
   heard first, and Esc cancels. It uses Omarchy's voxtype
   (`omarchy voxtype install`), transcribing on your machine.
 - **The tray light**: one glyph in the bar that shows when your agent is
-  working, when results are ready, or when something went wrong. Click it for
-  the island's AI mode.
-- **Keys**: Super+Alt+D, C, A or L opens a mode, with Illustrator's tool letters
-  inside Draw. Escape goes back.
+  working, when results are ready, or when something went wrong. Click it to
+  open Omastrator with the Ask field focused.
+- **Keys**: Super+Alt+V dictates (hold), Super+Alt+O turns on design mode,
+  Super+Alt+W opens the Desk, and Super+Alt+Escape resets everything.
 - **Menu**: an Omastrator group in the Omarchy menu.
 
 ### Design mode, on any window or page
@@ -392,7 +393,7 @@ It runs in the background (`omastrator --daemon`, started with Hyprland once
 setup's keys are loaded) and lays a transparent overlay over every monitor.
 Clicks go straight through it to your apps.
 
-- **Super+Alt+O** (or the island's Design mode) turns design mode on for the
+- **Super+Alt+O** (or Design Mode in the Omarchy menu, or `omastrator island mode design`) turns design mode on for the
   monitor you're on. Esc leaves.
 - **The floating bar sticks to its app**: it stays with the window design mode
   started on, and hides while that window is off screen. Pick another window
@@ -403,8 +404,8 @@ Clicks go straight through it to your apps.
   browser is read from its DOM, including sites that aren't yours. Other apps
   are read through the accessibility tree, and the colour under the pointer
   through grim. Hold Alt to measure the distances from one thing to the next.
-- **Draw on top**: the island's pen, rectangle, ellipse, arrow, text and note
-  tools draw over the window or page under the pointer. The art stays anchored
+- **Draw on top**: the pen, rectangle, ellipse, arrow, text and note
+  tools (`omastrator design tool pen`, and so on, for now) draw over the window or page under the pointer. The art stays anchored
   to that window (by app) or page (by address, scrolling with it). It is a real
   Omastrator document, kept for next time, and every drawing is one undo step.
 - **The floating bar** sits next to what you point at or select. It holds the
@@ -443,7 +444,7 @@ Clicks go straight through it to your apps.
   lifted shape came from, a page's edits as CSS, and screenshots, and works in
   a git branch of your app's source folder. Its change waits under Review
   changes. The folder is remembered for next time.
-- **The Desk** (Super+Alt+W, the island, or the launcher's "The Desk") is one
+- **The Desk** (Super+Alt+W, or the launcher's "The Desk") is one
   canvas for everything sent from any surface. Each frame is labelled with its
   source and time. It opens on its own Hyprland workspace, or as a normal
   window.
@@ -485,8 +486,8 @@ omastrator setup --remove   # takes out exactly what setup added
 ## Screenshots
 
 Every picture is from demo mode: made-up documents, a sample website and an
-agent that answers with prepared results. The island and tray light are the
-shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
+agent that answers with prepared results. The tray light is the
+shell plugin's own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 
 ### Drawing
 
@@ -526,18 +527,14 @@ shell plugins' own QML, rendered offscreen with Omarchy's Tokyo Night colours.
 
 | | |
 |---|---|
-| ![Island modes](docs/screenshots/island-modes.png) | ![Island activity](docs/screenshots/island-activity.png) |
-| The island resting and expanded: Normal, Draw, Capture, AI and Live. | Activity lines: agent work, results, Live and deploying. |
-| ![Dictation](docs/screenshots/island-dictation.png) | ![Tray light](docs/screenshots/tray-light.png) |
-| Dictation: listening, then what it heard and what it will do. | The tray light: idle, working, results ready, error. |
-| ![Capture colour](docs/screenshots/capture-color-swatch.png) | ![Capture screenshot](docs/screenshots/capture-screenshot-trace.png) |
-| Pick Colour as a Swatch: picked colours land in the Swatches panel. | Screenshot Region: a part of a web page, opened and traced in colour. |
-| ![Live overlay](docs/screenshots/live-overlay.png) | ![Live spacing](docs/screenshots/live-spacing.png) |
-| Live on a sample site: the contextual bar, the colour snapped to the site's `--accent` token. | Live's spacing handles: blue for padding, amber for margin. |
-| ![Live review](docs/screenshots/live-review-window.png) | ![Setup](docs/screenshots/setup.png) |
-| Review changes: a text change written directly, a colour change by the agent, each kept as a diff. | `omastrator setup` shows each change and asks first. |
-| ![Menu entries](docs/screenshots/setup-menu-entries.png) | |
-| The Omastrator group setup adds to the Omarchy menu. | |
+| ![Tray light](docs/screenshots/tray-light.png) | ![Capture colour](docs/screenshots/capture-color-swatch.png) |
+| The tray light: idle, working, results ready, error. | Pick Colour as a Swatch: picked colours land in the Swatches panel. |
+| ![Capture screenshot](docs/screenshots/capture-screenshot-trace.png) | ![Live overlay](docs/screenshots/live-overlay.png) |
+| Screenshot Region: a part of a web page, opened and traced in colour. | Live on a sample site: the contextual bar, the colour snapped to the site's `--accent` token. |
+| ![Live spacing](docs/screenshots/live-spacing.png) | ![Live review](docs/screenshots/live-review-window.png) |
+| Live's spacing handles: blue for padding, amber for margin. | Review changes: a text change written directly, a colour change by the agent, each kept as a diff. |
+| ![Setup](docs/screenshots/setup.png) | ![Menu entries](docs/screenshots/setup-menu-entries.png) |
+| `omastrator setup` shows each change and asks first. | The Omastrator group setup adds to the Omarchy menu. |
 
 ## Install (alpha)
 
@@ -571,7 +568,7 @@ omastrator setup
   Your documents are never touched.
 - **Low on RAM:** each compile job can take about 1 GB, so on a machine with
   16 GB or less, use `-j2` or `-j3` instead of `-j"$(nproc)"`.
-- **`omastrator setup`** shows every change it would make (the island and tray
+- **`omastrator setup`** shows every change it would make (design mode and the tray
   light in omarchy-shell, the Hyprland keys, the Omarchy menu entries, the
   Chromium extension) and asks before making it. `omastrator setup --remove`
   undoes it.

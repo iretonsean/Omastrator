@@ -40,7 +40,7 @@ reach the other pages. So:
 
 - **The editor window** sits on the current page's workspace.
 - **Every other page gets a stand-in.** A stand-in is a chrome-less
-  top-level `QWidget` (same app id, so the island treats it as Omastrator)
+  top-level `QWidget` (same app id as the editor)
   that paints a picture of that page:
   - the editor's `grab()` taken when the page was last left, so arriving
     looks seamless;
@@ -73,8 +73,7 @@ reach the other pages. So:
   editor's address comes from `clients`, matched by our pid and exact
   title. Then the app moves it. A new stand-in may tile beside the editor
   for about one frame; that's accepted. No fullscreen state is set: a lone
-  tiled window already fills the workspace, and the Omarchy bar and the
-  island stay visible.
+  tiled window already fills the workspace, and the Omarchy bar stays visible.
 - **Dispatchers**, all through `Hyprland::dispatch(lua, legacy)`, and new
   helpers in `Hyprland.h` that build both forms:
 
@@ -192,10 +191,11 @@ reach the other pages. So:
 
 ## 5. The island and the bar
 
-- **The island is unchanged.** The interim rule (the author confirmed it on
-  2026-09-29): the island shows while an Omastrator window is focused.
-  Stand-ins and the editor both carry our app id, so the island is up on
-  every page workspace without any new code. Nothing is added to the island.
+- **The island is gone (2026-09-29).** It was unchanged by this feature: it
+  showed while an Omastrator window was focused, and stand-ins and the editor
+  both carry our app id. The desktop island was removed with the window-layout
+  work (OS-SUITE.md, component 1), so nothing here needs it; the tray light in
+  the bar and desktop notifications remain.
 - **The design-mode floating bar.** Its home is a window (ANYWHERE.md, "The
   floating bar sticks to its app"):
   - **Stand-ins are never a home.** `DesignController` hands `DesignMode`

@@ -28,6 +28,7 @@ replaces the island's Live mode once it ships. Read it alongside VISION.md
    spacing, size, type and radius from the element bar, snapped to the
    project's tokens) go the same way.
 
+*(2026-09-29: the whole island is removed; see OS-SUITE.md, component 1.)*
 When this ships, **Live mode is removed from the island.** The island's
 Live button opens a Browser View instead.
 
