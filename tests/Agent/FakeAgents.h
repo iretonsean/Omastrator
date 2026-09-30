@@ -3,18 +3,20 @@
 #include <QFile>
 #include <QStringList>
 
-// Stand-ins for claude, codex, opencode and gemini. Each records its arguments,
-// folder, socket and opencode config as $FAKE_OUT/<name>.*, then does what
-// $FAKE_MODE says: roast, variations or overlay (answers through "$OMASTRATOR_BIN" agent),
+// Stand-ins for claude, codex, opencode and gemini. Each records its folder, socket,
+// opencode config and arguments as $FAKE_OUT/<name>.*, the arguments last and whole
+// (a test that sees them may read the rest), then does what $FAKE_MODE says:
+// roast, variations or overlay (answers through "$OMASTRATOR_BIN" agent),
 // quiet (exits without answering), fail (an error on stderr) or hang.
 namespace FakeAgents {
 inline constexpr const char *script = R"sh(#!/bin/sh
 out="$FAKE_OUT/$(basename "$0")"
-: > "$out.argv"
-for argument in "$@"; do printf '%s\000' "$argument" >> "$out.argv"; done
 pwd > "$out.cwd"
 printf '%s' "$OPENCODE_CONFIG_CONTENT" > "$out.config"
 printf '%s' "$OMASTRATOR_SOCKET" > "$out.socket"
+: > "$out.argv.part"
+for argument in "$@"; do printf '%s\000' "$argument" >> "$out.argv.part"; done
+mv "$out.argv.part" "$out.argv"
 task=""
 for argument in "$@"; do case "$argument" in "Omastrator task:"*) task="$argument";; esac; done
 request=$(printf '%s\n' "$task" | sed -n '1s/.*(request \([^)]*\)).*/\1/p')
