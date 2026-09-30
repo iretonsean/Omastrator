@@ -156,6 +156,19 @@ private slots:
         QTRY_VERIFY(ask->isEnabled());
     }
 
+    // The tray light's way in: the window comes forward with Ask focused.
+    void focusAskBringsTheWindowAndFocusesAsk()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        workspace.createDocument(QSizeF(200, 200));
+        QVERIFY(QTest::qWaitForWindowActive(&window));
+        window.content()->canvas().setFocus();
+        window.focusAsk();
+        QTRY_COMPARE(QApplication::focusWidget(), static_cast<QWidget *>(window.findChild<ContextBar *>(QStringLiteral("contextBar"))->askField()));
+    }
+
     // Hold the mic: pw-record fills a WAV, voxtype transcribes it, and the grammar runs it.
     void theMicRecordsTranscribesAndRuns()
     {

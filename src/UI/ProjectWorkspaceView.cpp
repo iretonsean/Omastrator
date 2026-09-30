@@ -1,6 +1,8 @@
 #include "UI/ProjectWorkspaceView.h"
+#include "UI/ContextBar.h"
 #include "UI/SharePanels.h"
 #include <QCloseEvent>
+#include <QLineEdit>
 #include <QToolButton>
 
 namespace {
@@ -142,4 +144,14 @@ void ProjectWorkspaceView::closeEvent(QCloseEvent *event)
     }
     event->ignore();
     m_workspace.closeWindow(this);
+}
+
+void ProjectWorkspaceView::focusAsk()
+{
+    if (!isVisible())
+        show();
+    raise();
+    activateWindow();
+    if (m_content && m_content->contextBar().askField())
+        m_content->contextBar().askField()->setFocus(Qt::OtherFocusReason);
 }

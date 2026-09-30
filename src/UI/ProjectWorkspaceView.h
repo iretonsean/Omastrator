@@ -26,6 +26,8 @@ public:
     ShareController *share() const { return m_share; }
     // Pages as Workspaces (View menu).
     PageWorkspaces *pageWorkspaces() const { return m_pageWorkspaces; }
+    // The tray light's way in: the window forward, and the front editor's Ask field focused.
+    void focusAsk();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
