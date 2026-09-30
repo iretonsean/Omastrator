@@ -109,3 +109,17 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   object into it (and out, when it ends outside every frame), in the same undo step. Dragging a whole frame onto
   another frame nests it. The Scale tool still scales everything. Rotated frames and group-based instances still
   scale as a whole (not changed).
+- [Intel] **The desktop island is removed** (Phase B, `d76cafb`). Decided while removing it:
+  - Design mode keeps a menu entry: the Omarchy menu has "Design Mode" (`omastrator island mode design`) beside "The Desk", instead of inside a submenu. The brief removed "Island Mode ▸" only.
+  - Design mode's drawing tools (pen, rectangle, …, Undo, Clear, Desk, Onboarding, Done) were buttons on the pill, so they have no mouse control now. They are `omastrator design tool …`, `design undo`, `design clear all`, `desk show`, `design onboarding open`, `design off`. Esc still leaves (under a drawing tool the overlay takes the keyboard). "Design over…" is the fix; I added no strip to the overlay.
+  - Design mode's own lines (turning on, its messages, a proposal on the overlay) are notified by `Design.qml` through `notify-send`, because the pill used to show them and nothing else would.
+  - Notifications share the hint `x-canonical-private-synchronous:omastrator`, so "Listening…", "Transcribing…" and "Heard: …" replace one card where the daemon honours it (mako and dunst do). Empty text sends nothing.
+  - The activity seconds are the notification timeout, so "Listening…" (60 s) stays until the next line replaces it.
+  - Setup also deletes `~/.local/state/omastrator/island-seen.json` (the pill's first-use labels). The brief did not list it.
+  - The setup step for `shell.json` is named `design`; a `--remove` on a record written by the old version still works.
+  - `mode design` starts the background app but no window (`mode draw` used to show the window).
+  - Dictation no longer routes requests to `live ask` when Live mode was on; every tier-2 request goes to Edit with Instruction.
+  - README's three island screenshots (`island-modes.png`, `island-activity.png`, `island-dictation.png`) are deleted, and the "Across Omarchy" section describes the window as the home of Draw, AI, Capture and Live.
+  - The empty Swatches panel now says "Pick a colour … with the Capture tab".
+  - Text that told people to use the island now names a command: "stop it with `omastrator island ai cancel`", "`omastrator design undo` brings them back", "Start it from a Browser View, or with `omastrator island live start`".
+  - The name `omastrator island …` and the `Island` C++ namespace stay: they name the desktop CLI and the mode file. Internal names such as `fromIsland` in the deploy code stay too.
