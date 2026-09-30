@@ -80,10 +80,14 @@ public:
     }
     QStringList shownFiles;
     int windowShown = 0;
-    QString showWindow(const QStringList &files, bool) override
+    QString shownFocus;
+    bool shownRaise = true;
+    QString showWindow(const QStringList &files, bool raise, const QString &focus) override
     {
         ++windowShown;
         shownFiles = files;
+        shownRaise = raise;
+        shownFocus = focus;
         return failure;
     }
 };

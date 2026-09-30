@@ -8,7 +8,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 
-// The island's Capture mode (docs/OS-SUITE.md): the user's own actions, so
+// Capture from anywhere on screen (docs/OS-SUITE.md): the user's own actions, so
 // each is a normal undo step, not a proposal. MCP does not list these.
 using AgentProtocol::Error;
 using namespace AgentParams;
@@ -238,7 +238,10 @@ QJsonObject AgentTools::showWindow(const QJsonObject &params)
     QStringList files;
     for (const QJsonValue &file : params["files"].toArray())
         files << file.toString();
-    if (const QString failure = m_host.showWindow(files, params["raise"].toBool(true)); !failure.isEmpty())
+    const QString focus = params["focus"].toString();
+    if (!focus.isEmpty() && focus != QLatin1String("ask"))
+        throw Error(AgentProtocol::invalidParams, QStringLiteral("focus can only be “ask”."));
+    if (const QString failure = m_host.showWindow(files, params["raise"].toBool(true), focus); !failure.isEmpty())
         throw Error(AgentProtocol::busy, failure);
     return {{"shown", true}};
 }

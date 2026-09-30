@@ -2,6 +2,7 @@
 #include "Agent/AgentLauncher.h"
 #include "UI/DesignController.h"
 #include "UI/ProjectWorkspace.h"
+#include "UI/ProjectWorkspaceView.h"
 #include <QCoreApplication>
 
 // The bridge's side of design mode everywhere (docs/ANYWHERE.md) and of
@@ -20,12 +21,19 @@ QString AgentBridge::design(const QString &action, const QJsonObject &params, QJ
     return m_design->run(action, params, result);
 }
 
-QString AgentBridge::showWindow(const QStringList &files, bool raise)
+QString AgentBridge::showWindow(const QStringList &files, bool raise, const QString &focus)
 {
-    // Work on the canvas from the island shows the window if it's hidden, without pulling a shown one forward.
+    auto focusField = [&] {
+        if (focus != QLatin1String("ask"))
+            return;
+        if (auto *view = qobject_cast<ProjectWorkspaceView *>(&m_window))
+            view->focusAsk();
+    };
+    // Work on the canvas from the desktop shows the window if it's hidden, without pulling a shown one forward.
     if (!raise && files.isEmpty()) {
         if (!m_window.isVisible())
             bringForward();
+        focusField();
         return {};
     }
     if (m_workspace.isManaging()) {
@@ -34,6 +42,7 @@ QString AgentBridge::showWindow(const QStringList &files, bool raise)
     }
     bringForward();
     m_workspace.receive(files);
+    focusField();
     return {};
 }
 
@@ -61,7 +70,7 @@ QString AgentBridge::quitApp()
 QString AgentBridge::askOnOverlay(EditorSession &overlay, const QString &requestId, const QString &prompt)
 {
     if (m_waiting)
-        return QStringLiteral("%1 Wait for it, or stop it from the island.").arg(waitingText());
+        return QStringLiteral("%1 Wait for it, or stop it with `omastrator island ai cancel`.").arg(waitingText());
     if (m_tools.hasProposal())
         return QStringLiteral("Keep or discard the preview that's open first.");
     m_designTarget = &overlay;

@@ -412,7 +412,7 @@ QString AgentBridge::live(const QString &action, const QJsonObject &params, QJso
         return {};
     }
     if (m_live.state() != LiveSession::State::running)
-        return QStringLiteral("Live isn't running. Start it from the island's Live mode.");
+        return QStringLiteral("Live isn't running. Start it from a Browser View, or with `omastrator island live start`.");
     if (action == QLatin1String("writeBack"))
         return liveWriteBack();
     if (action == QLatin1String("ask"))

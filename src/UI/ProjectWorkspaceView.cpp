@@ -3,7 +3,6 @@
 #include "UI/ContextBar.h"
 #include "UI/SharePanels.h"
 #include <QCloseEvent>
-#include <QLineEdit>
 #include <QToolButton>
 
 namespace {

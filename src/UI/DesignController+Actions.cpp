@@ -128,7 +128,7 @@ QString DesignController::run(const QString &action, const QJsonObject &params, 
             return {};
         }
         say(surfaces.isEmpty() ? QStringLiteral("Reset. Design mode is off and nothing is left on the screen.")
-                               : QStringLiteral("Reset. Design mode is off and the drawings are cleared; Undo on the island brings them back."));
+                               : QStringLiteral("Reset. Design mode is off and the drawings are cleared; `omastrator design undo` brings them back."));
         return {};
     }
     if (action == QLatin1String("barFollowsFocus")) {
@@ -335,7 +335,7 @@ QString DesignController::action(const QString &id, const Target &target, QJsonO
         const QJsonObject scan = SiteExtract::scan(live.browser(), live.pageSession(), &error);
         if (!error.isEmpty())
             return error;
-        m_bridge.showWindow({}, true);
+        m_bridge.showWindow({}, true, {});
         // The proposal waits for confirmation in the Design System panel.
         emit m_bridge.designSystemRequested(nullptr, scan, inspection.surface.url.toString());
         return {};
@@ -388,7 +388,7 @@ QString DesignController::artAction(const QString &id, const QString &surface)
         if (!overlay.makeComponent())
             return QStringLiteral("Select the art to make a component of.");
     } else if (id == QLatin1String("designSystem")) {
-        m_bridge.showWindow({}, true);
+        m_bridge.showWindow({}, true, {});
         emit m_bridge.designSystemRequested(&overlay, {}, {});
     } else if (id == QLatin1String("sendDesk")) {
         QJsonObject ignored;

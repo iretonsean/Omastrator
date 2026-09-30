@@ -71,10 +71,12 @@ public:
         return QStringLiteral("This Omastrator has no design mode (%1).").arg(action);
     }
     // show_window: the window forward, with `files` opened in it. The app may run in the background without one shown.
-    // Without `raise`, a window already on show is left where it is.
-    virtual QString showWindow(const QStringList &, bool raise)
+    // Without `raise`, a window already on show is left where it is. `focus` names a field to give the keyboard to once it is
+    // forward: "ask" for the Ask field, empty for none.
+    virtual QString showWindow(const QStringList &, bool raise, const QString &focus)
     {
         Q_UNUSED(raise)
+        Q_UNUSED(focus)
         return QStringLiteral("This Omastrator has no window.");
     }
     // quit_app: the app asks about unsaved documents, then quits, background and all.
