@@ -1,5 +1,7 @@
 #include "Live/WriteBack.h"
 #include "Agent/Setup.h"
+#include "Live/CssRules.h"
+#include "Live/MotionWrite.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -19,11 +21,36 @@ constexpr qint64 largestSource = 2 * 1024 * 1024;
 
 QString describe(const LiveEdit &edit)
 {
+    if (edit.selector.startsWith(QLatin1String("@keyframes ")))
+        return QStringLiteral("%1, %2: to %3").arg(edit.selector, edit.property, edit.after);
+    if (edit.selector.startsWith(QLatin1String("motion:")) && edit.property == QLatin1String("reduced-motion"))
+        return QStringLiteral("Reduced motion %1 for %2").arg(edit.after.isEmpty() ? QStringLiteral("off") : QStringLiteral("on"), edit.selector.mid(7));
     if (edit.property == QLatin1String("text"))
         return QStringLiteral("Change the text “%1” to “%2”").arg(edit.before.trimmed().left(60), edit.after.trimmed().left(60));
     if (!edit.addClass.isEmpty())
         return QStringLiteral("%1: %2 to %3").arg(edit.selector, edit.removeClass, edit.addClass);
     return QStringLiteral("%1: %2 to %3").arg(edit.selector, edit.property, edit.after);
+}
+
+// The innermost rule a position in `css` is inside, as its prelude ("#guji", ":root", "@theme"), or empty.
+QString enclosing(const QString &css, qsizetype position)
+{
+    QString found;
+    qsizetype open = -1;
+    for (const CssRules::Rule &rule : CssRules::scan(css)) {
+        if (rule.open < position && position < rule.close && rule.open > open) {
+            open = rule.open;
+            found = rule.prelude;
+        }
+    }
+    return found;
+}
+
+// A rule every element sees: a declaration there is a token, not one element's own value.
+bool isGlobalScope(const QString &prelude)
+{
+    return prelude.isEmpty() || prelude == QLatin1String(":root") || prelude == QLatin1String("html") || prelude == QLatin1String("*")
+        || prelude == QLatin1String("body") || prelude.startsWith(QLatin1String("@theme"));
 }
 
 int count(const QString &text, const QString &needle)
@@ -181,11 +208,32 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
         if (styleSuffixes.contains(QFileInfo(path).suffix().toLower()))
             styleFiles << path;
 
+    MotionWrite::Files styleTexts;
+    for (const QString &path : std::as_const(styleFiles))
+        styleTexts.push_back(&sources.of(path));
+
     // Each element's class swaps become one change to its class attribute, made in place.
     std::vector<QString> order;
     std::map<QString, std::vector<const LiveEdit *>> classEdits;
     for (const LiveEdit &edit : edits) {
-        if (edit.property == QLatin1String("text")) {
+        if (edit.selector.startsWith(QLatin1String("@keyframes "))) {
+            // A value inside one named @keyframes block: "from opacity" is the frame and the property.
+            const QString frame = edit.property.section(QLatin1Char(' '), 0, 0);
+            const QString property = edit.property.section(QLatin1Char(' '), 1);
+            const bool written = !property.isEmpty()
+                && MotionWrite::keyframeValue(styleTexts, edit.selector.mid(11), frame, property, edit.after) == MotionWrite::Result::written;
+            if (written)
+                result.done << describe(edit);
+            else
+                result.unresolved.push_back(edit);
+        } else if (edit.selector.startsWith(QLatin1String("motion:")) && edit.property == QLatin1String("reduced-motion")) {
+            // Off then on again leaves the code as it was; otherwise the rule is cut out or put back.
+            const bool same = edit.before.trimmed() == edit.after.trimmed();
+            if (same || MotionWrite::reducedMotion(styleTexts, edit.selector.mid(7), edit.before, edit.after) == MotionWrite::Result::written)
+                result.done << describe(edit);
+            else
+                result.unresolved.push_back(edit);
+        } else if (edit.property == QLatin1String("text")) {
             const QString before = edit.before.trimmed();
             const QString after = edit.after.trimmed();
             static const QRegularExpression markup(QStringLiteral("[<>&{}]"));
@@ -202,6 +250,20 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
             else
                 result.unresolved.push_back(edit);
         } else if (edit.property.startsWith(QLatin1String("--"))) {
+            // The rule that names this one element holds its value (--i, --delay-extra) when it occurs once; a rule that occurs
+            // twice is the agent's. Motion tokens are declared on :root, which the next rule reads.
+            const bool root = edit.selector.isEmpty() || edit.selector == QLatin1String(":root") || edit.selector == QLatin1String("html");
+            if (!root) {
+                const MotionWrite::Result scoped = MotionWrite::customProperty(styleTexts, edit.selector, edit.property, edit.after);
+                if (scoped == MotionWrite::Result::written) {
+                    result.done << QStringLiteral("%1: %2 to %3").arg(edit.selector, edit.property, edit.after);
+                    continue;
+                }
+                if (scoped == MotionWrite::Result::ambiguous) {
+                    result.unresolved.push_back(edit);
+                    continue;
+                }
+            }
             // A custom property's value, declared in exactly one stylesheet.
             const QRegularExpression declaration(QStringLiteral("(%1\\s*:\\s*)([^;}\\n]+)").arg(QRegularExpression::escape(edit.property)));
             QString only;
@@ -212,7 +274,11 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
                 if (times)
                     only = path;
             }
-            if (total == 1) {
+            // One element's edit is not written into another element's own rule, which is what a `--i` declared once would be.
+            const QString home = total == 1 ? enclosing(sources.of(only), declaration.match(sources.of(only)).capturedStart(1)) : QString();
+            if (total == 1 && !root && !isGlobalScope(home) && home != edit.selector.simplified()) {
+                result.unresolved.push_back(edit);
+            } else if (total == 1) {
                 QString &text = sources.of(only);
                 const auto match = declaration.match(text);
                 text.replace(match.capturedStart(2), match.capturedLength(2), edit.after);
