@@ -55,8 +55,9 @@ island goes, and every workflow it started gets a place in the window. Read with
 ## Phases
 - **Phase A (before the announcement video):** frame resize never scales text; the stack above
   with Layers on the left and the Properties/Capture tabs; the Ask field and mic; the island bar
-  by tool; Frame's Browser View switch and the server lifecycle. Capture's action buttons work.
-- **Phase B:** Design over…; Capture's window thumbnails; removing the desktop island plugin, its
+  by tool; Frame's Browser View switch and the server lifecycle. Capture's action buttons work, and its
+  window thumbnails (phase B, done).
+- **Phase B:** Design over…; removing the desktop island plugin, its
   Hyprland keys and submaps, and its setup steps.
 
 ## Decided without the author (review)
@@ -74,7 +75,15 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   theme's microphone, the button reads "Mic".
 - [Mac mini] **Capture tab, phase A:** Region, Fill Colour, Stroke Colour, Swatch, Paste SVG, Theme Swatches. A region
   or a colour first switches to the previous workspace (the window usually covers what's wanted) and comes back after.
-  Capturing a whole window waits for the window thumbnails (phase B), since "the focused window" is now Omastrator.
+  Capturing a whole window is the thumbnail grid below, since "the focused window" is now Omastrator.
+- [Mac mini] **Capture tab, window thumbnails:** under the buttons, a 2-column grid of the open windows (from
+  `hyprctl clients`; not Omastrator's own, hidden or unmapped ones, or special-workspace ones that aren't showing),
+  most recently used first, each a thumbnail and an elided "app · title". Windows on screen get a `grim` picture of
+  their geometry, taken off the UI thread; the others show the app's icon or a lettered tile. The grid is read when
+  the tab shows and by its Refresh button, never polled. Clicking a window goes to its workspace (or just focuses
+  it, when it is on screen), waits 250 ms for it to draw, grabs it with `grim`, returns to the previous workspace
+  (or refocuses Omastrator), then runs `omastrator island capture image <png>`, which opens and traces it like
+  the other captures. Recent colours are left out.
 - [Mac mini] **The Frame tool's island:** "Drop a size…" (the built-in presets; drops a frame in the middle of the view
   and switches to Selection, as Figma does), Clip content and Add/Remove Auto Layout for the selected frames, and a
   short hint.

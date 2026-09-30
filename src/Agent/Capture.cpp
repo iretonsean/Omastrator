@@ -233,6 +233,15 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
             return done(result["traced"].toBool() ? QStringLiteral("Captured %1 and traced it. Vectorize with AI is next.").arg(name.left(40))
                                                   : QStringLiteral("Captured %1.").arg(name.left(40)));
         }
+        if (action == QLatin1String("image")) {
+            // A picture already taken (the dock's window thumbnails grab it): open and trace it.
+            const QString path = args.value(1);
+            if (!QFileInfo::exists(path))
+                return failed(QStringLiteral("There is no picture at %1.").arg(path));
+            const QJsonObject result = callApp(QStringLiteral("open_capture"), {{"path", path}});
+            return done(result["traced"].toBool() ? QStringLiteral("Captured the window and traced it. Vectorize with AI is next.")
+                                                  : QStringLiteral("Captured the window."));
+        }
         if (action == QLatin1String("paste-svg")) {
             QString error;
             const QString svg = clipboardSvg(&error);
@@ -258,7 +267,7 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
     } catch (const AgentProtocol::Error &failure) {
         return failed(failure.message());
     }
-    err << "Usage: omastrator island capture <color [fill|stroke|swatch] | screenshot | window | paste-svg | theme-swatches>\n";
+    err << "Usage: omastrator island capture <color [fill|stroke|swatch] | screenshot | window | image <png> | paste-svg | theme-swatches>\n";
     return 1;
 }
 }
