@@ -177,6 +177,23 @@ private slots:
         QCOMPARE(target.pixelColor(20 + 195, 20 + 303), QColor(Qt::white));
     }
 
+    void aStaleDensePictureIsDrawnAtItsCssSizeUnderTheCanvasZoom()
+    {
+        QUuid frame;
+        const VectorDocument document = viewDocument(frame, {10, 10, 60, 80});
+        // Two pixels per CSS px, for a page 100 CSS px wide (red for its first 50), zoomed 2x on the canvas.
+        constexpr double zoom = 2;
+        const QImage target = drawWith(document, frame, pageAt(100, 100, 2.0), zoom);
+        const auto seen = [&](double x, double y) { return target.pixelColor(QPointF(x * zoom, y * zoom).toPoint()); };
+        // 1:1 in CSS px from the frame's corner: red to 10 + 50, blue after it, never stretched to 60 or shrunk by the density.
+        QCOMPARE(seen(10 + 48, 50), QColor(Qt::red));
+        QCOMPARE(seen(10 + 52, 50), QColor(Qt::blue));
+        QCOMPARE(seen(11, 11), QColor(Qt::red));
+        // Clipped to the frame, which is shorter than the page.
+        QCOMPARE(seen(10 + 52, 10 + 82), QColor(Qt::white));
+        QCOMPARE(seen(10 + 62, 50), QColor(Qt::white));
+    }
+
     void aPictureThatShowsTheFramesSizeFillsItWhateverItsDensity()
     {
         QUuid frame;
