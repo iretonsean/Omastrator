@@ -41,7 +41,7 @@ void DevServers::deliver(const Waiter &waiter, const Result &result)
     QMetaObject::invokeMethod(waiter.context.data(), [done = waiter.done, result] { done(result); }, Qt::QueuedConnection);
 }
 
-quint64 DevServers::acquire(const QString &folder, QObject *context, Done done)
+quint64 DevServers::acquire(const QString &folder, QObject *context, Done done, bool allowInstall)
 {
     const quint64 lease = m_nextLease++;
     const QString key = keyFor(folder);
@@ -63,6 +63,7 @@ quint64 DevServers::acquire(const QString &folder, QObject *context, Done done)
     }
     auto entry = std::make_shared<Entry>();
     entry->folder = key;
+    entry->allowInstall = allowInstall;
     entry->result.folder = key;
     entry->leases.push_back(lease);
     entry->waiters.push_back({lease, context, std::move(done)});
@@ -99,6 +100,7 @@ void DevServers::runStart(const EntryPtr &entry)
             }
             emit exited(entry->folder);
         });
+        server->setInstallAllowed(entry->allowInstall);
         const QString failure = server->start(entry->folder);
         entry->starting = false;
         // Released while it started: the server was stopped, and nobody wants the answer.

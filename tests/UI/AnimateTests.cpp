@@ -23,6 +23,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
+#include <QScopeGuard>
 #include <memory>
 
 // Animate (docs/MOTION.md, section 4): what the agent is told, that its motion is only previewed (from a worktree, on a server of
@@ -134,6 +135,8 @@ private:
     struct Rig {
         std::unique_ptr<ProjectWorkspace> workspace = std::make_unique<ProjectWorkspace>();
         std::unique_ptr<ProjectWorkspaceView> window;
+        // A document of its own, when a test closes it while the window and its agent carry on.
+        std::unique_ptr<EditorSession> own;
         EditorSession *session = nullptr;
         std::unique_ptr<Hosted> hosted;
         // The timeline is on the hosted canvas, so it is the one Animate opens.
@@ -142,11 +145,13 @@ private:
         BrowserViews *views = nullptr;
     };
 
-    void rig(Rig &r, const Site &served)
+    void rig(Rig &r, const Site &served, bool ownDocument = false)
     {
         r.window = std::make_unique<ProjectWorkspaceView>(*r.workspace);
         r.bridge = r.window->agent();
-        r.session = &r.workspace->current().session;
+        if (ownDocument)
+            r.own = std::make_unique<EditorSession>();
+        r.session = ownDocument ? r.own.get() : &r.workspace->current().session;
         r.hosted = std::make_unique<Hosted>(*r.session, page(served));
         r.views = BrowserViews::of(*r.session);
         r.views->setAgent(r.bridge);
@@ -219,6 +224,8 @@ private slots:
         BrowserViews::setPoolOptions(options);
         BrowserViews::setSignInAnswered(false);
         BrowserViews::setPreviewChooser({});
+        // A hung agent that has said it is done is stopped after this long, and then its files are read.
+        AgentBridge::setPageDrainMs(150);
         QFile::remove(ProjectRegistry::path());
         // The agent stays alive until the test says what it wrote, as one that is still working does.
         qputenv("FAKE_MODE", "hang");
@@ -235,6 +242,7 @@ private slots:
         for (const QString &folder : std::as_const(m_folders))
             LiveFrames::clearPending(folder);
         m_folders.clear();
+        AgentBridge::setPageDrainMs(5000);
         BrowserViews::shutdownPool();
     }
 
@@ -305,6 +313,8 @@ private slots:
         QVERIFY(text.contains(QStringLiteral("The project: Plain HTML and CSS.")));
         QVERIFY(text.contains(QStringLiteral("cards.css")));
         QVERIFY(text.contains(QStringLiteral("nl-cascade")));
+        // The page is on 127.0.0.1, which names no site: the prefix comes from the project's folder ("animate1"), and is a letter word.
+        QVERIFY2(text.contains(QStringLiteral("starts with \"an-\"")), qPrintable(text.section(QStringLiteral("Any new @keyframes"), 1).left(80)));
         // The contract, and the way to say it is done.
         QVERIFY(text.contains(QStringLiteral("/* omastrator:motion <name> */")));
         QVERIFY(text.contains(QStringLiteral("prefers-reduced-motion")));
@@ -332,7 +342,8 @@ private slots:
         writeMotion(worktree);
         QString id = prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0);
         QVERIFY(r.bridge->liveAgentDone(id, QStringLiteral("Slowed the cascade")).isEmpty());
-        QVERIFY(!r.bridge->waiting());
+        // Its process is waited for, so what it writes after saying so is in the preview.
+        QTRY_VERIFY_WITH_TIMEOUT(!r.bridge->waiting(), patience);
 
         // The project is as it was; the change waits in the worktree, served on a server of its own.
         QVERIFY(status(*served).isEmpty());
@@ -384,6 +395,115 @@ private slots:
         QVERIFY(!DevServers::shared().running(worktree));
     }
 
+    void saveToCodeWritesOnlyWhatTheAgentWrote()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        Rig r;
+        rig(r, *served);
+        const int before = commits(*served);
+        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("Slow the cascade"), true).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!prompt().isEmpty(), patience);
+        const QString worktree = agentCwd();
+        writeMotion(worktree);
+        QVERIFY(r.bridge->liveAgentDone(prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0), QStringLiteral("Slowed the cascade")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!r.bridge->waiting(), patience);
+        QTRY_VERIFY_WITH_TIMEOUT(r.bridge->previewOf(served->folder) && r.bridge->previewOf(served->folder)->ready, patience);
+        // The preview's server ran in the worktree, and what it changed there (a tracked file, a generated one) is not the agent's.
+        write(worktree + "/index.html", read(worktree + "/index.html") + "<!-- rewritten by the preview's server -->\n");
+        write(worktree + "/routeTree.gen.ts", "// generated\n");
+        QVERIFY2(r.views->savePreview(r.hosted->frame).isEmpty(), "saved");
+        QTRY_VERIFY_WITH_TIMEOUT(!r.bridge->previewOf(served->folder), patience);
+        QTRY_COMPARE_WITH_TIMEOUT(commits(*served), before + 1, patience);
+        QVERIFY(read(served->folder + "/cards.css").contains("--duration-cascade: 900ms;"));
+        QVERIFY(!read(served->folder + "/index.html").contains("rewritten"));
+        QVERIFY(!QFileInfo::exists(served->folder + "/routeTree.gen.ts"));
+        // The commit holds the agent's file and nothing else.
+        QCOMPARE(WriteBack::git(served->folder, {"show", "--name-only", "--format=", "HEAD"}).trimmed(), QStringLiteral("cards.css"));
+        QVERIFY(status(*served).isEmpty());
+    }
+
+    void whatTheAgentWritesAfterSayingItIsDoneIsInThePreview()
+    {
+        NEEDS_CHROMIUM;
+        // A claude that formats once more a second after it has said it is done, and then exits.
+        write(m_directory.filePath(QStringLiteral("late/claude")), "#!/bin/sh\nsleep 1\nsed -i 's/--duration-cascade: 640ms;/--duration-cascade: 777ms;/' cards.css\nexit 0\n", true);
+        const QByteArray path = qgetenv("PATH");
+        qputenv("PATH", (m_directory.filePath(QStringLiteral("late")) + QLatin1Char(':') + QString::fromLocal8Bit(path)).toUtf8());
+        const auto restore = qScopeGuard([&] { qputenv("PATH", path); });
+        AgentBridge::setPageDrainMs(15'000);
+        const auto served = site();
+        QVERIFY(served);
+        Rig r;
+        rig(r, *served);
+        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("Slow the cascade"), true).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(r.bridge->waiting().has_value(), patience);
+        const QString id = r.bridge->waiting()->requestId;
+        QVERIFY(r.bridge->liveAgentDone(id, QStringLiteral("Done")).isEmpty());
+        // Its process is still running: the preview waits for it, and the agent still counts as working.
+        QTest::qWait(300);
+        QVERIFY(!r.bridge->previewOf(served->folder));
+        QVERIFY(r.bridge->waiting());
+        QTRY_VERIFY_WITH_TIMEOUT(r.bridge->previewOf(served->folder).has_value(), patience);
+        QCOMPARE(r.bridge->previewOf(served->folder)->files, QStringList{"cards.css"});
+        QTRY_VERIFY_WITH_TIMEOUT(r.bridge->previewOf(served->folder)->ready, patience);
+        QTRY_VERIFY_WITH_TIMEOUT(inPage(*r.session, r.hosted->frame, QStringLiteral("getComputedStyle(document.documentElement).getPropertyValue('--duration-cascade').trim()")).toString() == QLatin1String("777ms"), patience);
+        QVERIFY(status(*served).isEmpty());
+    }
+
+    void closingTheDocumentDuringAPreviewDiscardsItWithoutTouchingTheDyingSession()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        Rig r;
+        rig(r, *served, true);
+        const int before = commits(*served);
+        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("Slow the cascade"), true).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!prompt().isEmpty(), patience);
+        const QString worktree = agentCwd();
+        writeMotion(worktree);
+        QVERIFY(r.bridge->liveAgentDone(prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0), QStringLiteral("Slowed")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!r.bridge->waiting(), patience);
+        QTRY_VERIFY_WITH_TIMEOUT(r.bridge->previewOf(served->folder) && r.bridge->previewOf(served->folder)->ready, patience);
+        QVERIFY(r.views->previewing(r.hosted->frame));
+        // The document closes while the preview shows: the timeline, the canvas, then the session.
+        r.timeline.reset();
+        r.hosted.reset();
+        r.own.reset();
+        QVERIFY(!r.bridge->previewOf(served->folder));
+        QTRY_COMPARE_WITH_TIMEOUT(worktrees(*served), 0, patience);
+        QVERIFY(!QFileInfo::exists(worktree));
+        QVERIFY(status(*served).isEmpty());
+        QCOMPARE(commits(*served), before);
+        QVERIFY(!DevServers::shared().running(worktree));
+    }
+
+    void stopBeforeTheAgentLaunchesAsksNothingAndSaysSo()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        Rig r;
+        rig(r, *served);
+        QSignalSpy ended(r.views, &BrowserViews::animateEnded);
+        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("Lift on hover"), true).isEmpty());
+        // The page's motion is being read before the agent is asked; Stop lands in that gap.
+        r.views->stopAnimate(r.hosted->frame);
+        QCOMPARE(ended.size(), 1);
+        QCOMPARE(ended.first().at(0).toUuid(), r.hosted->frame);
+        QTest::qWait(1500);
+        QVERIFY(!r.bridge->waiting());
+        QVERIFY(prompt().isEmpty());
+        QCOMPARE(worktrees(*served), 0);
+        // The frame can be asked again.
+        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("Lift on hover"), true).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(r.bridge->waiting().has_value(), patience);
+        r.bridge->stopWaiting();
+        QTRY_COMPARE_WITH_TIMEOUT(worktrees(*served), 0, patience);
+    }
+
     void discardingLeavesGitCleanAndRemovesTheWorktreeAndDropsWhatWasTuned()
     {
         NEEDS_CHROMIUM;
@@ -397,6 +517,7 @@ private slots:
         const QString worktree = agentCwd();
         writeMotion(worktree);
         QVERIFY(r.bridge->liveAgentDone(prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0), QStringLiteral("Slowed")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!r.bridge->waiting(), patience);
         QTRY_VERIFY_WITH_TIMEOUT(r.bridge->previewOf(served->folder)->ready, patience);
         MotionTimeline *timeline = r.timeline.get();
         QTRY_VERIFY_WITH_TIMEOUT(timeline && timeline->isOpen() && !timeline->timeline().tracks.isEmpty(), patience);
@@ -450,6 +571,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!prompt().isEmpty(), patience);
         writeMotion(agentCwd());
         QVERIFY(r.bridge->liveAgentDone(prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0), QStringLiteral("Slowed")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!r.bridge->waiting(), patience);
         QTRY_VERIFY_WITH_TIMEOUT(r.bridge->previewOf(served->folder)->ready, patience);
 
         int asked = 0;
@@ -458,10 +580,10 @@ private slots:
             ++asked;
             return answer;
         });
-        // Keep, and Cancel: nothing is started and the preview stays.
-        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("More"), true).isEmpty());
+        // Keep, and Cancel: nothing is started and the preview stays. Each says so, so the sheet does not wait for a run.
+        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("More"), true).contains(QLatin1String("Kept")));
         answer = BrowserViews::PreviewAnswer::cancel;
-        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("More"), true).isEmpty());
+        QVERIFY(r.views->animate(r.hosted->frame, QStringLiteral("More"), true).contains(QLatin1String("Cancelled")));
         QCOMPARE(asked, 2);
         QVERIFY(!r.bridge->waiting());
         QVERIFY(r.bridge->previewOf(served->folder));
@@ -489,6 +611,7 @@ private slots:
         css.replace("--duration-cascade: 640ms; ", "");
         write(agentCwd() + "/cards.css", css);
         QVERIFY(r.bridge->liveAgentDone(prompt().section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0), QStringLiteral("Slowed")).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!r.bridge->waiting(), patience);
         const auto preview = r.bridge->previewOf(served->folder);
         QVERIFY(preview);
         QVERIFY(!preview->problems.isEmpty());

@@ -34,6 +34,8 @@ public:
     // Starts the project and waits until it answers. Returns why it couldn't, or empty.
     QString start(const QString &folder, int timeoutMs = 120'000);
     void stop();
+    // False: a project that needs its packages installed fails to start instead of installing them.
+    void setInstallAllowed(bool allowed) { m_installAllowed = allowed; }
     // Freezes the server, or wakes it: its whole process group is stopped (SIGSTOP) and continued (SIGCONT), so it keeps
     // its port, state and PID. A static site stops answering instead.
     void setPaused(bool paused);
@@ -59,6 +61,7 @@ private:
     DevCommand m_command;
     QUrl m_url;
     QByteArray m_output;
+    bool m_installAllowed = true;
     bool m_paused = false;
     // Runs the package manager's install and waits for it. Returns why it failed, or empty.
     QString install(const QString &folder);

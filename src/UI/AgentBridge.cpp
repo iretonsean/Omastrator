@@ -422,6 +422,12 @@ QString AgentBridge::launchProject(const QString &requestId, const QString &dire
 
 void AgentBridge::liveRunFinished(const QString &requestId, AgentRun &run)
 {
+    // An Animate whose agent said it was done and has now exited (or was stopped after the wait): its files are final.
+    if (const auto animating = m_animations.constFind(requestId); animating != m_animations.constEnd() && animating->answered) {
+        const QString summary = animating->summary;
+        finishAnimation(requestId, summary);
+        return;
+    }
     auto job = m_liveJobs.find(requestId);
     job->second.cleanup();
     m_liveJobs.erase(job);

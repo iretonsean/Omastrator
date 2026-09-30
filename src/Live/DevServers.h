@@ -36,7 +36,10 @@ public:
 
     // Starts the project's server, or joins the one that runs. `done` runs on `context`'s thread with the address, or
     // why it failed (a failed lease holds nothing). Returns the lease, at once.
-    quint64 acquire(const QString &folder, QObject *context, Done done);
+    // `allowInstall` false: a project whose packages aren't installed doesn't run (the error says so) instead of running the package
+    // manager's install there. A copy of the project made for a preview must never rewrite its lockfile. The first holder of a
+    // folder's server decides.
+    quint64 acquire(const QString &folder, QObject *context, Done done, bool allowInstall = true);
     // Gives the lease back; the last one stops the server. With `wait`, it returns once the server has stopped.
     // A lease still starting never calls its `done`.
     void release(quint64 lease, bool wait = false);
@@ -74,6 +77,7 @@ private:
         // Only touched on the server's own thread.
         bool starting = false;
         bool stopRequested = false;
+        bool allowInstall = true;
         bool ready = false;
         std::vector<quint64> leases;
         std::vector<quint64> pausedLeases;

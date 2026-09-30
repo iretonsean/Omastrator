@@ -1,6 +1,7 @@
 #include "Canvas/EditorCanvas.h"
 #include "Document/EditorSession.h"
 #include "Live/Motion.h"
+#include "Live/MotionPrompt.h"
 #include "UI/AgentBridge.h"
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
@@ -89,17 +90,26 @@ QString BrowserViews::animate(const QUuid &frame, const QString &instruction, bo
                                                                                 : PreviewAnswer::cancel;
         }
         if (answer != PreviewAnswer::discard)
-            return {};
+            return answer == PreviewAnswer::keep ? QStringLiteral("Kept the motion you're previewing. Nothing new was asked.") : QStringLiteral("Cancelled.");
         m_agent->discardPreview(project);
     }
     if (const QString busy = m_agent->busyMessage(); !busy.isEmpty())
         return busy;
+    if (m_animating.contains(frame))
+        return QStringLiteral("An Animate is already starting for this frame.");
+    m_animating.insert(frame);
     // The page's motion is read fresh, so the agent hears what the elements do now; the ask goes when it has been.
     live->run(frame, [](LiveSession &session) { return session.motionRefresh(); }, [this, frame, project, instruction, reducedMotion](const QString &) {
+        // Stop before this point took the token away: nothing is asked.
+        if (!m_animating.remove(frame))
+            return;
         LiveFrames *again = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
         const VectorObject *object = m_session.hasDocument() ? m_session.document()->find(frame) : nullptr;
-        if (!again || !again->active(frame) || !object || !object->browser || !m_agent)
+        if (!again || !again->active(frame) || !object || !object->browser || !m_agent) {
+            emit notice(QStringLiteral("The page stopped before the motion could be asked for. Turn on Edit Page and try again."));
+            emit animateEnded(frame);
             return;
+        }
         const LiveFrames::Snapshot snapshot = again->snapshot(frame);
         AgentBridge::AnimateRequest request;
         request.frame = frame;
@@ -129,17 +139,22 @@ QString BrowserViews::animate(const QUuid &frame, const QString &instruction, bo
         request.width = QStringLiteral("The page is drawn %1 px wide%2").arg(qRound(box.width())).arg(
             widths.isEmpty() ? QStringLiteral(".") : QStringLiteral("; the site's breakpoints are %1.").arg(listed(widths)));
         request.url = toTabUrl(frame, object->browser->url).toString();
-        QString host = object->browser->url.host();
-        if (host.startsWith(QLatin1String("www.")))
-            host = host.mid(4);
-        request.siteName = host.section(QLatin1Char('.'), 0, 0).isEmpty() ? QDir(project).dirName() : host.section(QLatin1Char('.'), 0, 0);
+        request.siteName = MotionPrompt::siteName(object->browser->url, QDir(project).dirName());
         request.title = QStringLiteral("Animate: %1").arg(snapshot.selection.size() > 1 ? QStringLiteral("%1 elements").arg(snapshot.selection.size())
                                                                                         : labelOf(snapshot.selection.first().toObject()));
         const QString failure = m_agent->liveAnimate(request);
-        if (!failure.isEmpty())
+        if (!failure.isEmpty()) {
             emit notice(failure);
-    });
+            emit animateEnded(frame);
+        }
+    }, this);
     return {};
+}
+
+void BrowserViews::stopAnimate(const QUuid &frame)
+{
+    if (m_animating.remove(frame))
+        emit animateEnded(frame);
 }
 
 void BrowserViews::onPreviewChanged(const QString &folder)

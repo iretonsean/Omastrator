@@ -174,7 +174,7 @@ QString AgentBridge::liveAgentDone(const QString &id, const QString &summary)
         return QStringLiteral("No Live task is waiting with the id “%1”.").arg(id);
     // Motion is previewed from its worktree before anything is written (docs/MOTION.md, section 4).
     if (m_animations.contains(id))
-        return finishAnimation(id, summary);
+        return animationAnswered(id, summary);
     AgentWork &work = job->second;
     QString error;
     const std::vector<WriteBack::FileChange> changes = work.collect(&error);

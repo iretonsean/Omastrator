@@ -29,6 +29,11 @@ void AgentBridge::setPageDrainMs(int ms)
     drainMs() = ms;
 }
 
+int AgentBridge::pageDrainMs()
+{
+    return drainMs();
+}
+
 QString AgentBridge::generatePage(const PageRequest &request, PageDone done, QString *requestId)
 {
     if (m_waiting)

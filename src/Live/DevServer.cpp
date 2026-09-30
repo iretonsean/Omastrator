@@ -159,9 +159,13 @@ QString DevServer::start(const QString &folder, int timeoutMs)
     environment.insert(QStringLiteral("FORCE_COLOR"), QStringLiteral("0"));
     m_process.setProcessEnvironment(environment);
     m_process.setWorkingDirectory(folder);
-    if (!m_command.install.isEmpty())
+    if (!m_command.install.isEmpty()) {
+        if (!m_installAllowed)
+            return QStringLiteral("%1's packages aren't installed here, and this copy of the project doesn't install them. Install them in the project first.")
+                .arg(QDir(folder).dirName());
         if (const QString failure = install(folder); !failure.isEmpty())
             return failure;
+    }
     m_output.clear();
     emit step(QStringLiteral("Starting the project (%1)…").arg(m_command.description));
     m_process.start(m_command.program, m_command.arguments);

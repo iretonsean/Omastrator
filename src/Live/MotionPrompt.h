@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
+#include <QUrl>
 
 // What the agent is told when the designer asks for motion (docs/MOTION.md, section 4): the selection, the page's tokens, the
 // project's stack, the motion already on those elements, and the output contract the result is checked against.
@@ -37,6 +38,9 @@ struct Brief {
 QString animate(const AgentWork &work, const Brief &brief);
 // A site's short name for @keyframes names: the first letters of its words ("Northlight Coffee" is "nc"), or the first two of one.
 QString keyframePrefix(const QString &siteName);
+// The name the prefix comes from: the page's own site ("northlight" for www.northlight.example), or `folderName` for an address that
+// names no site (an IP address, localhost), since "127.0.0.1" and "localhost" are nobody's.
+QString siteName(const QUrl &page, const QString &folderName);
 // The marker lines every block is written between.
 QString startMarker(const QString &name);
 QString endMarker();

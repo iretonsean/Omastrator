@@ -384,10 +384,15 @@ private:
             });
             QObject::connect(sheet, &AnimateSheet::stopped, sheet, [shared, sheet] {
                 // Stop, and Esc while it writes: the run ends, its worktree goes, and the sheet stays for another try.
+                // Before the agent is launched there is nothing to stop but the ask itself.
+                if (const std::optional<QUuid> frame = shared->canvas->editPageFrame())
+                    BrowserViews::of(shared->canvas->session())->stopAnimate(*frame);
                 if (shared->agent)
                     shared->agent->stopWaiting();
                 sheet->setRunning(false);
             });
+            // The ask ended without the agent taking it up: the sheet stops saying "Writing…" and stays for another try.
+            QObject::connect(BrowserViews::of(shared->canvas->session()), &BrowserViews::animateEnded, sheet, [sheet](const QUuid &) { sheet->setRunning(false); });
             if (shared->agent) {
                 // The run ended (a preview is ready, or nothing was written): the sheet is done.
                 const auto ended = [shared, sheet] {

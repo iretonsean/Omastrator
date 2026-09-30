@@ -8,8 +8,12 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QPointer>
 #include <QProcess>
+#include <QTimer>
 #include <QUuid>
+#include <algorithm>
+#include <memory>
 
 // Animate (docs/MOTION.md, section 4): the agent writes motion into a worktree, and that worktree is served as a preview. The
 // project changes only when the designer saves; a discarded preview leaves nothing on disk but Omastrator's own worktree folder,
@@ -63,7 +67,12 @@ QString AgentBridge::liveAnimate(const AnimateRequest &request, QString *agentRe
         return error;
     }
     m_liveJobs[work.requestId] = work;
-    m_animations[work.requestId] = Animation{request.frame, project, request.title, request.reducedMotion};
+    Animation animation;
+    animation.frame = request.frame;
+    animation.folder = project;
+    animation.title = request.title;
+    animation.reducedMotion = request.reducedMotion;
+    m_animations[work.requestId] = animation;
     if (agentRequest)
         *agentRequest = work.requestId;
     m_waiting = Waiting{work.requestId, Task::live, agent};
@@ -106,7 +115,26 @@ std::optional<AgentBridge::Preview> AgentBridge::previewOfFrame(const QUuid &fra
     return std::nullopt;
 }
 
-// The agent said it is done: what it wrote is looked at and served, and nothing is written to the project.
+// The agent said it is done. It may still write or format before it exits, so when its process still runs the preview waits for it
+// to end (at most as long as a page run does, then it is stopped); an agent in a terminal has no process to wait for.
+QString AgentBridge::animationAnswered(const QString &id, const QString &summary)
+{
+    const auto run = m_runs.find(id);
+    if (run == m_runs.end() || !run->second || !run->second->isRunning())
+        return finishAnimation(id, summary);
+    Animation &animation = m_animations[id];
+    animation.answered = true;
+    animation.summary = summary;
+    const QPointer<AgentRun> watched = run->second;
+    QTimer::singleShot(pageDrainMs(), this, [this, id, watched] {
+        const auto again = m_animations.constFind(id);
+        if (again != m_animations.constEnd() && again->answered && watched && watched->isRunning())
+            watched->cancel();
+    });
+    return {};
+}
+
+// What the agent wrote is looked at and served, and nothing is written to the project.
 QString AgentBridge::finishAnimation(const QString &id, const QString &summary)
 {
     const auto job = m_liveJobs.find(id);
@@ -161,7 +189,8 @@ QString AgentBridge::finishAnimation(const QString &id, const QString &summary)
 }
 
 // The worktree, served: its own dev server (or Omastrator's static one), with the project's node_modules as hard links, so no
-// install and no network are needed.
+// install and no network are needed. The copy runs beside the window, not in it, and the server never installs packages: a
+// project without them fails to preview and says so, instead of rewriting its lockfile in the copy.
 void AgentBridge::startPreviewServer(const QString &folder)
 {
     const auto found = m_previews.find(folder);
@@ -170,25 +199,49 @@ void AgentBridge::startPreviewServer(const QString &folder)
     const QString worktree = found->second.work.worktree;
     const QString modules = QDir(folder).filePath(QStringLiteral("node_modules"));
     const QString linked = QDir(worktree).filePath(QStringLiteral("node_modules"));
-    if (QFileInfo(modules).isDir() && !QFileInfo::exists(linked)) {
-        QProcess copy;
-        copy.start(QStringLiteral("cp"), {QStringLiteral("-al"), modules, linked});
-        if (!copy.waitForFinished(120'000) || copy.exitCode() != 0)
-            QDir(linked).removeRecursively();
-    }
-    found->second.lease = DevServers::shared().acquire(worktree, this, [this, folder](const DevServers::Result &result) {
-        const auto again = m_previews.find(folder);
-        if (again == m_previews.end())
+    const auto serve = [this, folder, worktree] {
+        const auto preview = m_previews.find(folder);
+        // Discarded while the copy ran: nothing is left to serve.
+        if (preview == m_previews.end())
             return;
-        if (!result.error.isEmpty()) {
-            again->second.info.failure = result.error.section(QLatin1Char('\n'), 0, 0);
-            again->second.lease = 0;
-        } else {
-            again->second.info.url = result.url;
-            again->second.info.ready = true;
-        }
-        emit previewChanged(folder);
+        preview->second.lease = DevServers::shared().acquire(
+            worktree, this,
+            [this, folder](const DevServers::Result &result) {
+                const auto again = m_previews.find(folder);
+                if (again == m_previews.end())
+                    return;
+                if (!result.error.isEmpty()) {
+                    again->second.info.failure = result.error.section(QLatin1Char('\n'), 0, 0);
+                    again->second.lease = 0;
+                } else {
+                    again->second.info.url = result.url;
+                    again->second.info.ready = true;
+                }
+                emit previewChanged(folder);
+            },
+            false);
+    };
+    if (!QFileInfo(modules).isDir() || QFileInfo::exists(linked)) {
+        serve();
+        return;
+    }
+    auto *copy = new QProcess(this);
+    const auto finished = std::make_shared<bool>(false);
+    const auto next = [copy, finished, linked, serve](bool ok) {
+        if (*finished)
+            return;
+        *finished = true;
+        copy->deleteLater();
+        if (!ok)
+            QDir(linked).removeRecursively();
+        serve();
+    };
+    connect(copy, &QProcess::finished, this, [next](int code, QProcess::ExitStatus status) { next(status == QProcess::NormalExit && code == 0); });
+    connect(copy, &QProcess::errorOccurred, this, [next](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            next(false);
     });
+    copy->start(QStringLiteral("cp"), {QStringLiteral("-al"), modules, linked});
 }
 
 void AgentBridge::releasePreview(const QString &folder, bool waitForServer)
@@ -228,12 +281,20 @@ QString AgentBridge::acceptPreview(const QString &folder)
     const auto found = m_previews.find(project);
     if (found == m_previews.end())
         return QStringLiteral("There's no motion being previewed.");
+    // Save writes, commits and pushes: it does not start while a deploy runs, or the change would be written and left unsaved.
+    if (m_pipeline.active)
+        return QStringLiteral("A deploy is already running. Save to code again when it has finished.");
     // The agent's change against the project as it is now: what the designer changed meanwhile is merged around it.
     AgentWork &work = found->second.work;
     QString error;
-    const std::vector<WriteBack::FileChange> changes = work.collect(&error);
+    std::vector<WriteBack::FileChange> changes = work.collect(&error);
     if (!error.isEmpty())
         return error;
+    // Only what the agent wrote, as the preview listed it: the preview's server ran in this worktree, and whatever else it
+    // changed there (a lockfile, generated routes) was never the designer's to save.
+    const QStringList wrote = found->second.info.files;
+    changes.erase(std::remove_if(changes.begin(), changes.end(), [&](const WriteBack::FileChange &change) { return !wrote.contains(QDir(project).relativeFilePath(change.path)); }),
+                  changes.end());
     if (changes.empty()) {
         releasePreview(project, false);
         emit previewChanged(project);

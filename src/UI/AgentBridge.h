@@ -260,6 +260,7 @@ public:
     void stopPage(const QString &requestId = QString());
     // How long the agent has to exit after it says it is done, before it is stopped and its files are read (tests shorten it).
     static void setPageDrainMs(int ms);
+    static int pageDrainMs();
     // Steps of a longer job, one line each, for the Live panel's Activity list.
     struct ActivityLine {
         enum class State { pending, running, done, failed };
@@ -458,6 +459,10 @@ private:
         QString folder;
         QString title;
         bool reducedMotion = true;
+        // The agent said it was done while its process still ran: the preview starts when the process has ended, so what it
+        // wrote after saying so is in it.
+        bool answered = false;
+        QString summary;
     };
     QHash<QString, Animation> m_animations;
     struct PreviewState {
@@ -469,6 +474,7 @@ private:
     };
     std::map<QString, PreviewState> m_previews;
     QString finishAnimation(const QString &requestId, const QString &summary);
+    QString animationAnswered(const QString &requestId, const QString &summary);
     void startPreviewServer(const QString &folder);
     void releasePreview(const QString &folder, bool waitForServer);
     // Build Its by request id, and when each frame's last one finished.
