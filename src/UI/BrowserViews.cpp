@@ -244,6 +244,9 @@ QString BrowserViews::message(const QUuid &frame) const
             return QStringLiteral("Signing in…");
         return QStringLiteral("Omastrator's browser is open for Live. Frames resume when it closes.");
     case State::unavailable:
+        // An empty frame (a page undone, say) has no last picture to show: it offers Generate like any empty frame.
+        if (object->browser->url.isEmpty())
+            break;
         return QStringLiteral("Chromium isn't installed, so this shows the last picture.");
     case State::failed:
         return m_entries.value(frame).failure;

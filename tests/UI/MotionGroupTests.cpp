@@ -16,6 +16,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFile>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
