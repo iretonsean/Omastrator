@@ -1,0 +1,244 @@
+#include "Live/Motion.h"
+#include "Live/MotionCode.h"
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QTemporaryDir>
+#include <QTest>
+
+// The timeline's rows, made from what the page reports (docs/MOTION.md, section 2), and the marked blocks the Code tab
+// reads. No browser: the page's list is built here.
+namespace {
+QJsonObject who(const QString &tag, const QString &id, const QString &cls, const QString &selector)
+{
+    return {{"tag", tag}, {"id", id}, {"cls", cls}, {"selector", selector}};
+}
+
+QJsonObject animation(const QString &kind, const QString &name, const QJsonObject &element, const QJsonObject &parent, const QStringList &properties,
+                      double delay, double duration, const QString &trigger = QStringLiteral("load"))
+{
+    QJsonObject each = element;
+    each["kind"] = kind;
+    each["name"] = name;
+    each["timeline"] = QStringLiteral("document");
+    each["parent"] = parent;
+    each["properties"] = QJsonArray::fromStringList(properties);
+    each["keyframes"] = QJsonArray{QJsonObject{{"offset", 0}, {"easing", "linear"}, {"props", QJsonObject{{"opacity", "0"}}}},
+                                   QJsonObject{{"offset", 1}, {"easing", "linear"}, {"props", QJsonObject{{"opacity", "1"}}}}};
+    each["easing"] = QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)");
+    each["delay"] = delay;
+    each["duration"] = duration;
+    each["iterations"] = 1;
+    each["offset"] = 0;
+    each["trigger"] = trigger;
+    return each;
+}
+
+QJsonObject words(int count)
+{
+    QJsonArray all;
+    const QJsonObject h1 = who(QStringLiteral("h1"), QStringLiteral("headline"), {}, QStringLiteral("#headline"));
+    for (int i = 0; i < count; ++i)
+        all.append(animation(QStringLiteral("css-animation"), QStringLiteral("nl-rise"),
+                             who(QStringLiteral("span"), {}, QStringLiteral("word"), QStringLiteral("#headline > span:nth-of-type(%1)").arg(i + 1)), h1,
+                             {QStringLiteral("opacity"), QStringLiteral("translate")}, i * 60, 480));
+    return {{"animations", all}, {"held", true}};
+}
+}
+
+class MotionModelTests : public QObject {
+    Q_OBJECT
+
+private slots:
+    void siblingsWithTheSameAnimationAreOneRow()
+    {
+        const Motion::Timeline timeline = Motion::parse(words(5));
+        QCOMPARE(timeline.tracks.size(), 1);
+        const Motion::Track &track = timeline.tracks.first();
+        QCOMPARE(track.label, QStringLiteral("h1 .word × 5"));
+        QCOMPARE(track.detail, QStringLiteral("opacity, translate"));
+        QCOMPARE(track.bars.size(), 5);
+        QCOMPARE(track.bars[3].start, 180.0);
+        QCOMPARE(track.bars[3].length, 480.0);
+        QCOMPARE(track.stagger, 60.0);
+        QCOMPARE(track.duration, 480.0);
+        QCOMPARE(track.keyframes.size(), 2);
+        QCOMPARE(timeline.duration, 720.0);
+        QCOMPARE(timeline.trigger(), QStringLiteral("On load"));
+        QCOMPARE(track.selectors.size(), 5);
+    }
+
+    void oneElementIsNamedForItsTagAndIdOrClass()
+    {
+        QJsonArray all;
+        const QJsonObject body = who(QStringLiteral("main"), {}, {}, QStringLiteral("main"));
+        all.append(animation(QStringLiteral("css-animation"), QStringLiteral("nl-fade"), who(QStringLiteral("p"), QStringLiteral("lede"), QStringLiteral("lede"), QStringLiteral("#lede")), body,
+                             {QStringLiteral("opacity")}, 0, 400));
+        all.append(animation(QStringLiteral("css-animation"), QStringLiteral("nl-pop"), who(QStringLiteral("p"), {}, QStringLiteral("note"), QStringLiteral("main > p.note")), body,
+                             {QStringLiteral("opacity")}, 0, 400));
+        const Motion::Timeline timeline = Motion::parse({{"animations", all}});
+        QCOMPARE(timeline.tracks.size(), 2);
+        // An id names the element better than its class.
+        QCOMPARE(timeline.tracks[0].label, QStringLiteral("p#lede"));
+        QCOMPARE(timeline.tracks[1].label, QStringLiteral("p.note"));
+    }
+
+    void siblingsWithoutAClassReadTheirTagTimesTheirNumber()
+    {
+        QJsonArray all;
+        const QJsonObject section = who(QStringLiteral("section"), {}, QStringLiteral("cards"), QStringLiteral("section"));
+        for (int i = 0; i < 3; ++i)
+            all.append(animation(QStringLiteral("css-animation"), QStringLiteral("nl-fade"), who(QStringLiteral("article"), {}, {}, QStringLiteral("article:nth-of-type(%1)").arg(i + 1)),
+                                 section, {QStringLiteral("opacity")}, 0, 400));
+        QCOMPARE(Motion::parse({{"animations", all}}).tracks.first().label, QStringLiteral("article × 3"));
+    }
+
+    void theSameNameOnDifferentParentsIsTwoRows()
+    {
+        QJsonArray all = words(2)["animations"].toArray();
+        all.append(animation(QStringLiteral("css-animation"), QStringLiteral("nl-rise"), who(QStringLiteral("span"), {}, QStringLiteral("word"), QStringLiteral("#other > span")),
+                             who(QStringLiteral("h2"), QStringLiteral("other"), {}, QStringLiteral("#other")), {QStringLiteral("opacity")}, 0, 480));
+        const Motion::Timeline timeline = Motion::parse({{"animations", all}});
+        QCOMPARE(timeline.tracks.size(), 2);
+        QCOMPARE(timeline.tracks[0].bars.size(), 2);
+        QCOMPARE(timeline.tracks[1].bars.size(), 1);
+    }
+
+    void aTransitionIsOneRowAndKeepsItsIdOnceAStateHoldsIt()
+    {
+        const QJsonObject link = who(QStringLiteral("a"), QStringLiteral("primary"), {}, QStringLiteral("#primary"));
+        const QJsonObject parent = who(QStringLiteral("p"), {}, {}, QStringLiteral("p"));
+        QJsonObject waiting = animation(QStringLiteral("css-transition"), QStringLiteral("transform, background-color"), link, parent,
+                                        {QStringLiteral("transform"), QStringLiteral("background-color")}, 0, 200, QStringLiteral("hover"));
+        waiting["potential"] = true;
+        waiting["keyframes"] = QJsonArray();
+        const Motion::Timeline before = Motion::parse({{"animations", QJsonArray{waiting}}});
+        QCOMPARE(before.tracks.size(), 1);
+        QVERIFY(before.tracks.first().potential);
+        QCOMPARE(before.tracks.first().state(), QStringLiteral("hover"));
+        QCOMPARE(before.trigger(), QStringLiteral("On hover"));
+
+        // Held, the page reports one transition per property; they are still the one row, with the same id.
+        QJsonArray running;
+        for (const char *property : {"transform", "background-color"})
+            running.append(animation(QStringLiteral("css-transition"), QString::fromLatin1(property), link, parent, {QString::fromLatin1(property)}, 0, 200,
+                                     QStringLiteral("hover")));
+        const Motion::Timeline after = Motion::parse({{"animations", running}});
+        QCOMPARE(after.tracks.size(), 1);
+        QVERIFY(!after.tracks.first().potential);
+        QCOMPARE(after.tracks.first().id, before.tracks.first().id);
+        QCOMPARE(after.tracks.first().properties, (QStringList{"transform", "background-color"}));
+        QCOMPARE(after.tracks.first().label, QStringLiteral("a#primary"));
+    }
+
+    void rowsDrivenByScrollComeAfterTheOnesOnTimeAndUseThePagesAxis()
+    {
+        QJsonArray all;
+        QJsonObject card = animation(QStringLiteral("css-animation"), QStringLiteral("nl-fade"), who(QStringLiteral("article"), QStringLiteral("guji"), QStringLiteral("card"), QStringLiteral("#guji")),
+                                     who(QStringLiteral("section"), {}, QStringLiteral("cards"), QStringLiteral("section")), {QStringLiteral("opacity")}, 0, 0);
+        card["timeline"] = QStringLiteral("view");
+        card["trigger"] = QStringLiteral("scroll");
+        card["range"] = QJsonObject{{"from", 693.0}, {"to", 934.0}, {"axis", "y"}};
+        all.append(card);
+        all.append(words(2)["animations"].toArray().first());
+        const Motion::Timeline timeline = Motion::parse({{"animations", all}, {"scroll", QJsonObject{{"y", 10}, {"max", 2400}, {"viewport", 600}}}});
+        QCOMPARE(timeline.tracks.size(), 2);
+        QVERIFY(!timeline.tracks[0].isScroll());
+        QVERIFY(timeline.tracks[1].isScroll());
+        QCOMPARE(timeline.tracks[1].bars.first().start, 693.0);
+        QCOMPARE(timeline.tracks[1].bars.first().length, 241.0);
+        QVERIFY(timeline.hasScroll() && timeline.hasTime());
+        // Scrolling isn't time: the duration is the rows on time.
+        QCOMPARE(timeline.duration, 480.0);
+        QCOMPARE(timeline.scrollMax, 2400.0);
+        QCOMPARE(timeline.trigger(), QStringLiteral("On load"));
+    }
+
+    void anInfiniteAnimationDrawsOneIterationAndSaysItLoops()
+    {
+        QJsonObject spin = animation(QStringLiteral("css-animation"), QStringLiteral("nl-spin"), who(QStringLiteral("div"), QStringLiteral("dot"), {}, QStringLiteral("#dot")),
+                                     who(QStringLiteral("main"), {}, {}, QStringLiteral("main")), {QStringLiteral("rotate")}, 100, 1000);
+        spin["iterations"] = -1;
+        const Motion::Track track = Motion::parse({{"animations", QJsonArray{spin}}}).tracks.first();
+        QVERIFY(track.loops);
+        QVERIFY(track.bars.first().loops);
+        QCOMPARE(track.bars.first().start, 100.0);
+        QCOMPARE(track.bars.first().length, 1000.0);
+    }
+
+    void aScriptsGsapTimelineIsOneScrubbableRow()
+    {
+        const Motion::Timeline timeline = Motion::parse({{"animations", QJsonArray()}, {"gsap", QJsonObject{{"count", 4}, {"start", 100}, {"end", 1600}}}});
+        QCOMPARE(timeline.tracks.size(), 1);
+        QCOMPARE(timeline.tracks.first().label, QStringLiteral("GSAP timeline"));
+        QCOMPARE(timeline.tracks.first().kind, QStringLiteral("gsap"));
+        QCOMPARE(timeline.duration, 1600.0);
+        QCOMPARE(timeline.trigger(), QStringLiteral("From a script"));
+    }
+
+    void somethingThatIsNotAListGivesNoRows()
+    {
+        QVERIFY(Motion::parse({}).tracks.isEmpty());
+        QVERIFY(Motion::parse({{"type", "select"}}).tracks.isEmpty());
+        QVERIFY(Motion::parse({{"animations", QJsonArray()}}).trigger().isEmpty());
+    }
+
+    void timesReadInSecondsAndEasingsHaveNames()
+    {
+        QCOMPARE(Motion::seconds(1400), QStringLiteral("1.40 s"));
+        QCOMPARE(Motion::seconds(-5), QStringLiteral("0.00 s"));
+        QCOMPARE(Motion::easingName(QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)")), QStringLiteral("Soft out"));
+        QCOMPARE(Motion::easingName(QStringLiteral("cubic-bezier(0.16,  1, 0.3, 1)")), QStringLiteral("Soft out"));
+        QCOMPARE(Motion::easingName(QStringLiteral("linear")), QStringLiteral("Linear"));
+        QCOMPARE(Motion::easingName(QStringLiteral("linear(0, 0.5, 1)")), QStringLiteral("Custom"));
+    }
+
+    void theMarkedBlockIsFoundWithItsLinesAndTokens()
+    {
+        const QList<MotionCode::Block> found = MotionCode::blocks(QStringLiteral(OMASTRATOR_SOURCE_DIR "/tests/Live/fixtures/motion"));
+        QCOMPARE(found.size(), 1);
+        const MotionCode::Block &block = found.first();
+        QCOMPARE(block.name, QStringLiteral("headline-reveal"));
+        QCOMPARE(block.file, QStringLiteral("style.css"));
+        QVERIFY(block.text.startsWith(QLatin1String("/* omastrator:motion headline-reveal */")));
+        QVERIFY(block.text.endsWith(QLatin1String("/* omastrator:motion end */")));
+        QVERIFY(block.lastLine > block.firstLine);
+        QVERIFY(block.reducedMotion);
+        const auto tokens = MotionCode::tokens(block);
+        QCOMPARE(tokens.size(), 3);
+        QCOMPARE(tokens[0], (QPair<QString, QString>{"--duration-reveal", "480ms"}));
+        QCOMPARE(tokens[1].first, QStringLiteral("--stagger-words"));
+        QCOMPARE(tokens[2].second, QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
+        // Named by its keyframes, or all when nothing is named.
+        QCOMPARE(MotionCode::relevant(found, {QStringLiteral("nl-rise")}, {}).size(), 1);
+        QCOMPARE(MotionCode::relevant(found, {QStringLiteral("nl-elsewhere")}, {}).size(), 0);
+        QCOMPARE(MotionCode::relevant(found, {}, {}).size(), 1);
+    }
+
+    void buildFoldersAndAMarkerWithoutItsEndAreLeftAlone()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto write = [&](const QString &path, const QByteArray &text) {
+            QDir().mkpath(QFileInfo(directory.filePath(path)).absolutePath());
+            QFile file(directory.filePath(path));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write(text);
+        };
+        write(QStringLiteral("node_modules/pkg/style.css"), "/* omastrator:motion inside */ a{} /* omastrator:motion end */");
+        write(QStringLiteral("dist/app.css"), "/* omastrator:motion built */\na{}\n/* omastrator:motion end */");
+        write(QStringLiteral("src/open.css"), "/* omastrator:motion never-closed */\na{}\n");
+        write(QStringLiteral("src/two.css"), "/* omastrator:motion a */\nx{}\n/* omastrator:motion end */\n/* omastrator:motion b */\ny{}\n/* omastrator:motion end */\n");
+        const QList<MotionCode::Block> found = MotionCode::blocks(directory.path());
+        QCOMPARE(found.size(), 2);
+        QCOMPARE(found[0].name, QStringLiteral("a"));
+        QCOMPARE(found[1].name, QStringLiteral("b"));
+        QCOMPARE(found[1].firstLine, 4);
+        QVERIFY(!found[0].reducedMotion);
+        QVERIFY(MotionCode::blocks(QString()).isEmpty());
+        QVERIFY(MotionCode::blocks(directory.filePath(QStringLiteral("missing"))).isEmpty());
+    }
+};
+
+QTEST_GUILESS_MAIN(MotionModelTests)
+#include "MotionModelTests.moc"
