@@ -169,7 +169,7 @@ void EditorCanvas::State::penPress(QPointF view, Qt::KeyboardModifiers modifiers
         VectorPath path;
         path.contours.push_back({});
         addAnchor(path.contours.back(), at, std::nullopt);
-        pen = Pen{session.previewAddObject(session.pathObject(path, QStringLiteral("Path")))};
+        pen = Pen{session.previewAddObject(session.pathObject(path, QStringLiteral("Path")), session.drawingParent(at))};
     } else {
         VectorObject object = *session.document()->find(pen->object);
         addAnchor(object.path.contours[size_t(pen->contour)], at, std::nullopt);
@@ -333,5 +333,5 @@ void EditorCanvas::State::finishPencil()
     const bool closed = points.size() > 3 && QLineF(toView(points.front()), toView(points.back())).length() <= closeReach * 1.5;
     const VectorPath path = fitFreehand(points, reach(2), closed);
     if (path.nodeCount() >= 2)
-        session.addPath(path, QStringLiteral("Path"));
+        session.addObject(session.pathObject(path, QStringLiteral("Path")), QStringLiteral("Draw Path"), session.drawingParent(points.front()));
 }

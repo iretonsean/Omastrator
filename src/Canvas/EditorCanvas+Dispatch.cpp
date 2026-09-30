@@ -288,8 +288,12 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
         // A click that moved nothing on an object already selected makes it the key object.
         if (!drag->started && drag->keyCandidate)
             session.setKeyObject(session.keyObject() == drag->keyCandidate ? std::nullopt : drag->keyCandidate);
-        if (drag->interacting && session.isInteracting())
+        if (drag->interacting && session.isInteracting()) {
+            // Figma's rule: let go over a frame and the selection joins it, outside every frame and it leaves.
+            if (session.tool() == Tool::select)
+                session.previewDropAt(toDocument(view));
             session.commitInteraction();
+        }
         break;
     case DragKind::scale:
     case DragKind::rotate:

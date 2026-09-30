@@ -122,7 +122,7 @@ void EditorCanvas::State::applyText()
         session.beginInteraction(textCreated ? QStringLiteral("Type") : QStringLiteral("Edit Type"));
     if (!text->inDocument) {
         text->object.name = autoName(text->text());
-        session.previewAddObject(text->object);
+        session.previewAddObject(text->object, session.drawingParent(text->object.transform.map(QPointF())));
         text->inDocument = true;
     } else if (const VectorObject *current = session.document()->find(text->object.id)) {
         VectorObject object = *current;

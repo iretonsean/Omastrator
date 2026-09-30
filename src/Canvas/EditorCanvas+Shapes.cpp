@@ -148,7 +148,7 @@ void EditorCanvas::State::dragShape(QPointF view, Qt::KeyboardModifiers modifier
         session.beginInteraction(QStringLiteral("Draw %1").arg(name));
         VectorObject object = session.pathObject(path, name);
         place(object);
-        drag->object = session.previewAddObject(object);
+        drag->object = session.previewAddObject(object, session.drawingParent(drag->pressDocument));
         drag->interacting = true;
         return;
     }
