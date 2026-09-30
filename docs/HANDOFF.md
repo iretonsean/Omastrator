@@ -52,7 +52,7 @@ here" just below.** Everything under "Earlier notes" is history.
     prints "0 tests failed".
 - **Not merged:** `claude/sponsorship-links` waits until the author sets up
   GitHub Sponsors (there's no listing yet). `claude/variables-manager-backlog`
-  is docs only and safe to merge.
+  (docs only) was merged on 2026-09-30 as `docs/backlog/VARIABLES-MANAGER.md`.
 - **Load-sensitive tests** (they pass alone and failed only under heavy
   load): `PdfHostileInputTests` (time limits), and before fix round 4,
   `BrowseToolTests` (its wait was made readiness-based).
@@ -168,8 +168,6 @@ here" just below.** Everything under "Earlier notes" is history.
    QUICK-WINS item 9.
 4. Stop there. MEDIUM-EFFORT.md is on hold, and Effects waits on the
    author.
-- A small follow-up: `.arg(x).arg(n)` in page naming mangles names that
-  contain `%1` or `%2`.
 
 ### Waiting on the author
 - **The history backup:** delete it when the author says so. Optionally, ask
@@ -179,10 +177,11 @@ here" just below.** Everything under "Earlier notes" is history.
   dying again, ask for their Hyprland version, whether their config is Lua
   or conf, and `hyprctl binds -j`. The cause wasn't reproduced; the leading
   theory is a latched submap (docs/OS-SUITE.md).
-- **Installed build:** `~/.local` still runs the build from 2026-09-28
-  10:09, before all of today's work. Reinstall with
-  `scripts/install-local.sh` and restart the daemon only with the author's OK
-  (it closes their window).
+- **Installed build:** the Intel machine's `~/.local` runs main from the
+  evening of 2026-09-29 (473245b's app code). Main has moved a lot since (the
+  window layout, the island removed, motion). Reinstall with
+  `scripts/install-local.sh --shell` (setup then removes the old island plugin)
+  and restart the daemon only with the author's OK (it closes their window).
 - **Their own steps:** publish to the AUR and cut the first release
   (docs/RELEASING.md); supply real Figma, .ai and PDF files to check the
   importers against.

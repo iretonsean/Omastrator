@@ -6,7 +6,7 @@ with Qt 6.4.2 and Playwright's Chromium, and a script drove it. Each item
 says what was seen and how sure it is. Tick an item when it's fixed, as
 QUICK-WINS.md does: `[x] … (a1b2c3d, date)`.
 
-## 1. [ ] The build fails on Qt 6.4, the minimum AGENTS.md names
+## 1. [x] The build fails on Qt 6.4, the minimum AGENTS.md names (f64be94, CI job c3ac130, 2026-09-29)
 
 **Confirmed.** It's on `main` (1c3c6f7) and on `feat/live-in-frame`. CI
 doesn't catch it, because CI builds in an Arch container with a newer Qt.
