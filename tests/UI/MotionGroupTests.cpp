@@ -267,8 +267,15 @@ private slots:
         QCOMPARE(track->bars[huila].label, QStringLiteral("article#huila"));
         QTest::mouseClick(tracks, Qt::LeftButton, Qt::NoModifier, QPoint(40, tracks->childRect(row, huila).center().y()));
         QCOMPARE(timeline.selectedBar(), huila);
-        QTRY_COMPARE_WITH_TIMEOUT(LiveFrames::of(session)->snapshot(hosted.frame).selection.size(), qsizetype(1), patience);
-        QCOMPARE(LiveFrames::of(session)->snapshot(hosted.frame).selection.first().toObject()["selector"].toString(), QStringLiteral("#huila"));
+        // The page reports a pick of several one element at a time: the group's first element alone is a selection of one
+        // too, on the way to three. So this waits for huila alone, not for any one element.
+        const auto selected = [&] {
+            QStringList out;
+            for (const QJsonValue &each : LiveFrames::of(session)->snapshot(hosted.frame).selection)
+                out << each.toObject()["selector"].toString();
+            return out;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(selected(), QStringList{QStringLiteral("#huila")}, patience);
         QTRY_COMPARE_WITH_TIMEOUT(inspector.findChild<QLabel *>(QStringLiteral("motionInspectorName")) ? inspector.findChild<QLabel *>(QStringLiteral("motionInspectorName"))->text() : QString(), QStringLiteral("article#huila"), patience);
         // And the group row picks them all again.
         QTest::mouseClick(tracks, Qt::LeftButton, Qt::NoModifier, QPoint(40, tracks->rowRect(row).center().y()));
@@ -392,7 +399,9 @@ private slots:
         QCOMPARE(edit.property, QStringLiteral("--delay-extra"));
         QCOMPARE(edit.after, QStringLiteral("300ms"));
         // Only that element's start moved.
-        QTRY_COMPARE_WITH_TIMEOUT(starts()["#huila"], 580.0, patience);
+        // Within qFuzzyCompare, as QCOMPARE takes doubles: the page's times carry float noise (580.00000000000011 with
+        // Chromium 153 on arm64), and a QTRY loop's own test is ==, so an exact wait ran out and only its last QCOMPARE passed.
+        QTRY_VERIFY2_WITH_TIMEOUT(qFuzzyCompare(starts()["#huila"], 580.0), qPrintable(QString::number(starts()["#huila"], 'g', 17)), patience);
         QCOMPARE(starts()["#guji"], before["#guji"]);
         QCOMPARE(starts()["#nyeri"], before["#nyeri"]);
         // Written into its own rule.
@@ -404,7 +413,7 @@ private slots:
         auto *back = inspector.findChild<QToolButton *>(QStringLiteral("motionInspectorUseGroupTiming"));
         QVERIFY(back && back->isEnabled());
         back->click();
-        QTRY_COMPARE_WITH_TIMEOUT(starts()["#huila"], 280.0, patience);
+        QTRY_VERIFY2_WITH_TIMEOUT(qFuzzyCompare(starts()["#huila"], 280.0), qPrintable(QString::number(starts()["#huila"], 'g', 17)), patience);
         QCOMPARE(frames->snapshot(hosted.frame).edits.size(), size_t(1));
         QCOMPARE(frames->snapshot(hosted.frame).edits.front().after, QString());
         // Saved, that is nothing to write, so the file is as it was.
