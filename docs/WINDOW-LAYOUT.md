@@ -84,3 +84,21 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   "Nothing selected".
 - [Mac mini] **Suggested, not done yet:** remove the floating task bar's own "Ask AI…" field (row 3 has Ask now) and
   the Frame presets list in Properties while the Frame tool is on (the island has "Drop a size…").
+- [Mac mini] **Browser View switch: opening a file starts no server.** A view saved on shows its page (and last
+  picture); its project's dev server starts only when it's switched on, or on the first Edit Page. No `npm install` on
+  open.
+- [Mac mini] **An off frame resizes as a plain frame** (a real, undoable resize); it keeps its address and last picture
+  and wears the plain frame label.
+- [Mac mini] **Where the switch sits on the canvas:** a Browser View has it in its bar after back, forward and reload;
+  any other frame, and an off view, shows a "Browser View" pill at its top-right while it's selected or hovered.
+- [Mac mini] **Closing the last window in daemon mode stops the servers** (`BrowserViews::stopServers()`), since to the
+  user the app has closed; a frame still switched on starts its server again when its canvas is next seen.
+- [Mac mini] **The old Browser View tool name maps to Frame:** `Tool::browserView` still reads (files, settings,
+  scripts) but picks Frame, and it's gone from the rail and Ctrl+K.
+- [Mac mini] **Frozen = SIGSTOP of the server's process group,** so it keeps its port, state and PID; on again is
+  SIGCONT. Quitting wakes a frozen group before SIGTERM.
+- [Mac mini] **The Frame island's Browser View controls:** a "Browser View" switch for the single selected frame (off
+  with none or several; the same flip as the pill, one undo step). While it's on, the hint gives way to a Live group:
+  the server state ("No server", "Starting…", "Running", "Frozen", "Failed", or "Type a URL" with no page yet), Edit
+  Page, Reload, Changes, History, Deploy and Stop Live, each running the same host action as Object ▸ Browser View.
+  Keep Edits, Build It and the rest stay in the bar menu and Object ▸ Browser View.

@@ -45,6 +45,8 @@ void BrowserViews::onLiveChanged(const QUuid &frame)
     LiveFrames *live = m_session.findChild<LiveFrames *>(QString(), Qt::FindDirectChildrenOnly);
     if (m_canvas && m_canvas->editPageFrame() == frame && (!live || !live->active(frame)))
         m_canvas->leaveEditPage();
+    // The island's server state reads Live's snapshot.
+    emit frameChanged(frame);
 }
 
 namespace {

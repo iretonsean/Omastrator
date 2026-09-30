@@ -12,6 +12,7 @@
 #include "UI/NewDocumentSheet.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/PropertiesPanel.h"
+#include "UI/FrameToolHeader.h"
 #include "UI/ToolHeaders.h"
 #include "UI/ToolIcons.h"
 #include <QApplication>
@@ -588,6 +589,9 @@ void ContentView::showHeader(Tool tool)
     delete m_header;
     m_header = ToolHeaders::make(m_session, tool, this);
     m_header->setObjectName(QStringLiteral("toolHeader"));
+    // The Frame island's switch and Edit Page go through the canvas, as the frame's pill does.
+    if (auto *frameBar = qobject_cast<FrameToolHeader *>(m_header))
+        frameBar->setCanvas(m_canvas);
     // The island: under the selection and AI row, above the canvas.
     m_column->insertWidget(m_column->indexOf(m_contextDivider) + 1, m_header);
     // A layout shows a late child only later: show now.
