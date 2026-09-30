@@ -1,18 +1,75 @@
-# Handoff (2026-09-28, late)
+# Handoff (2026-09-29, evening)
 
 For the next session after a context clear. **Start with "Next session starts
 here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
-### Moving to another machine
+### State (2026-09-29 ~6 PM Pacific, the Intel machine)
+- **Phase 4 is merged and pushed** (9c5a487). `main` holds Browser View
+  phases 1–4, and all 147 tests passed on the merged code, Chromium included.
+  - Fix round 3: BUGS.md items 2–6, the `clearPending` race, Custom… with
+    opacity.
+  - The stale picture was real: a frame paused and shown again stayed hidden
+    in Chromium, so its picture stopped. It's fixed with focus emulation on
+    resume (cb4bf05), with tests on the dev-server path.
+  - The drawn-picture tests: 390 shows the narrow layout, and a stale picture
+    is drawn at 1:1, clipped.
+  - Fix round 4, from one review: a crash when a clear ran inside an undo,
+    a kept edit's stale `before`, whole-px rounding keeping the fixed edge,
+    and the snapping race that made `LiveFrameTests` flaky.
+  - Fix round 3b fixed the tests that failed on this machine: the default
+    font (Liberation Sans), a global `vercel` on PATH, and the hostname
+    `omarchy` in `sweep.sh`.
+- **Also merged today:**
+  - Qt 6.4 builds again, with a CI job on Ubuntu 24.04's Qt 6.4, pinned by
+    digest. Its first run passed.
+  - One-pass `.arg()` wherever outside text comes before a number
+    (`fix/arg-chains`).
+  - `Setup+Cli.cpp` (`refactor/setup-cli`).
+  - `check.sh` judges by ctest's exit code, because newer CMake always
+    prints "0 tests failed".
+- **Not merged:** `claude/sponsorship-links` waits until the author sets up
+  GitHub Sponsors (there's no listing yet). `claude/variables-manager-backlog`
+  is docs only and safe to merge.
+- **Load-sensitive tests** (they pass alone and failed only under heavy
+  load): `PdfHostileInputTests` (time limits), and before fix round 4,
+  `BrowseToolTests` (its wait was made readiness-based).
+
+### Next, in order
+1. **The author tests Pages as Workspaces** on the real desktop
+   (docs/WORKSPACES.md, "Left for the author"): Super+Tab and the swipe
+   reach the named workspaces, the Lua move and focus dispatches work, and
+   New Page doesn't flicker.
+2. **One announcement video** for Browser View and Pages as Workspaces:
+   extend `v3-kinetic`'s style (in the private repo,
+   `promo/media/animation/browser-view-v3/`) with a Pages as Workspaces
+   section, about 45 s in total. Re-record Browser View beats whose look
+   changed (the selection boxes, "Save failed"). Record the desktop beats on
+   a Hyprland headless output. Draft the X post; the author posts it.
+3. Phase 5, as listed under "Next, in order" below.
+
+### The Intel machine (moved from the Mac on 2026-09-29)
+- x86_64, 12 threads, 15 GB, Qt 6.11, Chromium 152, CMake 4.4. No battery:
+  the CPU is capped at 45 W, so more build jobs cost memory, not power.
+- **Builds:** `-j5` through `omastrator-build-slot` (two slots), configured
+  with `-DCMAKE_LINKER_TYPE=MOLD`. Never in /tmp or a scratchpad.
+- **Worktrees:** `~/Projects/Omastrator-main` (main),
+  `~/Projects/Omastrator-shortcuts` and `-share-device` (reusable slots
+  with warm `build/`).
+- **Omastrator is installed** in `~/.local`, from this merge, with setup
+  applied.
+
+### Earlier state (2026-09-29 ~11:15, the Mac, before the move)
+
+#### Moving to another machine
 - **Private material** lives in the private repo
   `github.com/iretonsean/omastrator-private`. It holds the briefs, the promo
   and animation work, a copy of Claude's memory, and bundles of the old local
   branches and the pre-rewrite backup. Its README has the setup steps.
 - **The unmerged phase 4 code** is the `feat/live-in-frame` branch on GitHub.
 
-### State (2026-09-29 ~11:15, session ended for a reboot into macOS)
+#### State (2026-09-29 ~11:15, session ended for a reboot into macOS)
 - **`main` is pushed** and CI is green (run 36593059112). It holds:
   - the Off-axis icon and the size fixes;
   - Browser View phase 2 (Pages as Workspaces, off by default);
