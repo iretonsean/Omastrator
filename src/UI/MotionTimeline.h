@@ -1,4 +1,5 @@
 #pragma once
+#include "IO/FrameRecorder.h"
 #include "Live/Motion.h"
 #include "Live/MotionCode.h"
 #include <QElapsedTimer>
@@ -10,11 +11,15 @@
 #include <QUuid>
 #include <QWidget>
 #include <functional>
+#include <memory>
 #include <optional>
 
 class EditorCanvas;
 class EditorSession;
 class LiveFrames;
+class MotionRecorder;
+class QHBoxLayout;
+class QMenu;
 class QLabel;
 class QPlainTextEdit;
 class QStackedWidget;
@@ -125,6 +130,31 @@ public:
     // Seeks and answers are in flight (tests wait for them to settle).
     bool busy() const { return m_inFlight || m_wantTime || m_wantScroll; }
 
+    // Record (docs/MOTION.md, section 8): the motion played by seeking, at a fixed frame rate, into a file the person names.
+    // `where` is what the save dialog is asked; the answer is the file (a new folder for PNG frames), or empty to cancel.
+    struct RecordAsk {
+        FrameRecorder::Format format = FrameRecorder::Format::mp4;
+        int fps = 30;
+        QString suggested;
+    };
+    using RecordChooser = std::function<QString(const RecordAsk &where)>;
+    // Answers the save dialog in place of it; tests set it. An empty function puts the dialog back.
+    static void setRecordChooser(RecordChooser chooser);
+    // A name typed without its ending gets it, and the dialog only asked about the name as typed: when the new name is a file that
+    // exists, this asks whether to replace it (true does). Tests set it; unset, a question box asks.
+    using ReplaceChooser = std::function<bool(const QString &path)>;
+    static void setReplaceChooser(ReplaceChooser chooser);
+    // "northlight-motion.mp4": the page's site (else the frame's name), then what it is.
+    QString suggestedName(FrameRecorder::Format format) const;
+    // Asks where, then records. Returns why it can't start, or empty (a cancelled dialog is empty too).
+    QString record(FrameRecorder::Format format, int fps = 30);
+    // Ends the file where it is. The step in flight finishes first; recorded() follows.
+    void stopRecording();
+    bool isRecording() const { return m_recording; }
+    // What the header says after a recording, "Recorded 2.1 s · northlight-motion.mp4", until the next action; and where.
+    QString recordedText() const { return m_recordedText; }
+    QString recordedPath() const { return m_recordedPath; }
+
 signals:
     void opened();
     void closed();
@@ -134,6 +164,8 @@ signals:
     void playheadChanged();
     // Something to say in the status line.
     void notice(const QString &text);
+    // A recording is whole (`seconds` long), or ended in the file with this name.
+    void recorded(const QString &path, double seconds);
 
 private:
     friend class MotionTrackView;
@@ -152,6 +184,12 @@ private:
     void fit();
     void scanCode();
     void forceRows();
+    // Record's header controls and steps (MotionTimeline+Record.cpp).
+    void buildRecord(QWidget *header, QHBoxLayout *row);
+    void syncRecord();
+    QString askWhere(const RecordAsk &ask);
+    void abortRecording();
+    void openRecorded();
 
     EditorSession &m_session;
     EditorCanvas &m_canvas;
@@ -195,6 +233,19 @@ private:
     bool m_code = false;
     QList<MotionCode::Block> m_allBlocks;
     QString m_project;
+
+    std::unique_ptr<MotionRecorder> m_recorder;
+    bool m_recording = false;
+    bool m_canEncode = false;
+    // Where the playhead was before a recording moved it.
+    double m_timeBefore = 0;
+    double m_scrollBefore = 0;
+    QString m_recordedText;
+    QString m_recordedPath;
+    QToolButton *m_record = nullptr;
+    QToolButton *m_more = nullptr;
+    QToolButton *m_recordedButton = nullptr;
+    QMenu *m_moreMenu = nullptr;
 
     QToolButton *m_playButton = nullptr;
     QToolButton *m_loopButton = nullptr;

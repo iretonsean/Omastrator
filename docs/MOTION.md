@@ -859,6 +859,48 @@ The author took the recommended answer to each open question.
     the expected indices and Save writes each in its own rule; a group change is one undo step; an extra delay moves one element's start
     and giving it back restores it; an effect replaces the first keyframe, undoes and is written), `MotionModelTests` (the orders from
     boxes, shuffle by seed, the group's name) and `WriteBackTests`.
+- **Phase F (Record, `feat/motion-f`).**
+  - **A screenshot, not the screencast.** Each step puts the page at its time and takes `Page.captureScreenshot` of the
+    frame (`BrowserViews::capture`). The screencast sends a picture only when the page paints, so a step that paints what the
+    last one did (a still stretch of the motion, or a seek that changes no pixel) would wait for ever. The capture waits for two
+    animation frames, or a quarter of a second for a page nobody is looking at, so the seek has been painted. It asks the tab
+    for the frame's size on screen at most 2560 px on the longer side; a screenshot's scale multiplies the tab's own density,
+    so the density is divided out. A frame that isn't live (paused, or its tab opening again) gets three seconds to come back.
+  - **The steps.** `MotionRecorder` makes `round(seconds × fps)` pictures at times 0, 1/fps, 2/fps…, so 2.0 s at 30 fps is
+    60. The last picture is one step before the end, not at it. A motion with only scroll-driven rows records a scroll of its
+    range over two seconds, as Play does; a page with both records the time axis. Seeking is the timeline's own
+    (`motionSeek`, `motionSeekScroll`), so a GSAP timeline records as it scrubs and script-driven motion with no clock to seek is
+    not moved.
+  - **ffmpeg.** `FrameRecorder` runs `ffmpeg -y -f image2pipe -framerate 30 -c:v mjpeg -i - -vf
+    scale=trunc(iw/2)*2:trunc(ih/2)*2:out_range=tv -c:v libx264 -pix_fmt yuv420p -movflags +faststart <file>`, with
+    `-loglevel error`, so the last line on stderr is the reason. Three things differ from the sketch in section 8: `-c:v mjpeg`
+    (ffmpeg cannot always tell the codec from a pipe), the even-sides scale (yuv420p refuses an odd size, so an odd picture
+    loses a row or a column) and `out_range=tv` (JPEG's full range would be tagged `yuvj420p`, which players show with the
+    wrong colours). A GIF writes the pictures beside the file as numbered JPEGs, in a hidden folder called
+    `.omastrator-frames-XXXXXX` (removed at the end; a crash leaves it, and it is there rather than in `/tmp` to spare a
+    RAM-backed disk), and runs two passes, `palettegen` then `paletteuse`, each with up to 120 s. The pictures go to ffmpeg as they arrive; a run that is faster than the
+    encoder waits for 4 MB to drain.
+  - **Failure and Stop.** A failure removes the partial file and says "Couldn't record: <ffmpeg's last line>". Stop, and Esc,
+    finish the step in flight and end the file where it is; the file is kept. A step whose seek or picture never answers
+    does not hold Stop: two seconds after Stop the file ends with the pictures taken so far. Closing the timeline, Edit Page ending and
+    Stop Live abort the recording and remove the file, since it was never whole. With no picture taken nothing is kept.
+  - **The header.** Record MP4 is the button; while it runs it reads Stop, the line beside it reads "Recording… 0.40 s / 1.20 s",
+    and Play, Replay, Loop, the ruler and the row clicks do nothing. After it, the line reads "Recorded 1.2 s · hero.mp4"
+    and a click opens the folder (`xdg-open`, or `OMASTRATOR_XDG_OPEN`; the file's folder, or the frames folder itself). The ⋯
+    has Record GIF…, Record MP4 at 60 fps… and Save Frames as PNG…. The playhead goes back to where it was. The save dialog
+    starts in the last folder used (else `~/Videos`, else home) with "<site>-motion.mp4", and adds the ending if it is left off.
+    The dialog asks about replacing the name as it was typed, so a name that gains its ending and is a file that exists is
+    asked about again (Replace the file?); ffmpeg runs with `-y` and would not ask.
+  - **Esc** goes to a hook on the canvas first (`EditorCanvas::setEscapeHook`), set only while a recording runs. The first Esc
+    stops the recording; the second leaves Edit Page and closes the timeline.
+  - **Without ffmpeg** (`OMASTRATOR_FFMPEG`, else `ffmpeg` on PATH) Record MP4 is disabled with "Recording needs ffmpeg. Install it
+    with sudo pacman -S ffmpeg."; the GIF and 60 fps items are disabled with the same words; Save Frames as PNG… works. It
+    writes `frame-0001.png`… into a new folder, and refuses a folder that has files in it.
+  - **Tests:** `FrameRecorderTests` (the fake ffmpeg's arguments and counts, a failure at once and at the end, a GIF's two
+    passes, PNG frames, and the real ffmpeg checked with `ffprobe`: h264, yuv420p, even sides, the frame count),
+    `MotionRecordTests` (Chromium: 60 pictures for 2.0 s at 30 fps, each with the box a little further along, Stop, a failing
+    ffmpeg, a failing seek, PNG frames, an abort, the real ffmpeg) and `MotionRecordTimelineTests` (Chromium: the header's
+    controls, no ffmpeg, the save dialog, 60 fps and GIF from the ⋯, Cancel, Stop, Esc, closing, a failing ffmpeg).
 
 ## 12. As built: phase E, Generate a page (2026-09-30)
 

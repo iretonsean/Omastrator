@@ -119,6 +119,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   the timeline shows them as one group that opens into a row each, and the inspector
   sets their order (as picked, left to right, centre out, shuffle), effect and stagger,
   and one element's extra delay. Esc leaves Edit Page and lets the page play on.
+  Record MP4 in the timeline's header records the frame, not the
+  screen: the timeline plays the motion by seeking, one step per picture at 30
+  frames a second, and ffmpeg makes the file. Its ⋯ has Record GIF…, Record MP4
+  at 60 fps… and Save Frames as PNG…. Nothing is written until you name the
+  file; Stop and Esc end the file where it is. Without ffmpeg (`sudo pacman -S
+  ffmpeg`) Record is off, and the PNG frames still work.
   An empty Browser View offers three ways to fill it: Type an address; Generate
   a page…, where your agent writes a page into a new project (Vite + Tailwind,
   plain HTML or Astro) and you confirm every file before anything is created;

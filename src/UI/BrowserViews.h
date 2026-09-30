@@ -49,6 +49,12 @@ public:
     // The timeline is open on this frame: it streams every picture, as a browsed frame does (docs/MOTION.md, section 2).
     void setScrubbed(const QUuid &frame, bool scrubbed);
 
+    // Record (docs/MOTION.md, section 8): the frame's page as it paints now, as JPEG bytes. It waits for two animation frames (or
+    // a quarter of a second, for a page nobody is looking at), so a seek has painted. The size is the frame's on screen, but at most
+    // `longSide` px on the longer side. `done` gets the bytes and the page's CSS size, or why it couldn't, on this thread.
+    using CaptureDone = std::function<void(const QByteArray &jpeg, const QSizeF &css, const QString &error)>;
+    void capture(const QUuid &frame, int longSide, CaptureDone done);
+
     // The pool's name for a frame's tab; tests speak to the pool's signals with it.
     QUuid poolKey(const QUuid &frame) const;
 

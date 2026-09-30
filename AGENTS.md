@@ -95,7 +95,11 @@ Each folder builds as its own static library:
   that aren't yours, This Is My Site), `BrowserViews+Deploy.cpp` (Deploy, Save,
   Review Changes, History) and `BrowserViews+Build.cpp` (Build It) on top of
   `AgentBridge`. The timeline under the canvas (docs/MOTION.md) is
-  `MotionTimeline` (with `MotionTrackView`, the drawing) and `MotionInspector` (with `CurveEditor`) and `AnimateSheet` (under the element bar).
+  `MotionTimeline` (with `MotionTrackView`, the drawing, and
+  `MotionTimeline+Record.cpp`, the header's Record) and `MotionInspector` (with `CurveEditor`) and `AnimateSheet` (under the element bar).
+  Record is `MotionRecorder` (the steps), `BrowserViews::capture` (a picture of
+  the frame) and `IO/FrameRecorder` (ffmpeg, or PNG frames through Qt). Tests
+  run it against `tests/IO/FakeFfmpeg.cpp` through `OMASTRATOR_FFMPEG`.
   `DevServers` (in `src/Live`) starts a project's dev server
   for the window and the frames. The Frame tool's Browser View switch
   (docs/BROWSER-VIEW.md, section 10) is `BrowserViews+Switch.cpp` and
