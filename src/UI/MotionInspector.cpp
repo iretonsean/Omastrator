@@ -10,6 +10,7 @@
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QTimer>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -69,7 +70,9 @@ NumberField *timeField(const QString &name, double value, MotionTimeline &timeli
             apply(ms, false);
         }
     }, parent);
-    field->gesture = [scrub, apply](bool starting) {
+    field->gesture = [field, scrub, apply](bool starting) {
+        // The inspector reads this to leave the field alone while it is being dragged.
+        field->setProperty("scrubbing", starting);
         if (starting) {
             scrub->on = true;
             scrub->last.reset();
@@ -121,6 +124,13 @@ MotionInspector::MotionInspector(MotionTimeline &timeline, QWidget *parent) : QW
 
 void MotionInspector::rebuild()
 {
+    // A late reading from the page must not delete the field under the designer's drag: try again after it.
+    if (m_body)
+        for (const NumberField *field : m_body->findChildren<NumberField *>())
+            if (field->property("scrubbing").toBool()) {
+                QTimer::singleShot(50, this, &MotionInspector::rebuild);
+                return;
+            }
     delete m_body;
     m_body = new QWidget(this);
     m_outer->addWidget(m_body);
