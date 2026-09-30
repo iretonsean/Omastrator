@@ -291,6 +291,12 @@ public:
     // Into `parent` when given, else where new objects go.
     QUuid previewAddObject(VectorObject object, std::optional<QUuid> parent = std::nullopt);
     void previewRemoveObject(const QUuid &id);
+    // The topmost open frame on this page whose box holds `point`, leaving out `excluding` and what's in them.
+    std::optional<QUuid> frameAt(QPointF point, const std::vector<QUuid> &excluding = {}) const;
+    // Where a tool drawing at `point` puts its object: the frame there, as Figma's; nullopt keeps the usual place.
+    std::optional<QUuid> drawingParent(QPointF point) const;
+    // Ends a move as Figma's: the selection joins the frame the pointer let go over, or leaves its frame outside one.
+    void previewDropAt(QPointF point);
     // Alt-drag: copies the selection in place and selects them; later previews move the copies.
     void previewDuplicateSelection();
     // Replaces the whole document and selection, for edits an agent proposes.
@@ -302,7 +308,7 @@ public:
 
     // Objects ----------------------------------------------------------------
     // Adds above the selection (or on top of the active layer) and selects it.
-    QUuid addObject(VectorObject object, const QString &editName);
+    QUuid addObject(VectorObject object, const QString &editName, std::optional<QUuid> parent = std::nullopt);
     // A path with the default fill and stroke.
     QUuid addPath(const VectorPath &path, const QString &name);
     QUuid addText(QPointF baselineOrigin, const QString &text);
@@ -732,6 +738,8 @@ private:
         bool duplicated = false;
         // A preview that is never recorded (a Browser View's width).
         bool discard = false;
+        // The last previewTransform was a box resize.
+        bool reflowAreaText = false;
     };
     std::optional<Interaction> m_interaction;
     struct PageView {
@@ -755,7 +763,11 @@ private:
         QTransform transform;
         bool duplicate = false;
         std::optional<QPointF> center;
+        // A box resize repeats as one, so frames and type keep their children's and glyphs' sizes.
+        bool reflowAreaText = false;
     };
     std::optional<RepeatTransform> m_lastTransform;
+    // The selection less anything inside another selected object, which moves with it already.
+    std::vector<QUuid> transformRoots() const;
     std::function<void()> m_lastSelect;
 };

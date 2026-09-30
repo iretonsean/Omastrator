@@ -70,14 +70,21 @@ void EditorSession::insertNew(VectorDocument &document, VectorObject object)
     m_selection = {id};
 }
 
-QUuid EditorSession::addObject(VectorObject object, const QString &editName)
+QUuid EditorSession::addObject(VectorObject object, const QString &editName, std::optional<QUuid> parent)
 {
     if (!m_document)
         return {};
     if (object.name.isEmpty())
         object.name = nameFor(object);
     const QUuid id = object.id;
-    edit(editName, [&](VectorDocument &document) { insertNew(document, std::move(object)); });
+    edit(editName, [&](VectorDocument &document) {
+        if (parent && document.find(*parent)) {
+            document.insert(std::move(object), *parent);
+            m_selection = {id};
+        } else {
+            insertNew(document, std::move(object));
+        }
+    });
     return id;
 }
 
@@ -88,10 +95,12 @@ QUuid EditorSession::previewAddObject(VectorObject object, std::optional<QUuid> 
     if (object.name.isEmpty())
         object.name = nameFor(object);
     const QUuid id = object.id;
-    if (parent && m_document->find(*parent))
+    if (parent && m_document->find(*parent)) {
         m_document->insert(std::move(object), *parent);
-    else
+        m_selection = {id};
+    } else {
         insertNew(*m_document, std::move(object));
+    }
     notify();
     return id;
 }
@@ -228,7 +237,7 @@ void EditorSession::duplicateSelection(QPointF offset)
     if (!m_document || m_selection.empty())
         return;
     // Set first: the edit's notification is what refreshes Transform Again's entry.
-    m_lastTransform = RepeatTransform{QTransform::fromTranslate(offset.x(), offset.y()), true, std::nullopt};
+    m_lastTransform = RepeatTransform{QTransform::fromTranslate(offset.x(), offset.y()), true, std::nullopt, false};
     edit(QStringLiteral("Duplicate"), [&](VectorDocument &document) { m_selection = duplicateInto(document, offset); });
 }
 
@@ -750,9 +759,9 @@ void EditorSession::transformSelection(const QTransform &transform, const QStrin
     if (!m_document || m_selection.empty() || transform.isIdentity())
         return;
     // Set first: the edit's notification is what refreshes Transform Again's entry.
-    m_lastTransform = RepeatTransform{transform, false, std::nullopt};
+    m_lastTransform = RepeatTransform{transform, false, std::nullopt, reflowAreaText};
     edit(editName, [&](VectorDocument &document) {
-        for (const QUuid &id : m_selection) {
+        for (const QUuid &id : transformRoots()) {
             if (!document.isEffectivelyLocked(id))
                 document.transform(id, transform, scaleStrokes, reflowAreaText, scaleCorners);
         }
@@ -764,7 +773,7 @@ void EditorSession::transformEach(const std::function<QTransform(const QRectF &b
     if (!m_document || m_selection.empty())
         return;
     std::vector<std::pair<QUuid, QTransform>> moves;
-    for (const QUuid &id : m_selection) {
+    for (const QUuid &id : transformRoots()) {
         if (m_document->isEffectivelyLocked(id))
             continue;
         const QTransform each = transform(m_document->bounds(id, false));

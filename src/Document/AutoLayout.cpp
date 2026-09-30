@@ -66,6 +66,28 @@ struct Axes {
     LayoutSizing counterSizing(const LayoutItem &item) const { return horizontal ? item.height : item.width; }
 };
 
+// One axis of a constraint: where [from, to] of the old frame [start, end] lands in the new one.
+std::pair<double, double> constrained(LayoutConstraint constraint, double from, double to, double start, double end, double newStart, double newEnd)
+{
+    switch (constraint) {
+    case LayoutConstraint::start:
+        return {from + newStart - start, to + newStart - start};
+    case LayoutConstraint::end:
+        return {from + newEnd - end, to + newEnd - end};
+    case LayoutConstraint::both:
+        return {from + newStart - start, std::max(from + newStart - start + 0.01, to + newEnd - end)};
+    case LayoutConstraint::center: {
+        const double shift = (newStart + newEnd) / 2 - (start + end) / 2;
+        return {from + shift, to + shift};
+    }
+    case LayoutConstraint::scale: {
+        const double ratio = end - start > 1e-9 ? (newEnd - newStart) / (end - start) : 1;
+        return {newStart + (from - start) * ratio, newStart + (to - start) * ratio};
+    }
+    }
+    return {from, to};
+}
+
 class Layouter {
 public:
     explicit Layouter(VectorDocument &document) : m_document(document) {}
@@ -218,10 +240,10 @@ private:
         if (near(now.width(), size.width()) && near(now.height(), size.height()))
             return false;
         size = QSizeF(std::max(0.01, size.width()), std::max(0.01, size.height()));
-        if (object->kind == ObjectKind::frame && object->shape && object->shape->placement.isIdentity()) {
+        if (object->kind == ObjectKind::frame && object->shape && object->shape->upright().placement.isIdentity()) {
             // Its own children follow their constraints; a hugging frame keeps hugging.
             const LayoutItem sizing = object->layout;
-            m_document.resizeFrame(id, QRectF(object->shape->rect.normalized().topLeft(), size));
+            m_document.resizeFrame(id, QRectF(object->shape->upright().rect.normalized().topLeft(), size));
             m_document.find(id)->layout = sizing;
             return true;
         }
@@ -242,6 +264,17 @@ private:
         }
         if (now.width() <= 0 || now.height() <= 0)
             return false;
+        if (object->kind == ObjectKind::group && !object->component && !object->instance) {
+            // Its children scale into the new box, each resized its own way, so type gets a new box and never new glyphs.
+            const QRectF fresh(now.topLeft(), size);
+            for (const QUuid &child : m_document.children(id)) {
+                const QRectF was = m_document.bounds(child);
+                const auto [left, right] = constrained(LayoutConstraint::scale, was.left(), was.right(), now.left(), now.right(), fresh.left(), fresh.right());
+                const auto [top, bottom] = constrained(LayoutConstraint::scale, was.top(), was.bottom(), now.top(), now.bottom(), fresh.top(), fresh.bottom());
+                place(child, QRectF(QPointF(left, top), QPointF(right, bottom)));
+            }
+            return true;
+        }
         // Anything else stretches from its corner.
         const QTransform stretch = QTransform::fromTranslate(-now.left(), -now.top()) * QTransform::fromScale(size.width() / now.width(), size.height() / now.height())
             * QTransform::fromTranslate(now.left(), now.top());
@@ -256,27 +289,6 @@ public:
     bool fit(const QUuid &id, const QRectF &target) { return place(id, target); }
 };
 
-// One axis of a constraint: where [from, to] of the old frame [start, end] lands in the new one.
-std::pair<double, double> constrained(LayoutConstraint constraint, double from, double to, double start, double end, double newStart, double newEnd)
-{
-    switch (constraint) {
-    case LayoutConstraint::start:
-        return {from + newStart - start, to + newStart - start};
-    case LayoutConstraint::end:
-        return {from + newEnd - end, to + newEnd - end};
-    case LayoutConstraint::both:
-        return {from + newStart - start, std::max(from + newStart - start + 0.01, to + newEnd - end)};
-    case LayoutConstraint::center: {
-        const double shift = (newStart + newEnd) / 2 - (start + end) / 2;
-        return {from + shift, to + shift};
-    }
-    case LayoutConstraint::scale: {
-        const double ratio = end - start > 1e-9 ? (newEnd - newStart) / (end - start) : 1;
-        return {newStart + (from - start) * ratio, newStart + (to - start) * ratio};
-    }
-    }
-    return {from, to};
-}
 }
 
 QString rawValue(LayoutConstraint constraint)
@@ -306,7 +318,10 @@ std::optional<PreviewRule> previewRule(const QString &raw)
 void VectorDocument::resizeFrame(const QUuid &id, const QRectF &box, bool preview)
 {
     VectorObject *frame = find(id);
-    if (!frame || frame->kind != ObjectKind::frame || !frame->shape || !frame->shape->placement.isIdentity())
+    if (!frame || frame->kind != ObjectKind::frame || !frame->shape)
+        return;
+    frame->shape = frame->shape->upright();
+    if (!frame->shape->placement.isIdentity())
         return;
     const QRectF old = frame->shape->rect.normalized();
     QRectF fresh = box.normalized();

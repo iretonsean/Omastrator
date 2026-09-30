@@ -162,11 +162,15 @@ void EditorSession::transformAgain()
     if (repeat.duplicate) {
         edit(QStringLiteral("Transform Again"), [&](VectorDocument &document) {
             m_selection = duplicateInto(document, QPointF(0, 0));
-            for (const QUuid &id : m_selection)
-                document.transform(id, transform);
+            for (const QUuid &id : m_selection) {
+                if (repeat.reflowAreaText)
+                    document.transform(id, transform, scaleStrokes, true, scaleCorners);
+                else
+                    document.transform(id, transform);
+            }
         });
     } else {
-        transformSelection(transform, QStringLiteral("Transform Again"));
+        transformSelection(transform, QStringLiteral("Transform Again"), repeat.reflowAreaText);
     }
     m_lastTransform = repeat;
 }

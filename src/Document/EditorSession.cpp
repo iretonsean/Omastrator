@@ -539,7 +539,7 @@ void EditorSession::beginInteraction(const QString &name)
         return;
     if (m_interaction)
         commitInteraction();
-    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false, false};
+    m_interaction = Interaction{name, *m_document, m_selection, *m_document, std::nullopt, false, false, false};
 }
 
 void EditorSession::previewTransform(const QTransform &transform, bool reflowAreaText)
@@ -547,12 +547,13 @@ void EditorSession::previewTransform(const QTransform &transform, bool reflowAre
     if (!m_document || !m_interaction)
         return;
     VectorDocument document = m_interaction->base;
-    for (const QUuid &id : m_selection) {
+    for (const QUuid &id : transformRoots()) {
         if (!document.isEffectivelyLocked(id))
             document.transform(id, transform, scaleStrokes, reflowAreaText, scaleCorners);
     }
     m_document = std::move(document);
     m_interaction->transform = transform;
+    m_interaction->reflowAreaText = reflowAreaText;
     notify();
 }
 
@@ -587,7 +588,7 @@ void EditorSession::commitInteraction()
     }
     // A drag's move, scale or rotate is what Transform Again repeats.
     if (interaction.transform && !interaction.transform->isIdentity())
-        m_lastTransform = RepeatTransform{*interaction.transform, interaction.duplicated, std::nullopt};
+        m_lastTransform = RepeatTransform{*interaction.transform, interaction.duplicated, std::nullopt, interaction.reflowAreaText};
     // Record the step as though it happened all at once.
     VectorDocument after = std::move(*m_document);
     m_document = std::move(interaction.before);

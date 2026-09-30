@@ -252,6 +252,8 @@ struct LiveRectangle {
     QPointF inward(int corner) const;
     // The same shape after `transform`; nullopt when it's no longer a rectangle.
     std::optional<LiveRectangle> transformed(const QTransform &transform, bool scaleCorners = true) const;
+    // A translation-only placement folded into the rect, so an imported upright box resizes as a drawn one does.
+    LiveRectangle upright() const;
     friend bool operator==(const LiveRectangle &, const LiveRectangle &) = default;
 };
 

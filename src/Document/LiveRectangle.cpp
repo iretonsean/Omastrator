@@ -119,6 +119,16 @@ std::optional<LiveRectangle> LiveRectangle::transformed(const QTransform &transf
     return result;
 }
 
+LiveRectangle LiveRectangle::upright() const
+{
+    if (placement.type() != QTransform::TxTranslate)
+        return *this;
+    LiveRectangle result = *this;
+    result.rect = rect.normalized().translated(placement.dx(), placement.dy());
+    result.placement = QTransform();
+    return result;
+}
+
 const LiveRectangle *VectorObject::liveShape() const
 {
     // A frame's box is always live.

@@ -491,10 +491,15 @@ void VectorDocument::transform(const QUuid &id, const QTransform &transform, boo
 {
     // A box resize (the handles, W and H) on an upright frame is Figma's: the box changes and its
     // children follow their constraints. The Scale tool and Transform ▸ Scale still scale everything.
-    if (const VectorObject *frame = find(id); reflowAreaText && frame && frame->kind == ObjectKind::frame && frame->shape
-        && frame->shape->placement.isIdentity() && transform.type() <= QTransform::TxScale && transform.m11() > 0 && transform.m22() > 0) {
-        resizeFrame(id, transform.mapRect(frame->shape->rect.normalized()));
-        return;
+    if (VectorObject *frame = find(id); reflowAreaText && frame && frame->kind == ObjectKind::frame && frame->shape
+        && transform.type() <= QTransform::TxScale && transform.m11() != 0 && transform.m22() != 0) {
+        const LiveRectangle box = frame->shape->upright();
+        // A handle dragged past the opposite side flips nothing: the box is just normalised.
+        if (box.placement.isIdentity()) {
+            frame->shape = box;
+            resizeFrame(id, transform.mapRect(box.rect.normalized()));
+            return;
+        }
     }
     std::vector<QUuid> areas;
     const bool upright = transform.type() <= QTransform::TxScale && transform.m11() > 0 && transform.m22() > 0;
