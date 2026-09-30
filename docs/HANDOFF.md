@@ -47,7 +47,13 @@ here" just below.** Everything under "Earlier notes" is history.
    section, about 45 s in total. Re-record Browser View beats whose look
    changed (the selection boxes, "Save failed"). Record the desktop beats on
    a Hyprland headless output. Draft the X post; the author posts it.
-3. Phase 5, as listed under "Next, in order" below.
+3. **Motion in Browser View runs in the cloud,** from the private repo's
+   `briefs/motion/MOTION-CLOUD-HANDOFF.md`. An Opus session writes
+   `docs/MOTION.md` on `feat/motion` and stops for the author's approval.
+   Then a new Sonnet session builds it phase by phase, one branch per phase
+   (`feat/motion-a`, …), with reports in the private repo's
+   `briefs/reports/`. A local session reviews and merges each phase.
+4. Phase 5, as listed under "Next, in order" below.
 
 ### The Intel machine (moved from the Mac on 2026-09-29)
 - x86_64, 12 threads, 15 GB, Qt 6.11, Chromium 152, CMake 4.4. No battery:
