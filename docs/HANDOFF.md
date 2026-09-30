@@ -5,6 +5,20 @@ here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
+### v0.1.0 is released (2026-09-30, 3:28 PM Pacific)
+- **GitHub Release:** https://github.com/iretonsean/Omastrator/releases/tag/v0.1.0 (x86_64 and aarch64
+  tarballs, `SHA256SUMS.txt`), built and tested by `release.yml` on main 926d85e. CI and Release are green.
+- **Packages tested locally:** `omastrator-git` (x86_64 here, aarch64 on the Mac mini) and `omastrator-bin`
+  0.1.0 (x86_64, from the published tarball): 44 files each; depends include libheif, zlib and zstd.
+- **The author's steps, once, for the AUR** (docs/RELEASING.md, "First-time AUR account"):
+  1. Make an account at aur.archlinux.org and add an SSH key to it (`ssh-keygen -t ed25519 -C aur`).
+  2. `~/.ssh/config`: `Host aur.archlinux.org` / `IdentityFile ~/.ssh/<that key>`.
+  3. Set a real contact in both PKGBUILDs' `# Maintainer:` line (the AUR wants one; the repo has the noreply
+     address) and regenerate `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO`).
+  4. `git clone ssh://aur@aur.archlinux.org/omastrator-git.git` and `…/omastrator-bin.git`, copy each package's
+     `PKGBUILD`, `.SRCINFO` and `omastrator.install` in, commit as yourself, push. The first push makes the page.
+  5. README's Install (alpha) section: drop "once published".
+
 ### Overnight summary, Intel machine (2026-09-30, 6:30 AM Pacific)
 - **Merged to main tonight from the Intel side:**
   - the desktop island removed (`d76cafb`); its decisions are in docs/WINDOW-LAYOUT.md under "Decided

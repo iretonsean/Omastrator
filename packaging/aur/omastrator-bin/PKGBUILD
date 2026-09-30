@@ -1,6 +1,6 @@
 # Maintainer: Sean Ireton <1441621+iretonsean@users.noreply.github.com>
 pkgname=omastrator-bin
-pkgver=0.0.0
+pkgver=0.1.0
 pkgrel=1
 pkgdesc="Vector illustration for Linux, made for Omarchy (prebuilt binary)"
 arch=('x86_64' 'aarch64')
@@ -26,8 +26,8 @@ install=omastrator.install
 source_x86_64=("https://github.com/iretonsean/Omastrator/releases/download/v${pkgver}/omastrator-${pkgver}-x86_64.tar.zst")
 source_aarch64=("https://github.com/iretonsean/Omastrator/releases/download/v${pkgver}/omastrator-${pkgver}-aarch64.tar.zst")
 # Filled in by scripts/update-bin-pkgbuild.sh from the release's own SHA256SUMS.txt.
-sha256sums_x86_64=('SKIP')
-sha256sums_aarch64=('SKIP')
+sha256sums_x86_64=('9fc68508860c324194bcb796352b9f6cd7fdea9819aae1294e34498e655f62ff')
+sha256sums_aarch64=('b1dd1f162243061507b38e466fdd43b2749904a77702f277735499af516fed90')
 
 package() {
     cp -a usr "$pkgdir/usr"
