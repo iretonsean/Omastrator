@@ -272,6 +272,10 @@ constexpr const char *methodTable = R"json([
  "inputSchema": {"type": "object", "properties": {"files": {"type": "array", "items": {"type": "string"}},
    "raise": {"type": "boolean", "description": "Default true. False only shows a hidden window, leaving one on show where it is."},
    "focus": {"type": "string", "enum": ["ask"], "description": "Give the keyboard to this field once the window is forward: ask is the Ask field."}}}},
+{"name": "go_to_page", "group": "desktop", "mcp": false,
+ "description": "The bar's page dots (docs/WORKSPACES.md): makes the page that holds the named Hyprland workspace the current page and takes the user to it, whether or not an Omastrator window has focus. Fails when Pages as Workspaces is off or there is no such workspace.",
+ "inputSchema": {"type": "object", "required": ["workspace"], "properties": {
+   "workspace": {"type": "string", "description": "The workspace's name, `design:<document> · <page>`."}}}},
 {"name": "quit_app", "group": "desktop", "mcp": false,
  "description": "Quits Omastrator, background and all, after asking about unsaved documents.",
  "inputSchema": {"type": "object", "properties": {}}},

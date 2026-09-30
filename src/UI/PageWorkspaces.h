@@ -43,6 +43,9 @@ public:
     int standInCount() const;
     // Every stand-in of every window, for design mode.
     static QStringList allStandInAddresses();
+    // A click on the page's dot in the bar (`go_to_page`): the page becomes current and the editor takes the user to its workspace
+    // in one batch, as Alt+PageDown does, though no Omastrator window has focus. Returns why it couldn't, or empty.
+    QString goTo(const QString &workspace);
     // Asks whether an Omastrator window has focus; tests answer it.
     void setFocusProbe(std::function<bool()> probe) { m_focusProbe = std::move(probe); }
 
@@ -105,6 +108,8 @@ private:
     QSet<QUuid> m_watched;
     QString m_key;
     bool m_followNext = false;
+    // The switch asked for the user to be taken along whatever has focus (a bar click is that request).
+    bool m_followAnyway = false;
     // Stand-ins are wanted but weren't made because no Omastrator window had focus.
     bool m_wantsStandIns = false;
     bool m_capNoticed = false;

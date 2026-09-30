@@ -156,7 +156,13 @@ reach the other pages. So:
   - swap.
 
   It's coalesced over 50 ms, so fast Super+Tab runs act only on where the
-  user lands.
+  user lands. The editor paints the new page (`repaint()`, before the move)
+  so the frame it arrives in shows the right page and not the one it left.
+  The user lands on the page's stand-in first, and Hyprland fades it out as
+  the editor fades in; the app can't hide that, since it is Hyprland's own
+  window animation and the user is looking at the workspace when it swaps. A
+  bar click (section 5) has neither, because the swap is made before the
+  user arrives.
 - **App → Hyprland.** A current-page change from the Pages list, Next or
   Previous Page, New Page, or undo:
   - swaps with the editor move `follow = true`, **only if an Omastrator
@@ -217,9 +223,14 @@ page, in page order, right after Omarchy's workspace numbers.
   of Omarchy's `Workspaces.qml`. An unfocused page is a dot (`•`) at half opacity. A gap a little wider than the
   numbers' own sits before the first page. The tooltip is the page's name, and "Page (Document)" when two open
   documents claim workspaces. With no claims it has zero width.
-- **Click** focuses the page's workspace as Omarchy's widget does, with
-  `hl.dsp.focus({ workspace = "name:<name>" })` through `bar.run`, the name escaped for Lua. The app already follows
-  the focus and swaps the editor in.
+- **Click** runs `omastrator island page <name>` (`Quickshell.execDetached` on `sh -c`, the name an argument, so it
+  needs no quoting). The running app makes that page current and takes the user to it in the same one-batch swap as
+  Alt+PageDown, though no Omastrator window has focus: a bar click is an explicit request to go there, so nothing
+  shows the page's stand-in on the way (`PageWorkspaces::goTo`, the `go_to_page` method). When the command fails (no
+  app, Pages as Workspaces off, an unknown name) the same `sh` line runs Hyprland's own focus as before,
+  `hl.dsp.focus({ workspace = "name:<name>" })` with the name escaped for Lua; the app then swaps the editor in
+  from the event (section 4, and it flickers as described there). On the page that is already current it moves no
+  window and only focuses the workspace, if the user is not on it.
 - **Data.** `omastrator status --follow` carries `pageWorkspaces: [{name, page, document}]`, read from
   `workspaces.json` in claim (page) order, and empty while no app is running (a file left by a crashed app is not
   shown). The claims file records each claim's `document` and `pageName` for this; a file from before has them cut
@@ -259,6 +270,9 @@ touches the real Hyprland.
 - `PageWorkspacesSyncTests`:
   - a `workspacev2` line makes the page current and swaps;
   - a burst of three coalesces to the last;
+  - the canvas paints the new page before the editor's move (a paint noted in the fake hyprctl's log ahead of the move);
+  - `go_to_page` follows the user with no focus in one call to Hyprland, moves nothing for the current page, and
+    refuses an unknown name or the feature off;
   - a numbered workspace does nothing;
   - our own echo dispatches nothing (the log is unchanged);
   - the agent's `page add` moves silently;

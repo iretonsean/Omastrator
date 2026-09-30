@@ -226,6 +226,8 @@ QString helpText()
         "  show <swatches|variations|roast|connect-agent>\n"
         "                     Bring Omastrator forward on a panel.\n"
         "  ask                Bring Omastrator forward with the Ask field focused.\n"
+        "  page <workspace>   Go to the page that holds a workspace (`design:Doc · Page`):\n"
+        "                     the bar's page dots. Fails when Omastrator isn't running.\n"
         "  ai <generate|edit|roast|vectorize|cancel> [--prompt TEXT] [--count N]\n"
         "     [--fit] [--mode logo|sketch]\n"
         "                     Start an AI flow. Without a prompt, Generate and Edit\n"
@@ -325,6 +327,19 @@ int runCli(const QStringList &args, QTextStream &out, QTextStream &err)
         try {
             AgentClient::Connection connection;
             connection.call(QStringLiteral("show_window"), {{"raise", true}, {"focus", "ask"}});
+            return 0;
+        } catch (const AgentProtocol::Error &failure) {
+            return failed(failure.message());
+        }
+    }
+    // The bar's page dots: the running app moves its editor to the page's workspace and the user with it, in one step.
+    // It never starts the app: the dot falls back to Hyprland's own focus when this fails.
+    if (verb == QLatin1String("page")) {
+        if (args.size() < 2 || args.mid(1).join(QLatin1Char(' ')).trimmed().isEmpty())
+            return failed(QStringLiteral("Name a page's workspace, as `design:Poster · Front`."));
+        try {
+            AgentClient::Connection connection;
+            connection.call(QStringLiteral("go_to_page"), {{"workspace", args.mid(1).join(QLatin1Char(' '))}}, 5000);
             return 0;
         } catch (const AgentProtocol::Error &failure) {
             return failed(failure.message());

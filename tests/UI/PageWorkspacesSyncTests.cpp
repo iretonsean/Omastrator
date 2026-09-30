@@ -1,3 +1,4 @@
+#include "Agent/AgentProtocol.h"
 #include "Agent/AgentTools.h"
 #include "Agent/WorkspaceClaims.h"
 #include "FakeHyprlandWorld.h"
@@ -66,6 +67,10 @@ private slots:
     void theEditorIsFocusedOnlyWithFocusAndOnlyWhereTheyStillAre();
     void aBackgroundTabIsSelectedFromItsWorkspace();
     void otherWindowsEventsDoNotTriggerPlacement();
+    void aDotClickFollowsTheUserInOneBatchWithoutFocus();
+    void aDotClickOnTheCurrentPageMovesNothing();
+    void aDotClickForAnUnknownWorkspaceIsRefused();
+    void theCanvasPaintsTheNewPageBeforeTheEditorMovesIn();
 
 private:
     // The stream's end that Hyprland writes to; waits for the app to connect.
@@ -326,6 +331,125 @@ void PageWorkspacesSyncTests::aBackgroundTabIsSelectedFromItsWorkspace()
     QCOMPARE(rig.workspace.selectedID(), first);
     QCOMPARE(firstTab->session.currentPage(), firstTab->session.document()->allPages().front().id);
     QCOMPARE(rig.world.workspaceOf(rig.editor()), there);
+}
+
+// The bar's page dots go through the app (`go_to_page`): the editor and the user arrive together, as with Alt+PageDown.
+void PageWorkspacesSyncTests::aDotClickFollowsTheUserInOneBatchWithoutFocus()
+{
+    Rig rig;
+    rig.session().addPage();
+    rig.world.settle();
+    const QString first = rig.name(0), second = rig.name(1);
+    QCOMPARE(rig.world.workspaceOf(rig.editor()), second);
+    // The user is in a browser: no Omastrator window has focus.
+    rig.focus = false;
+    rig.world.go(QStringLiteral("3"));
+    rig.world.clearHistory();
+    rig.ctl.clearLog();
+    rig.view->agent()->tools().call(QStringLiteral("go_to_page"), {{"workspace", first}});
+    // Straight away, not on a later turn: one call to Hyprland holds every move.
+    QCOMPARE(rig.ctl.dispatches().size(), 1);
+    rig.world.settle();
+    QCOMPARE(rig.world.batches().size(), 1);
+    QCOMPARE(rig.session().currentPage(), rig.page(0));
+    QCOMPARE(rig.world.workspaceOf(rig.editor()), first);
+    QVERIFY(!rig.world.stand(second).isEmpty());
+    // The user went with the editor, and no stand-in was ever what they saw: the editor's move is the one that follows.
+    QCOMPARE(rig.world.active(), first);
+    QCOMPARE(rig.count(QStringLiteral("^dispatch movetoworkspace name:.*,address:%1$").arg(rig.editor())), 1);
+    QCOMPARE(rig.count(QStringLiteral("^dispatch workspace ")), 0);
+    // Hyprland's report of that arrival changes nothing.
+    rig.world.clearHistory();
+    heard(rig, first);
+    rig.world.settle(3);
+    QVERIFY(rig.world.history().isEmpty());
+    QCOMPARE(rig.session().currentPage(), rig.page(0));
+}
+
+void PageWorkspacesSyncTests::aDotClickOnTheCurrentPageMovesNothing()
+{
+    Rig rig;
+    rig.session().addPage();
+    rig.world.settle();
+    const QString current = rig.name(1);
+    // Standing on it already: nothing at all.
+    rig.world.go(current);
+    rig.world.clearHistory();
+    rig.view->agent()->tools().call(QStringLiteral("go_to_page"), {{"workspace", current}});
+    rig.world.settle(3);
+    QVERIFY(rig.world.batches().isEmpty());
+    // Elsewhere: only the user goes, and no window moves.
+    rig.world.go(QStringLiteral("3"));
+    rig.world.clearHistory();
+    rig.view->agent()->tools().call(QStringLiteral("go_to_page"), {{"workspace", current}});
+    rig.world.settle(3);
+    QCOMPARE(rig.world.active(), current);
+    QCOMPARE(rig.count(QStringLiteral("movetoworkspace")), 0);
+    QCOMPARE(rig.session().currentPage(), rig.page(1));
+}
+
+void PageWorkspacesSyncTests::aDotClickForAnUnknownWorkspaceIsRefused()
+{
+    Rig rig;
+    rig.session().addPage();
+    rig.world.settle();
+    rig.world.clearHistory();
+    auto refused = [&](const QString &workspace) {
+        try {
+            rig.view->agent()->tools().call(QStringLiteral("go_to_page"), {{"workspace", workspace}});
+        } catch (const AgentProtocol::Error &) {
+            return true;
+        }
+        return false;
+    };
+    QVERIFY(refused(QStringLiteral("3")));
+    QVERIFY(refused(QStringLiteral("design:Nothing · Here")));
+    QVERIFY(rig.world.batches().isEmpty());
+    // With the feature off there is nothing to go to: the dot's fallback focuses the workspace itself.
+    const QString name = rig.name(0);
+    PageWorkspaces::setTurnedOn(false);
+    rig.world.settle(3);
+    QVERIFY(refused(name));
+}
+
+// Step 3 of the flicker: after a Super+Tab the editor was still painted with the old page when it arrived.
+void PageWorkspacesSyncTests::theCanvasPaintsTheNewPageBeforeTheEditorMovesIn()
+{
+    Rig rig;
+    rig.session().addPage();
+    rig.world.settle();
+    const QString first = rig.name(0);
+    // Every paint of the window is noted in the fake hyprctl's log, in order with the moves, with the page it drew.
+    struct Watcher : QObject {
+        std::function<bool(QObject *, QEvent *)> filter;
+        bool eventFilter(QObject *watched, QEvent *event) override { return filter(watched, event); }
+    } watcher;
+    watcher.filter = [&](QObject *watched, QEvent *event) {
+        if (event->type() == QEvent::Paint && watched->isWidgetType() && static_cast<QWidget *>(watched)->window() == rig.view.get())
+            rig.ctl.note(QStringLiteral("paint ") + rig.session().currentPage().toString());
+        return false;
+    };
+    qApp->installEventFilter(&watcher);
+    rig.focus = false;
+    rig.world.go(first);
+    rig.ctl.clearLog();
+    heard(rig, first);
+    // The world clears the log each time it steps, so read it before that.
+    QTest::qWait(200);
+    const QStringList log = rig.ctl.log();
+    qApp->removeEventFilter(&watcher);
+    rig.world.settle();
+    QCOMPARE(rig.session().currentPage(), rig.page(0));
+    const QString drawn = QStringLiteral("# paint ") + rig.page(0).toString();
+    const QRegularExpression editorMove(QStringLiteral("movetoworkspace(silent)? name:.*,address:%1").arg(rig.editor()));
+    const qsizetype paint = log.indexOf(drawn);
+    qsizetype move = -1;
+    for (qsizetype i = 0; i < log.size() && move < 0; ++i) {
+        if (editorMove.match(log[i]).hasMatch())
+            move = i;
+    }
+    QVERIFY2(move >= 0, qPrintable(log.join(QLatin1Char('\n'))));
+    QVERIFY2(paint >= 0 && paint < move, qPrintable(log.join(QLatin1Char('\n'))));
 }
 
 QTEST_MAIN(PageWorkspacesSyncTests)

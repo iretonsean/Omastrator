@@ -82,6 +82,12 @@ public:
     int windowShown = 0;
     QString shownFocus;
     bool shownRaise = true;
+    QStringList wentToPages;
+    QString goToPage(const QString &workspace) override
+    {
+        wentToPages << workspace;
+        return failure;
+    }
     QString showWindow(const QStringList &files, bool raise, const QString &focus) override
     {
         ++windowShown;

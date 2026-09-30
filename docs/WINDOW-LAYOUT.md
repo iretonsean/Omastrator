@@ -118,6 +118,8 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   - Setup also deletes `~/.local/state/omastrator/island-seen.json` (the pill's first-use labels). The brief did not list it.
   - The setup step for `shell.json` is named `design`; a `--remove` on a record written by the old version still works.
   - `mode design` starts the background app but no window (`mode draw` used to show the window).
+- [Intel] **A page dot goes through the app** (`omastrator island page <workspace>`, `go_to_page`). The app takes the user along whatever has focus, because a bar click is an explicit request; Alt+PageDown follows only with focus. When the app can't (not running, feature off), the dot runs Hyprland's focus as before. The dot on the page that is already current only focuses its workspace.
+- [Intel] **The Hyprland path (Super+Tab, a swipe) still shows the stand-in for about 50 ms plus the swap,** and its fade stays: the user is looking at the workspace when the editor arrives, and the fade is Hyprland's own animation, which the app does not change. The editor now paints the new page before it moves in. The 50 ms coalesce stays, since a shorter one would move the editor to every workspace of a fast run.
   - Dictation no longer routes requests to `live ask` when Live mode was on; every tier-2 request goes to Edit with Instruction.
   - README's three island screenshots (`island-modes.png`, `island-activity.png`, `island-dictation.png`) are deleted, and the "Across Omarchy" section describes the window as the home of Draw, AI, Capture and Live.
   - The empty Swatches panel now says "Pick a colour … with the Capture tab".

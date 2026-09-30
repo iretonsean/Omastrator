@@ -32,6 +32,8 @@ void PageWorkspaces::arrived()
     if (m_workspace.selectedID() != target.tab)
         m_workspace.select(target.tab);
     tab->session.setCurrentPage(target.page);
+    // The editor still shows the page it is leaving: paint the new one now, so the frame it arrives in is right.
+    m_editor.repaint();
     reconcile();
     m_fromHyprland = false;
     m_followNext = false;
@@ -42,4 +44,34 @@ void PageWorkspaces::arrived()
     const QJsonValue active = Hyprland::query(QStringLiteral("activeworkspace"), &error);
     if (error.isEmpty() && active.toObject()["name"].toString() == target.name)
         Hyprland::focusWindow(m_editorAddress);
+}
+
+QString PageWorkspaces::goTo(const QString &workspace)
+{
+    if (!isActive())
+        return QStringLiteral("Pages as Workspaces is off, or Omastrator has no window on show.");
+    const auto claim = std::find_if(m_claims.begin(), m_claims.end(), [&](const Claim &c) { return c.name == workspace; });
+    const std::shared_ptr<ProjectTab> tab = claim == m_claims.end() ? nullptr : m_workspace.tab(claim->tab);
+    if (!tab)
+        return QStringLiteral("No page holds the workspace “%1”.").arg(workspace);
+    const Claim target = *claim;
+    if (m_workspace.selectedID() == target.tab && tab->session.currentPage() == target.page) {
+        // The editor is there already: only the user may not be.
+        QString error;
+        const QJsonValue active = Hyprland::query(QStringLiteral("activeworkspace"), &error);
+        if (error.isEmpty() && active.toObject()["name"].toString() == target.name)
+            return {};
+        return Hyprland::focusWorkspace(Hyprland::workspaceSelector(0, target.name));
+    }
+    m_reconcileTimer.stop();
+    m_followAnyway = true;
+    if (m_workspace.selectedID() != target.tab)
+        m_workspace.select(target.tab);
+    tab->session.setCurrentPage(target.page);
+    // The page change cleared the request for a follow when nothing has focus.
+    m_followNext = true;
+    reconcile();
+    m_followAnyway = false;
+    m_followNext = false;
+    return {};
 }

@@ -123,7 +123,7 @@ private slots:
         // Nothing (zero width) when no document claims workspaces.
         QVERIFY(widget.contains(QStringLiteral("implicitWidth: pageList.length === 0 ? 0 :")));
         QVERIFY(widget.contains(QStringLiteral("visible: pageList.length > 0")));
-        QVERIFY(widget.contains(QStringLiteral("root.bar.run(\"hyprctl dispatch \" + Util.shellQuote(Logic.focusLua(name)))")));
+        QVERIFY(widget.contains(QStringLiteral("Quickshell.execDetached(Logic.pageCommand(status.binary, name))")));
         QVERIFY(widget.contains(QStringLiteral("onPressed: function() { root.focusPage(modelData.name) }")));
         QCOMPARE(QJsonDocument::fromJson(read(QStringLiteral("omastrator.pages/manifest.json")).toUtf8()).object()["barWidget"].toObject()["allowMultiple"].toBool(true), false);
     }
@@ -184,6 +184,17 @@ private slots:
         // A click focuses the workspace by name, the way Omarchy's widget focuses one by number.
         QCOMPARE(call("focusLua", {QJSValue(QStringLiteral("design:Poster · Back"))}).toString(),
                  QStringLiteral("hl.dsp.focus({ workspace = \"name:design:Poster · Back\" })"));
+        // The click goes through the running app first; the Hyprland focus is what runs when that fails.
+        const QJSValue command = call("pageCommand", {QJSValue(QStringLiteral("/opt/omastrator")), QJSValue(QStringLiteral("design:Poster · Back"))});
+        QCOMPARE(command.property(QStringLiteral("length")).toInt(), 6);
+        QCOMPARE(command.property(0).toString(), QStringLiteral("sh"));
+        QCOMPARE(command.property(1).toString(), QStringLiteral("-c"));
+        QCOMPARE(command.property(2).toString(), QStringLiteral("\"$0\" island page \"$1\" || hyprctl dispatch \"$2\""));
+        QCOMPARE(command.property(3).toString(), QStringLiteral("/opt/omastrator"));
+        QCOMPARE(command.property(4).toString(), QStringLiteral("design:Poster · Back"));
+        QCOMPARE(command.property(5).toString(), QStringLiteral("hl.dsp.focus({ workspace = \"name:design:Poster · Back\" })"));
+        // A binary that isn't known yet is `omastrator` on PATH, as the stream's own default.
+        QCOMPARE(call("pageCommand", {QJSValue(QString()), QJSValue(QStringLiteral("design:A · B"))}).property(3).toString(), QStringLiteral("omastrator"));
         // Quotes and backslashes in a page's name stay inside the Lua string.
         QCOMPARE(call("focusLua", {QJSValue(QStringLiteral("design:Say \"hi\" \\ now"))}).toString(),
                  QStringLiteral("hl.dsp.focus({ workspace = \"name:design:Say \\\"hi\\\" \\\\ now\" })"));

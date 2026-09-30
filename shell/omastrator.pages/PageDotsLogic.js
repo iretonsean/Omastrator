@@ -43,6 +43,13 @@ function luaEscape(text) {
   return String(text).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r")
 }
 
+// What a click runs, as an argument list. The running Omastrator moves the page's editor and the user to its workspace in one
+// step (`omastrator island page`); without it, or when it refuses, Hyprland's own focus, as before. `sh -c` takes the binary
+// as $0, the name as $1 and the Lua as $2, so no quoting is needed.
+function pageCommand(binary, name) {
+  return ["sh", "-c", "\"$0\" island page \"$1\" || hyprctl dispatch \"$2\"", binary || "omastrator", name, focusLua(name)]
+}
+
 // The Lua Omarchy's own widget sends, with the workspace named instead of numbered.
 function focusLua(name) {
   return "hl.dsp.focus({ workspace = \"name:" + luaEscape(name) + "\" })"

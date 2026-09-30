@@ -1,6 +1,7 @@
 #include "UI/AgentBridge.h"
 #include "Agent/AgentLauncher.h"
 #include "UI/DesignController.h"
+#include "UI/PageWorkspaces.h"
 #include "UI/ProjectWorkspace.h"
 #include "UI/ProjectWorkspaceView.h"
 #include <QCoreApplication>
@@ -44,6 +45,14 @@ QString AgentBridge::showWindow(const QStringList &files, bool raise, const QStr
     m_workspace.receive(files);
     focusField();
     return {};
+}
+
+QString AgentBridge::goToPage(const QString &workspace)
+{
+    auto *view = qobject_cast<ProjectWorkspaceView *>(&m_window);
+    if (!view || !view->pageWorkspaces())
+        return QStringLiteral("This Omastrator has no page workspaces.");
+    return view->pageWorkspaces()->goTo(workspace);
 }
 
 QString AgentBridge::quitApp()

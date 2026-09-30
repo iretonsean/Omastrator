@@ -102,6 +102,7 @@ private:
     QJsonObject command(const QJsonObject &params);
     QJsonObject design(const QJsonObject &params);
     QJsonObject showWindow(const QJsonObject &params);
+    QJsonObject goToPage(const QJsonObject &params);
     QJsonObject quitApp(const QJsonObject &params);
     // The session to act on for the user; refused while a drag or proposal is open, and
     // (unless `forEdit` is false, as for selecting) while the document is locked.

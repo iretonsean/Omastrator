@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
@@ -25,9 +26,9 @@ BarWidget {
   implicitWidth: pageList.length === 0 ? 0 : grid.implicitWidth + leadingGap + trailingGap
   implicitHeight: pageList.length === 0 ? 0 : grid.implicitHeight
 
+  // Through the app when it runs, so there is no stand-in phase; Hyprland's focus when it doesn't.
   function focusPage(name) {
-    if (!root.bar) return
-    root.bar.run("hyprctl dispatch " + Util.shellQuote(Logic.focusLua(name)))
+    Quickshell.execDetached(Logic.pageCommand(status.binary, name))
   }
 
   // A positioner, not Omarchy's GridLayout: the pages arrive after the widget loads, and a GridLayout kept its first (empty) size.

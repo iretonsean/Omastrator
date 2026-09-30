@@ -79,6 +79,13 @@ public:
         Q_UNUSED(focus)
         return QStringLiteral("This Omastrator has no window.");
     }
+    // go_to_page: a bar click on a page's workspace dot (docs/WORKSPACES.md, "In the bar"). Makes that page current and takes the
+    // user to it in one move, focus or not. Returns why it couldn't (no window, the feature off, no such workspace), or empty.
+    virtual QString goToPage(const QString &workspace)
+    {
+        Q_UNUSED(workspace)
+        return QStringLiteral("This Omastrator has no page workspaces.");
+    }
     // quit_app: the app asks about unsaved documents, then quits, background and all.
     virtual QString quitApp() { return QStringLiteral("This Omastrator can't be quit from here."); }
 };

@@ -246,6 +246,13 @@ QJsonObject AgentTools::showWindow(const QJsonObject &params)
     return {{"shown", true}};
 }
 
+QJsonObject AgentTools::goToPage(const QJsonObject &params)
+{
+    if (const QString failure = m_host.goToPage(requiredString(params, QStringLiteral("workspace"))); !failure.isEmpty())
+        throw Error(AgentProtocol::busy, failure);
+    return {{"shown", true}};
+}
+
 QJsonObject AgentTools::quitApp(const QJsonObject &)
 {
     if (const QString failure = m_host.quitApp(); !failure.isEmpty())

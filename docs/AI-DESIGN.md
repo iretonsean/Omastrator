@@ -219,7 +219,9 @@ it only reads.
   methods then act on the overlay, as a proposal the bar keeps or discards.
 - `show_window {files?, raise?}`: brings the window forward (the app may run in
   the background without one) with the files opened. `quit_app {}` quits,
-  asking about unsaved documents first.
+  asking about unsaved documents first. `go_to_page {workspace}`: the bar's
+  page dots ([WORKSPACES.md](WORKSPACES.md)), which make the page that holds
+  that workspace current and take the user to it.
 
 ## Flows
 

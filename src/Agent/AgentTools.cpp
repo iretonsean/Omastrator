@@ -88,6 +88,7 @@ QJsonObject AgentTools::call(const QString &method, const QJsonObject &params)
         {QStringLiteral("command"), &AgentTools::command},
         {QStringLiteral("design"), &AgentTools::design},
         {QStringLiteral("show_window"), &AgentTools::showWindow},
+        {QStringLiteral("go_to_page"), &AgentTools::goToPage},
         {QStringLiteral("quit_app"), &AgentTools::quitApp},
         {QStringLiteral("rename"), &AgentTools::rename},
     };

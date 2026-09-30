@@ -291,7 +291,7 @@ void PageWorkspaces::place()
         }
         const Move move = moves[pick];
         moves.erase(moves.begin() + long(pick));
-        const bool follow = move.editor && m_followNext && followsFocus();
+        const bool follow = move.editor && m_followNext && (m_followAnyway || followsFocus());
         batch.push_back(Hyprland::moveWindowDispatch(move.address, move.selector, follow));
         --occupancy[move.from];
         ++occupancy[move.workspace];

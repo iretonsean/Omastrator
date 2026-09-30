@@ -324,6 +324,32 @@ private slots:
         QVERIFY(out.contains(QLatin1String("ask ")));
     }
 
+    // The bar's page dots run `island page <workspace>`: the running app goes to the page, and nothing starts one (the dot falls back).
+    void pageGoesToTheWorkspaceInTheRunningApp()
+    {
+        onBackend([&] { m_backend->host.wentToPages.clear(); });
+        QString out, err;
+        // The name has spaces, and the middle dot: one workspace name, however the shell split it.
+        QCOMPARE(island({QStringLiteral("page"), QStringLiteral("design:Poster · Back")}, &out, &err), 0);
+        onBackend([&] { QCOMPARE(m_backend->host.wentToPages, QStringList{QStringLiteral("design:Poster · Back")}); });
+        // A refusal (the feature is off, no such workspace) is the command's failure, so the dot falls back.
+        onBackend([&] { m_backend->host.failure = QStringLiteral("Pages as Workspaces is off."); });
+        QCOMPARE(island({QStringLiteral("page"), QStringLiteral("design:A · B")}, &out, &err), 1);
+        QVERIFY(err.contains(QLatin1String("Pages as Workspaces is off")));
+        onBackend([&] { m_backend->host.failure.clear(); });
+        // No name, no call.
+        onBackend([&] { m_backend->host.wentToPages.clear(); });
+        QCOMPARE(island({QStringLiteral("page")}, &out, &err), 1);
+        onBackend([&] { QVERIFY(m_backend->host.wentToPages.isEmpty()); });
+        // No app: it fails at once and starts nothing (OMASTRATOR_APP would be /bin/true, which is not an app to wait for).
+        qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("closed.sock")).toUtf8());
+        QCOMPARE(island({QStringLiteral("page"), QStringLiteral("design:A · B")}, &out, &err), 1);
+        QVERIFY(!err.isEmpty());
+        qputenv("OMASTRATOR_SOCKET", m_path.toUtf8());
+        QCOMPARE(island({QStringLiteral("--help")}, &out), 0);
+        QVERIFY(out.contains(QLatin1String("page <workspace>")));
+    }
+
     // Messages from commands started outside the app reach the desktop through notify-send (OMASTRATOR_NOTIFY in tests).
     void activityIsAlsoANotification()
     {

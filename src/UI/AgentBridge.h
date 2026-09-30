@@ -127,6 +127,7 @@ public:
     QString live(const QString &action, const QJsonObject &params, QJsonObject &result) override;
     QString design(const QString &action, const QJsonObject &params, QJsonObject &result) override;
     QString showWindow(const QStringList &files, bool raise, const QString &focus) override;
+    QString goToPage(const QString &workspace) override;
     QString quitApp() override;
 
     // Shows the window if it's hidden (the app runs in the background), then raises it.
