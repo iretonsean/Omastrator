@@ -991,3 +991,73 @@ run it) and the dev server.
 **Design system tokens.** When the document has tokens, they go into the template's
 token file before the agent starts: `TokenFiles::writeTailwind` for Vite + Tailwind,
 `writeCss` for the other two. The prompt tells the agent where they are.
+
+## 13. Integration onto the window layout, and the review fixes (2026-09-30)
+
+The phases A to F were merged once onto `main` (the window layout, the Browser View switch, the desktop island's removal), then
+one round of fixes followed from the reviews of A to C, D, and E and F. This section lists what the merge decided and what the
+fixes changed; the sections above say what was designed.
+
+**What the merge decided**
+
+- **An empty frame is a Browser View that is on, with no address** (`showsPage()`). A plain frame, and a Browser View whose switch
+  is off, offer nothing to generate into; Generate says "Turn the frame's Browser View on first." The timeline opens only on a
+  frame that shows a page.
+- **A generated page's dev server follows the switch.** Its lease is `BrowserViews`' own (not a Live session's), so the switch
+  calls `DevServers::setPaused(lease, !on)`: off freezes it, on wakes it, as for a server Live holds. Animate's preview servers
+  are the bridge's leases and are not frozen by the switch.
+- **The timeline stays under the canvas**, in the canvas column. The window layout has no bottom panel to dock in.
+- **Esc order:** the recording's hook, Edit Page, an armed link, a drag, the pen, a held width, `stopGenerating`, isolation,
+  picked nodes, the selection.
+
+**What the fixes changed**
+
+- **Answers to a gone owner (A1, B2, D).** `LiveFrames::run` takes a context object, and its `done` is not called once that object
+  has gone; every `done` in the timeline that captures `this` passes it. A tab switch deletes the timeline while a seek is in
+  flight, and the answer used to read freed memory. The timeline's destructor gives the frame back its own streaming rate, the
+  visible inspector follows the front document's timeline (and deletes itself when its timeline goes), and the registry entry is
+  removed only by the timeline that owns it.
+- **Release (A2).** A page's own paused animation stays paused when the hold ends. **Limit:** after `pause()` and `play()` from
+  script, a CSS animation no longer follows `animation-play-state` from a rule such as `:hover { animation-play-state: paused }`
+  until the page reloads. The hold is script-driven, so this is the price of holding a CSS animation; a page that relies on
+  that rule while the timeline is open will not see it work.
+- **The ruler's zero** is the earliest start among animations that are still running, not the start of a load animation kept by
+  `fill: forwards`.
+- **Leaving a frame** returns at once when nothing is held, forced or emulated, and its two evaluates use the short timeout, so a
+  hung renderer no longer blocks every frame's pool thread. A hold that begins again after a reload starts with no forced state
+  in the timeline.
+- **The Code tab** walks the project without entering `node_modules`, `.git` or build output, and reads a file again only when its
+  size or time changed.
+- **Write-back (B, D).** `CssRules` blanks comments (`/* */`, and `//` for Sass and Less, but not inside a string or a `url()`),
+  and `$` is the end of the rule's body, so a value of several lines is one value (a two-line shadow list is replaced whole, and
+  taken out whole when given back). A markup file is scanned only inside its `<style>` bodies. A value with `;`, `{` or `}` is
+  not written (an easing is one value: `TokenFiles::isEasing` no longer accepts a second declaration), and a frame rule that
+  lists several offsets (`0%, 100% { … }`) is left for the agent, since the page's preview changes one. A whole frame is replaced
+  by `keyframeBody` only when its last declaration is not on the brace's line, and it keeps the frame's own
+  `animation-timing-function`.
+- **One element's value never goes into the project's one declaration (D1).** When no rule names the element, `--i` and
+  `--delay-extra` go to the agent. Before, the one place the project declared `--i` was written, which could be a template
+  loop (`style="--i: {i}"`) or a `:root` default that every element reads.
+- **Animate (C).** Save to code writes only the files the agent wrote, as the preview listed them. When the agent has said it is
+  done but its process still runs, the preview waits for the process to end (at most as long as a page run does), so what it
+  writes after saying so is in it. The preview's server never installs packages (`DevServers::acquire(…, allowInstall = false)`):
+  a project without them fails to preview and says so, instead of rewriting its lockfile in the copy. The `node_modules` hard
+  links are made beside the window, not in it. **Deviation from the review:** the copy is still `cp -al` (hard links), not a
+  symlink: a symlinked `node_modules` resolves outside the worktree, where Vite's file serving refuses it. Save checks for a
+  running deploy before it writes. Closing a document during a preview no longer runs the discard through the session that
+  is going. Page content in the prompt (the selection's markup and text, the tokens, the existing motion, the names in use) is
+  fenced as data. A new keyframe name starts with the site's short name, or the project folder's for an address that names
+  none (an IP address, localhost), and always with a letter. Stop before the agent was launched ends the ask, and a launch that
+  failed resets the sheet.
+- **Groups (D).** The Effect list shows Custom unless the first keyframe is exactly what the preset writes, and picking the item
+  already shown changes nothing. "Use the group's timing" changes the page even when the rule holds a delay. Extra delay is
+  offered only for a css-animation whose delay reads `var(--delay-extra`. Order with an element missing sets none, and a group
+  numbered by `--i` needs no token. The inspector rebuilds after a drag, a curve or typing, with one retry timer.
+- **E and F fixes** (in their own sections above) came in with their branches.
+
+**Left, from the reviews:** Animate's preview servers do not follow the Browser View switch; a page that reloads during a
+recording continues on the new page; `emptyFrames()` is computed more than once per paint; centre out rounds distances to 4 px,
+so two mirrored elements 1 px apart can land in different steps; a Shuffle after a tab switch can repeat the order the page has;
+the picked bar is an index, not a selector; `groupName` builds plurals with "s" and is not translated; GSAP's seconds share an
+axis with milliseconds; and the smaller items of the reviews' "Later" lists that are not named here.
+
