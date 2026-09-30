@@ -4,6 +4,7 @@
 #include "UI/ProjectWorkspaceView.h"
 #include <QDir>
 #include <QLocalServer>
+#include <QLocalSocket>
 #include <QGuiApplication>
 #include <QSettings>
 #include <QStandardPaths>
@@ -53,8 +54,9 @@ struct Rig {
     // Whether an Omastrator window has focus: stand-ins are made, and the editor takes the user along, only then.
     bool focus = true;
     QTemporaryDir dir;
-    // Something for the event stream to connect to; it never says anything.
+    // Something for the event stream to connect to; it says something only when a test writes to `connections`.
     QLocalServer events;
+    QList<QLocalSocket *> connections;
     FakeHyprctl ctl{dir.path()};
     FakeHyprlandWorld world{ctl};
     ProjectWorkspace workspace;
@@ -95,6 +97,7 @@ private slots:
     void aStandInDoesNotKeepTheAppAlive();
     void aRefusedMoveStopsItAndSaysSoOnce();
     void hyprlangAndLuaDispatchStrings();
+    void onLuaStandInsMapOnTheSpareWorkspaceAndAReloadAddsTheRuleAgain();
 
 private:
     QTemporaryDir m_runtime;
@@ -230,6 +233,8 @@ void PageWorkspacesTests::switchingPagesSwapsTheEditorAndAStandIn()
     QVERIFY(rig.world.history().at(0).contains(second));
     QVERIFY(rig.world.history().at(1).contains(first));
     QVERIFY(rig.world.history().at(2).contains(QStringLiteral("special:omastrator-spare")));
+    // All in one call, so Hyprland draws nothing in between (the spare tiled beside the editor was a flicker).
+    QCOMPARE(rig.world.batches().size(), 1);
     QCOMPARE(rig.world.on(QStringLiteral("special:omastrator-spare")).size(), 1);
     // Settled: nothing more is dispatched.
     rig.world.clearHistory();
@@ -674,6 +679,46 @@ void PageWorkspacesTests::hyprlangAndLuaDispatchStrings()
         QVERIFY2(line.startsWith(QStringLiteral("eval hl.dispatch(hl.dsp.window.move({ workspace = \"name:design:Untitled · Page ")), qPrintable(line));
         QVERIFY(line.contains(QStringLiteral("window = \"address:0x")));
     }
+    QVERIFY(lua.remove());
+}
+
+void PageWorkspacesTests::onLuaStandInsMapOnTheSpareWorkspaceAndAReloadAddsTheRuleAgain()
+{
+    Rig rig;
+    const QString hypr = QDir(qEnvironmentVariable("XDG_CONFIG_HOME")).filePath(QStringLiteral("hypr"));
+    QVERIFY(QDir().mkpath(hypr));
+    QFile lua(hypr + QStringLiteral("/hyprland.lua"));
+    QVERIFY(lua.open(QIODevice::WriteOnly));
+    lua.close();
+    // The world's record plus what it hasn't applied yet: each step clears hyprctl's log.
+    auto rules = [&rig] {
+        QStringList found;
+        for (const QString &line : rig.world.batches() + rig.ctl.dispatches()) {
+            if (line.startsWith(QLatin1String("eval hl.window_rule(")))
+                found << line;
+        }
+        return found;
+    };
+    rig.toggle();
+    rig.session().addPage();
+    QTRY_VERIFY(rig.pages().standInCount() > 0);
+    // Added once, before the first stand-in maps: new stand-ins go to the spare workspace, never beside the editor.
+    QCOMPARE(rules().size(), 1);
+    QVERIFY2(rules().first().contains(QStringLiteral("title = \"^omastrator-standin-.*\" }, workspace = \"special:omastrator-spare silent\"")),
+             qPrintable(rules().first()));
+    QVERIFY(rig.ctl.dispatches().indexOf(rules().first()) == 0);
+    rig.session().addPage();
+    rig.world.settle(3);
+    QCOMPARE(rules().size(), 1);
+    // A config reload drops runtime rules: the next stand-in adds it again.
+    QTRY_VERIFY(rig.events.hasPendingConnections() || !rig.connections.isEmpty());
+    while (rig.events.hasPendingConnections())
+        rig.connections << rig.events.nextPendingConnection();
+    for (QLocalSocket *socket : rig.connections)
+        socket->write("configreloaded>>\n");
+    QTest::qWait(100);
+    rig.session().addPage();
+    QTRY_COMPARE(rules().size(), 2);
     QVERIFY(lua.remove());
 }
 

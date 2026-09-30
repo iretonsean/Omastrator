@@ -9,7 +9,7 @@ class HyprlandEvents : public QObject {
     Q_OBJECT
 public:
     struct Event {
-        enum class Kind { workspace, openWindow, closeWindow, moveWindow, destroyWorkspace };
+        enum class Kind { workspace, openWindow, closeWindow, moveWindow, destroyWorkspace, configReloaded };
         Kind kind = Kind::workspace;
         // With the 0x that `clients` uses, though the stream leaves it off.
         QString address;

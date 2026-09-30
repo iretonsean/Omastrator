@@ -3,6 +3,8 @@
 #include "Rendering/VectorRenderer.h"
 #include "UI/PageWorkspaces.h"
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QRegularExpression>
 #include <QJsonObject>
 #include <algorithm>
 
@@ -41,6 +43,13 @@ bool PageWorkspaces::concernsUs(const HyprlandEvents::Event &event) const
 
 void PageWorkspaces::createStandIn(const QString &workspace)
 {
+    // A new window maps on the focused workspace, tiled beside the editor, which then shrinks and grows back:
+    // a flicker. The rule maps stand-ins (by their first title) on the spare workspace instead. Lua configs only.
+    if (!m_standInRule) {
+        const QString appId = QGuiApplication::desktopFileName();
+        const QString classRegex = appId.isEmpty() ? QStringLiteral(".*") : QStringLiteral("^%1$").arg(QRegularExpression::escape(appId));
+        m_standInRule = Hyprland::addWorkspaceRule(classRegex, QStringLiteral("^%1.*").arg(standInPrefix), spareWorkspace).isEmpty();
+    }
     auto *widget = new PageStandIn(m_nextStandIn++);
     connect(widget, &PageStandIn::closedByUser, this, &PageWorkspaces::standInClosed);
     m_standIns.push_back({widget, QString(), workspace});
@@ -269,7 +278,9 @@ void PageWorkspaces::place()
         else if (window.workspaceName.startsWith(QLatin1String("design:")) && !claimed.contains(window.workspaceName) && !m_returnName.isEmpty())
             moves.push_back({window.address, m_returnName, returnSelector, window.workspaceName, false});
     }
-    bool refused = false;
+    // Sent as one batch: Hyprland draws no frame between them, so a swap never shows the spare tiled beside the
+    // editor on the page being left, nor the editor growing back on the next one.
+    std::vector<Hyprland::Dispatch> batch;
     while (!moves.empty()) {
         size_t pick = 0;
         for (size_t i = 0; i < moves.size(); ++i) {
@@ -281,16 +292,14 @@ void PageWorkspaces::place()
         const Move move = moves[pick];
         moves.erase(moves.begin() + long(pick));
         const bool follow = move.editor && m_followNext && followsFocus();
-        const QString failure = Hyprland::moveWindow(move.address, move.selector, follow);
-        if (!failure.isEmpty()) {
-            qCDebug(lcApp).noquote() << "Pages as Workspaces: move failed:" << failure;
-            if (!m_lost) {
-                refused = true;
-                break;
-            }
-        }
+        batch.push_back(Hyprland::moveWindowDispatch(move.address, move.selector, follow));
         --occupancy[move.from];
         ++occupancy[move.workspace];
+    }
+    bool refused = false;
+    if (const QString failure = Hyprland::dispatchAll(batch); !failure.isEmpty()) {
+        qCDebug(lcApp).noquote() << "Pages as Workspaces: move failed:" << failure;
+        refused = !m_lost;
     }
     // Following is for the switch that asked for it, never for a later one.
     m_followNext = false;

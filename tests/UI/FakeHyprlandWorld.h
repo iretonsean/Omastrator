@@ -17,7 +17,8 @@
 // - a dispatcher's selector is a number (that workspace by id), `name:<name>` (by name, else a new named
 //   workspace, even for "1") or `special:<name>`; anything else is refused (`rejected()`).
 // Dispatchers in the log are applied to it; `clients`, `activeworkspace` and `workspaces` are what the app then
-// reads. Only hyprlang's dispatch lines are understood.
+// reads. Only hyprlang's dispatch lines are understood; a `--batch` call is applied one dispatcher at a time, in
+// order, and each is in `history()` on its own, while `batches()` keeps the calls as they came.
 class FakeHyprlandWorld {
 public:
     struct Window {
@@ -39,7 +40,13 @@ public:
     QString active() const { return m_active; }
     // Every dispatch the app has made since `clearHistory`.
     const QStringList &history() const { return m_history; }
-    void clearHistory() { m_history.clear(); }
+    void clearHistory()
+    {
+        m_history.clear();
+        m_batches.clear();
+    }
+    // Every call that dispatched, as sent: several dispatchers in one `--batch` are one entry.
+    const QStringList &batches() const { return m_batches; }
     QList<Window> &windows() { return m_windows; }
     // The user changes workspace (Super+Tab, a swipe): the app hears of it from the event stream.
     void go(const QString &workspace)
@@ -134,9 +141,18 @@ public:
         static const QRegularExpression focus(QStringLiteral("^dispatch workspace (.*)$"));
         static const QRegularExpression focusWindow(QStringLiteral("^dispatch focuswindow address:(0x\\w+)$"));
         static const QRegularExpression unmap(QStringLiteral("^# unmap (0x\\w+)$"));
-        for (const QString &line : m_hyprctl.log()) {
-            if (line.startsWith(QLatin1String("-j ")))
+        QStringList lines;
+        for (const QString &call : m_hyprctl.log()) {
+            if (call.startsWith(QLatin1String("-j ")))
                 continue;
+            if (!call.startsWith(QLatin1Char('#')))
+                m_batches << call;
+            if (call.startsWith(QLatin1String("--batch ")))
+                lines << call.mid(8).split(QStringLiteral(" ; "));
+            else
+                lines << call;
+        }
+        for (const QString &line : lines) {
             // A widget deleted between two dispatches unmaps there, and an emptied workspace goes at once.
             if (const auto u = unmap.match(line); u.hasMatch()) {
                 m_windows.erase(std::remove_if(m_windows.begin(), m_windows.end(), [&](const Window &w) { return w.address == u.captured(1); }),
@@ -286,6 +302,7 @@ private:
     QString m_focused;
     QList<Window> m_windows;
     QList<Workspace> m_spaces;
+    QStringList m_batches;
     QStringList m_history;
     QStringList m_deleted;
     QStringList m_rejected;

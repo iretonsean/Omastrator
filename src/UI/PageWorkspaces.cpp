@@ -59,6 +59,8 @@ PageWorkspaces::PageWorkspaces(ProjectWorkspace &workspace, QWidget &editor) : Q
         }
         else if (event.kind == Kind::workspace)
             workspaceEntered(event.workspaceName);
+        else if (event.kind == Kind::configReloaded)
+            m_standInRule = false;
     });
     connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, [this] {
         if (m_wantsStandIns && followsFocus())

@@ -32,9 +32,16 @@ QByteArray runProgram(const QString &path, const QStringList &args, QString *err
             *error = QStringLiteral("hyprctl didn't answer.");
         return {};
     }
-    if (process.exitCode() != 0 && error)
+    const QByteArray output = process.readAllStandardOutput();
+    // hyprctl prints its errors (an `eval` that failed) on stdout, so a failure is never left without a reason.
+    if (process.exitCode() != 0 && error) {
         *error = QString::fromUtf8(process.readAllStandardError()).trimmed();
-    return process.readAllStandardOutput();
+        if (error->isEmpty())
+            *error = QString::fromUtf8(output).trimmed();
+        if (error->isEmpty())
+            *error = QStringLiteral("hyprctl exited with %1.").arg(process.exitCode());
+    }
+    return output;
 }
 
 // Hyprland's request socket: one request per connection, answered then closed.
@@ -247,13 +254,60 @@ QString workspaceSelector(int id, const QString &name)
     return QStringLiteral("name:") + name;
 }
 
-QString moveWindow(const QString &address, const QString &workspace, bool follow)
+Dispatch moveWindowDispatch(const QString &address, const QString &workspace, bool follow)
 {
     const QString window = withZeroX(address);
-    return dispatch(QStringLiteral("hl.dispatch(hl.dsp.window.move({ workspace = \"%1\", follow = %2, window = \"address:%3\" }))")
-                        .arg(luaString(workspace), follow ? QStringLiteral("true") : QStringLiteral("false"), window),
-                    QStringLiteral("%1 %2,address:%3")
-                        .arg(follow ? QStringLiteral("movetoworkspace") : QStringLiteral("movetoworkspacesilent"), workspace, window));
+    return {QStringLiteral("hl.dispatch(hl.dsp.window.move({ workspace = \"%1\", follow = %2, window = \"address:%3\" }))")
+                .arg(luaString(workspace), follow ? QStringLiteral("true") : QStringLiteral("false"), window),
+            QStringLiteral("%1 %2,address:%3").arg(follow ? QStringLiteral("movetoworkspace") : QStringLiteral("movetoworkspacesilent"), workspace, window)};
+}
+
+QString moveWindow(const QString &address, const QString &workspace, bool follow)
+{
+    const Dispatch move = moveWindowDispatch(address, workspace, follow);
+    return dispatch(move.lua, move.legacy);
+}
+
+QString dispatchAll(const std::vector<Dispatch> &dispatches)
+{
+    if (dispatches.empty())
+        return {};
+    if (dispatches.size() == 1)
+        return dispatch(dispatches.front().lua, dispatches.front().legacy);
+    const QString overridden = program();
+    if (overridden.isEmpty() && qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE").isEmpty())
+        return QStringLiteral("Hyprland isn't running.");
+    QStringList parts;
+    QStringList args;
+    if (usesLua()) {
+        for (const Dispatch &each : dispatches)
+            parts << each.lua;
+        args = {QStringLiteral("eval"), parts.join(QStringLiteral("; "))};
+    } else {
+        // --batch splits on ";", which a page's name may hold: then one call each, as before, stopping at a refusal.
+        if (std::any_of(dispatches.begin(), dispatches.end(), [](const Dispatch &each) { return each.legacy.contains(QLatin1Char(';')); })) {
+            for (const Dispatch &each : dispatches) {
+                if (const QString error = dispatch(each.lua, each.legacy); !error.isEmpty())
+                    return error;
+            }
+            return {};
+        }
+        for (const Dispatch &each : dispatches)
+            parts << QStringLiteral("dispatch ") + each.legacy;
+        args = {QStringLiteral("--batch"), parts.join(QStringLiteral(" ; "))};
+    }
+    QString error;
+    runProgram(overridden.isEmpty() ? QStringLiteral("hyprctl") : overridden, args, &error);
+    return error;
+}
+
+QString addWorkspaceRule(const QString &classRegex, const QString &titleRegex, const QString &workspace)
+{
+    if (!usesLua())
+        return QStringLiteral("Runtime window rules need a Lua config.");
+    return dispatch(QStringLiteral("hl.window_rule({ match = { class = \"%1\", title = \"%2\" }, workspace = \"%3 silent\" })")
+                        .arg(luaString(classRegex), luaString(titleRegex), luaString(workspace)),
+                    QString());
 }
 
 QString focusWorkspace(const QString &workspace)

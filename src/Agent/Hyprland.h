@@ -63,6 +63,18 @@ QString dispatch(const QString &lua, const QString &legacy);
 // `workspace` is a selector (`workspaceSelector`) and `address` a window's, with or without the leading 0x. `follow` also goes there.
 // Renaming a workspace is never needed: a rename empties the old one and Hyprland deletes it.
 QString moveWindow(const QString &address, const QString &workspace, bool follow);
+// One dispatcher in both dialects, for `dispatchAll`.
+struct Dispatch {
+    QString lua;
+    QString legacy;
+};
+Dispatch moveWindowDispatch(const QString &address, const QString &workspace, bool follow);
+// Runs several dispatchers in one call (one `hyprctl eval`, or `hyprctl --batch`), so Hyprland draws no frame
+// between them. Returns why it failed, or empty. Lua stops at the first error; the ones before it have run.
+QString dispatchAll(const std::vector<Dispatch> &dispatches);
+// Sends windows that map with a title matching `titleRegex` (whole title) to `workspace`, silently: a runtime
+// rule, gone at the next config reload. Lua configs only; returns why it wasn't added, or empty.
+QString addWorkspaceRule(const QString &classRegex, const QString &titleRegex, const QString &workspace);
 QString focusWorkspace(const QString &workspace);
 // How a dispatcher names a workspace: its number when it has a numbered id (a bare name would make a new named
 // workspace, even for "1"), a special workspace's own name, else `name:<name>`. An id of 0 means only the name is known.

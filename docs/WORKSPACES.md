@@ -350,9 +350,36 @@ top of `tests/Agent/FakeHyprctl.h`. Decisions made while building:
   `DesignController::homeOnFocus` skips; with a stand-in focused, the home
   is the editor.
 
+### First live run (2026-09-29, Hyprland 0.56.2, Omarchy's Lua config)
+
+Run on a headless output with a three-page document:
+
+- **Claims, swaps, renames, New Page and quitting work.** The Lua `window.move` and `focus` dispatchers work as
+  built (the key names are right). The editor follows Alt+PageDown and Alt+PageUp, and a workspace the user
+  walks to swaps the editor in within about 0.2 s. Quitting gives every workspace back and empties the file.
+- **Super+Tab goes through the pages in reverse.** Omarchy's Super+Tab is `focus({ workspace = "e+1" })`, which
+  goes by workspace id, and Hyprland gives each new named workspace a lower id than the last. So from the
+  first page Super+Tab goes to the numbered workspaces, and Super+Shift+Tab goes forward through the pages.
+  Not fixed: a page added later would still come first. Next/Previous Page (Alt+PageDown, Alt+PageUp) go in page order.
+- **Fixed: the flicker on every swap and on New Page** (`fix/workspace-swap-flicker`). A swap's moves went to
+  Hyprland one call at a time, and Hyprland drew the frame between them: the spare tiled beside the editor on
+  the page being left, and the editor, half its width, animated back to full on the next page (about 0.5 s).
+  A new stand-in did the same where it mapped. Now:
+  - `place()` sends a swap's moves in one call (`Hyprland::dispatchAll`: one `hyprctl eval`, or
+    `hyprctl --batch`, split into single calls when a name holds `;`). The order is unchanged, so no
+    workspace is emptied.
+  - On a Lua config, a runtime window rule (`Hyprland::addWorkspaceRule`) maps windows first titled
+    `omastrator-standin-…` straight onto `special:omastrator-spare`, silently. It is added before the first
+    stand-in, and again after a `configreloaded` event, since a reload drops it. It's runtime state only:
+    nothing is written to the config, and without it stand-ins map as before.
+  - hyprctl prints a failed `eval` on stdout, with exit code 7, and we read only stderr, so a refused move
+    looked like success. `runProgram` now takes stdout, or the exit code, as the reason.
+- Seen once and not reproduced in six more runs: two fast switches left the middle page's workspace
+  deleted, with a stand-in tiled beside the editor. Watch for it.
+
 ### Left for the author
 
-Nothing here has run against a live Hyprland. By hand, on a real desktop:
+By hand, on a real desktop:
 
 1. Turn on View ▸ Pages as Workspaces with a two-page document and check
    that **Super+Tab** (Omarchy's `e+1` and the swipe) reaches the named

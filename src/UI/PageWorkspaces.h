@@ -111,6 +111,8 @@ private:
     bool m_unreachableNoticed = false;
     bool m_lost = false;
     int m_nextStandIn = 1;
+    // Whether the runtime rule that maps new stand-ins on the spare workspace is in Hyprland (a reload drops it).
+    bool m_standInRule = false;
     int m_retries = 0;
     QTimer m_reconcileTimer;
     QTimer m_placeTimer;

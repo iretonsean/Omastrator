@@ -24,6 +24,11 @@ std::optional<HyprlandEvents::Event> HyprlandEvents::parse(const QString &line)
         return std::nullopt;
     const QString name = line.left(split), data = line.mid(split + 2);
     Event event;
+    // A reload drops runtime rules, such as the stand-ins' (docs/WORKSPACES.md).
+    if (name == QLatin1String("configreloaded")) {
+        event.kind = Event::Kind::configReloaded;
+        return event;
+    }
     if (name == QLatin1String("workspacev2") || name == QLatin1String("destroyworkspacev2")) {
         const qsizetype comma = data.indexOf(QLatin1Char(','));
         bool ok = false;

@@ -1,6 +1,8 @@
 #include "Agent/Hyprland.h"
 #include "Agent/HyprlandEvents.h"
 #include "FakeHyprctl.h"
+#include <QDir>
+#include <QFile>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSignalSpy>
@@ -54,6 +56,11 @@ private slots:
         QCOMPARE(event->address, QStringLiteral("0x5588a1"));
         QCOMPARE(event->workspaceName, QStringLiteral("design:Poster · Front"));
         QCOMPARE(event->title, QStringLiteral("omastrator-standin-3"));
+
+        // A config reload drops runtime window rules.
+        event = HyprlandEvents::parse(QStringLiteral("configreloaded>>"));
+        QVERIFY(event);
+        QCOMPARE(event->kind, Kind::configReloaded);
 
         event = HyprlandEvents::parse(QStringLiteral("closewindow>>5588a1"));
         QVERIFY(event);
@@ -223,6 +230,83 @@ private slots:
         Hyprland::focusWorkspace(QStringLiteral("name:a\nb\rc"));
         QCOMPARE(hyprctl.log(), QStringList{QStringLiteral("eval hl.dispatch(hl.dsp.focus({ workspace = \"name:a\\nb\\rc\" }))")});
         QFile::remove(lua.fileName());
+        qunsetenv("OMASTRATOR_HYPRCTL");
+    }
+
+    void severalDispatchersGoInOneCall()
+    {
+        FakeHyprctl hyprctl(m_directory.path());
+        hyprctl.clearLog();
+        qputenv("OMASTRATOR_HYPRCTL", hyprctl.path().toUtf8());
+        const std::vector<Hyprland::Dispatch> two{Hyprland::moveWindowDispatch(QStringLiteral("a1"), QStringLiteral("name:design:A · 1"), false),
+                                                  Hyprland::moveWindowDispatch(QStringLiteral("b2"), QStringLiteral("name:design:A · 2"), true)};
+        // Nothing to do calls nothing, and one is a plain dispatch.
+        QVERIFY(Hyprland::dispatchAll({}).isEmpty());
+        QVERIFY(hyprctl.log().isEmpty());
+        QVERIFY(Hyprland::dispatchAll({two.front()}).isEmpty());
+        QCOMPARE(hyprctl.log(), QStringList{QStringLiteral("dispatch movetoworkspacesilent name:design:A · 1,address:0xa1")});
+        // hyprlang: one --batch.
+        hyprctl.clearLog();
+        QVERIFY(Hyprland::dispatchAll(two).isEmpty());
+        QCOMPARE(hyprctl.log(), QStringList{QStringLiteral("--batch dispatch movetoworkspacesilent name:design:A · 1,address:0xa1 ; "
+                                                           "dispatch movetoworkspace name:design:A · 2,address:0xb2")});
+        // A ";" in a name would split the batch: then one call each.
+        hyprctl.clearLog();
+        QVERIFY(Hyprland::dispatchAll({two.front(), Hyprland::moveWindowDispatch(QStringLiteral("c3"), QStringLiteral("name:design:A;B · 1"), false)}).isEmpty());
+        QCOMPARE(hyprctl.log(), (QStringList{QStringLiteral("dispatch movetoworkspacesilent name:design:A · 1,address:0xa1"),
+                                             QStringLiteral("dispatch movetoworkspacesilent name:design:A;B · 1,address:0xc3")}));
+        // Lua: one eval.
+        QVERIFY(QDir().mkpath(m_directory.filePath(QStringLiteral("config/hypr"))));
+        QFile lua(m_directory.filePath(QStringLiteral("config/hypr/hyprland.lua")));
+        QVERIFY(lua.open(QIODevice::WriteOnly));
+        lua.close();
+        hyprctl.clearLog();
+        QVERIFY(Hyprland::dispatchAll(two).isEmpty());
+        QCOMPARE(hyprctl.log(), QStringList{QStringLiteral("eval hl.dispatch(hl.dsp.window.move({ workspace = \"name:design:A · 1\", follow = false, window = \"address:0xa1\" })); "
+                                                           "hl.dispatch(hl.dsp.window.move({ workspace = \"name:design:A · 2\", follow = true, window = \"address:0xb2\" }))")});
+        // A refusal anywhere in the batch is the batch's.
+        hyprctl.setDispatchFailing(true);
+        QCOMPARE(Hyprland::dispatchAll(two), QStringLiteral("no"));
+        hyprctl.setDispatchFailing(false);
+        QFile::remove(lua.fileName());
+        qunsetenv("OMASTRATOR_HYPRCTL");
+    }
+
+    void aWorkspaceRuleIsForLuaConfigsOnly()
+    {
+        FakeHyprctl hyprctl(m_directory.path());
+        hyprctl.clearLog();
+        qputenv("OMASTRATOR_HYPRCTL", hyprctl.path().toUtf8());
+        // hyprlang: refused without calling hyprctl.
+        QVERIFY(!Hyprland::addWorkspaceRule(QStringLiteral("^app$"), QStringLiteral("^standin-.*"), QStringLiteral("special:spare")).isEmpty());
+        QVERIFY(hyprctl.log().isEmpty());
+        QVERIFY(QDir().mkpath(m_directory.filePath(QStringLiteral("config/hypr"))));
+        QFile lua(m_directory.filePath(QStringLiteral("config/hypr/hyprland.lua")));
+        QVERIFY(lua.open(QIODevice::WriteOnly));
+        lua.close();
+        QVERIFY(Hyprland::addWorkspaceRule(QStringLiteral("^io\\.app$"), QStringLiteral("^standin-.*"), QStringLiteral("special:spare")).isEmpty());
+        QCOMPARE(hyprctl.log(), QStringList{QStringLiteral("eval hl.window_rule({ match = { class = \"^io\\\\.app$\", title = \"^standin-.*\" }, "
+                                                           "workspace = \"special:spare silent\" })")});
+        QFile::remove(lua.fileName());
+        qunsetenv("OMASTRATOR_HYPRCTL");
+    }
+
+    void aFailureHyprctlPrintsOnStdoutSaysWhy()
+    {
+        // hyprctl reports a failed eval on stdout, with exit code 7.
+        const QString path = m_directory.filePath(QStringLiteral("stdout-hyprctl"));
+        QFile script(path);
+        QVERIFY(script.open(QIODevice::WriteOnly));
+        script.write("#!/bin/sh\necho 'error: attempt to call a nil value'\nexit 7\n");
+        script.close();
+        script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        qputenv("OMASTRATOR_HYPRCTL", path.toUtf8());
+        QCOMPARE(Hyprland::focusWorkspace(QStringLiteral("x")), QStringLiteral("error: attempt to call a nil value"));
+        // Silent on both: the exit code is the reason.
+        QVERIFY(script.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        script.write("#!/bin/sh\nexit 7\n");
+        script.close();
+        QCOMPARE(Hyprland::focusWorkspace(QStringLiteral("x")), QStringLiteral("hyprctl exited with 7."));
         qunsetenv("OMASTRATOR_HYPRCTL");
     }
 
