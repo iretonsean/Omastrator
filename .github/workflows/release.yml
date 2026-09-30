@@ -61,7 +61,7 @@ jobs:
             sed -i 's/^DownloadUser/#DownloadUser/' /etc/pacman.conf
             grep -q '^DisableSandbox' /etc/pacman.conf || sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
           fi
-          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq ttf-dejavu
+          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq ttf-dejavu libheif zstd
           useradd -m builder
 
       - uses: actions/checkout@v4

@@ -13,6 +13,8 @@ option(OMASTRATOR_WERROR "Treat warnings as errors" OFF)
 # Installs (install-local.sh, the PKGBUILDs, release.yml) turn this off: no test targets, no Qt Test.
 option(OMASTRATOR_BUILD_TESTS "Build the test suite" ON)
 # Link-time optimisation and dead-code removal for the shipped binary; see docs/RELEASING.md.
+# Packages set this so a build missing zlib, zstd or libheif fails instead of silently dropping those imports.
+option(OMASTRATOR_REQUIRE_CODECS "Fail configuring when zlib, libzstd or libheif is missing" OFF)
 option(OMASTRATOR_LTO "Build with LTO and gc-sections" OFF)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Network)
@@ -78,6 +80,9 @@ if(ZSTD_FOUND)
     target_link_libraries(oma_io PRIVATE ${ZSTD_LIBRARIES})
     target_compile_definitions(oma_io PRIVATE OMASTRATOR_HAVE_ZSTD)
 endif()
+if(OMASTRATOR_REQUIRE_CODECS AND NOT (ZLIB_FOUND AND ZSTD_FOUND AND LIBHEIF_FOUND))
+    message(FATAL_ERROR "OMASTRATOR_REQUIRE_CODECS: zlib (${ZLIB_FOUND}), libzstd (${ZSTD_FOUND}) and libheif (${LIBHEIF_FOUND}) must all be found")
+endif()
 # HEIC/AVIF Place and Open, dynamically linked (LGPL).
 if(LIBHEIF_FOUND)
     target_link_libraries(oma_io PRIVATE ${LIBHEIF_LIBRARIES})
@@ -140,7 +145,8 @@ foreach(size 16 32 64 128 256 512)
 endforeach()
 install(FILES packaging/icons/app-icon.svg
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps RENAME io.github.iretonsean.Omastrator.svg)
-install(FILES LICENSE third_party/nanosvg/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL)
+install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL)
+install(FILES third_party/nanosvg/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL RENAME LICENSE-nanosvg.txt)
 install(FILES third_party/hyph-utf8/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/omastrator OPTIONAL RENAME LICENSE-hyph-utf8.txt)
 # A direct install registers the document type; packages use hooks.
 install(CODE "
@@ -192,7 +198,7 @@ function(oma_tests library folder)
         target_compile_definitions(${name} PRIVATE OMASTRATOR_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMASTRATOR_NOTIFY=true" LABELS ${folder})
         # The background app is started as itself.
-        if(name STREQUAL "DesignModeUiTests")
+        if(name MATCHES "^(DesignModeUiTests|CliTests)$")
             target_compile_definitions(${name} PRIVATE OMASTRATOR_BINARY="$<TARGET_FILE:omastrator>")
             add_dependencies(${name} omastrator)
         endif()

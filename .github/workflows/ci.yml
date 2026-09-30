@@ -27,7 +27,7 @@ jobs:
       # the type tests measure real glyphs, so it gets DejaVu (fontconfig's default sans).
       - name: Install build and test dependencies
         run: |
-          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq ttf-dejavu
+          pacman -Syu --noconfirm --needed cmake qt6-base qt6-declarative git jq ttf-dejavu libheif zstd
           useradd -m builder
 
       - uses: actions/checkout@v4

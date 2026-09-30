@@ -6,8 +6,8 @@ pkgdesc="Vector illustration for Linux, made for Omarchy (git version)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/iretonsean/Omastrator"
 license=('MIT')
-depends=('qt6-base' 'jq' 'shared-mime-info' 'hicolor-icon-theme')
-makedepends=('cmake' 'git')
+depends=('qt6-base' 'jq' 'shared-mime-info' 'hicolor-icon-theme' 'libheif' 'zlib' 'zstd')
+makedepends=('cmake' 'git' 'libheif')
 # hyprpicker, slurp, grim, wl-clipboard: Capture (Pick Colour, Screenshot Region/Window).
 # rclone: Cloud storage. python-gobject/at-spi2-core: Design mode's AT-SPI inspector
 # reading native app windows. chromium: Live web editing and the browser inspector.
@@ -46,6 +46,7 @@ build() {
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DOMASTRATOR_BUILD_TESTS=OFF \
+        -DOMASTRATOR_REQUIRE_CODECS=ON \
         -DOMASTRATOR_LTO=ON
     cmake --build build --target omastrator
 }

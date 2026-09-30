@@ -117,14 +117,20 @@ download, since its source is the release tarball.
 
 ## Design decisions and why
 
-- **Depends `qt6-base`, `jq`, `shared-mime-info` and `hicolor-icon-theme`.**
+- **Depends `qt6-base`, `jq`, `shared-mime-info`, `hicolor-icon-theme`, `libheif`, `zlib` and `zstd`.**
   `qt6-base` covers Widgets, Concurrent, Network and Test — Omastrator doesn't
   need `qt6-declarative` itself (only `ShellPluginTests` links it, optionally,
   to run `OverlayLogic.js`); the shell plugins run inside
   `omarchy-shell`/quickshell, which brings its own Qt Qml. `jq` is a hard
   dependency of `omastrator setup` (`Setup+Files.cpp` shells out to it to edit
   `shell.json`), not optional. `shared-mime-info` and `hicolor-icon-theme` own
-  the MIME and icon directories the package installs into. The `.install`
+  the MIME and icon directories the package installs into. `libheif`, `zlib`
+  and `zstd` are libraries the binary links directly (HEIC/AVIF, zip and Kiwi
+  imports); `qt6-base` doesn't bring them. CMake makes them optional, so
+  `omastrator-git` also lists `libheif` in `makedepends` and builds with
+  `-DOMASTRATOR_REQUIRE_CODECS=ON`, which fails configuring if any is missing.
+  `release.yml` installs `libheif` and `zstd`, so the `-bin` tarball links the
+  same libraries the package declares. The `.install`
   files don't run `update-desktop-database`, `update-mime-database` or
   `gtk-update-icon-cache`: pacman hooks shipped by `desktop-file-utils`,
   `shared-mime-info` and `gtk-update-icon-cache` already do that on every

@@ -6,7 +6,7 @@ pkgdesc="Vector illustration for Linux, made for Omarchy (prebuilt binary)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/iretonsean/Omastrator"
 license=('MIT')
-depends=('qt6-base' 'jq' 'shared-mime-info' 'hicolor-icon-theme')
+depends=('qt6-base' 'jq' 'shared-mime-info' 'hicolor-icon-theme' 'libheif' 'zlib' 'zstd')
 # See omastrator-git's PKGBUILD for what each of these is for; voxtype and omdrop/omadrop
 # aren't pacman packages, so `omastrator setup` names how to install them instead.
 optdepends=('hyprpicker: Capture > Pick Colour as a Swatch'
