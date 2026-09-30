@@ -76,6 +76,17 @@ void ContentView::setPanelWidth(double width)
     QSettings().setValue(QStringLiteral("panelWidth"), width);
 }
 
+double ContentView::layersWidth()
+{
+    const double stored = QSettings().value(QStringLiteral("layersPanelWidth"), defaultLayersWidth).toDouble();
+    return stored >= minimumPanelWidth && stored <= maximumPanelWidth ? stored : defaultLayersWidth;
+}
+
+void ContentView::setLayersWidth(double width)
+{
+    QSettings().setValue(QStringLiteral("layersPanelWidth"), width);
+}
+
 bool ContentView::eventFilter(QObject *watched, QEvent *event)
 {
     const bool key = event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease;

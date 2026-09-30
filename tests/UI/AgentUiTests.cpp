@@ -6,6 +6,7 @@
 #include "Live/Browser.h"
 #include "UI/AgentPanels.h"
 #include "UI/AgentSheets.h"
+#include "UI/ContextBar.h"
 #include "UI/ProjectWorkspaceView.h"
 #include "../Agent/FakeAgents.h"
 #include <QAbstractButton>
@@ -15,6 +16,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
+#include <QLineEdit>
 #include <QLocalSocket>
 #include <QPainter>
 #include <QPlainTextEdit>
@@ -122,6 +124,72 @@ private slots:
     }
 
     QString read(const QString &name) const { return FakeAgents::read(m_directory.filePath(name)); }
+
+    // The window's third row (docs/WINDOW-LAYOUT.md): the selection, the agent's state, and Ask.
+    void askAndSpokenCommandsLiveInTheContextRow()
+    {
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        window.show();
+        workspace.createDocument(QSizeF(200, 200));
+        EditorSession &session = workspace.current().session;
+        rectangle(session, {0, 0, 20, 20});
+        auto *row = window.findChild<ContextBar *>(QStringLiteral("contextBar"));
+        QVERIFY(row);
+        QVERIFY(row->findChild<ProposalBar *>(QStringLiteral("proposalBar")));
+        QCOMPARE(row->findChild<QLabel *>(QStringLiteral("contextSelection"))->text(), QStringLiteral("Rectangle · 20 × 20"));
+        // The local grammar runs at once.
+        row->heard(QStringLiteral("pen tool"));
+        QCOMPARE(session.tool(), Tool::pen);
+        // Anything else waits in Ask, to be fixed before Enter.
+        row->heard(QStringLiteral("make the corners rounder"));
+        QLineEdit *ask = row->askField();
+        QCOMPARE(ask->text(), QStringLiteral("make the corners rounder"));
+        QVERIFY(prompt().isEmpty());
+        QTest::keyClick(ask, Qt::Key_Return);
+        QVERIFY(prompt().contains(QStringLiteral("make the corners rounder")));
+        QVERIFY(ask->text().isEmpty());
+        QVERIFY(row->proposalBar()->isVisible());
+        // While the agent works, Ask waits.
+        QVERIFY(!ask->isEnabled());
+        window.agent()->stopWaiting();
+        QTRY_VERIFY(ask->isEnabled());
+    }
+
+    // Hold the mic: pw-record fills a WAV, voxtype transcribes it, and the grammar runs it.
+    void theMicRecordsTranscribesAndRuns()
+    {
+        auto script = [this](const char *name, const QByteArray &body) {
+            const QString path = m_directory.filePath(QString::fromLatin1(name));
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly))
+                file.write(body);
+            file.close();
+            file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+            return path;
+        };
+        qputenv("OMASTRATOR_PW_RECORD",
+                script("pw-record", "#!/bin/sh\nfor a; do f=\"$a\"; done\nhead -c 2000 /dev/zero > \"$f\"\ntrap 'exit 0' INT\nwhile :; do sleep 0.05; done\n")
+                    .toUtf8());
+        qputenv("OMASTRATOR_VOXTYPE", script("voxtype", "#!/bin/sh\necho 'rectangle tool'\n").toUtf8());
+        qputenv("XDG_RUNTIME_DIR", m_directory.filePath(QStringLiteral("run")).toUtf8());
+        {
+            ProjectWorkspace workspace;
+            ProjectWorkspaceView window(workspace);
+            window.show();
+            workspace.createDocument(QSizeF(200, 200));
+            auto *row = window.findChild<ContextBar *>(QStringLiteral("contextBar"));
+            auto *mic = row->findChild<QToolButton *>(QStringLiteral("askMic"));
+            QTest::mousePress(mic, Qt::LeftButton);
+            QTRY_VERIFY(row->isListening());
+            QTest::qWait(200);
+            QTest::mouseRelease(mic, Qt::LeftButton);
+            QVERIFY(!row->isListening());
+            QTRY_COMPARE(workspace.current().session.tool(), Tool::rectangle);
+        }
+        qunsetenv("OMASTRATOR_PW_RECORD");
+        qunsetenv("OMASTRATOR_VOXTYPE");
+    }
 
     void keepingIsOneUndoStepWithTheBarGone()
     {

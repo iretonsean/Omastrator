@@ -8,7 +8,7 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QSettings>
-#include <QSplitter>
+#include <QTabWidget>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -60,7 +60,7 @@ private slots:
     void canvasKeysPickToolsAndSwapColours();
     void remappedKeysReachTheCanvasAsTheirOriginals();
     void theDockFollowsItsSettings();
-    void theDockSplitIsRememberedAndResets();
+    void theLayoutFollowsTheWireframe();
 
 private:
     QTemporaryDir m_config;
@@ -378,37 +378,42 @@ void ContentViewTests::theDockFollowsItsSettings()
     QCOMPARE(ContentView::panelWidth(), 300.0);
 }
 
-void ContentViewTests::theDockSplitIsRememberedAndResets()
+void ContentViewTests::theLayoutFollowsTheWireframe()
 {
-    int moved = 0;
+    int widened = 0;
     {
         Editor editor;
-        auto &split = find<QSplitter>(editor.view, "panelSplit");
-        QSplitterHandle *handle = split.handle(1);
-        QVERIFY(handle && handle->isVisible() && handle->height() >= 8);
-        QVERIFY(!handle->toolTip().isEmpty());
-        const int before = split.sizes().at(0);
-        // Properties opens with three fifths of the column.
-        QVERIFY(std::abs(before - (before + split.sizes().at(1)) * 3 / 5) <= 2);
-        // A drag on the grip moves it, and the place is saved.
-        const QPoint middle = handle->rect().center();
-        QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, middle);
-        QMouseEvent drag(QEvent::MouseMove, middle + QPoint(0, -120), handle->mapToGlobal(middle + QPoint(0, -120)), Qt::NoButton, Qt::LeftButton,
+        auto top = [&editor](const char *name) { return find<QWidget>(editor.view, QString::fromLatin1(name)).mapTo(&editor.view, QPoint()).y(); };
+        auto left = [&editor](const char *name) { return find<QWidget>(editor.view, QString::fromLatin1(name)).mapTo(&editor.view, QPoint()).x(); };
+        // Top to bottom: the selection and AI row, the island (the tool's bar), then the canvas.
+        QVERIFY(top("contextBar") < top("toolHeader"));
+        QVERIFY(top("toolHeader") < editor.view.canvas().mapTo(&editor.view, QPoint()).y());
+        // Left to right: the tools, Layers, the canvas, then Properties and Capture.
+        QVERIFY(left("toolRail") < left("layersDock"));
+        QVERIFY(left("layersDock") < editor.view.canvas().mapTo(&editor.view, QPoint()).x());
+        QVERIFY(editor.view.canvas().mapTo(&editor.view, QPoint()).x() < left("panelDock"));
+        auto &tabs = find<QTabWidget>(editor.view, "dockTabs");
+        QCOMPARE(tabs.count(), 2);
+        QCOMPARE(tabs.tabText(0), QStringLiteral("Properties"));
+        QCOMPARE(tabs.tabText(1), QStringLiteral("Capture"));
+        // Switching tools keeps the island under the row above it.
+        editor.press(Qt::Key_P);
+        QVERIFY(top("contextBar") < top("toolHeader"));
+        // Dragging the edge right widens Layers, and the width is kept.
+        auto &edge = find<QWidget>(editor.view, "layersEdge");
+        auto &dock = find<QWidget>(editor.view, "layersDock");
+        QCOMPARE(dock.width(), int(ContentView::defaultLayersWidth));
+        const QPoint middle = edge.rect().center();
+        QTest::mousePress(&edge, Qt::LeftButton, Qt::NoModifier, middle);
+        QMouseEvent drag(QEvent::MouseMove, middle + QPoint(60, 0), edge.mapToGlobal(middle + QPoint(60, 0)), Qt::NoButton, Qt::LeftButton,
                          Qt::NoModifier);
-        QCoreApplication::sendEvent(handle, &drag);
-        QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, middle + QPoint(0, -120));
-        moved = split.sizes().at(0);
-        QVERIFY(moved < before - 60);
-        QVERIFY(QSettings().contains("panelSplitState"));
+        QCoreApplication::sendEvent(&edge, &drag);
+        QTest::mouseRelease(&edge, Qt::LeftButton, Qt::NoModifier, middle + QPoint(60, 0));
+        widened = dock.width();
+        QCOMPARE(widened, int(ContentView::defaultLayersWidth) + 60);
     }
     Editor again;
-    auto &split = find<QSplitter>(again.view, "panelSplit");
-    QTRY_VERIFY(std::abs(split.sizes().at(0) - moved) <= 2);
-    // A double-click puts it back and forgets the place.
-    QTest::mouseDClick(split.handle(1), Qt::LeftButton);
-    const int total = split.sizes().at(0) + split.sizes().at(1);
-    QCOMPARE(split.sizes().at(0), total * 3 / 5);
-    QVERIFY(!QSettings().contains("panelSplitState"));
+    QCOMPARE(find<QWidget>(again.view, "layersDock").width(), widened);
 }
 
 QTEST_MAIN(ContentViewTests)

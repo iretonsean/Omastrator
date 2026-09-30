@@ -3,7 +3,9 @@
 #include "Logging.h"
 #include "UI/AgentBridge.h"
 #include "UI/AgentPanels.h"
+#include "UI/CapturePanel.h"
 #include "UI/ColorPaletteControls.h"
+#include "UI/ContextBar.h"
 #include "UI/IsolationBar.h"
 #include "UI/KeyboardShortcuts.h"
 #include "UI/LayersPanel.h"
@@ -22,8 +24,9 @@
 #include <QPainterPath>
 #include <QScrollArea>
 #include <QSettings>
-#include <QSplitter>
+#include <QTabWidget>
 #include <QTimer>
+#include <functional>
 #include <algorithm>
 #include <cmath>
 
@@ -45,53 +48,6 @@ std::vector<std::vector<Tool>> ContentView::toolSlots()
 
 namespace {
 const QString toolPresetKey = QStringLiteral("toolPreset");
-const QString splitKey = QStringLiteral("panelSplitState");
-
-// The grip between Properties and Layers: a visible bar; a double-click resets it.
-class SplitHandle : public QSplitterHandle {
-public:
-    SplitHandle(Qt::Orientation orientation, QSplitter *parent) : QSplitterHandle(orientation, parent)
-    {
-        setToolTip(QStringLiteral("Drag to share the space between Properties and Layers; double-click to reset"));
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        QColor line = palette().color(QPalette::Mid);
-        painter.fillRect(QRectF(0, height() / 2.0 - 0.5, width(), 1), line);
-        QColor grip = palette().color(underMouse() ? QPalette::WindowText : QPalette::PlaceholderText);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(grip);
-        painter.drawRoundedRect(QRectF(width() / 2.0 - 16, height() / 2.0 - 2, 32, 4), 2, 2);
-    }
-    void enterEvent(QEnterEvent *event) override
-    {
-        QSplitterHandle::enterEvent(event);
-        update();
-    }
-    void leaveEvent(QEvent *event) override
-    {
-        QSplitterHandle::leaveEvent(event);
-        update();
-    }
-    void mouseDoubleClickEvent(QMouseEvent *) override
-    {
-        const int total = splitter()->sizes().value(0) + splitter()->sizes().value(1);
-        splitter()->setSizes({total * 3 / 5, total - total * 3 / 5});
-        QSettings().remove(splitKey);
-    }
-};
-
-class PanelSplitter : public QSplitter {
-public:
-    using QSplitter::QSplitter;
-
-protected:
-    QSplitterHandle *createHandle() override { return new SplitHandle(orientation(), this); }
-};
 }
 
 // A rail slot: one or more tools sharing a button. It shows the last one picked, with a
@@ -275,15 +231,15 @@ protected:
 };
 
 namespace {
-// An 8-point grip: dragged left, the dock widens.
+// An 8-point grip beside a side panel: dragged away from the canvas, the panel widens.
 class PanelResizeEdge : public QWidget {
 public:
-    PanelResizeEdge(QWidget &dock, QWidget *parent) : QWidget(parent), m_dock(dock)
+    PanelResizeEdge(QWidget &dock, bool dockOnLeft, std::function<void(double)> remember, QWidget *parent)
+        : QWidget(parent), m_dock(dock), m_dockOnLeft(dockOnLeft), m_remember(std::move(remember))
     {
-        setObjectName(QStringLiteral("panelEdge"));
         setFixedWidth(8);
         setCursor(Qt::SplitHCursor);
-        setToolTip(QStringLiteral("Drag to resize the panels"));
+        setToolTip(QStringLiteral("Drag to resize the panel"));
     }
 
 protected:
@@ -301,17 +257,20 @@ protected:
     {
         if (!m_start)
             return;
-        const double wanted = std::round(m_start->second - (event->globalPosition().x() - m_start->first));
+        const double moved = event->globalPosition().x() - m_start->first;
+        const double wanted = std::round(m_dockOnLeft ? m_start->second + moved : m_start->second - moved);
         const double width = std::clamp(wanted, ContentView::minimumPanelWidth, ContentView::maximumPanelWidth);
         if (width == m_dock.width())
             return;
         m_dock.setFixedWidth(int(width));
-        ContentView::setPanelWidth(width);
+        m_remember(width);
     }
     void mouseReleaseEvent(QMouseEvent *) override { m_start = std::nullopt; }
 
 private:
     QWidget &m_dock;
+    const bool m_dockOnLeft;
+    const std::function<void(double)> m_remember;
     std::optional<std::pair<double, double>> m_start;
 };
 
@@ -359,12 +318,12 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     auto *canvasColumn = new QVBoxLayout(canvas);
     canvasColumn->setContentsMargins(0, 0, 0, 0);
     canvasColumn->setSpacing(0);
-    // The accept bar sits above the canvas, never over the art.
-    if (m_agent) {
-        m_proposalBar = new ProposalBar(*m_agent, session, canvas);
-        canvasColumn->addWidget(m_proposalBar);
+    // The selection and the agent's state, with Ask: a row of its own above the island (docs/WINDOW-LAYOUT.md).
+    m_contextBar = new ContextBar(session, m_agent, this);
+    m_proposalBar = m_contextBar->proposalBar();
+    connect(m_contextBar, &ContextBar::notice, this, &ContentView::flash);
+    if (m_agent)
         connect(m_agent, &AgentBridge::proposalChanged, this, &ContentView::synchronize);
-    }
     // Isolation mode's breadcrumb, above the art it isolates.
     canvasColumn->addWidget(new IsolationBar(session, canvas));
     canvasColumn->addLayout(m_canvasSlot, 1);
@@ -378,34 +337,46 @@ ContentView::ContentView(EditorSession &session, ProjectWorkspace *workspace, QW
     qApp->installEventFilter(this);
     setAcceptDrops(true);
 
+    // Layers on the left, beside the tools, as Figma has it.
+    m_layersDock = new QWidget(this);
+    m_layersDock->setObjectName(QStringLiteral("layersDock"));
+    auto *layersColumn = new QVBoxLayout(m_layersDock);
+    layersColumn->setContentsMargins(0, 0, 0, 0);
+    layersColumn->addWidget(m_layersPanel);
+    if (m_agent)
+        m_layersPanel->setNamer([agent = m_agent](const QString &convention) { return agent ? agent->nameLayers(convention) : QString(); });
+    m_layersDock->setFixedWidth(int(layersWidth()));
+    // Properties and Capture share the right dock as tabs.
     m_dock = new QWidget(this);
     m_dock->setObjectName(QStringLiteral("panelDock"));
     auto *dockColumn = new QVBoxLayout(m_dock);
     dockColumn->setContentsMargins(0, 0, 0, 0);
-    auto *split = new PanelSplitter(Qt::Vertical, m_dock);
-    split->setObjectName(QStringLiteral("panelSplit"));
-    split->setChildrenCollapsible(false);
-    split->setHandleWidth(9);
-    split->addWidget(m_propertiesPanel);
-    split->addWidget(m_layersPanel);
-    if (m_agent)
-        m_layersPanel->setNamer([agent = m_agent](const QString &convention) { return agent ? agent->nameLayers(convention) : QString(); });
-    // Properties holds more fields; it takes the larger share until moved.
-    split->setStretchFactor(0, 3);
-    split->setStretchFactor(1, 2);
-    if (!split->restoreState(QSettings().value(splitKey).toByteArray()))
-        split->setSizes({600, 400});
-    connect(split, &QSplitter::splitterMoved, this, [split] { QSettings().setValue(splitKey, split->saveState()); });
-    dockColumn->addWidget(split);
+    m_dockTabs = new QTabWidget(m_dock);
+    m_dockTabs->setObjectName(QStringLiteral("dockTabs"));
+    m_dockTabs->setDocumentMode(true);
+    m_dockTabs->addTab(m_propertiesPanel, QStringLiteral("Properties"));
+    m_capturePanel = new CapturePanel(m_dockTabs);
+    m_dockTabs->addTab(m_capturePanel, QStringLiteral("Capture"));
+    connect(m_capturePanel, &CapturePanel::notice, this, &ContentView::flash);
+    dockColumn->addWidget(m_dockTabs);
     m_dock->setFixedWidth(int(panelWidth()));
 
+    auto *layersEdge = new PanelResizeEdge(*m_layersDock, true, &ContentView::setLayersWidth, this);
+    layersEdge->setObjectName(QStringLiteral("layersEdge"));
+    auto *dockEdge = new PanelResizeEdge(*m_dock, false, &ContentView::setPanelWidth, this);
+    dockEdge->setObjectName(QStringLiteral("panelEdge"));
     auto *middle = new QHBoxLayout;
     middle->setSpacing(0);
     middle->addWidget(makeRail());
     middle->addWidget(divider(QFrame::VLine, this));
+    middle->addWidget(m_layersDock);
+    middle->addWidget(layersEdge);
     middle->addWidget(canvas, 1);
-    middle->addWidget(new PanelResizeEdge(*m_dock, this));
+    middle->addWidget(dockEdge);
     middle->addWidget(m_dock);
+    m_column->addWidget(m_contextBar);
+    m_contextDivider = divider(QFrame::HLine, this);
+    m_column->addWidget(m_contextDivider);
     m_column->addWidget(divider(QFrame::HLine, this));
     m_column->addLayout(middle, 1);
     m_column->addWidget(divider(QFrame::HLine, this));
@@ -530,10 +501,11 @@ void ContentView::retitleTools()
 void ContentView::synchronizePanels()
 {
     const bool properties = showsPanel(propertiesKey), layers = showsPanel(layersKey);
-    m_propertiesPanel->setVisible(properties);
+    m_dock->setVisible(properties);
+    findChild<QWidget *>(QStringLiteral("panelEdge"))->setVisible(properties);
     m_layersPanel->setVisible(layers);
-    m_dock->setVisible(properties || layers);
-    findChild<QWidget *>(QStringLiteral("panelEdge"))->setVisible(properties || layers);
+    m_layersDock->setVisible(layers);
+    findChild<QWidget *>(QStringLiteral("layersEdge"))->setVisible(layers);
 }
 
 // Shows what the session holds: every line compares, then sets.
@@ -548,6 +520,7 @@ void ContentView::synchronize()
         slot->setEnabled(!proposal);
     }
     m_dock->setEnabled(!proposal);
+    m_layersDock->setEnabled(!proposal);
     m_palette->setEnabled(!proposal);
     if (m_header)
         m_header->setEnabled(!proposal);
@@ -615,7 +588,8 @@ void ContentView::showHeader(Tool tool)
     delete m_header;
     m_header = ToolHeaders::make(m_session, tool, this);
     m_header->setObjectName(QStringLiteral("toolHeader"));
-    m_column->insertWidget(0, m_header);
+    // The island: under the selection and AI row, above the canvas.
+    m_column->insertWidget(m_column->indexOf(m_contextDivider) + 1, m_header);
     // A layout shows a late child only later: show now.
     m_header->show();
 }

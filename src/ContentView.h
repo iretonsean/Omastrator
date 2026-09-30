@@ -10,15 +10,18 @@
 #include <QWidget>
 
 class AgentBridge;
+class CapturePanel;
+class ContextBar;
 class LayersPanel;
 class ProposalBar;
 class PropertiesPanel;
 class ProjectWorkspace;
 class QMimeData;
-class QSplitter;
+class QTabWidget;
 class ToolSlot;
 
-// One document's editor area: tool bar, rail, canvas, dock, status.
+// One document's editor area (docs/WINDOW-LAYOUT.md): the selection and AI row, the island, the rail,
+// Layers, the canvas, the Properties and Capture dock, and the status bar.
 class ContentView : public QWidget {
     Q_OBJECT
 public:
@@ -55,12 +58,18 @@ public:
     static constexpr double defaultPanelWidth = 264;
     static double panelWidth();
     static void setPanelWidth(double width);
+    // The Layers panel's width on the left, remembered across launches, in the same range.
+    static constexpr double defaultLayersWidth = 240;
+    static double layersWidth();
+    static void setLayersWidth(double width);
     // A tool's tooltip: its name and current key.
     static QString toolTip(Tool tool);
 
     EditorCanvas &canvas() const { return *m_canvas; }
     LayersPanel &layersPanel() const { return *m_layersPanel; }
     PropertiesPanel &propertiesPanel() const { return *m_propertiesPanel; }
+    ContextBar &contextBar() const { return *m_contextBar; }
+    CapturePanel &capturePanel() const { return *m_capturePanel; }
     // Shows the dock's panels as the settings say.
     void synchronizePanels();
     bool acceptsDrop(const QMimeData &data) const;
@@ -92,6 +101,8 @@ private:
     EditorSession &m_session;
     const QPointer<ProjectWorkspace> m_workspace;
     const QPointer<AgentBridge> m_agent;
+    ContextBar *m_contextBar = nullptr;
+    QWidget *m_contextDivider = nullptr;
     ProposalBar *m_proposalBar = nullptr;
     QToolButton *m_roast = nullptr;
     QWidget *m_palette = nullptr;
@@ -104,6 +115,9 @@ private:
     PropertiesPanel *const m_propertiesPanel;
     LayersPanel *const m_layersPanel;
     QWidget *m_dock = nullptr;
+    QTabWidget *m_dockTabs = nullptr;
+    CapturePanel *m_capturePanel = nullptr;
+    QWidget *m_layersDock = nullptr;
     QWidget *const m_dropRing;
     QWidget *m_welcome = nullptr;
     QLabel *const m_zoom;
