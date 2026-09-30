@@ -5,6 +5,7 @@
 #include "UI/BrowserViews.h"
 #include "UI/LiveFrames.h"
 #include "UI/MotionTrackView.h"
+#include <QCoreApplication>
 #include <QTimer>
 #include <QUrl>
 #include <algorithm>
@@ -27,7 +28,8 @@ MotionCode::Bindings MotionTimeline::bindings() const
         return {};
     for (const MotionCode::Block &block : codeBlocks()) {
         const MotionCode::Bindings found = MotionCode::bindings(block, track->name);
-        if (!found.duration.isEmpty() || !found.easing.isEmpty() || !found.stagger.isEmpty())
+        // A group numbered by --i needs no token: `animation-delay: calc(var(--i) * 140ms)` is Order's.
+        if (!found.duration.isEmpty() || !found.easing.isEmpty() || !found.stagger.isEmpty() || found.indexed || found.extraDelay)
             return found;
     }
     return {};
@@ -38,8 +40,9 @@ std::optional<MotionCode::Block> MotionTimeline::blockOfSelection() const
     const Motion::Track *track = selectedTrack();
     if (!track)
         return std::nullopt;
+    // The name as a whole word: "rise" is not the "sunrise" block's.
     for (const MotionCode::Block &block : codeBlocks()) {
-        if (!MotionCode::bindings(block, track->name).duration.isEmpty() || block.text.contains(track->name))
+        if (!MotionCode::bindings(block, track->name).duration.isEmpty() || MotionCode::mentions(block, track->name))
             return block;
     }
     return std::nullopt;
@@ -56,7 +59,7 @@ void MotionTimeline::setToken(const QString &property, const QString &value, boo
     }, [this, frame](const QString &error) {
         if (frame == m_frame && !error.isEmpty())
             emit notice(error);
-    });
+    }, this);
 }
 
 void MotionTimeline::setKeyframe(const QString &frame, const QString &property, const QString &value)
@@ -70,7 +73,7 @@ void MotionTimeline::setKeyframe(const QString &frame, const QString &property, 
                 [this, key](const QString &error) {
                     if (key == m_frame && !error.isEmpty())
                         emit notice(error);
-                });
+                }, this);
 }
 
 void MotionTimeline::setTiming(const QString &property, const QString &value)
@@ -87,7 +90,7 @@ void MotionTimeline::setTiming(const QString &property, const QString &value)
                 [this, key](const QString &error) {
                     if (key == m_frame && !error.isEmpty())
                         emit notice(error);
-                });
+                }, this);
 }
 
 bool MotionTimeline::reducedMotionOn() const
@@ -187,7 +190,7 @@ void MotionTimeline::setPreviewReduced(bool on)
     m_live->run(frame, [on](LiveSession &session) { return session.motionEmulateReduced(on); }, [this, frame](const QString &error) {
         if (frame == m_frame && !error.isEmpty())
             emit notice(error);
-    });
+    }, this);
     emit changed();
 }
 
@@ -204,7 +207,7 @@ void MotionTimeline::setStarts(const QString &trigger)
                 [this, frame](const QString &error) {
                     if (frame == m_frame && !error.isEmpty())
                         emit notice(error);
-                });
+                }, this);
 }
 
 QString MotionTimeline::askAgent(const QString &prompt)
@@ -266,6 +269,9 @@ QString MotionTimeline::setOrder(Motion::Order mode)
     const QUuid frame = m_frame;
     m_live->run(frame, [ordered, mode, seed](LiveSession &session) {
         const QJsonObject boxes = session.motionBoxes(ordered);
+        // An element that isn't there (a pseudo-element's bar is never) would get a box of nothing and part of an order: set none.
+        if (boxes.size() < ordered.size())
+            return QCoreApplication::translate("MotionTimeline", "Some of these elements can't be found on the page, so their order was not changed.");
         QList<Motion::Element> elements;
         for (const QString &selector : ordered) {
             const QJsonObject box = boxes[selector].toObject();
@@ -279,7 +285,7 @@ QString MotionTimeline::setOrder(Motion::Order mode)
     }, [this, frame](const QString &error) {
         if (frame == m_frame && !error.isEmpty())
             emit notice(error);
-    });
+    }, this);
     return {};
 }
 
@@ -295,7 +301,7 @@ void MotionTimeline::setExtraDelay(double ms)
                 [this, frame](const QString &error) {
                     if (frame == m_frame && !error.isEmpty())
                         emit notice(error);
-                });
+                }, this);
 }
 
 void MotionTimeline::useGroupTiming()
@@ -310,7 +316,7 @@ void MotionTimeline::useGroupTiming()
                 [this, frame](const QString &error) {
                     if (frame == m_frame && !error.isEmpty())
                         emit notice(error);
-                });
+                }, this);
 }
 
 QString MotionTimeline::effectDeclarations(const QString &effect)
@@ -330,11 +336,15 @@ QString MotionTimeline::effectOf() const
     if (!track || track->keyframes.isEmpty())
         return {};
     const QJsonObject props = track->keyframes.first().toObject()["props"].toObject();
-    if (props.contains(QStringLiteral("rotate")) && props["rotate"].toString().startsWith(QLatin1String("y")))
+    // A preset only when the first keyframe is exactly what the preset writes: `opacity`, `translate` and `rotate: -3deg` is not
+    // Rise, and picking Rise for it would drop the rotation.
+    QStringList keys = props.keys();
+    keys.sort();
+    if (keys == QStringList{"opacity", "rotate"} && props["rotate"].toString().startsWith(QLatin1String("y")))
         return QStringLiteral("flip");
-    if (props.contains(QStringLiteral("scale")))
+    if (keys == QStringList{"opacity", "scale"})
         return QStringLiteral("grow");
-    if (props.contains(QStringLiteral("translate")))
+    if (keys == QStringList{"opacity", "translate"})
         return QStringLiteral("rise");
     return QStringLiteral("custom");
 }
@@ -351,5 +361,5 @@ void MotionTimeline::setEffect(const QString &effect)
                 [this, frame](const QString &error) {
                     if (frame == m_frame && !error.isEmpty())
                         emit notice(error);
-                });
+                }, this);
 }

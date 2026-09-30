@@ -15,6 +15,8 @@ public:
     // Where a handle is drawn (1 or 2), for hit tests and for tests.
     QPointF handle(int which) const;
     QPointF pointOf(double x, double y) const;
+    // A handle is being dragged.
+    bool isDragging() const { return m_dragging != 0; }
 
 signals:
     // A handle moved; the text is cubic-bezier(…).

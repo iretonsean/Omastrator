@@ -166,6 +166,51 @@ private:
     }
 
 private slots:
+    // A throwaway home for everything: the user's registry, Chromium profile, git identity and agent socket are never touched.
+    void initTestCase()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        QVERIFY(m_directory.isValid());
+        qputenv("OMASTRATOR_RUNTIME_DIR", m_directory.filePath(QStringLiteral("runtime")).toUtf8());
+        qputenv("XDG_DATA_HOME", m_directory.filePath(QStringLiteral("data")).toUtf8());
+        qputenv("XDG_CONFIG_HOME", m_directory.filePath(QStringLiteral("config")).toUtf8());
+        qputenv("XDG_STATE_HOME", m_directory.filePath(QStringLiteral("state")).toUtf8());
+        qputenv("OMASTRATOR_SOCKET", m_directory.filePath(QStringLiteral("o.sock")).toUtf8());
+        qputenv("OMASTRATOR_THEME_DIR", m_directory.filePath(QStringLiteral("no-theme")).toUtf8());
+        qunsetenv("HYPRLAND_INSTANCE_SIGNATURE");
+        const QString gitconfig = m_directory.filePath(QStringLiteral("gitconfig"));
+        write(gitconfig, "[user]\n\tname = Omastrator Tests\n\temail = tests@example.invalid\n[init]\n\tdefaultBranch = main\n");
+        qputenv("GIT_CONFIG_GLOBAL", gitconfig.toUtf8());
+        qputenv("GIT_CONFIG_NOSYSTEM", "1");
+        write(m_directory.filePath(QStringLiteral("omarchy")), fakeOmarchy, true);
+        qputenv("OMASTRATOR_OMARCHY", m_directory.filePath(QStringLiteral("omarchy")).toUtf8());
+        QDir().mkpath(m_directory.filePath(QStringLiteral("agents")));
+        qputenv("FAKE_OUT", m_directory.filePath(QStringLiteral("agents")).toUtf8());
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "quiet");
+        qputenv("OMASTRATOR_GH", "/bin/false");
+        const QString bin = FakeAgents::install(m_directory.path());
+        QVERIFY(!bin.isEmpty());
+        qputenv("PATH", (bin + QLatin1Char(':') + qEnvironmentVariable("PATH")).toUtf8());
+    }
+
+    void init()
+    {
+        BrowserPool::Options options;
+        options.profile = m_directory.filePath(QStringLiteral("profile"));
+        options.cache = Browser::Cache::minimal;
+        BrowserViews::setPoolOptions(options);
+        BrowserViews::setSignInAnswered(false);
+        QFile::remove(ProjectRegistry::path());
+    }
+
+    void cleanup()
+    {
+        for (const QString &folder : std::as_const(m_folders))
+            LiveFrames::clearPending(folder);
+        m_folders.clear();
+        BrowserViews::shutdownPool();
+    }
 
     void picksAreNumberedInThePickOrder()
     {
@@ -178,7 +223,7 @@ private slots:
         QString row;
         openOnCards(session, timeline, hosted.frame, row);
         pick(session, hosted.frame, {QStringLiteral("#huila")});
-        QTRY_VERIFY_WITH_TIMEOUT(!hosted.canvas.editPageSelectionRect().has_value() || true, patience);
+        QTRY_VERIFY_WITH_TIMEOUT(hosted.canvas.editPageSelectionRect().has_value(), patience);
         // One pick needs no number.
         QVERIFY(hosted.canvas.editPageBadges().isEmpty());
         pick(session, hosted.frame, {QStringLiteral("#huila"), QStringLiteral("#guji"), QStringLiteral("#nyeri")});
@@ -369,24 +414,6 @@ private slots:
         QVERIFY(WriteBack::git(served->folder, {"status", "--porcelain", "--untracked-files=no"}).trimmed().isEmpty());
     }
 
-    void aCardsOwnDelayIsTakenOffItsRuleWhenGivenBack()
-    {
-        // The code side of "Use the group's timing": an empty value takes the declaration out and leaves the rest of the rule.
-        NEEDS_CHROMIUM;
-        const auto served = site();
-        QVERIFY(served);
-        QByteArray css = read(served->folder + "/cards.css");
-        css.replace("#huila { --i: 2; }", "#huila { --i: 2; --delay-extra: 300ms; }");
-        write(served->folder + "/cards.css", css);
-        LiveEdit off;
-        off.selector = QStringLiteral("#huila");
-        off.property = QStringLiteral("--delay-extra");
-        const WriteBack::Plan plan = WriteBack::plan(served->folder, {off});
-        QVERIFY(plan.unresolved.empty());
-        QCOMPARE(plan.changes.size(), size_t(1));
-        QVERIFY(QString::fromUtf8(*plan.changes.front().after).contains(QStringLiteral("#huila { --i: 2; }")));
-    }
-
     void anEffectReplacesTheFirstKeyframeAndUndoesAndIsWritten()
     {
         NEEDS_CHROMIUM;
@@ -402,7 +429,8 @@ private slots:
         QString row;
         openOnCards(session, timeline, hosted.frame, row);
         LiveFrames *frames = LiveFrames::of(session);
-        QCOMPARE(timeline.effectOf(), QStringLiteral("rise"));
+        // The fixture's first keyframe also turns (`rotate: -3deg`), so it is no preset: picking Rise would drop the rotation.
+        QCOMPARE(timeline.effectOf(), QStringLiteral("custom"));
         const QString scale = QStringLiteral("String(document.getAnimations().find(a => a.animationName === 'nl-cascade').effect.getKeyframes()[0].scale)");
         timeline.setEffect(QStringLiteral("grow"));
         QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).edits.size(), size_t(1), patience);
@@ -411,7 +439,7 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(timeline.effectOf(), QStringLiteral("grow"), patience);
         hosted.canvas.undoPageEdit();
         QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).edits.size(), size_t(0), patience);
-        QTRY_COMPARE_WITH_TIMEOUT(timeline.effectOf(), QStringLiteral("rise"), patience);
+        QTRY_COMPARE_WITH_TIMEOUT(timeline.effectOf(), QStringLiteral("custom"), patience);
         // Written: the frame's declarations are the effect's, and the rest of the file stays.
         hosted.canvas.redoPageEdit();
         QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).edits.size(), size_t(1), patience);

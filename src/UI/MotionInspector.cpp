@@ -119,18 +119,47 @@ MotionInspector::MotionInspector(MotionTimeline &timeline, QWidget *parent) : QW
     m_outer->setContentsMargins(16, 14, 16, 14);
     connect(&m_timeline, &MotionTimeline::changed, this, &MotionInspector::rebuild);
     connect(&m_timeline, &MotionTimeline::closed, this, &MotionInspector::rebuild);
+    // A tab switch or a closed document deletes the timeline while this panel is up: nothing here reads it afterwards.
+    connect(&m_timeline, &QObject::destroyed, this, [this] {
+        m_gone = true;
+        hide();
+        deleteLater();
+    });
     rebuild();
+}
+
+bool MotionInspector::busy() const
+{
+    if (!m_body)
+        return false;
+    for (const NumberField *field : m_body->findChildren<NumberField *>())
+        if (field->property("scrubbing").toBool())
+            return true;
+    for (const CurveEditor *curve : m_body->findChildren<CurveEditor *>())
+        if (curve->isDragging())
+            return true;
+    for (const QLineEdit *edit : m_body->findChildren<QLineEdit *>())
+        if (edit->hasFocus() && edit->isModified())
+            return true;
+    return false;
 }
 
 void MotionInspector::rebuild()
 {
-    // A late reading from the page must not delete the field under the designer's drag: try again after it.
-    if (m_body)
-        for (const NumberField *field : m_body->findChildren<NumberField *>())
-            if (field->property("scrubbing").toBool()) {
-                QTimer::singleShot(50, this, &MotionInspector::rebuild);
-                return;
-            }
+    if (m_gone)
+        return;
+    // A late reading from the page must not delete the field under the designer's drag, the curve under its handle, or a line of
+    // text being typed: one retry waits, whatever the number of readings meanwhile.
+    if (busy()) {
+        if (!m_rebuildPending) {
+            m_rebuildPending = true;
+            QTimer::singleShot(50, this, [this] {
+                m_rebuildPending = false;
+                rebuild();
+            });
+        }
+        return;
+    }
     delete m_body;
     m_body = new QWidget(this);
     m_outer->addWidget(m_body);
@@ -186,6 +215,16 @@ void MotionInspector::rebuild()
     if (picked >= 0 && picked < track->bars.size()) {
         // One card of the group: its own delay on top of the group's, which the others keep.
         const Motion::Bar &bar = track->bars[picked];
+        // Only a css-animation whose delay reads --delay-extra takes one: anywhere else the field would change nothing on the page,
+        // and Save would add a declaration nothing reads.
+        if (track->kind != QLatin1String("css-animation") || !m_timeline.bindings().extraDelay) {
+            column->addWidget(label(tr("This motion's delay doesn't read --delay-extra, so it takes no extra delay. Ask the agent to add it, or edit the code."),
+                                    QStringLiteral("motionInspectorNoExtra"), m_body, true));
+            column->addWidget(label(tr("Its start is %1 in the group.").arg(bar.index >= 0 ? tr("number %1").arg(bar.index + 1) : tr("unnumbered")),
+                                    QStringLiteral("motionInspectorPlace"), m_body, true));
+            column->addStretch(1);
+            return;
+        }
         auto *extra = timeField(QStringLiteral("motionInspectorExtra"), bar.extra, m_timeline, m_body, [this](double ms, bool preview) {
             if (!preview)
                 m_timeline.setExtraDelay(ms);
@@ -288,7 +327,12 @@ void MotionInspector::rebuild()
             if (now == QLatin1String("custom"))
                 effect->addItem(tr("Custom"), QStringLiteral("custom"));
             effect->setCurrentIndex(std::max(0, effect->findData(now)));
-            connect(effect, &QComboBox::activated, effect, [this, effect](int index) { m_timeline.setEffect(effect->itemData(index).toString()); });
+            connect(effect, &QComboBox::activated, effect, [this, effect](int index) {
+            // Picking the item that is already shown changes nothing, and must not rewrite a keyframe.
+            const QString picked = effect->itemData(index).toString();
+            if (picked != m_timeline.effectOf())
+                m_timeline.setEffect(picked);
+        });
             form->addRow(tr("Effect"), effect);
         }
     }

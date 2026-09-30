@@ -16,7 +16,12 @@ public:
 
 private:
     void rebuild();
+    // A drag, or text being typed, is in the panel: it is rebuilt after it.
+    bool busy() const;
     MotionTimeline &m_timeline;
+    bool m_rebuildPending = false;
+    // The timeline this shows was deleted.
+    bool m_gone = false;
     QVBoxLayout *const m_outer;
     QPointer<QWidget> m_body;
 };
