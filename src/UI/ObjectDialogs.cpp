@@ -1,6 +1,5 @@
 #include "UI/ObjectDialogs.h"
 #include "Canvas/EditorCanvas.h"
-#include "Agent/Island.h"
 #include "IO/FigmaImporter.h"
 #include "UI/KeyboardShortcuts.h"
 #include <QCheckBox>
@@ -207,16 +206,9 @@ QDialog *ObjectDialogs::preferences(QWidget *window)
         forgetToken->setEnabled(false);
     });
     form->addRow(QStringLiteral("Figma:"), forgetToken);
-    auto *islandAlways = new QCheckBox(QStringLiteral("Show the island on every window"), dialog);
-    islandAlways->setObjectName(QStringLiteral("islandAlways"));
-    islandAlways->setChecked(Island::visibility() == QLatin1String("always"));
-    islandAlways->setToolTip(QStringLiteral("Off, the island shows only while an Omastrator window is focused (and while design mode, "
-                                            "dictation or a waiting result needs it). The tray light is always there."));
-    form->addRow(QStringLiteral("Island:"), islandAlways);
-    finish(dialog, form, [increment, history, islandAlways] {
+    finish(dialog, form, [increment, history] {
         EditorCanvas::setKeyboardIncrement(increment->value());
         EditorSession::setHistoryLimit(history->value());
-        Island::setVisibility(islandAlways->isChecked() ? QStringLiteral("always") : QStringLiteral("with-app"));
     });
     return dialog;
 }

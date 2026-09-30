@@ -14,7 +14,7 @@
 #endif
 
 // The omarchy-shell plugins in shell/: each manifest keeps the contract in
-// /usr/share/omarchy/shell/README.md, and the island can draw every tool.
+// /usr/share/omarchy/shell/README.md, and the desktop island's plugin is gone.
 class ShellPluginTests : public QObject {
     Q_OBJECT
 
@@ -47,7 +47,10 @@ private slots:
     void manifestsKeepTheContract()
     {
         const QStringList plugins = m_shell.entryList({QStringLiteral("omastrator.*")}, QDir::Dirs);
-        QVERIFY(plugins.contains(QStringLiteral("omastrator.island")));
+        QVERIFY(plugins.contains(QStringLiteral("omastrator.design")));
+        QVERIFY(plugins.contains(QStringLiteral("omastrator.ai")));
+        // The pill moved into the app: nothing installs it any more.
+        QVERIFY(!plugins.contains(QStringLiteral("omastrator.island")));
         for (const QString &plugin : plugins) {
             QJsonParseError error{};
             const QJsonObject manifest = QJsonDocument::fromJson(read(plugin + QStringLiteral("/manifest.json")).toUtf8(), &error).object();
@@ -67,56 +70,49 @@ private slots:
         }
     }
 
-    void theIslandDrawsEveryToolItOffers()
+    // The island's pill is gone; design mode kept its overlay in a service plugin of its own.
+    void theIslandIsGoneAndDesignModeKeepsItsOverlay()
     {
-        const QString icons = read(QStringLiteral("omastrator-ui/Icons.js"));
-        const QString island = read(QStringLiteral("omastrator.island/Island.qml"));
-        QVERIFY(!icons.isEmpty() && !island.isEmpty());
-        auto hasIcon = [&](const QString &name) { return icons.contains(QStringLiteral("\n  ") + name + QStringLiteral(": [")); };
-        const QRegularExpression item(QStringLiteral("\\{ id: \"(\\w+)\"(?:, icon: \"(\\w+)\")?"));
-        // Draw mode's buttons are the app's own tools.
-        const qsizetype draw = island.indexOf(QStringLiteral("draw: ["));
-        const QString drawList = island.mid(draw, island.indexOf(QLatin1Char(']'), draw) - draw);
-        int tools = 0;
-        for (auto match = item.globalMatch(drawList); match.hasNext(); ++tools)
-            QVERIFY2(toolNamed(match.next().captured(1)).has_value(), qPrintable(drawList));
-        QVERIFY(tools >= 13);
-        // Every button anywhere has an icon.
-        for (auto match = item.globalMatch(island); match.hasNext();) {
-            const auto found = match.next();
-            const QString name = found.captured(2).isEmpty() ? found.captured(1) : found.captured(2);
-            QVERIFY2(hasIcon(name), qPrintable(name));
+        QVERIFY(!m_shell.exists(QStringLiteral("omastrator.island")));
+        const QString entry = read(QStringLiteral("omastrator.design/Design.qml"));
+        QVERIFY(!entry.isEmpty());
+        // It makes the status stream and the overlay, as Island.qml did, without the pill's size.
+        QVERIFY(entry.contains(QStringLiteral("O.Status {")));
+        QVERIFY(entry.contains(QStringLiteral("Overlay { status: status }")));
+        QVERIFY(!entry.contains(QStringLiteral("PanelWindow")));
+        for (const QString &plugin : m_shell.entryList({QStringLiteral("omastrator*")}, QDir::Dirs)) {
+            for (const QString &name : QDir(m_shell.filePath(plugin)).entryList({QStringLiteral("*.qml"), QStringLiteral("*.js")}, QDir::Files)) {
+                const QString source = read(plugin + QLatin1Char('/') + name);
+                for (const char *gone : {"islandWidth", "islandHeight", "islandHole", "islandShown", "islandShow", "labelsSeen", "\"expanded\""})
+                    QVERIFY2(!source.contains(QLatin1String(gone)), qPrintable(plugin + QLatin1Char('/') + name + QStringLiteral(": ") + QLatin1String(gone)));
+                QVERIFY2(!source.contains(QStringLiteral("omastrator.island")), qPrintable(plugin + QLatin1Char('/') + name));
+                // Nothing runs the verbs that only served the pill.
+                for (const char *verb : {"\"island\", \"tool\"", "\"island\", \"mode\", \"draw\"", "\"island\", \"expand\"", "\"island\", \"rest\"",
+                                         "\"island\", \"seen\""})
+                    QVERIFY2(!source.contains(QLatin1String(verb)), qPrintable(plugin + QLatin1Char('/') + name + QStringLiteral(": ") + QLatin1String(verb)));
+            }
         }
-        for (const char *mode : {"normal", "draw", "capture", "ai", "live", "design", "previous", "next"})
-            QVERIFY2(hasIcon(QLatin1String(mode)), mode);
-        // Design mode's row: the overlay's own tools, as `omastrator design tool` takes them.
-        const qsizetype design = island.indexOf(QStringLiteral("design: ["));
-        QVERIFY(design > 0);
-        const QString designList = island.mid(design, island.indexOf(QLatin1Char(']'), design) - design);
-        for (const char *tool : {"inspect", "pen", "rectangle", "ellipse", "arrow", "text", "note", "desk", "done"})
-            QVERIFY2(designList.contains(QStringLiteral("id: \"%1\"").arg(QLatin1String(tool))), tool);
+    }
+
+    // The tray light's click brings Omastrator forward with Ask focused, and its tooltip logic comes from the design plugin.
+    void theTrayLightAsks()
+    {
+        const QString light = read(QStringLiteral("omastrator.ai/TrayLight.qml"));
+        QVERIFY(light.contains(QStringLiteral("status.run([\"island\", \"ask\"])")));
+        QVERIFY(!light.contains(QStringLiteral("\"mode\", \"ai\"")));
+        QVERIFY(light.contains(QStringLiteral("import \"../omastrator.design/OverlayLogic.js\" as Logic")));
+        QVERIFY(!read(QStringLiteral("omastrator.design/OverlayLogic.js")).isEmpty());
+        QVERIFY(!read(QStringLiteral("omastrator.ai/manifest.json")).contains(QStringLiteral("island")));
     }
 
     // Design mode's overlay (docs/ANYWHERE.md) sits over every window and must never steal their clicks
     // unless the user asked it to: an empty input mask by default.
     void theOverlayIsClickThroughByDefault()
     {
-        const QString overlay = read(QStringLiteral("omastrator.island/Overlay.qml"));
+        const QString overlay = read(QStringLiteral("omastrator.design/Overlay.qml"));
         QVERIFY(!overlay.isEmpty());
-        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Logic.designOnLine(next)")));
-        // The island's window shows through the visibility rule, so it can't drift from what the tests check.
-        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Logic.islandShown(status.status, activeClass)")));
-        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("visible: root.islandShown && ")));
-        // The focused class comes from the Wayland app id first (Hyprland's record is empty until refreshed), and a
-        // focus change refreshes that record for the XWayland fallback.
-        const QString islandQml = read(QStringLiteral("omastrator.island/Island.qml"));
-        const qsizetype classAt = islandQml.indexOf(QStringLiteral("readonly property string activeClass"));
-        QVERIFY(classAt >= 0);
-        const QString classRule = islandQml.mid(classAt, islandQml.indexOf(QStringLiteral("readonly property bool islandShown"), classAt) - classAt);
-        QVERIFY(classRule.contains(QStringLiteral("toplevel.wayland.appId")));
-        QVERIFY(classRule.indexOf(QStringLiteral("toplevel.wayland.appId")) < classRule.indexOf(QStringLiteral("lastIpcObject")));
-        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("function onActiveToplevelChanged() { Hyprland.refreshToplevels() }")));
-        QVERIFY(read(QStringLiteral("omastrator.island/Island.qml")).contains(QStringLiteral("Overlay { status: status; islandWidth: root.pillWidth; islandHeight: root.pillHeight }")));
+        // The plugin's entry says what design mode says about itself (the pill that showed it is gone).
+        QVERIFY(read(QStringLiteral("omastrator.design/Design.qml")).contains(QStringLiteral("Logic.designOnLine(next)")));
         const QString window = block(overlay, QStringLiteral("PanelWindow"));
         QVERIFY(window.contains(QStringLiteral("WlrLayershell.layer: WlrLayer.Overlay")));
         QVERIFY(window.contains(QStringLiteral("exclusionMode: ExclusionMode.Ignore")));
@@ -128,8 +124,8 @@ private slots:
         for (auto match = part.globalMatch(mask); match.hasNext(); match.next())
             ++parts;
         QCOMPARE(parts, 5);
-        // Even a drawing tool leaves the island reachable: its buttons change the tool and leave design mode.
-        QVERIFY(mask.contains(QStringLiteral("Region { item: islandHole; intersection: Intersection.Subtract }")));
+        // The island's hole is gone with the island.
+        QVERIFY(!mask.contains(QStringLiteral("islandHole")));
         // ...and so does the Omarchy bar: a drawing tool must not turn a click on its clock or tray light into a shape.
         QVERIFY(mask.contains(QStringLiteral("Region { x: 0; y: 0; width: window.width; height: window.place.reservedTop || 0; intersection: Intersection.Subtract }")));
         // A proposal left waiting keeps its Keep and Discard reachable, with or without design mode.
@@ -149,7 +145,7 @@ private slots:
 #ifndef OMASTRATOR_HAVE_QML
         QSKIP("Qt Qml isn't installed, so the overlay's JavaScript can't run here.");
 #else
-        QString source = read(QStringLiteral("omastrator.island/OverlayLogic.js"));
+        QString source = read(QStringLiteral("omastrator.design/OverlayLogic.js"));
         QVERIFY(source.startsWith(QStringLiteral(".pragma library")));
         source.remove(0, source.indexOf(QLatin1Char('\n')));
         QJSEngine engine;
@@ -187,23 +183,17 @@ private slots:
         QVERIFY(call("wantsKeyboard", {design, screen, true}).toBool());
         QVERIFY(!call("wantsKeyboard", {design, other, true}).toBool());
 
-        // The island's line when design mode turns on: Esc only leaves with setup's keys loaded, or under a drawing tool.
+        // Design mode's line when it turns on: Esc only leaves with setup's keys loaded, or under a drawing tool.
         const QString escLeaves = QStringLiteral("Design mode: point at anything. Clicks still reach the app; Esc leaves");
-        const QString clickLeaves = QStringLiteral("Design mode: point at anything. Clicks still reach the app; click the island's Leave (or run `omastrator reset`) to leave");
+        const QString clickLeaves = QStringLiteral("Design mode: point at anything. Clicks still reach the app; run `omastrator reset` to leave");
         QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "point"}, {"keysLoaded", true}}}).toString(), escLeaves);
         QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "point"}, {"keysLoaded", false}}}).toString(), clickLeaves);
         QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "inspect"}, {"keysLoaded", false}}}).toString(), clickLeaves);
         QCOMPARE(call("designOnLine", {QVariantMap{{"tool", "rectangle"}, {"keysLoaded", false}}}).toString(), escLeaves);
 
-        // The island's pill: centred under the bar's reserved space, with a margin; nothing before the island has a size.
-        QVariantMap barred = screen;
-        barred["reservedTop"] = 26;
-        const QVariantMap hole = call("islandHole", {barred, 400, 34, 5}).toMap();
-        QCOMPARE(hole["x"].toInt(), 754);
-        QCOMPARE(hole["y"].toInt(), 25);
-        QCOMPARE(hole["width"].toInt(), 412);
-        QCOMPARE(hole["height"].toInt(), 46);
-        QCOMPARE(call("islandHole", {screen, 0, 34, 5}).toMap()["width"].toInt(), 0);
+        // The island's pill and the rule that showed it are gone from the overlay's logic.
+        for (const char *gone : {"islandHole", "islandShown", "ownClasses"})
+            QVERIFY2(!engine.globalObject().hasProperty(QLatin1String(gone)), gone);
 
         // The bar under the thing, above it near the bottom, always inside the screen.
         QVariantMap spot = call("barPosition", {QVariantList{2000, 100, 200, 40}, 300, 60, screen, 10}).toMap();
@@ -212,7 +202,7 @@ private slots:
         spot = call("barPosition", {QVariantList{3700, 1000, 100, 60}, 300, 60, screen, 10}).toMap();
         QCOMPARE(spot["x"].toInt(), 1610);
         QCOMPARE(spot["y"].toInt(), 930);
-        // Never over the bar and island: a thing at the very top puts the bar below topClear.
+        // Never over the Omarchy bar: a thing at the very top puts the bar below topClear.
         spot = call("barPosition", {QVariantList{2400, 0, 300, 40}, 300, 60, screen, 10, 80}).toMap();
         QCOMPARE(spot["y"].toInt(), 80);
         spot = call("barPosition", {QVariantList{2400, 0, 300, 1070}, 300, 60, screen, 10, 80}).toMap();
@@ -221,7 +211,7 @@ private slots:
         spot = call("barPosition", {QVariantList{1920, 0, 1920, 1080}, 300, 60, screen, 10, 80}).toMap();
         QCOMPARE(spot["x"].toInt(), 810);
         QCOMPARE(spot["y"].toInt(), 990);
-        // Dragged or pinned, it stays on the screen and below the island.
+        // Dragged or pinned, it stays on the screen and below the Omarchy bar.
         spot = call("clampBar", {-50, 10, 300, 60, screen, 80}).toMap();
         QCOMPARE(spot["x"].toInt(), 4);
         QCOMPARE(spot["y"].toInt(), 80);
@@ -233,57 +223,6 @@ private slots:
         QVERIFY(call("barShownOn", {QVariantMap{{"bounds", QVariantList{2000, 100, 200, 40}}}, screen}).toBool());
         QVERIFY(!call("barShownOn", {QVariantMap{{"bounds", QVariantList{100, 100, 200, 40}}}, screen}).toBool());
         QVERIFY(!call("barShownOn", {QVariant(), screen}).toBool());
-
-        // The island shows only with Omastrator (interim, pending a rethink of the island), and stays while it is a way out.
-        const QString own = QStringLiteral("io.github.iretonsean.Omastrator");
-        const QVariantMap quiet{{"islandShow", "with-app"}, {"dictation", "idle"}, {"ready", false}, {"proposal", ""}, {"design", QVariantMap{{"on", false}}}};
-        QVERIFY(!call("islandShown", {quiet, "foot"}).toBool());
-        QVERIFY(!call("islandShown", {quiet, ""}).toBool());
-        QVERIFY(!call("islandShown", {QVariantMap(), ""}).toBool());
-        QVERIFY(call("islandShown", {quiet, own}).toBool());
-        QVERIFY(call("islandShown", {quiet, "omastrator"}).toBool());
-        // Design mode, listening (and showing what was heard), a proposal or a result waiting: the island stays.
-        QVariantMap kept = quiet;
-        kept["design"] = QVariantMap{{"on", true}};
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        kept = quiet;
-        kept["dictation"] = "listening";
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        kept["dictation"] = "transcribing";
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        kept["dictation"] = "heard";
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        // Waiting on an agent (Stop is on the island), and Live editing in the browser (its tools are island-only).
-        kept = quiet;
-        kept["waiting"] = "Claude";
-        QVERIFY(call("islandShown", {kept, "chromium"}).toBool());
-        kept = quiet;
-        kept["waiting"] = "";
-        QVERIFY(!call("islandShown", {kept, "chromium"}).toBool());
-        for (const char *state : {"running", "starting"}) {
-            kept = quiet;
-            kept["live"] = QVariantMap{{"state", state}};
-            QVERIFY2(call("islandShown", {kept, "chromium"}).toBool(), state);
-        }
-        kept = quiet;
-        kept["live"] = QVariantMap{{"state", "off"}, {"deploy", QVariantMap{{"running", false}}}};
-        QVERIFY(!call("islandShown", {kept, "chromium"}).toBool());
-        kept["live"] = QVariantMap{{"state", "off"}, {"deploy", QVariantMap{{"running", true}}}};
-        QVERIFY(call("islandShown", {kept, "chromium"}).toBool());
-        kept = quiet;
-        kept["ready"] = true;
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        kept = quiet;
-        kept["proposal"] = "AI: Palette";
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        kept = quiet;
-        kept["design"] = QVariantMap{{"on", false}, {"proposal", QVariantMap{{"title", "AI: Palette"}}}};
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        // The setting shows it everywhere.
-        kept = quiet;
-        kept["islandShow"] = "always";
-        QVERIFY(call("islandShown", {kept, "foot"}).toBool());
-        QVERIFY(call("islandShown", {kept, ""}).toBool());
 
         // A lift's progress reads plainly on the bar.
         QCOMPARE(call("liftText", {QVariantMap{{"label", "div.card"}, {"stage", "Fetching pictures…"}, {"done", 3}, {"total", 8}}}).toString(),
@@ -356,34 +295,15 @@ private slots:
         QVERIFY(files >= 4);
     }
 
-    // Sizing the surface to the tooltip moved the pill from under the pointer,
-    // which hid the tooltip and moved it back: hover flickered many times a second.
-    void theIslandNeverResizesOnHover()
-    {
-        const QString window = block(read(QStringLiteral("omastrator.island/Island.qml")), QStringLiteral("PanelWindow"));
-        QVERIFY(!window.isEmpty());
-        for (const char *anchor : {"anchors.top: true", "anchors.left: true", "anchors.right: true"})
-            QVERIFY2(window.contains(QLatin1String(anchor)), anchor);
-        // Only the window's own lines count, not its children's.
-        const QString own = window.left(window.indexOf(QStringLiteral("O.Panel {")));
-        QVERIFY(!own.contains(QStringLiteral("implicitWidth")));
-        const QRegularExpression height(QStringLiteral("implicitHeight:([^\\n]*)"));
-        const QString heightBinding = height.match(own).captured(1);
-        QVERIFY(!heightBinding.isEmpty());
-        for (const char *hoverDependent : {"tip", "hover", "pill.", "row.", "expanded", "activity"})
-            QVERIFY2(!heightBinding.contains(QLatin1String(hoverDependent)), qPrintable(heightBinding));
-        QVERIFY(own.contains(QStringLiteral("mask: Region { item: pill }")));
-    }
-
-    // The island and the floating bar take the installed theme's look through one place, O.Theme,
+    // The floating bar takes the installed theme's look through one place, O.Theme,
     // which reads Graphite's tokens when the theme has them.
-    void theIslandAndBarFollowTheThemeTokens()
+    void theBarFollowsTheThemeTokens()
     {
         const QString theme = read(QStringLiteral("omastrator-ui/Theme.qml"));
         QVERIFY(theme.contains(QStringLiteral("pragma Singleton")));
         QVERIFY(theme.contains(QStringLiteral("Color.shellValues[\"graphite.\" + name]")));
         QVERIFY(read(QStringLiteral("omastrator-ui/qmldir")).contains(QStringLiteral("singleton Theme 1.0 Theme.qml")));
-        for (const char *file : {"omastrator.island/Island.qml", "omastrator.island/Overlay.qml"}) {
+        for (const char *file : {"omastrator.design/Overlay.qml"}) {
             const QString source = read(QString::fromLatin1(file));
             QVERIFY2(source.contains(QStringLiteral("O.Theme.")), file);
             QVERIFY2(!source.contains(QStringLiteral("Color.popups")), file);
@@ -395,7 +315,7 @@ private slots:
     // surface has the keyboard, so waiting for its focus sent every letter to the window underneath.
     void askingTakesTheKeyboardOnTheClick()
     {
-        const QString overlay = read(QStringLiteral("omastrator.island/Overlay.qml"));
+        const QString overlay = read(QStringLiteral("omastrator.design/Overlay.qml"));
         const QRegularExpression focus(QStringLiteral("keyboardFocus: Logic\\.wantsKeyboard\\([^\\n]*asking"));
         QVERIFY(focus.match(overlay).hasMatch());
         const QString ask = overlay.mid(overlay.indexOf(QStringLiteral("id: askField")));
@@ -403,7 +323,7 @@ private slots:
         QVERIFY(ask.contains(QStringLiteral("mouse.accepted = false")));
     }
 
-    // A binary that can't start never sends exited; the island would never connect.
+    // A binary that can't start never sends exited; the overlay would never connect.
     void theStatusStreamRetriesAFailedStart()
     {
         const QString process = block(read(QStringLiteral("omastrator-ui/Status.qml")), QStringLiteral("Process"));
