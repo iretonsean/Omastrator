@@ -164,7 +164,9 @@ QString EditorSession::applyToken(const QString &id, const QString &target)
     }
     if (key.isEmpty())
         return kind == TokenKind::shadow ? QStringLiteral("Shadow tokens are kept for code; objects here have no shadow yet.")
-                                         : QStringLiteral("Select a group to space its contents by this token.");
+            : kind == TokenKind::duration || kind == TokenKind::easing
+            ? QStringLiteral("Motion tokens are kept for code: the timeline and the Motion inspector use them.")
+            : QStringLiteral("Select a group to space its contents by this token.");
     const bool colour = key == QLatin1String("fill") || key == QLatin1String("stroke");
     if (colour != (kind == TokenKind::color))
         return QStringLiteral("A %1 token can't set that.").arg(title(kind).toLower());

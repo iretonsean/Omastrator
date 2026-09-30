@@ -9,9 +9,9 @@
 #include <cmath>
 
 namespace {
-const std::array<std::pair<TokenKind, const char *>, 5> kindNames{{
+const std::array<std::pair<TokenKind, const char *>, 7> kindNames{{
     {TokenKind::color, "color"}, {TokenKind::type, "type"}, {TokenKind::spacing, "spacing"},
-    {TokenKind::radius, "radius"}, {TokenKind::shadow, "shadow"},
+    {TokenKind::radius, "radius"}, {TokenKind::shadow, "shadow"}, {TokenKind::duration, "duration"}, {TokenKind::easing, "easing"},
 }};
 
 QString hex(const QColor &color)
@@ -98,7 +98,10 @@ QJsonObject encodeValue(TokenKind kind, const TokenValue &value)
         return {{"color", value.color.name(QColor::HexArgb)}};
     case TokenKind::spacing:
     case TokenKind::radius:
+    case TokenKind::duration:
         return {{"number", value.number}};
+    case TokenKind::easing:
+        return {{"text", value.text}};
     case TokenKind::type: {
         QJsonObject type{{"family", value.type.family}, {"weight", value.type.weight}, {"size", value.type.size},
                          {"tracking", value.type.tracking}};
@@ -118,6 +121,7 @@ TokenValue decodeValue(const QJsonObject &json)
     TokenValue value;
     value.color = QColor::fromString(json["color"].toString());
     value.number = json["number"].toDouble();
+    value.text = json["text"].toString();
     const QJsonObject type = json["type"].toObject();
     value.type.family = type["family"].toString(value.type.family);
     value.type.weight = std::clamp(type["weight"].toInt(400), 1, 1000);
@@ -169,6 +173,10 @@ QString title(TokenKind kind)
         return QStringLiteral("Radius");
     case TokenKind::shadow:
         return QStringLiteral("Shadow");
+    case TokenKind::duration:
+        return QStringLiteral("Duration");
+    case TokenKind::easing:
+        return QStringLiteral("Easing");
     }
     return {};
 }
@@ -261,6 +269,11 @@ QString DesignToken::displayValue(const QString &mode) const
     }
     case TokenKind::shadow:
         return shown.shadow.css();
+    case TokenKind::duration:
+        return numeral(shown.number) + QStringLiteral(" ms");
+    case TokenKind::easing:
+        // linear() is kept as written and is not read as a curve.
+        return shown.text.startsWith(QLatin1String("linear(")) ? QStringLiteral("Custom") : shown.text;
     }
     return {};
 }
@@ -292,6 +305,13 @@ DesignToken DesignToken::typography(const QString &name, const TypeValue &type)
 {
     DesignToken token{DesignTokens::newId(), name, TokenKind::type, {}, {}, {}};
     token.value.type = type;
+    return token;
+}
+
+DesignToken DesignToken::easing(const QString &name, const QString &text)
+{
+    DesignToken token{DesignTokens::newId(), name, TokenKind::easing, {}, {}, {}};
+    token.value.text = text.trimmed();
     return token;
 }
 

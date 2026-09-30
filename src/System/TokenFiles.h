@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QColor>
 #include <QString>
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -45,4 +46,11 @@ std::optional<QColor> parseColor(const QString &css);
 QString cssColor(const QColor &color);
 // "16px", "1rem", "0.5em", "12" → points; nullopt for anything else.
 std::optional<double> parseLength(const QString &css);
+// "480ms", "0.48s" → milliseconds; nullopt for anything else (a bare number has no unit, so it is not a time).
+std::optional<double> parseTime(const QString &css);
+// Whether `css` reads as an easing: cubic-bezier(), steps(), linear(), or a keyword such as ease-out.
+bool isEasing(const QString &css);
+// "cubic-bezier(0.16, 1, 0.3, 1)" as its four numbers, or nothing for a keyword and the rest.
+std::optional<std::array<double, 4>> cubicBezier(const QString &css);
+QString cubicBezierText(const std::array<double, 4> &points);
 }

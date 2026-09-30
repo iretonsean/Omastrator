@@ -11,7 +11,8 @@
 // Tailwind theme when the page has one, then the CSS custom properties in its
 // stylesheets, then the Omarchy theme's colours.
 struct Token {
-    enum class Group { color, spacing, fontSize, fontWeight, radius };
+    // duration, easing and stagger are motion's (docs/MOTION.md, section 6): a duration and a stagger are in ms, an easing is CSS text.
+    enum class Group { color, spacing, fontSize, fontWeight, radius, duration, easing, stagger };
     enum class Source { tailwind, css, omarchy };
     Group group;
     Source source;
@@ -46,7 +47,7 @@ public:
     const std::vector<Token> &tokens() const { return m_tokens; }
     bool hasTailwind() const { return m_spacingPx > 0 || m_tailwind; }
     double spacingPx() const { return m_spacingPx; }
-    // For the overlay's chips: {colors: [{name, value}], spacing: [...], fontSizes, fontWeights, radii}.
+    // For the overlay's chips: {colors: [{name, value}], spacing: [...], fontSizes, fontWeights, radii, durations, easings, staggers}.
     QJsonObject toJson() const;
 
     static std::optional<Token::Group> groupOf(const QString &property);
@@ -54,6 +55,8 @@ public:
     static QString tailwindPrefix(const QString &property);
     // "12px", "0.75rem" (with the root font size), "3" → pixels.
     static std::optional<double> pixels(const QString &value, double rootFontSize = 16);
+    // "480ms", "0.48s" → milliseconds.
+    static std::optional<double> milliseconds(const QString &value);
 
 private:
     std::vector<Token> m_tokens;

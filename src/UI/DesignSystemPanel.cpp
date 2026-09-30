@@ -1,4 +1,5 @@
 #include "UI/DesignSystemPanel.h"
+#include "System/TokenFiles.h"
 #include "Document/EditorSession.h"
 #include "Live/Deploy.h"
 #include <QColorDialog>
@@ -119,6 +120,23 @@ std::optional<TokenValue> askValue(const DesignToken &token, const TokenValue &s
         value.type = *type;
         return value;
     }
+    case TokenKind::duration: {
+        bool ok = false;
+        const double ms = QInputDialog::getDouble(parent, token.name, QStringLiteral("Milliseconds"), start.number, 0, 60000, 0, &ok);
+        if (!ok)
+            return std::nullopt;
+        value.number = ms;
+        return value;
+    }
+    case TokenKind::easing: {
+        bool ok = false;
+        const QString css = QInputDialog::getText(parent, token.name, QStringLiteral("CSS easing, such as cubic-bezier(0.16, 1, 0.3, 1) or ease-out"), QLineEdit::Normal,
+                                                  start.text, &ok);
+        if (!ok || !TokenFiles::isEasing(css))
+            return std::nullopt;
+        value.text = css.trimmed();
+        return value;
+    }
     case TokenKind::shadow: {
         bool ok = false;
         const QString css = QInputDialog::getText(parent, token.name, QStringLiteral("CSS box-shadow"), QLineEdit::Normal, start.shadow.css(), &ok);
@@ -216,7 +234,7 @@ QWidget *DesignSystemPanel::buildTokens()
     auto *row = new QHBoxLayout;
     QToolButton *add = smallButton(QStringLiteral("+"), QStringLiteral("New Token"), page);
     auto *menu = new QMenu(add);
-    for (const TokenKind kind : {TokenKind::color, TokenKind::type, TokenKind::spacing, TokenKind::radius, TokenKind::shadow})
+    for (const TokenKind kind : {TokenKind::color, TokenKind::type, TokenKind::spacing, TokenKind::radius, TokenKind::shadow, TokenKind::duration, TokenKind::easing})
         menu->addAction(title(kind), this, [this, kind] { addToken(int(kind)); });
     menu->addSeparator();
     menu->addAction(QStringLiteral("Add Mode…"), this, [this] {
@@ -256,7 +274,7 @@ void DesignSystemPanel::rebuildTokens()
     if (document) {
         m_mode->addItems(document->tokenModes);
         m_mode->setCurrentText(document->tokenMode);
-        for (const TokenKind kind : {TokenKind::color, TokenKind::type, TokenKind::spacing, TokenKind::radius, TokenKind::shadow}) {
+        for (const TokenKind kind : {TokenKind::color, TokenKind::type, TokenKind::spacing, TokenKind::radius, TokenKind::shadow, TokenKind::duration, TokenKind::easing}) {
             QTreeWidgetItem *group = nullptr;
             for (const DesignToken &token : document->tokens) {
                 if (token.kind != kind)
@@ -310,6 +328,13 @@ void DesignSystemPanel::addToken(int kind)
         break;
     case TokenKind::shadow:
         token = DesignToken::shadowToken(QStringLiteral("shadow/new"), {});
+        break;
+    case TokenKind::duration:
+        // A stagger is a duration named in a stagger group: "stagger/words".
+        token = DesignToken::number(which, QStringLiteral("duration/new"), 300);
+        break;
+    case TokenKind::easing:
+        token = DesignToken::easing(QStringLiteral("ease/new"), QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
         break;
     }
     bool ok = false;

@@ -15,7 +15,8 @@ struct ParagraphFormat;
 // A design system's named values (docs/DESIGN-SYSTEMS.md). Paints, text styles,
 // corner radii, stroke weights and group gaps can point at one by id, and
 // changing the token changes every use.
-enum class TokenKind { color, type, spacing, radius, shadow };
+// Duration is milliseconds (a stagger is a duration in a `stagger` group), easing is CSS text: cubic-bezier(), a keyword or linear().
+enum class TokenKind { color, type, spacing, radius, shadow, duration, easing };
 QString rawValue(TokenKind kind);
 std::optional<TokenKind> tokenKind(const QString &rawValue);
 // "Colour", "Type" … for the panel's headings.
@@ -45,12 +46,14 @@ struct ShadowValue {
     friend bool operator==(const ShadowValue &, const ShadowValue &) = default;
 };
 
-// What a token holds: the field its kind uses. Spacing and radius are `number`, in points.
+// What a token holds: the field its kind uses. Spacing and radius are `number`, in points; a duration is `number`, in ms.
 struct TokenValue {
     QColor color;
     double number = 0;
     TypeValue type;
     ShadowValue shadow;
+    // An easing: "cubic-bezier(0.16, 1, 0.3, 1)", "ease-out" or "linear(0, 0.5, 1)".
+    QString text;
     friend bool operator==(const TokenValue &, const TokenValue &) = default;
 };
 
@@ -74,6 +77,7 @@ struct DesignToken {
     static DesignToken number(TokenKind kind, const QString &name, double value);
     static DesignToken typography(const QString &name, const TypeValue &type);
     static DesignToken shadowToken(const QString &name, const ShadowValue &shadow);
+    static DesignToken easing(const QString &name, const QString &text);
 };
 
 // The keys objects bind scalar properties to tokens under (VectorObject::tokenRefs).

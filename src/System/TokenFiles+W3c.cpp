@@ -47,6 +47,18 @@ std::optional<QColor> colourOf(const QJsonValue &value)
 }
 
 // A token's value as `kind` from its W3C form, nullopt when it isn't one.
+// A W3C duration: {"value": 480, "unit": "ms"} (2025), or the text "480ms" (earlier drafts), in milliseconds.
+std::optional<double> timeOf(const QJsonValue &value)
+{
+    if (value.isObject()) {
+        const QJsonObject object = value.toObject();
+        if (!object["value"].isDouble())
+            return std::nullopt;
+        return object["unit"].toString(QStringLiteral("ms")) == QLatin1String("s") ? object["value"].toDouble() * 1000 : object["value"].toDouble();
+    }
+    return value.isString() ? TokenFiles::parseTime(value.toString()) : std::nullopt;
+}
+
 std::optional<TokenValue> valueOf(TokenKind kind, const QJsonValue &value)
 {
     TokenValue result;
@@ -61,6 +73,23 @@ std::optional<TokenValue> valueOf(TokenKind kind, const QJsonValue &value)
     case TokenKind::radius:
         if (const auto points = dimension(value)) {
             result.number = *points;
+            return result;
+        }
+        return std::nullopt;
+    case TokenKind::duration:
+        if (const auto ms = timeOf(value)) {
+            result.number = *ms;
+            return result;
+        }
+        return std::nullopt;
+    case TokenKind::easing:
+        if (value.isArray() && value.toArray().size() == 4) {
+            const QJsonArray points = value.toArray();
+            result.text = TokenFiles::cubicBezierText({points[0].toDouble(), points[1].toDouble(), points[2].toDouble(), points[3].toDouble()});
+            return result;
+        }
+        if (value.isString() && TokenFiles::isEasing(value.toString())) {
+            result.text = value.toString().trimmed();
             return result;
         }
         return std::nullopt;
@@ -108,7 +137,14 @@ std::optional<TokenKind> kindFor(const QString &type, const QString &path, const
         return TokenKind::type;
     if (type == QLatin1String("shadow"))
         return TokenKind::shadow;
+    if (type == QLatin1String("duration"))
+        return TokenKind::duration;
+    if (type == QLatin1String("cubicBezier"))
+        return TokenKind::easing;
     const QString lower = path.toLower();
+    // An easing written as text keeps its name in the path: ease/reveal.
+    if (type == QLatin1String("string") && value.isString() && (lower.startsWith(QLatin1String("ease")) || lower.contains(QLatin1String("/ease"))))
+        return TokenKind::easing;
     const bool round = lower.contains(QLatin1String("radius")) || lower.contains(QLatin1String("rounded")) || lower.contains(QLatin1String("corner"));
     if (type == QLatin1String("dimension") || type == QLatin1String("spacing") || type == QLatin1String("sizing") || type == QLatin1String("borderRadius"))
         return round || type == QLatin1String("borderRadius") ? TokenKind::radius : TokenKind::spacing;
@@ -117,6 +153,8 @@ std::optional<TokenKind> kindFor(const QString &type, const QString &path, const
     // Untyped: the value says.
     if (value.isString() && TokenFiles::parseColor(value.toString()))
         return TokenKind::color;
+    if (value.isString() && TokenFiles::parseTime(value.toString()))
+        return TokenKind::duration;
     if (dimension(value))
         return round ? TokenKind::radius : TokenKind::spacing;
     return std::nullopt;
@@ -181,6 +219,14 @@ QJsonValue w3cValue(TokenKind kind, const TokenValue &value, bool strings)
     case TokenKind::spacing:
     case TokenKind::radius:
         return length(value.number);
+    case TokenKind::duration:
+        if (strings)
+            return numeral(value.number) + QStringLiteral("ms");
+        return QJsonObject{{"value", std::round(value.number * 1000) / 1000}, {"unit", "ms"}};
+    case TokenKind::easing:
+        if (const auto points = TokenFiles::cubicBezier(value.text))
+            return QJsonArray{(*points)[0], (*points)[1], (*points)[2], (*points)[3]};
+        return value.text;
     case TokenKind::type: {
         QJsonObject type{{"fontFamily", value.type.family}, {"fontSize", length(value.type.size)}, {"fontWeight", value.type.weight}};
         if (value.type.lineHeight && value.type.size > 0)
@@ -190,14 +236,14 @@ QJsonValue w3cValue(TokenKind kind, const TokenValue &value, bool strings)
         return type;
     }
     case TokenKind::shadow:
-        return QJsonObject{{"color", strings ? QJsonValue(TokenFiles::cssColor(value.shadow.color)) : w3cValue(TokenKind::color, TokenValue{value.shadow.color, 0, {}, {}}, false)},
+        return QJsonObject{{"color", strings ? QJsonValue(TokenFiles::cssColor(value.shadow.color)) : w3cValue(TokenKind::color, TokenValue{value.shadow.color, 0, {}, {}, {}}, false)},
                            {"offsetX", length(value.shadow.x)}, {"offsetY", length(value.shadow.y)}, {"blur", length(value.shadow.blur)},
                            {"spread", length(value.shadow.spread)}, {"inset", value.shadow.inset}};
     }
     return {};
 }
 
-QString w3cType(TokenKind kind)
+QString w3cType(TokenKind kind, const TokenValue &value)
 {
     switch (kind) {
     case TokenKind::color:
@@ -209,6 +255,11 @@ QString w3cType(TokenKind kind)
         return QStringLiteral("typography");
     case TokenKind::shadow:
         return QStringLiteral("shadow");
+    case TokenKind::duration:
+        return QStringLiteral("duration");
+    case TokenKind::easing:
+        // A keyword is text; only four numbers are a cubicBezier.
+        return TokenFiles::cubicBezier(value.text) ? QStringLiteral("cubicBezier") : QStringLiteral("string");
     }
     return {};
 }
@@ -221,9 +272,10 @@ bool usesStrings(const QJsonObject &group)
         const QJsonObject child = entry.value().toObject();
         if (child.contains("$value")) {
             const QString type = child["$type"].toString();
-            if ((type == QLatin1String("dimension") || type == QLatin1String("color")) && child["$value"].isString())
+            const bool sized = type == QLatin1String("dimension") || type == QLatin1String("color") || type == QLatin1String("duration");
+            if (sized && child["$value"].isString())
                 return true;
-            if ((type == QLatin1String("dimension") || type == QLatin1String("color")) && child["$value"].isObject())
+            if (sized && child["$value"].isObject())
                 return false;
             continue;
         }
@@ -508,7 +560,7 @@ QByteArray writeW3c(const std::vector<DesignToken> &tokens, const QByteArray &ex
     QJsonObject root = QJsonDocument::fromJson(existing).object();
     const bool strings = !root.isEmpty() && usesStrings(root);
     for (const DesignToken &token : tokens) {
-        QJsonObject entry{{"$type", w3cType(token.kind)}, {"$value", w3cValue(token.kind, token.value, strings)}};
+        QJsonObject entry{{"$type", w3cType(token.kind, token.value)}, {"$value", w3cValue(token.kind, token.value, strings)}};
         if (!token.description.isEmpty())
             entry["$description"] = token.description;
         if (!token.modes.empty()) {

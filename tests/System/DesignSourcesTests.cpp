@@ -68,7 +68,10 @@ private slots:
         QCOMPARE(body.family, QStringLiteral("Inter"));
         QCOMPARE(body.lineHeight, std::optional<double>(24));
         QCOMPARE(named(read.tokens, QStringLiteral("shadow/sm"))->value.shadow.blur, 2.0);
-        QVERIFY(read.skipped.contains(QStringLiteral("motion/fast")));
+        // Durations are read now (docs/MOTION.md, section 6): motion/fast is a token, in ms.
+        QVERIFY(!read.skipped.contains(QStringLiteral("motion/fast")));
+        QCOMPARE(named(read.tokens, QStringLiteral("motion/fast"))->kind, TokenKind::duration);
+        QCOMPARE(named(read.tokens, QStringLiteral("motion/fast"))->value.number, 100.0);
     }
 
     void w3cRoundTripsAndKeepsWhatItDoesntKnow()
@@ -91,6 +94,134 @@ private slots:
         // A new file uses the 2025 object forms.
         const QJsonObject fresh = QJsonDocument::fromJson(TokenFiles::writeW3c({DesignToken::color(QStringLiteral("color/ink"), Qt::black)})).object();
         QCOMPARE(fresh["color"].toObject()["ink"].toObject()["$value"].toObject()["hex"].toString(), QStringLiteral("#000000"));
+    }
+
+    // Motion tokens (docs/MOTION.md, section 6): duration/*, ease/* and stagger/* in each file the project keeps them in.
+    void motionTokensRoundTripThroughW3c()
+    {
+        const std::vector<DesignToken> tokens{DesignToken::number(TokenKind::duration, QStringLiteral("duration/reveal"), 480),
+                                              DesignToken::number(TokenKind::duration, QStringLiteral("stagger/words"), 60),
+                                              DesignToken::easing(QStringLiteral("ease/reveal"), QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)")),
+                                              DesignToken::easing(QStringLiteral("ease/plain"), QStringLiteral("ease-out")),
+                                              DesignToken::easing(QStringLiteral("ease/table"), QStringLiteral("linear(0, 0.4, 1)"))};
+        const QByteArray written = TokenFiles::writeW3c(tokens);
+        const QJsonObject json = QJsonDocument::fromJson(written).object();
+        // A new file uses the 2025 forms: a duration is {value, unit}, a curve is four numbers.
+        const QJsonObject reveal = json["duration"].toObject()["reveal"].toObject();
+        QCOMPARE(reveal["$type"].toString(), QStringLiteral("duration"));
+        QCOMPARE(reveal["$value"].toObject()["value"].toDouble(), 480.0);
+        QCOMPARE(reveal["$value"].toObject()["unit"].toString(), QStringLiteral("ms"));
+        // A stagger is a duration in a `stagger` group.
+        QCOMPARE(json["stagger"].toObject()["words"].toObject()["$type"].toString(), QStringLiteral("duration"));
+        const QJsonObject curve = json["ease"].toObject()["reveal"].toObject();
+        QCOMPARE(curve["$type"].toString(), QStringLiteral("cubicBezier"));
+        QCOMPARE(curve["$value"].toArray().size(), 4);
+        QCOMPARE(curve["$value"].toArray()[1].toDouble(), 1.0);
+        // A keyword or linear() is text, not a curve of four numbers.
+        QCOMPARE(json["ease"].toObject()["plain"].toObject()["$value"].toString(), QStringLiteral("ease-out"));
+        QCOMPARE(json["ease"].toObject()["plain"].toObject()["$type"].toString(), QStringLiteral("string"));
+
+        const TokenFiles::Read again = TokenFiles::readW3c(written);
+        QVERIFY(again.skipped.isEmpty());
+        QCOMPARE(named(again.tokens, QStringLiteral("duration/reveal"))->value.number, 480.0);
+        QCOMPARE(named(again.tokens, QStringLiteral("stagger/words"))->kind, TokenKind::duration);
+        QCOMPARE(named(again.tokens, QStringLiteral("ease/reveal"))->value.text, QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
+        QCOMPARE(named(again.tokens, QStringLiteral("ease/plain"))->value.text, QStringLiteral("ease-out"));
+        QCOMPARE(named(again.tokens, QStringLiteral("ease/table"))->value.text, QStringLiteral("linear(0, 0.4, 1)"));
+        // linear() reads as Custom, in the panel.
+        QCOMPARE(named(again.tokens, QStringLiteral("ease/table"))->displayValue(), QStringLiteral("Custom"));
+        QCOMPARE(named(again.tokens, QStringLiteral("duration/reveal"))->displayValue(), QStringLiteral("480 ms"));
+    }
+
+    void w3cDurationsInTheOlderTextFormAreReadAndKeepTheirKeys()
+    {
+        const QByteArray file = R"json({
+  "motion": {
+    "$description": "Timing",
+    "reveal": { "$type": "duration", "$value": "0.48s", "$description": "Entrances", "$extensions": { "org.example": { "keep": true } } },
+    "spring": { "$type": "cubicBezier", "$value": [0.34, 1.56, 0.64, 1] }
+  }
+})json";
+        TokenFiles::Read read = TokenFiles::readW3c(file);
+        QCOMPARE(named(read.tokens, QStringLiteral("motion/reveal"))->value.number, 480.0);
+        QCOMPARE(named(read.tokens, QStringLiteral("motion/spring"))->kind, TokenKind::easing);
+        for (DesignToken &token : read.tokens)
+            if (token.name == QLatin1String("motion/reveal"))
+                token.value.number = 600;
+        const QJsonObject json = QJsonDocument::fromJson(TokenFiles::writeW3c(read.tokens, file)).object();
+        const QJsonObject reveal = json["motion"].toObject()["reveal"].toObject();
+        // The file wrote text, so it keeps writing text; the description and the extension key stay.
+        QCOMPARE(reveal["$value"].toString(), QStringLiteral("600ms"));
+        QCOMPARE(reveal["$description"].toString(), QStringLiteral("Entrances"));
+        QVERIFY(reveal["$extensions"].toObject().contains("org.example"));
+        QCOMPARE(json["motion"].toObject()["$description"].toString(), QStringLiteral("Timing"));
+    }
+
+    void motionTokensRoundTripThroughTailwindAndCss()
+    {
+        const QByteArray tailwind = "@import \"tailwindcss\";\n\n@theme {\n  --duration-reveal: 480ms;\n  --duration-slow: 0.6s;\n  --stagger-words: 60ms;\n"
+                                    "  --ease-reveal: cubic-bezier(0.16, 1, 0.3, 1);\n  --color-ink: #111111;\n}\n\n.word { animation: nl-rise var(--duration-reveal) var(--ease-reveal); }\n";
+        TokenFiles::Read read = TokenFiles::readTailwind(tailwind);
+        QCOMPARE(named(read.tokens, QStringLiteral("duration/reveal"))->value.number, 480.0);
+        QCOMPARE(named(read.tokens, QStringLiteral("duration/slow"))->value.number, 600.0);
+        QCOMPARE(named(read.tokens, QStringLiteral("stagger/words"))->kind, TokenKind::duration);
+        QCOMPARE(named(read.tokens, QStringLiteral("ease/reveal"))->value.text, QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
+        QVERIFY(named(read.tokens, QStringLiteral("color/ink")));
+        std::vector<DesignToken> edited = read.tokens;
+        for (DesignToken &token : edited) {
+            if (token.name == QLatin1String("duration/reveal"))
+                token.value.number = 520;
+            if (token.name == QLatin1String("duration/slow"))
+                token.value.number = 800;
+            if (token.name == QLatin1String("ease/reveal"))
+                token.value.text = QStringLiteral("cubic-bezier(0.34, 1.56, 0.64, 1)");
+        }
+        edited.push_back(DesignToken::number(TokenKind::duration, QStringLiteral("stagger/cards"), 120));
+        const QString written = QString::fromUtf8(TokenFiles::writeTailwind(edited, tailwind));
+        QVERIFY(written.contains(QStringLiteral("--duration-reveal: 520ms;")));
+        // A file that writes seconds keeps writing seconds.
+        QVERIFY(written.contains(QStringLiteral("--duration-slow: 0.8s;")));
+        QVERIFY(written.contains(QStringLiteral("--ease-reveal: cubic-bezier(0.34, 1.56, 0.64, 1);")));
+        QVERIFY(written.contains(QStringLiteral("--stagger-cards: 120ms;")));
+        // What else is in the file stays as it was.
+        QVERIFY(written.contains(QStringLiteral(".word { animation: nl-rise var(--duration-reveal) var(--ease-reveal); }")));
+        QVERIFY(written.contains(QStringLiteral("--color-ink: #111111;")));
+        QCOMPARE(written.count(QStringLiteral("@theme")), 1);
+
+        const QByteArray css = ":root {\n  --duration-reveal: 480ms;\n  --stagger-words: 60ms;\n  --ease-out: cubic-bezier(0, 0, 0.2, 1);\n  --brand: #e11d48;\n}\n";
+        read = TokenFiles::readCss(css);
+        QCOMPARE(named(read.tokens, QStringLiteral("duration/reveal"))->value.number, 480.0);
+        QCOMPARE(named(read.tokens, QStringLiteral("stagger/words"))->value.number, 60.0);
+        QCOMPARE(named(read.tokens, QStringLiteral("ease/out"))->value.text, QStringLiteral("cubic-bezier(0, 0, 0.2, 1)"));
+        edited = read.tokens;
+        for (DesignToken &token : edited)
+            if (token.name == QLatin1String("stagger/words"))
+                token.value.number = 90;
+        const QString rewritten = QString::fromUtf8(TokenFiles::writeCss(edited, css));
+        QVERIFY(rewritten.contains(QStringLiteral("--stagger-words: 90ms;")));
+        QVERIFY(rewritten.contains(QStringLiteral("--brand: #e11d48;")));
+        // And each name is the variable it came from.
+        QCOMPARE(TokenFiles::cssVariable(*named(read.tokens, QStringLiteral("stagger/words"))), QStringLiteral("--stagger-words"));
+        QCOMPARE(TokenFiles::cssVariable(*named(read.tokens, QStringLiteral("duration/reveal"))), QStringLiteral("--duration-reveal"));
+        QCOMPARE(TokenFiles::cssVariable(*named(read.tokens, QStringLiteral("ease/out"))), QStringLiteral("--ease-out"));
+    }
+
+    void timesAndEasingsAreParsedAsTheFilesWriteThem()
+    {
+        QCOMPARE(TokenFiles::parseTime(QStringLiteral("480ms")), std::optional<double>(480));
+        QCOMPARE(TokenFiles::parseTime(QStringLiteral("0.48s")), std::optional<double>(480));
+        QCOMPARE(TokenFiles::parseTime(QStringLiteral(" 60 ms ")), std::optional<double>(60));
+        QVERIFY(!TokenFiles::parseTime(QStringLiteral("480")));
+        QVERIFY(!TokenFiles::parseTime(QStringLiteral("16px")));
+        QVERIFY(TokenFiles::isEasing(QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)")));
+        QVERIFY(TokenFiles::isEasing(QStringLiteral("ease-in-out")));
+        QVERIFY(TokenFiles::isEasing(QStringLiteral("linear(0, 0.5, 1)")));
+        QVERIFY(!TokenFiles::isEasing(QStringLiteral("banana")));
+        const auto curve = TokenFiles::cubicBezier(QStringLiteral("cubic-bezier( 0.16 ,1, 0.3, 1 )"));
+        QVERIFY(curve);
+        QCOMPARE((*curve)[0], 0.16);
+        QCOMPARE(TokenFiles::cubicBezierText(*curve), QStringLiteral("cubic-bezier(0.16, 1, 0.3, 1)"));
+        QVERIFY(!TokenFiles::cubicBezier(QStringLiteral("ease-out")));
     }
 
     void tailwindV4RoundTripsInPlace()
