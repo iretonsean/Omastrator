@@ -102,6 +102,12 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   Build It: your agent changes the code to match it on its own git branch, and
   Review Changes shows the result. Build It with a Note… adds a line for the
   agent; on a site that isn't yours it asks for the code's folder first.
+  An empty Browser View offers three ways to fill it: Type an address; Generate
+  a page…, where your agent writes a page into a new project (Vite + Tailwind,
+  plain HTML or Astro) and you confirm every file before anything is created;
+  and Build It from a canvas frame, which makes a starter project first. The
+  new project is a git repository with one commit, and nothing is pushed. Stop
+  and Esc end the writing and leave nothing on disk.
 - Canvas size limit: an artboard can be up to 1,000,000 points a side (about
   350 m). Tested at 50 m and at that limit: drawing, zoom (Fit works down to
   0.01 %), precision at 3200 %, selection, saving and reopening, SVG and PDF.
