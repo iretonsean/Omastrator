@@ -26,44 +26,6 @@ QString jsonString(const QString &text)
     return QLatin1Char('"') + escaped + QLatin1Char('"');
 }
 
-struct Key {
-    const char *key;
-    const char *tool;
-    const char *label;
-};
-// Draw mode's letters, Illustrator's own. Type (T) is apart: it gives the keyboard back.
-constexpr Key drawKeys[] = {{"V", "select", "Selection"},   {"A", "directSelect", "Direct Selection"},
-                            {"P", "pen", "Pen"},            {"N", "pencil", "Pencil"},
-                            {"M", "rectangle", "Rectangle"}, {"L", "ellipse", "Ellipse"},
-                            {"backslash", "line", "Line Segment"}, {"I", "eyedropper", "Eyedropper"},
-                            {"H", "hand", "Hand"},          {"Z", "zoom", "Zoom"}};
-// Capture mode: one action, then the keyboard goes back.
-// AI mode: each starts a flow and hands the keyboard back, since Generate and Edit open a sheet to type in.
-constexpr Key aiKeys[] = {{"G", "ai generate", "Generate"},
-                          {"E", "ai edit", "Edit with Instruction"},
-                          {"R", "ai roast", "Roast My Design"},
-                          {"V", "ai vectorize", "Vectorize with AI"}};
-// Live mode: open, deploy, save, review changes, history and stop; each hands the keyboard back.
-constexpr Key liveKeys[] = {{"O", "live start", "Open a page…"},
-                            {"D", "live deploy", "Deploy"},
-                            {"S", "live save", "Save"},
-                            {"R", "live changes", "Review changes"},
-                            {"H", "live history", "History"},
-                            {"X", "live stop", "Stop Live"}};
-constexpr Key captureKeys[] = {{"F", "capture color fill", "Pick colour for fill"},
-                               {"S", "capture color stroke", "Pick colour for stroke"},
-                               {"W", "capture color swatch", "Pick colour as a swatch"},
-                               {"R", "capture screenshot", "Screenshot region"},
-                               {"A", "capture window", "Capture the focused window"},
-                               {"V", "capture paste-svg", "Paste SVG"},
-                               {"T", "capture theme-swatches", "Theme swatches"}};
-struct Mode {
-    const char *key;
-    const char *mode;
-    const char *label;
-};
-constexpr Mode modeKeys[] = {{"D", "draw", "Draw"}, {"C", "capture", "Capture"}, {"A", "ai", "AI"}, {"L", "live", "Live"}};
-
 // Whether the key in Lua's "SUPER + ALT + O" form is one setup leaves to the user.
 bool skipping(const QStringList &skip, const QString &lua)
 {
@@ -155,7 +117,7 @@ static QString designLua(const DesignKeys &keys, const QStringList &skip)
     if (!skipping(skip, QStringLiteral("SUPER + ALT + Escape")))
         text += QStringLiteral(
             "-- The escape hatch: gives the keyboard back, ends design mode and drops previews. It works inside any\n"
-            "-- submap (submap_universal) and closes the submap itself, so it needs neither the app nor the island.\n"
+            "-- submap (submap_universal) and closes the submap itself, so it needs neither the app nor the shell.\n"
             "bind(\"SUPER + ALT + Escape\", function()\n"
             "  run(hl.dsp.submap(\"reset\"))\n"
             "  run(hl.dsp.exec_cmd(omastrator .. \" reset\"))\n"
@@ -183,10 +145,9 @@ static QString designLua(const DesignKeys &keys, const QStringList &skip)
 QByteArray hyprlandLua(const QString &command, const DesignKeys &keys, const QStringList &skip)
 {
     QString text = QStringLiteral(
-        "-- Omastrator's island keys, written by `omastrator setup` (docs/OS-SUITE.md).\n"
-        "-- Super+Alt+D, C, A or L switches the island to Draw, Capture, AI or Live and\n"
-        "-- takes that mode's keys. Escape goes back to Normal. While a mode's keys are\n"
-        "-- held, other shortcuts wait until Escape; unbound keys still reach apps.\n"
+        "-- Omastrator's keys, written by `omastrator setup` (docs/OS-SUITE.md): design mode, the Desk,\n"
+        "-- dictation and the reset key. While design mode's keys are held, other shortcuts wait\n"
+        "-- until Escape; unbound keys still reach apps.\n"
         "-- `omastrator setup` rewrites this file; `omastrator setup --remove` deletes it.\n"
         "%2"
         "\n"
@@ -241,14 +202,7 @@ QByteArray hyprlandLua(const QString &command, const DesignKeys &keys, const QSt
         "  return hl.dsp.exec_cmd(omastrator .. \" island \" .. args)\n"
         "end\n"
         "\n"
-        "local function enter(mode)\n"
-        "  return function()\n"
-        "    run(island(\"mode \" .. mode))\n"
-        "    run(hl.dsp.submap(\"omastrator-\" .. mode))\n"
-        "  end\n"
-        "end\n"
-        "\n"
-        "-- Hands the keyboard back first, so a failing command can't leave the mode's keys held; then runs one island command.\n"
+        "-- Hands the keyboard back first, so a failing command can't leave the submap's keys held; then runs one command.\n"
         "local function leave(args)\n"
         "  return function()\n"
         "    run(hl.dsp.submap(\"reset\"))\n"
@@ -256,12 +210,6 @@ QByteArray hyprlandLua(const QString &command, const DesignKeys &keys, const QSt
         "  end\n"
         "end\n"
         "\n").arg(luaString(command), skippedNote(skip, QStringLiteral("--")));
-    for (const Mode &mode : modeKeys) {
-        if (skipping(skip, QStringLiteral("SUPER + ALT + ") + QLatin1String(mode.key)))
-            continue;
-        text += QStringLiteral("bind(\"SUPER + ALT + %1\", enter(\"%2\"), { description = \"Omastrator: %3 mode\" })\n")
-                    .arg(QLatin1String(mode.key), QLatin1String(mode.mode), QString::fromUtf8(mode.label));
-    }
     text += QStringLiteral("\n-- Dictation: hold Super+Alt+V and speak; release to hear it back. Esc cancels while it waits.\n");
     if (!skipping(skip, QStringLiteral("SUPER + ALT + V")))
         text += QStringLiteral(
@@ -271,37 +219,6 @@ QByteArray hyprlandLua(const QString &command, const DesignKeys &keys, const QSt
         "submap(\"omastrator-heard\", function()\n"
         "  bind(\"Escape\", leave(\"dictate cancel\"), { description = \"Cancel what was heard\" })\n"
         "end)\n");
-    text += QStringLiteral("\nsubmap(\"omastrator-draw\", function()\n");
-    for (const Key &key : drawKeys)
-        text += QStringLiteral("  bind(\"%1\", island(\"tool %2\"), { description = \"%3\" })\n")
-                    .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
-    text += QStringLiteral(
-        "  -- Type takes letters, so choosing it hands the keyboard back.\n"
-        "  bind(\"T\", leave(\"tool text\"), { description = \"Type\" })\n"
-        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
-        "end)\n"
-        "\n"
-        "submap(\"omastrator-capture\", function()\n");
-    for (const Key &key : captureKeys)
-        text += QStringLiteral("  bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
-                    .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
-    text += QStringLiteral(
-        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
-        "end)\n");
-    text += QStringLiteral("\nsubmap(\"omastrator-ai\", function()\n");
-    for (const Key &key : aiKeys)
-        text += QStringLiteral("  bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
-                    .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
-    text += QStringLiteral(
-        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
-        "end)\n");
-    text += QStringLiteral("\nsubmap(\"omastrator-live\", function()\n");
-    for (const Key &key : liveKeys)
-        text += QStringLiteral("  bind(\"%1\", leave(\"%2\"), { description = \"%3\" })\n")
-                    .arg(QLatin1String(key.key), QLatin1String(key.tool), QString::fromUtf8(key.label));
-    text += QStringLiteral(
-        "  bind(\"Escape\", leave(\"mode normal\"), { description = \"Back to Normal\" })\n"
-        "end)\n");
     text += designLua(keys, skip);
     return text.toUtf8();
 }
@@ -310,19 +227,11 @@ QByteArray hyprlandConf(const QString &command, const DesignKeys &keys, const QS
 {
     const QString island = shellQuote(command) + QStringLiteral(" island ");
     QString text = QStringLiteral(
-        "# Omastrator's island keys, written by `omastrator setup` (docs/OS-SUITE.md).\n"
-        "# Super+Alt+D, C, A or L switches the island's mode and takes its keys; Escape goes back.\n"
-        "# Every mode's keys sit in a submap that ends with `submap = reset`. This first line makes sure nothing\n"
+        "# Omastrator's keys, written by `omastrator setup` (docs/OS-SUITE.md): design mode, the Desk, dictation and the reset key.\n"
+        "# Every submap ends with `submap = reset`. This first line makes sure nothing\n"
         "# above this file (an unclosed submap in the user's own config) holds the binds below.\n"
         "submap = reset\n");
     text += skippedNote(skip, QStringLiteral("#")) + QLatin1Char('\n');
-    for (const Mode &mode : modeKeys) {
-        if (skipping(skip, QStringLiteral("SUPER + ALT + ") + QLatin1String(mode.key)))
-            continue;
-        text += QStringLiteral("bindd = SUPER ALT, %1, Omastrator: %2 mode, exec, %3mode %4\n"
-                               "bind = SUPER ALT, %1, submap, omastrator-%4\n")
-                    .arg(QLatin1String(mode.key), QString::fromUtf8(mode.label), island, QLatin1String(mode.mode));
-    }
     auto back = [&](const QString &key, const QString &args) {
         return QStringLiteral("bind = , %1, exec, %2%3\nbind = , %1, submap, reset\n").arg(key, island, args);
     };
@@ -332,22 +241,6 @@ QByteArray hyprlandConf(const QString &command, const DesignKeys &keys, const QS
                                "bindr = SUPER ALT, V, exec, %1dictate stop\n\n").arg(island);
     text += QStringLiteral("submap = omastrator-heard\n")
             + back(QStringLiteral("escape"), QStringLiteral("dictate cancel")) + QStringLiteral("submap = reset\n");
-    text += QStringLiteral("\nsubmap = omastrator-draw\n");
-    for (const Key &key : drawKeys)
-        text += QStringLiteral("bind = , %1, exec, %2tool %3\n").arg(QLatin1String(key.key), island, QLatin1String(key.tool));
-    text += back(QStringLiteral("T"), QStringLiteral("tool text")) + back(QStringLiteral("escape"), QStringLiteral("mode normal"));
-    text += QStringLiteral("submap = reset\n\nsubmap = omastrator-capture\n");
-    for (const Key &key : captureKeys)
-        text += back(QLatin1String(key.key), QLatin1String(key.tool));
-    text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
-    text += QStringLiteral("\nsubmap = omastrator-ai\n");
-    for (const Key &key : aiKeys)
-        text += back(QLatin1String(key.key), QLatin1String(key.tool));
-    text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
-    text += QStringLiteral("\nsubmap = omastrator-live\n");
-    for (const Key &key : liveKeys)
-        text += back(QLatin1String(key.key), QLatin1String(key.tool));
-    text += back(QStringLiteral("escape"), QStringLiteral("mode normal")) + QStringLiteral("submap = reset\n");
     // Design mode everywhere: its key, Escape and Alt inside, the Desk, and the background app.
     const QString design = shellQuote(command) + QStringLiteral(" design ");
     text += QLatin1Char('\n');
@@ -377,12 +270,12 @@ QByteArray hyprlandConf(const QString &command, const DesignKeys &keys, const QS
 QByteArray sourceBlock(HyprFormat format)
 {
     if (format == HyprFormat::lua)
-        return "\n-- Omastrator's island keys (added by `omastrator setup --apply`).\n"
+        return "\n-- Omastrator's keys (added by `omastrator setup --apply`).\n"
                "do\n"
                "  local ok, err = pcall(dofile, (os.getenv(\"XDG_CONFIG_HOME\") or (os.getenv(\"HOME\") .. \"/.config\")) .. \"/omastrator/hyprland.lua\")\n"
                "  if not ok then pcall(hl.notification.create, { text = \"Omastrator: its key file didn't load: \" .. tostring(err), timeout = 10000 }) end\n"
                "end\n";
-    return "\n# Omastrator's island keys (added by `omastrator setup --apply`).\n"
+    return "\n# Omastrator's keys (added by `omastrator setup --apply`).\n"
            "source = ~/.config/omastrator/hyprland.conf\n";
 }
 
@@ -398,15 +291,9 @@ QByteArray menuBlock(const QString &command)
     };
     // Icons are Nerd Font glyphs, as Omarchy's own menu uses.
     static const Entry entries[] = {
-        {"omastrator", "\U000F03D8", "Omastrator", nullptr, "Vector illustration, and the island's modes"},
+        {"omastrator", "\U000F03D8", "Omastrator", nullptr, "Vector illustration, and its desktop tools"},
         {"omastrator.new", "", "New Document", "new", nullptr},
-        {"omastrator.mode", "", "Island Mode", nullptr, "Switch the island's mode"},
-        {"omastrator.mode.normal", "\U000F0379", "Normal", "mode normal", nullptr},
-        {"omastrator.mode.draw", "", "Draw", "mode draw", "Omastrator's canvas tools"},
-        {"omastrator.mode.capture", "", "Capture", "mode capture", "Colour, screenshots and SVG from anywhere on screen"},
-        {"omastrator.mode.ai", "\U000F16A4", "AI", "mode ai", "Generate, edit and roast with your agent"},
-        {"omastrator.mode.live", "", "Live", "mode live", "Edit a web page in the browser"},
-        {"omastrator.mode.design", "\U000F0E0C", "Design", "mode design", "Inspect, measure and draw on any window or page"},
+        {"omastrator.design", "\U000F0E0C", "Design Mode", "mode design", "Inspect, measure and draw on any window or page"},
         {"omastrator.desk", "\U000F0E0C", "The Desk", "@desk window", "Everything sent from any surface, on one canvas"},
         {"omastrator.capture", "", "Capture", nullptr, nullptr},
         {"omastrator.capture.fill", "\U000F00C9", "Pick Colour for Fill", "capture color fill", nullptr},

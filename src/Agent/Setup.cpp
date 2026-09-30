@@ -14,8 +14,10 @@
 #include <QStandardPaths>
 
 namespace SetupInternal {
-const QString islandFilter = QStringLiteral(
-    "if ((.plugins // []) | map(.id) | index(\"omastrator.island\")) then . else .plugins = ((.plugins // []) + [{\"id\": \"omastrator.island\"}]) end");
+// Adds omastrator.design and drops the desktop island's omastrator.island, whichever of the two is there.
+const QString designFilter = QStringLiteral(
+    "(if ((.plugins // []) | map(.id) | index(\"omastrator.island\")) then .plugins |= map(select(.id != \"omastrator.island\")) else . end)"
+    " | (if ((.plugins // []) | map(.id) | index(\"omastrator.design\")) then . else .plugins = ((.plugins // []) + [{\"id\": \"omastrator.design\"}]) end)");
 const QString barFilter = QStringLiteral(
     "if ([.bar.layout[]?[]?.id] | index(\"omastrator.ai\")) then . else .bar.layout.right = ([{\"id\": \"omastrator.ai\"}] + (.bar.layout.right // [])) end");
 
@@ -40,8 +42,11 @@ QByteArray shellJsonBase(const Setup::Environment &environment, bool *exists)
 using namespace SetupInternal;
 
 namespace {
-const QStringList pluginFolders{QStringLiteral("omastrator.island"), QStringLiteral("omastrator.ai"), QStringLiteral("omastrator-ui")};
-const QString islandRemoval = QStringLiteral("if .plugins then .plugins |= map(select(.id != \"omastrator.island\")) else . end");
+const QStringList pluginFolders{QStringLiteral("omastrator.design"), QStringLiteral("omastrator.ai"), QStringLiteral("omastrator-ui")};
+// The desktop island's plugin, removed in this version: setup deletes it from an old install.
+const QString oldIslandFolder = QStringLiteral("omastrator.island");
+const QString designRemoval = QStringLiteral(
+    "if .plugins then .plugins |= map(select(.id != \"omastrator.design\" and .id != \"omastrator.island\")) else . end");
 const QString barRemoval = QStringLiteral("if .bar.layout then .bar.layout |= map_values(map(select(.id != \"omastrator.ai\"))) else . end");
 
 QString configHomeFor(const QString &home)
@@ -63,6 +68,11 @@ QString omarchyShell()
 }
 
 namespace Setup {
+QString oldIslandPlugin(const Environment &environment)
+{
+    return QDir(environment.plugins()).filePath(oldIslandFolder);
+}
+
 // Where a package for any prefix (/usr, ~/.local, …) puts the shell plugins next to `binary`,
 // independent of the prefix: GNUInstallDirs' bindir and datadir are always "bin" and "share"
 // relative to it, so `binary`'s ../share/omastrator/shell is always right once installed.
@@ -209,10 +219,24 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
             paths.sort();
             for (const QString &path : paths) {
                 const QString target = QDir(environment.plugins()).filePath(folder + QLatin1Char('/') + source.relativeFilePath(path));
-                plan.push_back({QStringLiteral("plugins"), QStringLiteral("Install the island and tray light plugins in omarchy-shell"), target,
+                plan.push_back({QStringLiteral("plugins"), QStringLiteral("Install the design mode and tray light plugins in omarchy-shell"), target,
                                 readFile(target), readFile(path), true});
             }
         }
+    }
+
+    // The desktop island is gone: its plugin, its "show everywhere" choice and the labels it had shown.
+    const QString cleanupTitle = QStringLiteral("Remove the desktop island's old files (it moved into Omastrator's window)");
+    QDirIterator oldFiles(oldIslandPlugin(environment), QDir::Files, QDirIterator::Subdirectories);
+    QStringList oldPaths;
+    while (oldFiles.hasNext())
+        oldPaths << oldFiles.next();
+    oldPaths.sort();
+    oldPaths << QDir(environment.omastratorConfig()).filePath(QStringLiteral("island-visibility.json"))
+             << QDir(environment.stateHome).filePath(QStringLiteral("omastrator/island-seen.json"));
+    for (const QString &path : std::as_const(oldPaths)) {
+        if (const auto content = readFile(path))
+            plan.push_back({QStringLiteral("cleanup"), cleanupTitle, path, content, std::nullopt, true});
     }
 
     const HyprFormat format = hyprFormat(environment);
@@ -220,7 +244,7 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
         const QString keys = QDir(environment.omastratorConfig()).filePath(format == HyprFormat::lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf"));
         const KeyChoice choice = chooseKeys(environment);
         const DesignKeys designKeys = DesignKeys::from(environment);
-        plan.push_back({QStringLiteral("keys"), QStringLiteral("Write the island's Hyprland keys (Omastrator's own file)"), keys, readFile(keys),
+        plan.push_back({QStringLiteral("keys"), QStringLiteral("Write Omastrator's Hyprland keys (its own file)"), keys, readFile(keys),
                         format == HyprFormat::lua ? hyprlandLua(environment.command, designKeys, choice.skip)
                                                   : hyprlandConf(environment.command, designKeys, choice.skip)});
         if (skippedKeys)
@@ -239,13 +263,13 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
     bool exists = false;
     const QByteArray shell = shellJsonBase(environment, &exists);
     QString error;
-    if (const auto island = jq(shell, islandFilter, &error)) {
-        plan.push_back({QStringLiteral("island"), QStringLiteral("Turn on the island in ~/.config/omarchy/shell.json"), environment.shellJson(),
-                        exists ? std::optional(shell) : std::nullopt, *island});
+    if (const auto design = jq(shell, designFilter, &error)) {
+        plan.push_back({QStringLiteral("design"), QStringLiteral("Turn on design mode (and turn off the old island) in ~/.config/omarchy/shell.json"),
+                        environment.shellJson(), exists ? std::optional(shell) : std::nullopt, *design});
         if (withBar) {
-            if (const auto bar = jq(*island, barFilter, &error))
+            if (const auto bar = jq(*design, barFilter, &error))
                 plan.push_back({QStringLiteral("bar"), QStringLiteral("Add the tray light to the bar's right section in ~/.config/omarchy/shell.json"),
-                                environment.shellJson(), *island, *bar});
+                                environment.shellJson(), *design, *bar});
         }
     }
     if (!error.isEmpty())
@@ -262,10 +286,10 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
     // With no keys file there is nothing for the line to load.
     if (!noKeys && withSource) {
         if (!config || !hasSourceLine(*config, format))
-            plan.push_back({QStringLiteral("source"), QStringLiteral("Load the island's keys from your Hyprland config"), hypr, config,
+            plan.push_back({QStringLiteral("source"), QStringLiteral("Load Omastrator's keys from your Hyprland config"), hypr, config,
                             config.value_or(QByteArray()) + source});
     } else if (!noKeys && (!config || !hasSourceLine(*config, format))) {
-        notes->append(QStringLiteral("To use the island's keys, add this to %1 (or run `omastrator setup --apply`):%2")
+        notes->append(QStringLiteral("To use Omastrator's keys, add this to %1 (or run `omastrator setup --apply`):%2")
                           .arg(hypr, QString::fromUtf8(source).chopped(1)));
     }
 
@@ -295,15 +319,15 @@ std::vector<Change> removalPlan(const Environment &environment, QStringList *not
                             path.startsWith(environment.plugins())});
     }
     QString error;
-    if (record.island || record.bar) {
+    if (record.design || record.bar) {
         if (const auto shell = readFile(environment.shellJson())) {
             std::optional<QByteArray> edited = shell;
-            if (record.island && edited)
-                edited = jq(*edited, islandRemoval, &error);
+            if (record.design && edited)
+                edited = jq(*edited, designRemoval, &error);
             if (record.bar && edited)
                 edited = jq(*edited, barRemoval, &error);
             if (edited)
-                plan.push_back({QStringLiteral("shell"), QStringLiteral("Take the island and tray light out of ~/.config/omarchy/shell.json"),
+                plan.push_back({QStringLiteral("shell"), QStringLiteral("Take design mode and the tray light out of ~/.config/omarchy/shell.json"),
                                 environment.shellJson(), shell, *edited});
         }
     }
@@ -328,7 +352,7 @@ std::vector<Change> removalPlan(const Environment &environment, QStringList *not
         if (const auto config = readFile(record.sourcePath); config && config->contains(record.sourceText)) {
             QByteArray edited = *config;
             edited.remove(edited.lastIndexOf(record.sourceText), record.sourceText.size());
-            plan.push_back({QStringLiteral("source"), QStringLiteral("Take the island's keys out of your Hyprland config"), record.sourcePath, config,
+            plan.push_back({QStringLiteral("source"), QStringLiteral("Take Omastrator's keys out of your Hyprland config"), record.sourcePath, config,
                             edited});
         }
     }
@@ -347,7 +371,7 @@ void reloadOmarchyShell(QStringList *notes)
             process.waitForFinished(10'000);
         }
     } else {
-        *notes << QStringLiteral("omarchy-shell isn't running; the island appears the next time it starts.");
+        *notes << QStringLiteral("omarchy-shell isn't running; the plugins appear the next time it starts.");
     }
 }
 }

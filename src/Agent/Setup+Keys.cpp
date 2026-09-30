@@ -257,7 +257,7 @@ QString displayCombo(const QString &normalized)
 QStringList omastratorKeys(const DesignKeys &keys)
 {
     QStringList combos;
-    for (const char *key : {"D", "C", "A", "L", "V", "Escape"})
+    for (const char *key : {"V", "Escape"})
         combos << normalizeCombo(QStringLiteral("SUPER + ALT + ") + QLatin1String(key));
     combos << normalizeCombo(keys.design) << normalizeCombo(keys.desk);
     combos.removeDuplicates();

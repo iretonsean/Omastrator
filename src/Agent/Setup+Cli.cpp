@@ -53,9 +53,9 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                "       omastrator setup --remove [--yes] [--dry-run]\n"
                "       omastrator setup --restore [BACKUP] [--yes] [--dry-run]\n"
                "       omastrator setup --list-backups\n\n"
-               "Installs the island and tray light in omarchy-shell, writes the island's\n"
-               "Hyprland keys and the Omarchy menu entries, and offers the tray light for\n"
-               "the bar. Each change is shown as a diff and asked about first.\n\n"
+               "Installs design mode and the tray light in omarchy-shell, writes\n"
+               "Omastrator's Hyprland keys and the Omarchy menu entries, and offers the tray\n"
+               "light for the bar. It also removes the old desktop island. Each change is shown as a diff and asked about first.\n\n"
                "Before it changes anything, setup copies every file it will change to\n"
                "~/.local/state/omastrator/setup-backups/<date-time>/ (the newest 5 are\n"
                "kept). If that copy can't be made, nothing changes. Setup never takes a\n"
@@ -135,7 +135,7 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
     const QString backupName = newBackupName(environment);
     const QString backupFolder = QDir(environment.backups()).filePath(backupName);
     if (noKeys) {
-        out << "No keys: Hyprland and its keys are left alone. Reach design mode from the Omarchy menu (Omastrator, Island Mode, Design) or with\n"
+        out << "No keys: Hyprland and its keys are left alone. Reach design mode from the Omarchy menu (Omastrator, Design Mode) or with\n"
                "`omastrator design on`, and start the background app with `omastrator daemon start`.\n";
         if (!record.files.contains(QDir(environment.omastratorConfig()).filePath(QStringLiteral("hyprland.lua")))
             && !record.files.contains(QDir(environment.omastratorConfig()).filePath(QStringLiteral("hyprland.conf"))))
@@ -202,10 +202,10 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         for (const Change *change : step) {
             // JSON edits apply to the file as it is now, so a skipped step above doesn't undo this one.
             std::optional<QByteArray> after = change->after;
-            if (!removing && (key == QLatin1String("island") || key == QLatin1String("bar"))) {
+            if (!removing && (key == QLatin1String("design") || key == QLatin1String("bar"))) {
                 bool exists = false;
                 QString error;
-                after = jq(shellJsonBase(environment, &exists), key == QLatin1String("island") ? islandFilter : barFilter, &error);
+                after = jq(shellJsonBase(environment, &exists), key == QLatin1String("design") ? designFilter : barFilter, &error);
                 if (!after) {
                     err << error << '\n';
                     continue;
@@ -234,7 +234,7 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             if (key == QLatin1String("files"))
                 record.files.clear(), record.skippedKeys.clear();
             if (key == QLatin1String("shell"))
-                record.island = record.bar = false;
+                record.design = record.bar = false;
             if (key == QLatin1String("menu"))
                 record.menu = false;
             if (key == QLatin1String("source"))
@@ -244,8 +244,14 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         } else {
             if (key == QLatin1String("keys"))
                 record.skippedKeys = skippedKeys;
-            if (key == QLatin1String("island"))
-                record.island = true;
+            if (key == QLatin1String("design"))
+                record.design = true;
+            if (key == QLatin1String("cleanup")) {
+                // The old plugin's folder goes with its files (every one of them was copied to the backup), and out of the record.
+                QDir(oldIslandPlugin(environment)).removeRecursively();
+                const QString prefix = oldIslandPlugin(environment) + QLatin1Char('/');
+                record.files.removeIf([&](const QString &path) { return path.startsWith(prefix); });
+            }
             if (key == QLatin1String("bar"))
                 record.bar = true;
             if (key == QLatin1String("menu")) {
@@ -265,7 +271,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                 record.flagsExtension = environment.extension;
             }
         }
-        reloadShell = reloadShell || key == QLatin1String("plugins") || key == QLatin1String("island") || key == QLatin1String("bar")
+        reloadShell = reloadShell || key == QLatin1String("plugins") || key == QLatin1String("design") || key == QLatin1String("bar")
+                      || key == QLatin1String("cleanup")
                       || key == QLatin1String("shell") || key == QLatin1String("files");
         ++applied;
     }

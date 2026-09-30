@@ -346,7 +346,12 @@ private slots:
         json.replace(block.left(block.indexOf('\n') + 1), "").replace("  // END omastrator setup\n", "");
         const QJsonObject entries = QJsonDocument::fromJson(json).object();
         QCOMPARE(entries["omastrator.capture.fill"].toObject()["action"].toString(), QStringLiteral("omastrator island capture color fill"));
-        QVERIFY(entries.contains("omastrator.mode.draw") && entries.contains("omastrator.connect"));
+        QVERIFY(entries.contains("omastrator.connect"));
+        // The island's "Island Mode" submenu is gone; design mode keeps a menu entry of its own.
+        for (auto it = entries.begin(); it != entries.end(); ++it)
+            QVERIFY2(!it.key().startsWith(QLatin1String("omastrator.mode")), qPrintable(it.key()));
+        QVERIFY(!block.contains("Island Mode"));
+        QCOMPARE(entries["omastrator.design"].toObject()["action"].toString(), QStringLiteral("omastrator island mode design"));
     }
 
     void extensionFlagsKeepTheUsersOwn()
@@ -392,25 +397,31 @@ private slots:
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
         QVERIFY2(out.contains(QLatin1String("Set up.")), qPrintable(out));
         QVERIFY(Setup::designKeysLoaded(Setup::Environment::current()));
-        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island/Island.qml"))));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design/Design.qml"))));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design/OverlayLogic.js"))));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island"))));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.ai/TrayLight.qml"))));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator-ui/Status.qml"))));
-        QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("\nsubmap(\"omastrator-draw\""));
+        QVERIFY(read(config(QStringLiteral("omastrator/hyprland.lua"))).contains("\nsubmap(\"omastrator-design\""));
+        // The pill's keys and submaps are not written any more.
+        for (const char *gone : {"omastrator-draw", "omastrator-capture", "omastrator-ai", "omastrator-live", "SUPER + ALT + D\"", "SUPER + ALT + C\"",
+                                 "SUPER + ALT + A\"", "SUPER + ALT + L\"", "island(\"tool", "mode draw"})
+            QVERIFY2(!read(config(QStringLiteral("omastrator/hyprland.lua"))).contains(gone), gone);
         // The escape hatch is bound outside every submap and works inside them.
         const QByteArray keyFile = read(config(QStringLiteral("omastrator/hyprland.lua")));
         QVERIFY(keyFile.contains("bind(\"SUPER + ALT + Escape\", function()"));
         QVERIFY(keyFile.contains("submap_universal = true"));
         // Labels are UTF-8 once, not read as Latin-1 and encoded again.
-        QVERIFY(QString::fromUtf8(read(config(QStringLiteral("omastrator/hyprland.lua")))).contains(QStringLiteral("\"Open a page\u2026\"")));
+        QVERIFY(QString::fromUtf8(read(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc")))).contains(QStringLiteral("\"label\": \"Generate\u2026\"")));
         QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/vocabulary.txt"))));
         const QJsonObject shell = QJsonDocument::fromJson(read(config(QStringLiteral("omarchy/shell.json")))).object();
         QCOMPARE(shell["plugins"].toArray().size(), 2);
         const QJsonArray plugins = shell["plugins"].toArray();
         QCOMPARE(plugins[0].toObject()["id"].toString(), QStringLiteral("someone.else"));
-        QCOMPARE(plugins[1].toObject()["id"].toString(), QStringLiteral("omastrator.island"));
+        QCOMPARE(plugins[1].toObject()["id"].toString(), QStringLiteral("omastrator.design"));
         QCOMPARE(shell["bar"].toObject()["layout"].toObject()["right"].toArray()[0].toObject()["id"].toString(), QStringLiteral("omastrator.ai"));
         QVERIFY(read(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc"))).contains("\"omastrator.connect\""));
-        QVERIFY(read(config(QStringLiteral("hypr/hyprland.lua"))).startsWith(userHypr + "\n-- Omastrator's island keys"));
+        QVERIFY(read(config(QStringLiteral("hypr/hyprland.lua"))).startsWith(userHypr + "\n-- Omastrator's keys"));
         // Live in your own Chromium: the host its extension starts, and the extension loaded next to Omarchy's.
         const QJsonObject host = QJsonDocument::fromJson(read(config(QStringLiteral("chromium/NativeMessagingHosts/io.github.iretonsean.omastrator.json")))).object();
         QCOMPARE(host["allowed_origins"].toArray().first().toString(), QStringLiteral("chrome-extension://gmanolpmdkmgccoeiogpdhjifdkdjfap/"));
@@ -440,7 +451,7 @@ private slots:
         QCOMPARE(snapshot(m_home.path()), before);
         QVERIFY(out.contains(QLatin1String("Add the Omastrator AI light to the bar? [y/N]")));
         QVERIFY(out.contains(QLatin1String("+  \"omastrator\": {")));
-        QVERIFY(out.contains(QLatin1String("+      \"id\": \"omastrator.island\"")));
+        QVERIFY(out.contains(QLatin1String("+      \"id\": \"omastrator.design\"")));
         QVERIFY(out.contains(QLatin1String("Make this change? [y/N] Skipped.")));
         // The source line is only printed without --apply.
         QVERIFY(out.contains(QLatin1String("pcall(dofile")));
@@ -454,7 +465,7 @@ private slots:
         const bool binaryStep = out.contains(QLatin1String("Tell the plugins where Omastrator is"));
         QCOMPARE(setup({}, binaryStep ? QStringLiteral("n\nn\nn\nn\nn\nn\ny\n") : QStringLiteral("n\nn\nn\nn\nn\ny\n"), &out), 0);
         QVERIFY(read(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc"))).contains("BEGIN omastrator setup"));
-        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island"))));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design"))));
         QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
         QCOMPARE(snapshot(m_home.path()), before);
     }
@@ -476,7 +487,7 @@ private slots:
         write(m_home.filePath(QStringLiteral("omarchy/config/omarchy/shell.json")), "{\"version\": 1, \"plugins\": []}\n");
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes")}, QString(), &out), 0);
-        QVERIFY(read(config(QStringLiteral("omarchy/shell.json"))).contains("omastrator.island"));
+        QVERIFY(read(config(QStringLiteral("omarchy/shell.json"))).contains("omastrator.design"));
         QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
         // The user's file stays, without Omastrator in it.
         QVERIFY(!read(config(QStringLiteral("omarchy/shell.json"))).contains("omastrator"));
@@ -532,7 +543,7 @@ private slots:
         QVERIFY(prefix.isValid());
         const QString binary = prefix.filePath(QStringLiteral("bin/omastrator"));
         write(binary, QByteArray());
-        write(prefix.filePath(QStringLiteral("share/omastrator/shell/omastrator.island/manifest.json")), "{}");
+        write(prefix.filePath(QStringLiteral("share/omastrator/shell/omastrator.design/manifest.json")), "{}");
         write(prefix.filePath(QStringLiteral("share/omastrator/extras/chromium-extension/manifest.json")), "{}");
 
         const QByteArray previous = qgetenv("OMASTRATOR_SHELL_DIR");
@@ -742,25 +753,26 @@ private slots:
     void keysTheUserHasAreSkipped()
     {
         const QStringList before = snapshot(m_home.path());
-        // Live: Super+Alt+C is theirs; Super+Alt+L is bound inside their own submap, where it can't clash.
-        liveBinds({bind(72, QStringLiteral("C")), bind(72, QStringLiteral("L"), QStringLiteral("resize")), bind(64, QStringLiteral("Q"))});
+        // Live: Super+Alt+O (design mode) is theirs; Super+Alt+W (the Desk) is bound inside their own submap, where it can't clash.
+        liveBinds({bind(72, QStringLiteral("O")), bind(72, QStringLiteral("W"), QStringLiteral("resize")), bind(64, QStringLiteral("Q"))});
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
-        QVERIFY2(out.contains(QLatin1String("Super+Alt+C is already yours: skipped")), qPrintable(out));
-        QVERIFY(!out.contains(QLatin1String("Super+Alt+L is already yours")));
+        QVERIFY2(out.contains(QLatin1String("Super+Alt+O is already yours: skipped")), qPrintable(out));
+        QVERIFY(!out.contains(QLatin1String("Super+Alt+W is already yours")));
         const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
-        QVERIFY(!keys.contains("bind(\"SUPER + ALT + C\""));
-        QVERIFY(keys.contains("bind(\"SUPER + ALT + L\""));
-        QVERIFY(keys.contains("bind(\"SUPER + ALT + D\""));
+        // The key that turns design mode on is left out; the same key inside its submap (leave) is not a global bind.
+        QVERIFY(!keys.contains("bind(\"SUPER + ALT + O\", function()"));
+        QVERIFY(keys.contains("bind(\"SUPER + ALT + W\""));
+        QVERIFY(keys.contains("bind(\"SUPER + ALT + V\""));
         QVERIFY(keys.contains("bind(\"SUPER + ALT + Escape\""));
         // Recorded, so setup stays exact.
         const QJsonObject record = QJsonDocument::fromJson(read(config(QStringLiteral("omastrator/setup.json")))).object();
-        QCOMPARE(record["skippedKeys"].toArray().first().toString(), QStringLiteral("Super+Alt+C"));
+        QCOMPARE(record["skippedKeys"].toArray().first().toString(), QStringLiteral("Super+Alt+O"));
 
         // A second run is quiet about the key and changes nothing.
         const QStringList installed = snapshot(m_home.path());
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
-        QVERIFY2(out.contains(QLatin1String("Everything is already set up.")) && out.contains(QLatin1String("Super+Alt+C is already yours")), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("Everything is already set up.")) && out.contains(QLatin1String("Super+Alt+O is already yours")), qPrintable(out));
         QCOMPARE(snapshot(m_home.path()), installed);
 
         QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
@@ -770,12 +782,34 @@ private slots:
     void restoreAfterSkippedKeysIsExact()
     {
         const QStringList before = snapshot(m_home.path());
-        liveBinds({bind(72, QStringLiteral("D"))});
+        liveBinds({bind(72, QStringLiteral("V"))});
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
-        QVERIFY(out.contains(QLatin1String("Super+Alt+D is already yours: skipped")));
+        QVERIFY(out.contains(QLatin1String("Super+Alt+V is already yours: skipped")));
         QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--yes")}, QString(), &out), 0);
         QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    // The keys the pill needed are not written in either format; dictation, design mode, the Desk and the reset stay.
+    void theKeyFilesHaveNoPillKeys()
+    {
+        const QByteArray lua = Setup::hyprlandLua(QStringLiteral("omastrator"));
+        const QByteArray conf = Setup::hyprlandConf(QStringLiteral("omastrator"));
+        for (const char *gone : {"omastrator-draw", "omastrator-capture", "omastrator-ai", "omastrator-live", "mode draw", "mode capture", "mode ai", "mode live",
+                                 "Draw mode", "Capture mode", "AI mode", "Live mode", "island tool", "island(\"tool", "SUPER + ALT + D\"", "SUPER + ALT + C\"",
+                                 "SUPER + ALT + A\"", "SUPER + ALT + L\"", "the island"}) {
+            QVERIFY2(!lua.contains(gone), gone);
+            QVERIFY2(!conf.contains(gone), gone);
+        }
+        for (const char *letter : {"D", "C", "A", "L"})
+            QVERIFY2(!conf.contains(QByteArray("SUPER ALT, ") + letter + ","), letter);
+        for (const char *kept : {"omastrator-heard", "omastrator-design", "dictate start", "dictate stop", "dictate cancel", "SUPER"})
+            QVERIFY2(lua.contains(kept) && conf.contains(kept), kept);
+        QVERIFY(lua.contains("SUPER + ALT + Escape") && lua.contains("submap_universal = true"));
+        QVERIFY(conf.contains("binddu = SUPER ALT, escape,"));
+        // Every submap is still closed, and only the two that remain are defined.
+        QCOMPARE(conf.count("\nsubmap = omastrator-"), 2);
+        QCOMPARE(lua.count("\nsubmap(\"omastrator-"), 2);
     }
 
     void keysInTheConfigAreSkippedToo()
@@ -784,23 +818,23 @@ private slots:
         write(config(QStringLiteral("hypr/hyprland.lua")),
               userHypr
                   + "hl.bind(\"SUPER + ALT + V\", hl.dsp.exec_cmd(\"mine\"))\n"
-                    "-- hl.bind(\"SUPER + ALT + A\", hl.dsp.exec_cmd(\"commented out\"))\n"
+                    "-- hl.bind(\"SUPER + ALT + O\", hl.dsp.exec_cmd(\"commented out\"))\n"
                     "hl.define_submap(\"resize\", function()\n"
-                    "  hl.bind(\"SUPER + ALT + L\", hl.dsp.exec_cmd(\"in a submap\"))\n"
+                    "  hl.bind(\"SUPER + ALT + Escape\", hl.dsp.exec_cmd(\"in a submap\"))\n"
                     "end)\n");
-        write(config(QStringLiteral("hypr/bindings.conf")), "$mod = SUPER\nbindd = $mod ALT, C, Mine, exec, mine\nbindm = SUPER ALT, D, movewindow\n");
+        write(config(QStringLiteral("hypr/bindings.conf")), "$mod = SUPER\nbindd = $mod ALT, W, Mine, exec, mine\nbindm = SUPER ALT, O, movewindow\n");
         QSet<QString> taken = Setup::takenKeys(Setup::Environment::current());
         QVERIFY(taken.contains(QStringLiteral("SUPER+ALT+V")));
-        QVERIFY(taken.contains(QStringLiteral("SUPER+ALT+C")));
-        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+A")));
-        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+L")));
-        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+D")));
+        QVERIFY(taken.contains(QStringLiteral("SUPER+ALT+W")));
+        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+O")));
+        QVERIFY(!taken.contains(QStringLiteral("SUPER+ALT+ESCAPE")));
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes")}, QString(), &out), 0);
-        QVERIFY2(out.contains(QLatin1String("Super+Alt+V is already yours: skipped")) && out.contains(QLatin1String("Super+Alt+C is already yours: skipped")), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("Super+Alt+V is already yours: skipped")) && out.contains(QLatin1String("Super+Alt+W is already yours: skipped")), qPrintable(out));
         const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
         QVERIFY(!keys.contains("bind(\"SUPER + ALT + V\""));
-        QVERIFY(keys.contains("bind(\"SUPER + ALT + A\""));
+        QVERIFY(!keys.contains("bind(\"SUPER + ALT + W\""));
+        QVERIFY(keys.contains("bind(\"SUPER + ALT + O\""));
     }
 
     void aRerunKeepsOurOwnKeysOnLuaHyprland()
@@ -832,8 +866,8 @@ private slots:
     void omarchyLuaBindsAreReadFromTheConfig()
     {
         write(config(QStringLiteral("hypr/bindings.lua")),
-              "o.bind(\"SUPER + ALT + C\", \"Mine\", \"true\")\n"
-              "  o.bind_toggle('SUPER + ALT + A', \"Toggle\", \"true\")\n"
+              "o.bind(\"SUPER + ALT + W\", \"Mine\", \"true\")\n"
+              "  o.bind_toggle('SUPER + ALT + O', \"Toggle\", \"true\")\n"
               "-- o.bind(\"SUPER + ALT + D\", \"Commented out\", \"true\")\n"
               "hl.unbind(\"SUPER + ALT + L\")\n"
               "o.unbind(\"SUPER + ALT + Escape\")\n"
@@ -844,13 +878,13 @@ private slots:
               "o.bind(\"SUPER + ALT + V\", \"An Omarchy default\", hl.dsp.window.close(), { locked = true })\n"
               "hl.bind(\"SUPER + ALT + \" .. key, hl.dsp.focus({ workspace = 1 }))\n");
         const QSet<QString> taken = Setup::takenKeys(Setup::Environment::current());
-        for (const char *combo : {"SUPER+ALT+C", "SUPER+ALT+A", "SUPER+ALT+V", "SUPER+CTRL+V"})
+        for (const char *combo : {"SUPER+ALT+W", "SUPER+ALT+O", "SUPER+ALT+V", "SUPER+CTRL+V"})
             QVERIFY2(taken.contains(QLatin1String(combo)), combo);
         for (const char *combo : {"SUPER+ALT+D", "SUPER+ALT+L", "SUPER+ALT+ESCAPE"})
             QVERIFY2(!taken.contains(QLatin1String(combo)), combo);
         QString out;
         QCOMPARE(setup({QStringLiteral("--yes")}, QString(), &out), 0);
-        for (const char *key : {"Super+Alt+C", "Super+Alt+A", "Super+Alt+V"})
+        for (const char *key : {"Super+Alt+W", "Super+Alt+O", "Super+Alt+V"})
             QVERIFY2(out.contains(QLatin1String(key) + QLatin1String(" is already yours: skipped")), qPrintable(out));
     }
 
@@ -890,6 +924,8 @@ private slots:
         QCOMPARE(Setup::normalizeCombo(QStringLiteral("ALT SUPER + o")), QStringLiteral("SUPER+ALT+O"));
         QCOMPARE(Setup::normalizeCombo(QStringLiteral("Super+Alt+Esc")), QStringLiteral("SUPER+ALT+ESCAPE"));
         QCOMPARE(Setup::displayCombo(QStringLiteral("SUPER+ALT+C")), QStringLiteral("Super+Alt+C"));
+        // The pill's keys are not Omastrator's any more; dictation, design mode, the Desk and the reset are.
+        QCOMPARE(Setup::omastratorKeys({}), (QStringList{QStringLiteral("SUPER+ALT+V"), QStringLiteral("SUPER+ALT+ESCAPE"), QStringLiteral("SUPER+ALT+O"), QStringLiteral("SUPER+ALT+W")}));
         QVERIFY(Setup::omastratorKeys({}).contains(QStringLiteral("SUPER+ALT+ESCAPE")));
     }
 
@@ -901,7 +937,7 @@ private slots:
         QVERIFY2(out.contains(QLatin1String("omastrator design on")), qPrintable(out));
         QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
         QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), hypr);
-        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island/Island.qml"))));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design/Design.qml"))));
         QVERIFY(read(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc"))).contains("BEGIN omastrator setup"));
         QCOMPARE(setup({QStringLiteral("--no-keys"), QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
         QVERIFY(out.contains(QLatin1String("Everything is already set up.")));
@@ -997,8 +1033,8 @@ private slots:
         }
     }
 
-    // The generated Lua run against a stand-in for Hyprland's API: a failing dispatch can't stop a mode from handing the keyboard back.
-    void leavingAModeClosesItsSubmapFirst()
+    // The generated Lua run against a stand-in for Hyprland's API: a failing dispatch can't stop a submap from handing the keyboard back.
+    void leavingASubmapClosesItFirst()
     {
         const QString lua = QStandardPaths::findExecutable(QStringLiteral("lua"));
         if (lua.isEmpty())
@@ -1022,18 +1058,18 @@ private slots:
                       "}\n"
                       "dofile(os.getenv('XDG_CONFIG_HOME') .. '/omastrator/hyprland.lua')\n"
                       "local function press(id) calls = {} binds[id].action() return table.concat(calls, ',') end\n"
-                      "print('enter ' .. press('|SUPER + ALT + D'))\n"
-                      "print('leave ' .. press('omastrator-draw|Escape'))\n"
+                      "print('enter ' .. press('|SUPER + ALT + O'))\n"
+                      "print('leave ' .. press('omastrator-heard|Escape'))\n"
                       "print('design ' .. press('omastrator-design|Escape'))\n"
-                      "hl.dispatch(hl.dsp.submap('omastrator-live'))\n"
+                      "hl.dispatch(hl.dsp.submap('omastrator-heard'))\n"
                       "print('hatch ' .. press('|SUPER + ALT + Escape') .. ' universal=' .. tostring(binds['|SUPER + ALT + Escape'].options.submap_universal))\n");
         QProcess run;
         run.start(lua, {script});
         QVERIFY(run.waitForFinished(30'000));
         const QString output = QString::fromUtf8(run.readAll());
         QVERIFY2(run.exitCode() == 0, qPrintable(output));
-        // Entering still takes the submap when the island command fails; every way out hands the keyboard back even though the command fails.
-        QVERIFY2(output.contains(QLatin1String("enter submap omastrator-draw\n")), qPrintable(output));
+        // Entering still takes the submap when the command fails; every way out hands the keyboard back even though the command fails.
+        QVERIFY2(output.contains(QLatin1String("enter submap omastrator-design\n")), qPrintable(output));
         QVERIFY2(output.contains(QLatin1String("leave submap reset\n")), qPrintable(output));
         QVERIFY2(output.contains(QLatin1String("design submap reset\n")), qPrintable(output));
         QVERIFY2(output.contains(QLatin1String("hatch submap reset universal=true")), qPrintable(output));
@@ -1063,7 +1099,7 @@ private slots:
         QVERIFY2(out.contains(QLatin1String("Your keys are back")), qPrintable(out));
         QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), userHypr);
         QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator/hyprland.lua"))));
-        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island"))));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design"))));
         // A baseline reload, the reload after the writes, and the reload after the restore; and Hyprland really has the keys again.
         QCOMPARE(reloads(), 3);
         QVERIFY(hasBind(liveNow(), 64, QStringLiteral("1")) && hasBind(liveNow(), 64, QStringLiteral("Return")) && hasBind(liveNow(), 64, QStringLiteral("Q")));
@@ -1112,7 +1148,7 @@ private slots:
         QCOMPARE(QString::fromUtf8(read(m_fake.filePath(QStringLiteral("verify.log")))).trimmed(), config(QStringLiteral("hypr/hyprland.lua")));
         QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))), userHypr);
         QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator"))));
-        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island"))));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design"))));
         QVERIFY(backupNames().isEmpty());
         // --no-keys never reloads, so it is still available.
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply"), QStringLiteral("--no-keys")}, QString(), &out), 0);
@@ -1184,9 +1220,10 @@ private slots:
         // Fed back through the fake Hyprland: theirs are there beside every key of ours, including the hatch inside a submap.
         const QJsonArray live = liveNow();
         QVERIFY(hasBind(live, 64, QStringLiteral("1")) && hasBind(live, 64, QStringLiteral("Return")));
-        for (const char *key : {"D", "C", "A", "L", "V", "Escape"})
+        for (const char *key : {"V", "Escape", "O", "W"})
             QVERIFY2(hasBind(live, 72, QLatin1String(key)), key);
-        QVERIFY(hasBind(live, 72, QStringLiteral("O")) && hasBind(live, 72, QStringLiteral("W")));
+        for (const char *key : {"D", "C", "A", "L"})
+            QVERIFY2(!hasBind(live, 72, QLatin1String(key)), key);
     }
 
     void aReloadThatFailsIsNotReportedAsSuccess()
@@ -1254,10 +1291,17 @@ private slots:
         const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
         QVERIFY(keys.contains("submap_universal = true"));
         QVERIFY(keys.contains("SUPER + ALT + V\", island(\"dictate start\")"));
-        QVERIFY(keys.contains("SUPER + ALT + D\""));
+        QVERIFY(keys.contains("SUPER + ALT + O\""));
+        // The pill's mode keys and submaps went with the old file.
+        for (const char *gone : {"SUPER + ALT + D\"", "SUPER + ALT + C\"", "SUPER + ALT + A\"", "SUPER + ALT + L\"", "omastrator-draw"})
+            QVERIFY2(!keys.contains(gone), gone);
+        QVERIFY(!Setup::submapDefined(Setup::Environment::current(), QStringLiteral("omastrator-draw")));
+        QVERIFY(Setup::designKeysLoaded(Setup::Environment::current()));
         QCOMPARE(reloads(), 2);
         const QJsonArray live = liveNow();
-        QVERIFY(hasBind(live, 64, QStringLiteral("1")) && hasBind(live, 72, QStringLiteral("V")) && hasBind(live, 72, QStringLiteral("D")));
+        QVERIFY(hasBind(live, 64, QStringLiteral("1")) && hasBind(live, 72, QStringLiteral("V")) && hasBind(live, 72, QStringLiteral("O")));
+        for (const char *letter : {"D", "C", "A", "L"})
+            QVERIFY2(!hasBind(live, 72, QLatin1String(letter)), letter);
         // The old file's source line was recognised, so it isn't added a second time.
         QCOMPARE(read(config(QStringLiteral("hypr/hyprland.lua"))).count("omastrator/hyprland.lua"), 1);
     }
@@ -1276,6 +1320,9 @@ private slots:
         QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
         QVERIFY2(!out.contains(QLatin1String("already yours")) && !out.contains(QLatin1String("no longer has")) && out.contains(QLatin1String("Set up.")), qPrintable(out));
         QVERIFY(read(config(QStringLiteral("omastrator/hyprland.conf"))).contains("binddu = SUPER ALT, escape, Omastrator: reset, submap, reset"));
+        for (const char *letter : {"D", "C", "A", "L"})
+            QVERIFY2(!hasBind(liveNow(), 72, QLatin1String(letter)), letter);
+        QVERIFY(hasBind(liveNow(), 72, QStringLiteral("V")) && hasBind(liveNow(), 72, QStringLiteral("O")));
         // Both halves of the hatch report a description, so either says whose it is.
         int hatch = 0;
         for (const QJsonValue &value : liveNow()) {
@@ -1287,6 +1334,153 @@ private slots:
         }
         QCOMPARE(hatch, 2);
         QVERIFY(hasBind(liveNow(), 64, QStringLiteral("1")));
+    }
+
+    // A machine that has the desktop island installed: setup brings it to the new state, keeps a backup of what it deletes,
+    // and a second run changes nothing.
+    void setupCleansUpAnOldIslandInstall()
+    {
+        const QString island = QStringLiteral("omarchy/plugins/omastrator.island/");
+        const QStringList oldFiles{QStringLiteral("Island.qml"), QStringLiteral("Overlay.qml"), QStringLiteral("OverlayLogic.js"), QStringLiteral("GapHandle.qml"),
+                                   QStringLiteral("manifest.json")};
+        for (const QString &name : oldFiles)
+            write(config(island + name), "old island " + name.toUtf8() + "\n");
+        write(config(QStringLiteral("omarchy/shell.json")),
+              "{\n  \"version\": 1,\n  \"bar\": {\n    \"layout\": {\n      \"right\": [\n        {\n          \"id\": \"omastrator.ai\"\n        }\n      ]\n    }\n  },\n"
+              "  \"plugins\": [\n    {\n      \"id\": \"someone.else\"\n    },\n    {\n      \"id\": \"omastrator.island\"\n    }\n  ]\n}\n");
+        write(config(QStringLiteral("omastrator/hyprland.lua")), IslandKeyFiles::lua);
+        write(config(QStringLiteral("hypr/hyprland.lua")), userHypr + OldKeyFiles::luaSource);
+        write(config(QStringLiteral("omastrator/island-visibility.json")), "{\"show\":\"always\"}\n");
+        write(m_state.filePath(QStringLiteral("omastrator/island-seen.json")), "{\"labelsSeen\":[\"draw\"]}\n");
+        // What the old setup recorded, with the plugin files it had copied.
+        QJsonArray recorded;
+        for (const QString &name : oldFiles)
+            recorded.append(config(island + name));
+        recorded.append(config(QStringLiteral("omastrator/hyprland.lua")));
+        write(config(QStringLiteral("omastrator/setup.json")),
+              QJsonDocument(QJsonObject{{"version", 1}, {"files", recorded}, {"shellJson", QJsonObject{{"island", true}, {"bar", true}, {"created", false}}}}).toJson());
+        liveBinds({bind(64, QStringLiteral("1"))});
+        hyprlandLoadsTheConfig();
+        const QStringList before = snapshot(m_home.path());
+
+        // Nothing is asked or changed by a dry run, but it names the old files.
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply"), QStringLiteral("--dry-run")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Remove the desktop island's old files")) && out.contains(QLatin1String("delete ") + config(island + QStringLiteral("Island.qml"))), qPrintable(out));
+        QCOMPARE(snapshot(m_home.path()), before);
+
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Set up.")) && !out.contains(QLatin1String("no longer has")), qPrintable(out));
+        // The plugin folder, the shell.json entry, the old keys, the visibility choice and the labels seen are all gone.
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.island"))));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design/Design.qml"))));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design/Overlay.qml"))));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omastrator/island-visibility.json"))));
+        QVERIFY(!QFileInfo::exists(m_state.filePath(QStringLiteral("omastrator/island-seen.json"))));
+        const QJsonArray plugins = QJsonDocument::fromJson(read(config(QStringLiteral("omarchy/shell.json")))).object()["plugins"].toArray();
+        QCOMPARE(plugins.size(), 2);
+        QCOMPARE(plugins[0].toObject()["id"].toString(), QStringLiteral("someone.else"));
+        QCOMPARE(plugins[1].toObject()["id"].toString(), QStringLiteral("omastrator.design"));
+        QVERIFY(!read(config(QStringLiteral("omarchy/shell.json"))).contains("omastrator.island"));
+        const QByteArray keys = read(config(QStringLiteral("omastrator/hyprland.lua")));
+        QVERIFY(!keys.contains("omastrator-draw") && !keys.contains("SUPER + ALT + D\"") && keys.contains("omastrator-design"));
+        // Hyprland's own keys are still all there.
+        QVERIFY(hasBind(liveNow(), 64, QStringLiteral("1")) && !hasBind(liveNow(), 72, QStringLiteral("D")));
+        // The record no longer lists the deleted plugin's files, so --remove leaves them alone too.
+        const QJsonObject record = QJsonDocument::fromJson(read(config(QStringLiteral("omastrator/setup.json")))).object();
+        for (const QJsonValue &file : record["files"].toArray())
+            QVERIFY2(!file.toString().contains(QLatin1String("omastrator.island")), qPrintable(file.toString()));
+        QVERIFY(record["shellJson"].toObject()["design"].toBool());
+        // What was deleted is in the backup, and --restore brings it back exactly.
+        QVERIFY(!backupNames().isEmpty());
+        const QJsonObject manifest = QJsonDocument::fromJson(read(QDir(QDir(backupsFolder()).filePath(backupNames().last())).filePath(QStringLiteral("manifest.json")))).object();
+        QMap<QString, bool> existed;
+        for (const QJsonValue &entry : manifest["entries"].toArray())
+            existed[entry.toObject()["path"].toString()] = entry.toObject()["existed"].toBool();
+        QVERIFY(existed.value(config(island + QStringLiteral("Island.qml"))));
+        QVERIFY(existed.value(config(QStringLiteral("omastrator/island-visibility.json"))));
+        QVERIFY(existed.value(m_state.filePath(QStringLiteral("omastrator/island-seen.json"))));
+
+        // A second run changes nothing, and asks nothing.
+        const QStringList installed = snapshot(m_home.path());
+        const int backups = backupNames().size();
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Everything is already set up.")), qPrintable(out));
+        QCOMPARE(snapshot(m_home.path()), installed);
+        QCOMPARE(backupNames().size(), backups);
+
+        QCOMPARE(setup({QStringLiteral("--restore"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QVERIFY2(read(config(island + QStringLiteral("Island.qml"))) == "old island Island.qml\n", qPrintable(out));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omastrator/island-visibility.json"))));
+        QVERIFY(QFileInfo::exists(m_state.filePath(QStringLiteral("omastrator/island-seen.json"))));
+        QCOMPARE(snapshot(m_home.path()), before);
+    }
+
+    // --remove after an upgrade takes design mode out of shell.json, and takes out an entry an older setup recorded as "island".
+    void removeKnowsTheDesignPluginAndTheOldRecord()
+    {
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes")}, QString(), &out), 0);
+        QVERIFY(QJsonDocument::fromJson(read(config(QStringLiteral("omastrator/setup.json")))).object()["shellJson"].toObject()["design"].toBool());
+        // A record written before the island was removed says "island".
+        QJsonObject record = QJsonDocument::fromJson(read(config(QStringLiteral("omastrator/setup.json")))).object();
+        QJsonObject shellJson = record["shellJson"].toObject();
+        shellJson.remove(QStringLiteral("design"));
+        shellJson["island"] = true;
+        record["shellJson"] = shellJson;
+        write(config(QStringLiteral("omastrator/setup.json")), QJsonDocument(record).toJson());
+        QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QVERIFY(!read(config(QStringLiteral("omarchy/shell.json"))).contains("omastrator"));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design"))));
+    }
+
+    // From the last version with the island: its four mode keys and submaps go, and every key of the user's and of ours that stays is still bound.
+    void anUpgradeFromTheIslandKeyFilesDropsThePillsKeys_data()
+    {
+        QTest::addColumn<bool>("lua");
+        QTest::newRow("Lua") << true;
+        QTest::newRow("hyprlang") << false;
+    }
+
+    void anUpgradeFromTheIslandKeyFilesDropsThePillsKeys()
+    {
+        QFETCH(bool, lua);
+        const QString name = lua ? QStringLiteral("hyprland.lua") : QStringLiteral("hyprland.conf");
+        if (!lua) {
+            QFile::remove(config(QStringLiteral("hypr/hyprland.lua")));
+            write(config(QStringLiteral("hypr/hyprland.conf")), "source = ~/.config/hypr/bindings.conf\n\nsource = ~/.config/omastrator/hyprland.conf\n");
+        } else {
+            write(config(QStringLiteral("hypr/hyprland.lua")), userHypr + Setup::sourceBlock(Setup::HyprFormat::lua));
+        }
+        write(config(QStringLiteral("omastrator/") + name), lua ? IslandKeyFiles::lua : IslandKeyFiles::conf);
+        liveBinds({bind(64, QStringLiteral("1")), bind(64, QStringLiteral("Return"))});
+        hyprlandLoadsTheConfig();
+        for (const char *letter : {"D", "C", "A", "L", "V", "O"})
+            QVERIFY2(hasBind(liveNow(), 72, QLatin1String(letter)), letter);
+        QVERIFY(Setup::submapDefined(Setup::Environment::current(), QStringLiteral("omastrator-draw")));
+
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--apply")}, QString(), &out), 0);
+        QVERIFY2(!out.contains(QLatin1String("already yours")) && !out.contains(QLatin1String("no longer has")) && !out.contains(QLatin1String("didn't bind"))
+                     && out.contains(QLatin1String("Set up.")),
+                 qPrintable(out));
+        QCOMPARE(reloads(), 2);
+        const QJsonArray live = liveNow();
+        QVERIFY(hasBind(live, 64, QStringLiteral("1")) && hasBind(live, 64, QStringLiteral("Return")));
+        for (const char *letter : {"V", "O", "W"})
+            QVERIFY2(hasBind(live, 72, QLatin1String(letter)), letter);
+        for (const char *letter : {"D", "C", "A", "L"})
+            QVERIFY2(!hasBind(live, 72, QLatin1String(letter)), letter);
+        // Not one bind is left in the pill's submaps.
+        for (const QJsonValue &value : live) {
+            const QString submap = value.toObject()["submap"].toString();
+            QVERIFY2(submap.isEmpty() || submap == QLatin1String("omastrator-heard") || submap == QLatin1String("omastrator-design"), qPrintable(submap));
+        }
+        QVERIFY(!Setup::submapDefined(Setup::Environment::current(), QStringLiteral("omastrator-draw")));
+        QVERIFY(Setup::submapDefined(Setup::Environment::current(), QStringLiteral("omastrator-design")));
+        QVERIFY(Setup::submapDefined(Setup::Environment::current(), QStringLiteral("omastrator-heard")));
+        // The source line was recognised in either wording.
+        QCOMPARE(read(config(QStringLiteral("hypr/") + name)).count("omastrator/" + name.toUtf8()), 1);
     }
 
     void aRerunWithApplyChangesAndReloadsNothing()

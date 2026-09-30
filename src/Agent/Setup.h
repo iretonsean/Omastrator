@@ -8,8 +8,8 @@
 #include <optional>
 #include <vector>
 
-// `omastrator setup` (docs/OS-SUITE.md): installs the island and tray light
-// plugins, writes the Hyprland keys, the Omarchy menu entries and the
+// `omastrator setup` (docs/OS-SUITE.md): installs the design mode and tray light
+// plugins (and removes the old desktop island's), writes the Hyprland keys, the Omarchy menu entries and the
 // dictation vocabulary, and offers the bar widget and the Hyprland source
 // line. Every change to a file is shown as a diff and confirmed first, after
 // a copy of each file it will change goes to setup-backups (`--restore` puts
@@ -91,7 +91,7 @@ struct DesignKeys {
 QString normalizeCombo(const QString &lua);
 // "SUPER+ALT+ESCAPE" as people write it: "Super+Alt+Escape".
 QString displayCombo(const QString &normalized);
-// Every global key setup would bind, normalised: the mode keys, dictation, design mode, the Desk and the reset.
+// Every global key setup would bind, normalised: dictation, design mode, the Desk and the reset.
 QStringList omastratorKeys(const DesignKeys &keys);
 // The global keys the user already binds (Hyprland's live binds, else their config), normalised. Omastrator's own binds don't count,
 // nor do keys used only inside a submap: the keys setup binds inside its own submaps can't collide with anything.
@@ -102,6 +102,9 @@ struct KeyChoice {
     QStringList skipped;
 };
 KeyChoice chooseKeys(const Environment &environment);
+
+// The desktop island's plugin folder in omarchy-shell's plugins, which setup deletes from an old install.
+QString oldIslandPlugin(const Environment &environment);
 
 // The generated files. `skip` is normalised keys to leave unbound (see chooseKeys).
 QByteArray hyprlandLua(const QString &command, const DesignKeys &keys = {}, const QStringList &skip = {});
@@ -129,7 +132,7 @@ std::optional<QByteArray> jq(const QByteArray &input, const QString &filter, QSt
 // Whether Hyprland loads setup's design keys: Omastrator's key file defines the design submap and Hyprland's
 // config sources it. Entering a submap Hyprland doesn't define would leave the user with no keybindings.
 bool designKeysLoaded(const Environment &environment);
-// The same for any of Omastrator's submaps (omastrator-draw, -capture, -ai, -live, -heard, -design).
+// The same for any of Omastrator's submaps (omastrator-heard, omastrator-design).
 bool submapDefined(const Environment &environment, const QString &submap);
 QString unifiedDiff(const QString &path, const std::optional<QByteArray> &before, const std::optional<QByteArray> &after);
 // "grim (sudo pacman -S grim)" for each program Omastrator's desktop features need and can't find.
