@@ -9,6 +9,7 @@
 namespace SetupInternal {
 extern const QString designFilter;
 extern const QString barFilter;
+extern const QString pagesFilter;
 
 std::optional<QByteArray> readFile(const QString &path);
 QByteArray shellJsonBase(const Setup::Environment &environment, bool *exists);
@@ -21,6 +22,8 @@ struct Record {
     // omastrator.design is in shell.json (setup.json calls it "island" in records written before the island was removed).
     bool design = false;
     bool bar = false;
+    // omastrator.pages (the page dots) is in the bar layout.
+    bool pages = false;
     bool shellJsonCreated = false;
     bool menu = false;
     bool menuComma = false;
@@ -44,6 +47,7 @@ struct Record {
             record.directories << directory.toString();
         record.design = json["shellJson"]["design"].toBool() || json["shellJson"]["island"].toBool();
         record.bar = json["shellJson"]["bar"].toBool();
+        record.pages = json["shellJson"]["pages"].toBool();
         record.shellJsonCreated = json["shellJson"]["created"].toBool();
         record.menu = json["menu"]["block"].toBool();
         record.menuComma = json["menu"]["comma"].toBool();
@@ -59,7 +63,7 @@ struct Record {
     }
     bool isEmpty() const
     {
-        return files.isEmpty() && directories.isEmpty() && !design && !bar && !menu && sourcePath.isEmpty() && flagsPath.isEmpty();
+        return files.isEmpty() && directories.isEmpty() && !design && !bar && !pages && !menu && sourcePath.isEmpty() && flagsPath.isEmpty();
     }
     QByteArray toJson() const
     {
@@ -67,7 +71,7 @@ struct Record {
                                  {"version", 1},
                                  {"files", QJsonArray::fromStringList(files)},
                                  {"directories", QJsonArray::fromStringList(directories)},
-                                 {"shellJson", QJsonObject{{"design", design}, {"bar", bar}, {"created", shellJsonCreated}}},
+                                 {"shellJson", QJsonObject{{"design", design}, {"bar", bar}, {"pages", pages}, {"created", shellJsonCreated}}},
                                  {"menu", QJsonObject{{"block", menu}, {"comma", menuComma}, {"created", menuCreated}}},
                                  {"hyprSource", QJsonObject{{"path", sourcePath}, {"text", QString::fromUtf8(sourceText)}}},
                                  {"chromiumFlags", QJsonObject{{"path", flagsPath}, {"extension", flagsExtension}, {"created", flagsCreated}}},

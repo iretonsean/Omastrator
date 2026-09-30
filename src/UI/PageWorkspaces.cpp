@@ -460,7 +460,8 @@ void PageWorkspaces::writeClaims() const
         state.returnWorkspace = m_returnName;
         state.returnId = m_returnId;
         for (const Claim &claim : m_claims) {
-            WorkspaceClaims::Claim entry{claim.name, claim.tab.toString(QUuid::WithoutBraces), claim.page.toString(QUuid::WithoutBraces), {}};
+            WorkspaceClaims::Claim entry{claim.name, claim.tab.toString(QUuid::WithoutBraces), claim.page.toString(QUuid::WithoutBraces), {}, claim.document,
+                                            claim.pageName.isEmpty() ? QStringLiteral("Page") : claim.pageName};
             for (const StandIn &standIn : m_standIns) {
                 if (!standIn.address.isEmpty() && standIn.workspace == claim.name)
                     entry.windows << standIn.address;

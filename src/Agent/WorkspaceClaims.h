@@ -13,6 +13,9 @@ struct Claim {
     QString pageId;
     // The windows Omastrator put there (the editor and stand-ins); anything else on the workspace is the user's.
     QStringList windows;
+    // What the name came from, for the bar's page dots (docs/WORKSPACES.md, "In the bar"). Files from before have neither.
+    QString document;
+    QString pageName;
     bool operator==(const Claim &) const = default;
 };
 

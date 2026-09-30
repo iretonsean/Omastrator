@@ -1,6 +1,7 @@
 #include "Agent/StatusStream.h"
 #include "Agent/AgentClient.h"
 #include "Agent/AgentProtocol.h"
+#include "Agent/WorkspaceClaims.h"
 #include <QCoreApplication>
 #include <csignal>
 #include <sys/prctl.h>
@@ -12,15 +13,37 @@
 #include <QJsonDocument>
 
 namespace StatusStream {
+// The pages that hold a workspace, in page order, for the bar's page dots. A claims file from a version that didn't
+// record the names gives them back from the workspace name, `design:<document> · <page>`.
+static QJsonArray pageWorkspaces()
+{
+    QJsonArray pages;
+    for (const WorkspaceClaims::Claim &claim : WorkspaceClaims::read().claims) {
+        QString document = claim.document, page = claim.pageName;
+        if (document.isEmpty() || page.isEmpty()) {
+            const QString plain = claim.name.startsWith(QLatin1String("design:")) ? claim.name.mid(7) : claim.name;
+            const qsizetype split = plain.indexOf(QStringLiteral(" · "));
+            document = split < 0 ? QString() : plain.left(split);
+            page = split < 0 ? plain : plain.mid(split + 3);
+        }
+        pages.append(QJsonObject{{"name", claim.name}, {"page", page}, {"document", document}});
+    }
+    return pages;
+}
+
 QJsonObject compose(const QJsonObject &app, const Island::State &island)
 {
     // What a reader gets when the app is closed: nothing waiting, nothing ready.
     QJsonObject status{{"running", false}, {"document", false}, {"tool", "select"}, {"proposal", ""}, {"summary", ""},
                        {"waiting", ""}, {"task", ""}, {"agent", ""}, {"variations", 0}, {"variationsId", ""},
                        {"roastId", ""}, {"offer", ""}, {"ready", false}, {"error", ""}, {"live", QJsonObject{{"state", "off"}}},
-                       {"design", QJsonObject{{"on", false}, {"overlays", QJsonArray()}}}, {"window", false}};
+                       {"design", QJsonObject{{"on", false}, {"overlays", QJsonArray()}}}, {"window", false},
+                       {"pageWorkspaces", QJsonArray()}};
     for (auto it = app.begin(); it != app.end(); ++it)
         status.insert(it.key(), it.value());
+    // The claims file belongs to a running app: one left by a crashed app is not shown.
+    if (!app.isEmpty())
+        status.insert(QStringLiteral("pageWorkspaces"), pageWorkspaces());
     // Dictation's state, from its own file beside the mode's.
     QFile dictation(QDir(Island::runtimeDirectory()).filePath(QStringLiteral("dictation.json")));
     const QJsonObject heard = dictation.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(dictation.readAll()).object() : QJsonObject();

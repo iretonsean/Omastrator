@@ -34,6 +34,8 @@ State read()
         claim.name = each["name"].toString();
         claim.tabId = each["tab"].toString();
         claim.pageId = each["page"].toString();
+        claim.document = each["document"].toString();
+        claim.pageName = each["pageName"].toString();
         for (const QJsonValue &window : each["windows"].toArray())
             claim.windows << window.toString();
         if (!claim.name.isEmpty())
@@ -55,6 +57,8 @@ QString write(const State &state)
             claims.append(QJsonObject{{"name", claim.name},
                                       {"tab", claim.tabId},
                                       {"page", claim.pageId},
+                                      {"document", claim.document},
+                                      {"pageName", claim.pageName},
                                       {"windows", QJsonArray::fromStringList(claim.windows)}});
         }
         object["claims"] = claims;

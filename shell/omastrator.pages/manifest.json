@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "omastrator.pages",
+  "name": "Omastrator Pages",
+  "version": "0.1.0",
+  "author": "Omastrator",
+  "license": "MIT",
+  "description": "One button in the bar for each page of an Omastrator document that holds a workspace (Pages as Workspaces), after Omarchy's workspace numbers. Click one to go to that page.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "PageDots.qml"
+  },
+  "barWidget": {
+    "displayName": "Omastrator Pages",
+    "description": "The pages that hold a workspace, next to the workspace numbers. Nothing shows when no document claims workspaces.",
+    "category": "Workspaces",
+    "aliases": ["pages"],
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}

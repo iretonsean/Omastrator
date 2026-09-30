@@ -278,6 +278,29 @@ private:
         return code;
     }
 
+    // The ids in each section of the bar layout, e.g. {"left": ["omarchy.menu", ...]}.
+    QMap<QString, QStringList> barLayout() const
+    {
+        QMap<QString, QStringList> sections;
+        const QJsonObject layout = QJsonDocument::fromJson(read(config(QStringLiteral("omarchy/shell.json")))).object()["bar"].toObject()["layout"].toObject();
+        for (auto it = layout.begin(); it != layout.end(); ++it) {
+            for (const QJsonValue &entry : it.value().toArray())
+                sections[it.key()] << entry.toObject()["id"].toString();
+        }
+        return sections;
+    }
+    static QByteArray shellWithLayout(const QJsonObject &layout)
+    {
+        return QJsonDocument(QJsonObject{{"version", 1}, {"bar", QJsonObject{{"layout", layout}}}}).toJson();
+    }
+    static QJsonArray widgets(const QStringList &ids)
+    {
+        QJsonArray array;
+        for (const QString &id : ids)
+            array.append(QJsonObject{{"id", id}});
+        return array;
+    }
+
 private slots:
     void initTestCase()
     {
@@ -388,6 +411,91 @@ private slots:
         QVERIFY(Setup::unifiedDiff(QStringLiteral("f"), QByteArray("x\n"), std::nullopt).startsWith(QStringLiteral("--- f\n+++ /dev/null\n")));
     }
 
+    // The page dots (shell/omastrator.pages) sit right after Omarchy's workspace numbers, whichever section holds them.
+    void thePageDotsFollowTheWorkspaceNumbers()
+    {
+        write(config(QStringLiteral("omarchy/shell.json")),
+              shellWithLayout({{"left", widgets({"omarchy.menu", "omarchy.workspaces", "omarchy.clock"})}, {"right", widgets({"omarchy.audio"})}}));
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--no-keys")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("page dots")), qPrintable(out));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.pages/PageDots.qml"))));
+        QVERIFY(QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.pages/manifest.json"))));
+        QCOMPARE(barLayout()["left"], (QStringList{"omarchy.menu", "omarchy.workspaces", "omastrator.pages", "omarchy.clock"}));
+        QCOMPARE(barLayout()["right"], (QStringList{"omastrator.ai", "omarchy.audio"}));
+        QVERIFY(!out.contains(QLatin1String("no Omarchy workspaces widget")));
+
+        // A second run changes nothing.
+        const QStringList installed = snapshot(m_home.path());
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--no-keys")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("Everything is already set up.")), qPrintable(out));
+        QCOMPARE(snapshot(m_home.path()), installed);
+
+        // Removal takes both widgets out and leaves the user's.
+        QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);
+        QCOMPARE(barLayout()["left"], (QStringList{"omarchy.menu", "omarchy.workspaces", "omarchy.clock"}));
+        QCOMPARE(barLayout()["right"], (QStringList{"omarchy.audio"}));
+        QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.pages"))));
+    }
+
+    void thePageDotsFollowTheNumbersInAnySection()
+    {
+        write(config(QStringLiteral("omarchy/shell.json")),
+              shellWithLayout({{"left", widgets({"omarchy.menu"})}, {"center", widgets({"omarchy.clock", "omarchy.workspaces"})}}));
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--no-keys")}), 0);
+        QCOMPARE(barLayout()["center"], (QStringList{"omarchy.clock", "omarchy.workspaces", "omastrator.pages"}));
+        QCOMPARE(barLayout()["left"], (QStringList{"omarchy.menu"}));
+    }
+
+    // Without Omarchy's workspaces widget the dots go at the end of the left section, and setup says so.
+    void thePageDotsGoLastOnTheLeftWithoutWorkspaces()
+    {
+        write(config(QStringLiteral("omarchy/shell.json")), shellWithLayout({{"left", widgets({"omarchy.menu"})}}));
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--no-keys")}, QString(), &out), 0);
+        QCOMPARE(barLayout()["left"], (QStringList{"omarchy.menu", "omastrator.pages"}));
+        QVERIFY2(out.contains(QLatin1String("no Omarchy workspaces widget")), qPrintable(out));
+        // The note is for the run that adds them.
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--no-keys")}, QString(), &out), 0);
+        QVERIFY2(!out.contains(QLatin1String("no Omarchy workspaces widget")), qPrintable(out));
+    }
+
+    // An install from before the page dots (the tray light is there, the dots aren't) gets them on the next setup.
+    void anOldInstallGetsThePageDots()
+    {
+        write(config(QStringLiteral("omarchy/shell.json")),
+              shellWithLayout({{"left", widgets({"omarchy.menu", "omarchy.workspaces"})}, {"right", widgets({"omastrator.ai", "omarchy.audio"})}}));
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--yes"), QStringLiteral("--no-keys")}, QString(), &out), 0);
+        QCOMPARE(barLayout()["left"], (QStringList{"omarchy.menu", "omarchy.workspaces", "omastrator.pages"}));
+        QCOMPARE(barLayout()["right"], (QStringList{"omastrator.ai", "omarchy.audio"}));
+    }
+
+    // With no bar layout the shell uses its own default, which adding a section would replace: leave it and say so.
+    // (Without the tray light: that one would make a layout with a right section.)
+    void aBarWithoutALayoutIsLeftAlone()
+    {
+        write(config(QStringLiteral("omarchy/shell.json")), QByteArray("{\n  \"version\": 1\n}\n"));
+        QStringList notes;
+        const std::vector<Setup::Change> plan = Setup::installPlan(Setup::Environment::current(), false, false, &notes, true);
+        for (const Setup::Change &change : plan)
+            QVERIFY2(change.key != QLatin1String("pages") || !change.changes(), "a pages step with no layout");
+        QVERIFY2(notes.join(QLatin1Char('\n')).contains(QLatin1String("shell.json has no bar layout")), qPrintable(notes.join(QLatin1Char('\n'))));
+    }
+
+    // The dots are a step of their own, apart from the tray light's, and a dry run changes nothing.
+    void thePageDotsAreTheirOwnStep()
+    {
+        const QByteArray original = shellWithLayout({{"left", widgets({"omarchy.workspaces"})}});
+        write(config(QStringLiteral("omarchy/shell.json")), original);
+        QString out;
+        QCOMPARE(setup({QStringLiteral("--dry-run"), QStringLiteral("--no-keys")}, QString(), &out), 0);
+        QVERIFY2(out.contains(QLatin1String("== Add the tray light to the bar")), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("== Add the page dots to the bar, after the workspace numbers")), qPrintable(out));
+        QVERIFY2(out.contains(QLatin1String("+          \"id\": \"omastrator.pages\"")), qPrintable(out));
+        QCOMPARE(read(config(QStringLiteral("omarchy/shell.json"))), original);
+    }
+
     void setupAndRemoveAreIdempotent()
     {
         const QStringList before = snapshot(m_home.path());
@@ -461,9 +569,9 @@ private slots:
         QCOMPARE(setup({}, QString(), &out), 0);
         QCOMPARE(snapshot(m_home.path()), before);
 
-        // Yes to the menu alone (the fifth step, after plugins, keys, vocabulary and the binary).
+        // Yes to the menu alone (after plugins, keys, vocabulary, the binary, design and the page dots).
         const bool binaryStep = out.contains(QLatin1String("Tell the plugins where Omastrator is"));
-        QCOMPARE(setup({}, binaryStep ? QStringLiteral("n\nn\nn\nn\nn\nn\ny\n") : QStringLiteral("n\nn\nn\nn\nn\ny\n"), &out), 0);
+        QCOMPARE(setup({}, binaryStep ? QStringLiteral("n\nn\nn\nn\nn\nn\nn\ny\n") : QStringLiteral("n\nn\nn\nn\nn\nn\ny\n"), &out), 0);
         QVERIFY(read(config(QStringLiteral("omarchy/extensions/omarchy-menu.jsonc"))).contains("BEGIN omastrator setup"));
         QVERIFY(!QFileInfo::exists(config(QStringLiteral("omarchy/plugins/omastrator.design"))));
         QCOMPARE(setup({QStringLiteral("--remove"), QStringLiteral("--yes")}, QString(), &out), 0);

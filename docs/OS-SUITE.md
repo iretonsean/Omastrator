@@ -116,6 +116,13 @@ moved the island into the app window. What each of its jobs became:
 - Setup offers to add it to `~/.config/omarchy/shell.json`: it shows the change
   and asks. Otherwise it prints the snippet.
 
+### 2b. The page dots (`omastrator.pages`, kind `bar-widget`)
+
+- One button in the bar's left section for each page that holds a workspace (Pages as Workspaces,
+  WORKSPACES.md, "In the bar"), right after Omarchy's workspace numbers. Zero width when no document claims
+  workspaces. A click focuses the page's workspace. It reads `pageWorkspaces` from the status stream.
+- Setup adds it as its own step, after `omarchy.workspaces`, and `--remove` takes it out.
+
 ### 3. Omarchy menu entries
 
 User extension entries in `~/.config/omarchy/extensions/omarchy-menu.jsonc`,
@@ -474,7 +481,8 @@ where they describe the pill: it was removed on 2026-09-29 (component 1).*
 - **shell.json is edited with jq** (an Omarchy dependency), which keeps the
   key order and layout the shell itself writes, so the diff shows only
   Omastrator's lines. The island is added to `plugins[]`; the tray light, if
-  accepted, goes first in `bar.layout.right`. jq writes escaped characters
+  accepted, goes first in `bar.layout.right`, and the page dots go right after `omarchy.workspaces` (their own step,
+  `pages`, always offered). jq writes escaped characters
   raw (`\u2014` becomes "—"), so any line jq only re-encoded takes the
   file's own bytes back; found when a real `shell.json` held an escaped em
   dash. JSON edits are recomputed from

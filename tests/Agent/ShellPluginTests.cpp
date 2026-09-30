@@ -49,6 +49,7 @@ private slots:
         const QStringList plugins = m_shell.entryList({QStringLiteral("omastrator.*")}, QDir::Dirs);
         QVERIFY(plugins.contains(QStringLiteral("omastrator.design")));
         QVERIFY(plugins.contains(QStringLiteral("omastrator.ai")));
+        QVERIFY(plugins.contains(QStringLiteral("omastrator.pages")));
         // The pill moved into the app: nothing installs it any more.
         QVERIFY(!plugins.contains(QStringLiteral("omastrator.island")));
         for (const QString &plugin : plugins) {
@@ -103,6 +104,90 @@ private slots:
         QVERIFY(light.contains(QStringLiteral("import \"../omastrator.design/OverlayLogic.js\" as Logic")));
         QVERIFY(!read(QStringLiteral("omastrator.design/OverlayLogic.js")).isEmpty());
         QVERIFY(!read(QStringLiteral("omastrator.ai/manifest.json")).contains(QStringLiteral("island")));
+    }
+
+    // The page dots (docs/WORKSPACES.md, "In the bar") are drawn like Omarchy's own workspace numbers and click through the
+    // same Lua dispatch; the widget can't load without quickshell, so its source is checked and its decisions run.
+    void thePageDotsLookLikeTheWorkspaceNumbers()
+    {
+        const QString widget = read(QStringLiteral("omastrator.pages/PageDots.qml"));
+        QVERIFY(!widget.isEmpty());
+        // The same button, sizes and spacing as /usr/share/omarchy/shell/plugins/bar/widgets/Workspaces.qml.
+        for (const char *same : {"WidgetButton {", "horizontalMargin: 6", "verticalPadding: 6", "fixedWidth: root.vertical ? root.barSize : Style.space(20)",
+                                 "fixedHeight: root.barSize", "columnSpacing: root.vertical ? 0 : Style.space(1)", "rowSpacing: root.vertical ? Style.space(2) : 0"})
+            QVERIFY2(widget.contains(QLatin1String(same)), same);
+        // Focus comes from Hyprland's own state, not from a query; the page order from the status stream.
+        QVERIFY(widget.contains(QStringLiteral("Hyprland.focusedWorkspace.name")));
+        QVERIFY(widget.contains(QStringLiteral("O.Status { id: status }")));
+        QVERIFY(!widget.contains(QStringLiteral("Process")));
+        // Nothing (zero width) when no document claims workspaces.
+        QVERIFY(widget.contains(QStringLiteral("implicitWidth: pageList.length === 0 ? 0 :")));
+        QVERIFY(widget.contains(QStringLiteral("visible: pageList.length > 0")));
+        QVERIFY(widget.contains(QStringLiteral("root.bar.run(\"hyprctl dispatch \" + Util.shellQuote(Logic.focusLua(name)))")));
+        QVERIFY(widget.contains(QStringLiteral("onPressed: function() { root.focusPage(modelData.name) }")));
+        QCOMPARE(QJsonDocument::fromJson(read(QStringLiteral("omastrator.pages/manifest.json")).toUtf8()).object()["barWidget"].toObject()["allowMultiple"].toBool(true), false);
+    }
+
+    void thePageDotsDecisionsRunWithoutAShell()
+    {
+#ifndef OMASTRATOR_HAVE_QML
+        QSKIP("Qt Qml isn't installed, so the page dots' JavaScript can't run here.");
+#else
+        QString source = read(QStringLiteral("omastrator.pages/PageDotsLogic.js"));
+        QVERIFY(source.startsWith(QStringLiteral(".pragma library")));
+        source.remove(0, source.indexOf(QLatin1Char('\n')));
+        QJSEngine engine;
+        const QJSValue loaded = engine.evaluate(source, QStringLiteral("PageDotsLogic.js"));
+        QVERIFY2(!loaded.isError(), qPrintable(loaded.toString()));
+        auto call = [&](const char *name, const QJSValueList &args) {
+            const QJSValue result = engine.globalObject().property(QLatin1String(name)).call(args);
+            if (result.isError())
+                qWarning() << result.toString();
+            return result;
+        };
+        auto json = [&](const QByteArray &text) { return engine.evaluate(QStringLiteral("(%1)").arg(QString::fromUtf8(text))); };
+
+        // A stream that isn't there yet, or has no field (an older Omastrator), shows nothing.
+        QCOMPARE(call("pages", {json("{}")}).property(QStringLiteral("length")).toInt(), 0);
+        QCOMPARE(call("pages", {json("{\"pageWorkspaces\": 3}")}).property(QStringLiteral("length")).toInt(), 0);
+        QCOMPARE(call("pages", {engine.toScriptValue(QVariant())}).property(QStringLiteral("length")).toInt(), 0);
+
+        const QByteArray status = "{\"pageWorkspaces\": ["
+                                  "{\"name\": \"design:Poster · Front\", \"page\": \"Front\", \"document\": \"Poster\"},"
+                                  "{\"name\": \"design:Poster · Back\", \"page\": \"Back\", \"document\": \"Poster\"},"
+                                  "{\"page\": \"no name\"}]}";
+        const QJSValue pages = call("pages", {json(status)});
+        // In the stream's order, minus the entry with no workspace to focus.
+        QCOMPARE(pages.property(QStringLiteral("length")).toInt(), 2);
+        // The second page is focused: the glyph Omarchy uses for its own focused number, and full opacity.
+        const QJSValue buttons = call("buttons", {pages, QJSValue(QStringLiteral("design:Poster · Back"))});
+        QCOMPARE(buttons.property(0).property(QStringLiteral("text")).toString(), QStringLiteral("\u2022"));
+        QCOMPARE(buttons.property(0).property(QStringLiteral("opacity")).toNumber(), 0.5);
+        QVERIFY(!buttons.property(0).property(QStringLiteral("focused")).toBool());
+        QCOMPARE(buttons.property(1).property(QStringLiteral("text")).toString(), QStringLiteral("\U000F14FB"));
+        QCOMPARE(buttons.property(1).property(QStringLiteral("opacity")).toNumber(), 1.0);
+        QVERIFY(buttons.property(1).property(QStringLiteral("focused")).toBool());
+        // One document: the page's name alone.
+        QCOMPARE(buttons.property(0).property(QStringLiteral("tooltip")).toString(), QStringLiteral("Front"));
+        // Nothing focused (another workspace, or none yet): every page is a dot.
+        const QJSValue none = call("buttons", {pages, QJSValue(QStringLiteral("3"))});
+        QVERIFY(!none.property(0).property(QStringLiteral("focused")).toBool() && !none.property(1).property(QStringLiteral("focused")).toBool());
+
+        // Two documents: the tooltip names the document too.
+        const QJSValue two = call("pages", {json("{\"pageWorkspaces\": ["
+                                                 "{\"name\": \"design:A · One\", \"page\": \"One\", \"document\": \"A\"},"
+                                                 "{\"name\": \"design:B · One\", \"page\": \"One\", \"document\": \"B\"}]}")});
+        const QJSValue twoButtons = call("buttons", {two, QJSValue(QString())});
+        QCOMPARE(twoButtons.property(0).property(QStringLiteral("tooltip")).toString(), QStringLiteral("One (A)"));
+        QCOMPARE(twoButtons.property(1).property(QStringLiteral("tooltip")).toString(), QStringLiteral("One (B)"));
+
+        // A click focuses the workspace by name, the way Omarchy's widget focuses one by number.
+        QCOMPARE(call("focusLua", {QJSValue(QStringLiteral("design:Poster · Back"))}).toString(),
+                 QStringLiteral("hl.dsp.focus({ workspace = \"name:design:Poster · Back\" })"));
+        // Quotes and backslashes in a page's name stay inside the Lua string.
+        QCOMPARE(call("focusLua", {QJSValue(QStringLiteral("design:Say \"hi\" \\ now"))}).toString(),
+                 QStringLiteral("hl.dsp.focus({ workspace = \"name:design:Say \\\"hi\\\" \\\\ now\" })"));
+#endif
     }
 
     // Design mode's overlay (docs/ANYWHERE.md) sits over every window and must never steal their clicks

@@ -3,6 +3,7 @@
 #include "Agent/AgentTools.h"
 #include "Agent/DesignCli.h"
 #include "Agent/Island.h"
+#include "Agent/WorkspaceClaims.h"
 #include "Agent/StatusStream.h"
 #include "FakeAgentHost.h"
 #include <QDir>
@@ -523,6 +524,31 @@ private slots:
         QVERIFY(Island::ensureAppRunning(300).contains(QLatin1String("Could not start")));
         qputenv("OMASTRATOR_APP", "/bin/true");
         qputenv("OMASTRATOR_SOCKET", m_path.toUtf8());
+    }
+
+    // The bar's page dots follow the claims file: a line when it changes, and an empty list when it is emptied.
+    void followPrintsThePageWorkspacesWhenTheClaimsChange()
+    {
+        QString text;
+        QTextStream out(&text);
+        StatusStream::Follower follower(out);
+        follower.start();
+        QTRY_VERIFY(follower.last()["running"].toBool());
+        QVERIFY(follower.last()["pageWorkspaces"].toArray().isEmpty());
+
+        WorkspaceClaims::State state;
+        state.pid = 1;
+        state.returnWorkspace = QStringLiteral("1");
+        state.claims = {{QStringLiteral("design:Poster · Front"), QStringLiteral("t"), QStringLiteral("a"), {}, QStringLiteral("Poster"), QStringLiteral("Front")},
+                        {QStringLiteral("design:Poster · Back"), QStringLiteral("t"), QStringLiteral("b"), {}, QStringLiteral("Poster"), QStringLiteral("Back")}};
+        QVERIFY(WorkspaceClaims::write(state).isEmpty());
+        QTRY_COMPARE(follower.last()["pageWorkspaces"].toArray().size(), 2);
+        QCOMPARE(follower.last()["pageWorkspaces"].toArray()[1].toObject()["page"].toString(), QStringLiteral("Back"));
+        state.claims.removeFirst();
+        QVERIFY(WorkspaceClaims::write(state).isEmpty());
+        QTRY_COMPARE(follower.last()["pageWorkspaces"].toArray().size(), 1);
+        QVERIFY(WorkspaceClaims::write({}).isEmpty());
+        QTRY_VERIFY(follower.last()["pageWorkspaces"].toArray().isEmpty());
     }
 
     void followPrintsALinePerChange()

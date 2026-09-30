@@ -21,6 +21,27 @@ const QString designFilter = QStringLiteral(
 const QString barFilter = QStringLiteral(
     "if ([.bar.layout[]?[]?.id] | index(\"omastrator.ai\")) then . else .bar.layout.right = ([{\"id\": \"omastrator.ai\"}] + (.bar.layout.right // [])) end");
 
+// Adds omastrator.pages right after omarchy.workspaces, in whichever section holds it; with no such widget, at the end of
+// the left section. A bar with no layout at all is left alone: the shell then uses its own default, which this would replace.
+const QString pagesFilter = QStringLiteral(R"jq(
+def ids: map(if type == "object" then .id else null end);
+if ([.bar.layout[]?[]?.id?] | index("omastrator.pages")) or ((.bar.layout | type) != "object") then .
+elif ([.bar.layout[] | select(type == "array") | ids | index("omarchy.workspaces")] | any) then
+  .bar.layout |= map_values(
+    if type == "array" and (ids | index("omarchy.workspaces")) != null
+    then (ids | index("omarchy.workspaces")) as $i | .[:$i + 1] + [{"id": "omastrator.pages"}] + .[$i + 1:]
+    else . end)
+else .bar.layout.left = ((.bar.layout.left // []) + [{"id": "omastrator.pages"}]) end
+)jq");
+// "after", "end" (no omarchy.workspaces to follow) or "none" (nothing to add, or no layout to add it to).
+const QString pagesPlacement = QStringLiteral(R"jq(
+def ids: map(if type == "object" then .id else null end);
+if ([.bar.layout[]?[]?.id?] | index("omastrator.pages")) then "none"
+elif (.bar.layout | type) != "object" then "nolayout"
+elif ([.bar.layout[] | select(type == "array") | ids | index("omarchy.workspaces")] | any) then "after"
+else "end" end
+)jq");
+
 std::optional<QByteArray> readFile(const QString &path)
 {
     QFile file(path);
@@ -42,12 +63,21 @@ QByteArray shellJsonBase(const Setup::Environment &environment, bool *exists)
 using namespace SetupInternal;
 
 namespace {
-const QStringList pluginFolders{QStringLiteral("omastrator.design"), QStringLiteral("omastrator.ai"), QStringLiteral("omastrator-ui")};
+const QStringList pluginFolders{QStringLiteral("omastrator.design"), QStringLiteral("omastrator.ai"), QStringLiteral("omastrator.pages"),
+                                    QStringLiteral("omastrator-ui")};
 // The desktop island's plugin, removed in this version: setup deletes it from an old install.
 const QString oldIslandFolder = QStringLiteral("omastrator.island");
 const QString designRemoval = QStringLiteral(
     "if .plugins then .plugins |= map(select(.id != \"omastrator.design\" and .id != \"omastrator.island\")) else . end");
 const QString barRemoval = QStringLiteral("if .bar.layout then .bar.layout |= map_values(map(select(.id != \"omastrator.ai\"))) else . end");
+// A section that held only the page dots goes with them, so a bar without the tray light comes back as it was.
+const QString pagesRemoval = QStringLiteral(R"jq(
+if .bar.layout then .bar.layout |= with_entries(
+  if (.value | type) == "array" and any(.value[]?; type == "object" and .id == "omastrator.pages")
+  then (.value |= map(select(type != "object" or .id != "omastrator.pages"))) | select((.value | length) > 0)
+  else . end)
+else . end
+)jq");
 
 QString configHomeFor(const QString &home)
 {
@@ -219,7 +249,7 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
             paths.sort();
             for (const QString &path : paths) {
                 const QString target = QDir(environment.plugins()).filePath(folder + QLatin1Char('/') + source.relativeFilePath(path));
-                plan.push_back({QStringLiteral("plugins"), QStringLiteral("Install the design mode and tray light plugins in omarchy-shell"), target,
+                plan.push_back({QStringLiteral("plugins"), QStringLiteral("Install the design mode, tray light and page dots plugins in omarchy-shell"), target,
                                 readFile(target), readFile(path), true});
             }
         }
@@ -266,10 +296,23 @@ std::vector<Change> installPlan(const Environment &environment, bool withBar, bo
     if (const auto design = jq(shell, designFilter, &error)) {
         plan.push_back({QStringLiteral("design"), QStringLiteral("Turn on design mode (and turn off the old island) in ~/.config/omarchy/shell.json"),
                         environment.shellJson(), exists ? std::optional(shell) : std::nullopt, *design});
+        QByteArray current = *design;
         if (withBar) {
-            if (const auto bar = jq(*design, barFilter, &error))
+            if (const auto bar = jq(*design, barFilter, &error)) {
                 plan.push_back({QStringLiteral("bar"), QStringLiteral("Add the tray light to the bar's right section in ~/.config/omarchy/shell.json"),
                                 environment.shellJson(), *design, *bar});
+                current = *bar;
+            }
+        }
+        // The page dots are not offered apart from the rest: nothing shows in the bar until a document claims workspaces.
+        if (const auto pages = jq(current, pagesFilter, &error)) {
+            const auto placement = jq(current, pagesPlacement, &error);
+            plan.push_back({QStringLiteral("pages"), QStringLiteral("Add the page dots to the bar, after the workspace numbers, in ~/.config/omarchy/shell.json"),
+                            environment.shellJson(), current, *pages});
+            if (placement && placement->contains("\"end\""))
+                notes->append(QStringLiteral("The bar has no Omarchy workspaces widget, so the page dots go at the end of its left section."));
+            else if (placement && placement->contains("\"nolayout\""))
+                notes->append(QStringLiteral("shell.json has no bar layout, so the page dots weren't added. Add {\"id\": \"omastrator.pages\"} to the bar's layout."));
         }
     }
     if (!error.isEmpty())
@@ -319,15 +362,17 @@ std::vector<Change> removalPlan(const Environment &environment, QStringList *not
                             path.startsWith(environment.plugins())});
     }
     QString error;
-    if (record.design || record.bar) {
+    if (record.design || record.bar || record.pages) {
         if (const auto shell = readFile(environment.shellJson())) {
             std::optional<QByteArray> edited = shell;
             if (record.design && edited)
                 edited = jq(*edited, designRemoval, &error);
             if (record.bar && edited)
                 edited = jq(*edited, barRemoval, &error);
+            if (record.pages && edited)
+                edited = jq(*edited, pagesRemoval, &error);
             if (edited)
-                plan.push_back({QStringLiteral("shell"), QStringLiteral("Take design mode and the tray light out of ~/.config/omarchy/shell.json"),
+                plan.push_back({QStringLiteral("shell"), QStringLiteral("Take design mode, the tray light and the page dots out of ~/.config/omarchy/shell.json"),
                                 environment.shellJson(), shell, *edited});
         }
     }

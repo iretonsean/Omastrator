@@ -207,6 +207,30 @@ reach the other pages. So:
   - On a numbered workspace (the editor off screen), the bar hides, as it
     does now. The proposal card covers a waiting Keep or Discard.
 
+### In the bar
+
+Omarchy's bar lists only workspaces 1 to 10, and a named workspace has a negative id, so the pages never show
+there. The plugin `omastrator.pages` (`shell/omastrator.pages`, a `bar-widget`) adds one button for each claimed
+page, in page order, right after Omarchy's workspace numbers.
+
+- **Looks like the numbers.** It uses `BarWidget` and `WidgetButton` with the sizes, spacing and focused glyph (`󱓻`)
+  of Omarchy's `Workspaces.qml`. An unfocused page is a dot (`•`) at half opacity. A gap a little wider than the
+  numbers' own sits before the first page. The tooltip is the page's name, and "Page (Document)" when two open
+  documents claim workspaces. With no claims it has zero width.
+- **Click** focuses the page's workspace as Omarchy's widget does, with
+  `hl.dsp.focus({ workspace = "name:<name>" })` through `bar.run`, the name escaped for Lua. The app already follows
+  the focus and swaps the editor in.
+- **Data.** `omastrator status --follow` carries `pageWorkspaces: [{name, page, document}]`, read from
+  `workspaces.json` in claim (page) order, and empty while no app is running (a file left by a crashed app is not
+  shown). The claims file records each claim's `document` and `pageName` for this; a file from before has them cut
+  from the workspace name. The stream reprints when the file changes. The focused button comes from
+  `Hyprland.focusedWorkspace.name`, so the widget never queries `hyprctl`.
+- **Setup** puts `omastrator.pages` in the bar layout right after `omarchy.workspaces`, in the section that holds
+  it, as a step of its own (with a backup, and undone by `--remove`). A second run changes nothing, and a machine set
+  up before this step gets it on the next `omastrator setup`. With no `omarchy.workspaces` it goes at the end of the
+  left section and setup says so. With no bar layout in `shell.json` at all it adds nothing, because the shell then
+  uses its own default layout and a new section would replace it.
+
 ## 6. Tests
 
 All tests run in a temporary `HOME` and runtime dir, with

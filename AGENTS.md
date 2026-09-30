@@ -37,8 +37,8 @@ Each folder builds as its own static library:
   monitors and the pointer from Hyprland's socket and runs dispatchers, and
   `DesignCli` is `omastrator design`, `desk` and `daemon`.
 - `shell/` → the omarchy-shell plugins, QML: `omastrator.design` (design mode's
-  overlay; the desktop island's pill is gone), `omastrator.ai` (the tray light)
-  and `omastrator-ui` (what they share).
+  overlay; the desktop island's pill is gone), `omastrator.ai` (the tray light),
+  `omastrator.pages` (a dot in the bar for each page that holds a workspace) and `omastrator-ui` (what they share).
   Setup copies them to `~/.config/omarchy/plugins/`. To try a change without
   touching the user's shell, run a throwaway `quickshell -p` config that loads
   the plugin, with `OMASTRATOR_SOCKET` and `OMASTRATOR_RUNTIME_DIR` pointed at a

@@ -202,10 +202,11 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
         for (const Change *change : step) {
             // JSON edits apply to the file as it is now, so a skipped step above doesn't undo this one.
             std::optional<QByteArray> after = change->after;
-            if (!removing && (key == QLatin1String("design") || key == QLatin1String("bar"))) {
+            if (!removing && (key == QLatin1String("design") || key == QLatin1String("bar") || key == QLatin1String("pages"))) {
                 bool exists = false;
                 QString error;
-                after = jq(shellJsonBase(environment, &exists), key == QLatin1String("design") ? designFilter : barFilter, &error);
+                after = jq(shellJsonBase(environment, &exists),
+                           key == QLatin1String("design") ? designFilter : key == QLatin1String("bar") ? barFilter : pagesFilter, &error);
                 if (!after) {
                     err << error << '\n';
                     continue;
@@ -234,7 +235,7 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             if (key == QLatin1String("files"))
                 record.files.clear(), record.skippedKeys.clear();
             if (key == QLatin1String("shell"))
-                record.design = record.bar = false;
+                record.design = record.bar = record.pages = false;
             if (key == QLatin1String("menu"))
                 record.menu = false;
             if (key == QLatin1String("source"))
@@ -254,6 +255,8 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
             }
             if (key == QLatin1String("bar"))
                 record.bar = true;
+            if (key == QLatin1String("pages"))
+                record.pages = true;
             if (key == QLatin1String("menu")) {
                 record.menuCreated = record.menuCreated || !step.front()->before;
                 bool comma = false;
@@ -271,7 +274,7 @@ int runCli(const QStringList &args, QTextStream &in, QTextStream &out, QTextStre
                 record.flagsExtension = environment.extension;
             }
         }
-        reloadShell = reloadShell || key == QLatin1String("plugins") || key == QLatin1String("design") || key == QLatin1String("bar")
+        reloadShell = reloadShell || key == QLatin1String("plugins") || key == QLatin1String("design") || key == QLatin1String("bar") || key == QLatin1String("pages")
                       || key == QLatin1String("cleanup")
                       || key == QLatin1String("shell") || key == QLatin1String("files");
         ++applied;

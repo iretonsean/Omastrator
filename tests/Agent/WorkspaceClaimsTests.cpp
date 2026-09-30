@@ -1,5 +1,6 @@
 #include "Agent/DesignCli.h"
 #include "Agent/Hyprland.h"
+#include "Agent/StatusStream.h"
 #include "Agent/WorkspaceClaims.h"
 #include "FakeHyprctl.h"
 #include <QDir>
@@ -49,8 +50,9 @@ private:
         state.signature = QStringLiteral("sig1");
         state.pid = pid;
         state.returnWorkspace = QStringLiteral("3");
-        state.claims = {{pageA, QStringLiteral("tab-1"), QStringLiteral("page-a"), {QStringLiteral("0xed1"), QStringLiteral("0x5a1")}},
-                        {pageB, QStringLiteral("tab-1"), QStringLiteral("page-b"), {}}};
+        state.claims = {{pageA, QStringLiteral("tab-1"), QStringLiteral("page-a"), {QStringLiteral("0xed1"), QStringLiteral("0x5a1")},
+                         QStringLiteral("Poster"), QStringLiteral("Front")},
+                        {pageB, QStringLiteral("tab-1"), QStringLiteral("page-b"), {}, QStringLiteral("Poster"), QStringLiteral("Back")}};
         return state;
     }
 
@@ -91,6 +93,38 @@ private slots:
         QCOMPARE(WorkspaceClaims::read(), state);
         QVERIFY(WorkspaceClaims::write({}).isEmpty());
         QVERIFY(WorkspaceClaims::read().isEmpty());
+    }
+
+    // The bar's page dots (shell/omastrator.pages) read the claims from the status stream.
+    void theStatusStreamCarriesThePagesInOrder()
+    {
+        const QJsonObject running{{"running", true}};
+        QVERIFY(StatusStream::compose(running, Island::State())["pageWorkspaces"].toArray().isEmpty());
+        WorkspaceClaims::State state = sample(4242);
+        state.claims.append({QStringLiteral("design:Flyer · Only"), QStringLiteral("tab-2"), QStringLiteral("page-c"), {}, QStringLiteral("Flyer"),
+                             QStringLiteral("Only")});
+        QVERIFY(WorkspaceClaims::write(state).isEmpty());
+        const QJsonArray pages = StatusStream::compose(running, Island::State())["pageWorkspaces"].toArray();
+        QCOMPARE(pages.size(), 3);
+        QCOMPARE(pages[0].toObject(), (QJsonObject{{"name", pageA}, {"page", "Front"}, {"document", "Poster"}}));
+        QCOMPARE(pages[1].toObject(), (QJsonObject{{"name", pageB}, {"page", "Back"}, {"document", "Poster"}}));
+        QCOMPARE(pages[2].toObject()["document"].toString(), QStringLiteral("Flyer"));
+        // A claims file left by an app that isn't running is not shown.
+        QVERIFY(StatusStream::compose({}, Island::State())["pageWorkspaces"].toArray().isEmpty());
+        QVERIFY(WorkspaceClaims::write({}).isEmpty());
+        QVERIFY(StatusStream::compose(running, Island::State())["pageWorkspaces"].toArray().isEmpty());
+    }
+
+    void aFileWithoutNamesGivesThemBackFromTheWorkspaceName()
+    {
+        QDir().mkpath(QFileInfo(WorkspaceClaims::path()).absolutePath());
+        QFile file(WorkspaceClaims::path());
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QJsonDocument(QJsonObject{{"pid", 1}, {"claims", QJsonArray{QJsonObject{{"name", pageA}, {"tab", "t"}, {"page", "p"}}}}}).toJson());
+        file.close();
+        const QJsonArray pages = StatusStream::compose({{"running", true}}, Island::State())["pageWorkspaces"].toArray();
+        QCOMPARE(pages.size(), 1);
+        QCOMPARE(pages[0].toObject(), (QJsonObject{{"name", pageA}, {"page", "Front"}, {"document", "Poster"}}));
     }
 
     void emptyingNothingWritesNothing()

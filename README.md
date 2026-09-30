@@ -80,7 +80,8 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   document with two or more pages is its own Hyprland workspace,
   `design:<document> · <page>`, so Super+Tab and swipes move between pages.
   Closing the document, turning it off, or `omastrator reset` gives the
-  workspaces back.
+  workspaces back. `omastrator setup` adds a dot for each page to the Omarchy
+  bar, after the workspace numbers; click one to go to that page.
 - Browser View (the tool under Frame, or Object ▸ Browser View): a frame that
   shows a live web page, from Omastrator's own Chromium profile, not yours. Type
   an address in the bar above it. The page draws live on the

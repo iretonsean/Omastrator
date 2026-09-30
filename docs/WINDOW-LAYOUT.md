@@ -123,3 +123,12 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   - The empty Swatches panel now says "Pick a colour … with the Capture tab".
   - Text that told people to use the island now names a command: "stop it with `omastrator island ai cancel`", "`omastrator design undo` brings them back", "Start it from a Browser View, or with `omastrator island live start`".
   - The name `omastrator island …` and the `Island` C++ namespace stay: they name the desktop CLI and the mode file. Internal names such as `fromIsland` in the deploy code stay too.
+- [Intel] **Page dots in the Omarchy bar** (`omastrator.pages`). Decided while building them:
+  - It is a plugin of its own, not a second widget of `omastrator.ai`: a manifest declares one bar widget.
+  - Setup offers it as a separate step (`pages`), not with the tray light's question: the light is optional, and the dots do nothing (zero width) until a document claims workspaces. An old install gets it on the next `omastrator setup`. Its record flag is `shellJson.pages`, so `--remove` takes out only what setup added.
+  - With no bar layout in `shell.json` setup adds nothing and says so. Adding `left` would replace the shell's default layout (menu, workspaces, clock…) with one dot.
+  - The stream shows pages only while an app is running, so a `workspaces.json` left by a crash shows no dots.
+  - The tooltip is the page's name; with two documents, "Page (Document)". No separator between documents.
+  - Every page button has the same opacity rule as the numbers, focused 1 and the rest 0.5. A page workspace always holds the editor or a stand-in, so there is no "empty" state.
+  - The claims file gained `document` and `pageName` for each claim; older files are read by splitting the workspace name at the first " · ".
+  - The gap before the first page is `Style.spaceReal(3)`, about twice the trailing gap of Omarchy's numbers. I did not draw a separator line.
