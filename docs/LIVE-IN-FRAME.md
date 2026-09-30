@@ -765,7 +765,14 @@ them again in between. Callers: `liveWriteBack` (everything it read),
 - The token as the unit ("p-4", "radius-md") and the small arrow that lists the
   scale, in the bar's fields. The host's element state doesn't carry an edit's
   snapped token yet; it needs to.
-- The server's full output ("Details") for a failed dev-server start.
+- The server's full output ("Details") for a failed dev-server start. The output
+  is captured but dropped: nothing shows it.
 - Before and After to Desk from a frame.
 - Spacing handles on the element.
 - The island step above.
+- Tests seen to fail once under heavy load and pass alone (a busy machine, not a
+  known bug): `BrowserBarTests::aSignInWindowLeftByAnEarlierRunStillHoldsTheProfile`
+  (an empty `/proc/<pid>/cmdline`), `AgentUiTests::cancelStopsTheAgent` (a "1 s"
+  timer label), and `PdfHostileInputTests` (its time limits).
+- Run the tests as a normal user. As root, a file with mode 000 is still readable,
+  so a test that relies on one being unreadable can't check that.
