@@ -731,17 +731,21 @@ The author took the recommended answer to each open question.
     `-loglevel error`, so the last line on stderr is the reason. Three things differ from the sketch in section 8: `-c:v mjpeg`
     (ffmpeg cannot always tell the codec from a pipe), the even-sides scale (yuv420p refuses an odd size, so an odd picture
     loses a row or a column) and `out_range=tv` (JPEG's full range would be tagged `yuvj420p`, which players show with the
-    wrong colours). A GIF writes the pictures beside the file as numbered JPEGs (a hidden folder, removed at the end) and
-    runs two passes, `palettegen` then `paletteuse`. The pictures go to ffmpeg as they arrive; a run that is faster than the
+    wrong colours). A GIF writes the pictures beside the file as numbered JPEGs, in a hidden folder called
+    `.omastrator-frames-XXXXXX` (removed at the end; a crash leaves it, and it is there rather than in `/tmp` to spare a
+    RAM-backed disk), and runs two passes, `palettegen` then `paletteuse`, each with up to 120 s. The pictures go to ffmpeg as they arrive; a run that is faster than the
     encoder waits for 4 MB to drain.
   - **Failure and Stop.** A failure removes the partial file and says "Couldn't record: <ffmpeg's last line>". Stop, and Esc,
-    finish the step in flight and end the file where it is; the file is kept. Closing the timeline, Edit Page ending and
+    finish the step in flight and end the file where it is; the file is kept. A step whose seek or picture never answers
+    does not hold Stop: two seconds after Stop the file ends with the pictures taken so far. Closing the timeline, Edit Page ending and
     Stop Live abort the recording and remove the file, since it was never whole. With no picture taken nothing is kept.
   - **The header.** Record MP4 is the button; while it runs it reads Stop, the line beside it reads "Recording… 0.40 s / 1.20 s",
     and Play, Replay, Loop, the ruler and the row clicks do nothing. After it, the line reads "Recorded 1.2 s · hero.mp4"
     and a click opens the folder (`xdg-open`, or `OMASTRATOR_XDG_OPEN`; the file's folder, or the frames folder itself). The ⋯
     has Record GIF…, Record MP4 at 60 fps… and Save Frames as PNG…. The playhead goes back to where it was. The save dialog
     starts in the last folder used (else `~/Videos`, else home) with "<site>-motion.mp4", and adds the ending if it is left off.
+    The dialog asks about replacing the name as it was typed, so a name that gains its ending and is a file that exists is
+    asked about again (Replace the file?); ffmpeg runs with `-y` and would not ask.
   - **Esc** goes to a hook on the canvas first (`EditorCanvas::setEscapeHook`), set only while a recording runs. The first Esc
     stops the recording; the second leaves Edit Page and closes the timeline.
   - **Without ffmpeg** (`OMASTRATOR_FFMPEG`, else `ffmpeg` on PATH) Record MP4 is disabled with "Recording needs ffmpeg. Install it

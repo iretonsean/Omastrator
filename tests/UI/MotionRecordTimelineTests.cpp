@@ -125,6 +125,7 @@ private slots:
     void cleanup()
     {
         MotionTimeline::setRecordChooser({});
+        MotionTimeline::setReplaceChooser({});
         BrowserViews::shutdownPool();
     }
 
@@ -274,6 +275,79 @@ private slots:
         QVERIFY(!timeline.isRecording());
         QVERIFY(notices.isEmpty());
         QVERIFY(!QFileInfo::exists(out() + QStringLiteral("/calls")));
+    }
+
+    void aNameWithoutItsEndingIsAskedAboutBeforeItReplacesAFile()
+    {
+        NEEDS_CHROMIUM;
+        EditorSession session;
+        Hosted hosted(session, page());
+        MotionTimeline timeline(session, hosted.canvas);
+        openAndWait(session, timeline, hosted.frame);
+        // "clip" is typed while clip.mp4 exists: the dialog asked about "clip", and ffmpeg would overwrite clip.mp4 without asking.
+        const QString existing = target(QStringLiteral("clip.mp4"));
+        QFile old(existing);
+        QVERIFY(old.open(QIODevice::WriteOnly));
+        old.write("OLD\n");
+        old.close();
+        MotionTimeline::setRecordChooser([this](const MotionTimeline::RecordAsk &) { return target(QStringLiteral("clip")); });
+        QStringList asked;
+        bool replace = false;
+        MotionTimeline::setReplaceChooser([&](const QString &path) {
+            asked << QFileInfo(path).fileName();
+            return replace;
+        });
+        QSignalSpy done(&timeline, &MotionTimeline::recorded);
+
+        // Declined: nothing runs, and the file is as it was.
+        QCOMPARE(timeline.record(FrameRecorder::Format::mp4), QString());
+        QCOMPARE(asked, QStringList{"clip.mp4"});
+        QVERIFY(!timeline.isRecording());
+        QVERIFY(!QFileInfo::exists(out() + QStringLiteral("/calls")));
+        QCOMPARE(read(existing), QByteArray("OLD\n"));
+
+        // Accepted: it records into clip.mp4, and there is no file called "clip".
+        replace = true;
+        QVERIFY(timeline.record(FrameRecorder::Format::mp4).isEmpty());
+        QCOMPARE(asked.size(), 2);
+        QVERIFY2(done.wait(patience), "the recording never finished");
+        QVERIFY(read(existing).contains("frames="));
+        QVERIFY(!QFileInfo::exists(target(QStringLiteral("clip"))));
+        QCOMPARE(done.first().at(0).toString(), existing);
+
+        // A name that gains its ending and is new asks nothing; one that already has it asks nothing either (the dialog did).
+        asked.clear();
+        MotionTimeline::setRecordChooser([this](const MotionTimeline::RecordAsk &) { return target(QStringLiteral("fresh")); });
+        QVERIFY(timeline.record(FrameRecorder::Format::mp4).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 2, patience);
+        QVERIFY(QFileInfo::exists(target(QStringLiteral("fresh.mp4"))));
+        MotionTimeline::setRecordChooser([existing](const MotionTimeline::RecordAsk &) { return existing; });
+        QVERIFY(timeline.record(FrameRecorder::Format::mp4).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 3, patience);
+        QVERIFY(asked.isEmpty());
+    }
+
+    void stopLiveWhileRecordingLeavesNoFile()
+    {
+        NEEDS_CHROMIUM;
+        EditorSession session;
+        Hosted hosted(session, page());
+        MotionTimeline timeline(session, hosted.canvas);
+        openAndWait(session, timeline, hosted.frame);
+        const QString file = target(QStringLiteral("stoplive.mp4"));
+        MotionTimeline::setRecordChooser([file](const MotionTimeline::RecordAsk &) { return file; });
+        QSignalSpy done(&timeline, &MotionTimeline::recorded);
+        QVERIFY(timeline.record(FrameRecorder::Format::mp4).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(file), patience);
+        // Stop Live ends the frame's session: the timeline closes, and the file was never whole.
+        LiveFrames::of(session)->stop(hosted.frame);
+        QTRY_VERIFY_WITH_TIMEOUT(!timeline.isOpen(), patience);
+        QVERIFY(!timeline.isRecording());
+        QVERIFY(!QFileInfo::exists(file));
+        QVERIFY(timeline.recordedText().isEmpty());
+        QTest::qWait(300);
+        QVERIFY(done.isEmpty());
+        QVERIFY(!QFileInfo::exists(file));
     }
 
     void stopKeepsTheFileWhereItEnded()

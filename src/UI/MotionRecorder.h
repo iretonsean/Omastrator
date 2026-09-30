@@ -35,8 +35,10 @@ public:
 
     // Returns why it can't start, or empty. The steps follow on the event loop.
     QString start(const Job &job);
-    // Ends the file where it is; finished() follows once the step in flight is done.
+    // Ends the file where it is; finished() follows once the step in flight is done, or after a couple of seconds if it never is.
     void stop();
+    // How long stop() waits for a step that doesn't answer (tests shorten it).
+    static void setStopWaitMs(int ms);
     // Ends it and removes what was written. No signal.
     void abort();
     bool recording() const { return m_running; }
@@ -59,6 +61,9 @@ private:
     std::unique_ptr<FrameRecorder> m_recorder;
     bool m_running = false;
     bool m_stopping = false;
+    // A step's seek or picture is on its way; and the file is being finished, so a late answer is stale.
+    bool m_inFlight = false;
+    bool m_ending = false;
     int m_step = 0;
     int m_steps = 0;
     // A new run makes an older one's late answers stale.

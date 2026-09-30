@@ -85,6 +85,10 @@ public:
     using RecordChooser = std::function<QString(const RecordAsk &where)>;
     // Answers the save dialog in place of it; tests set it. An empty function puts the dialog back.
     static void setRecordChooser(RecordChooser chooser);
+    // A name typed without its ending gets it, and the dialog only asked about the name as typed: when the new name is a file that
+    // exists, this asks whether to replace it (true does). Tests set it; unset, a question box asks.
+    using ReplaceChooser = std::function<bool(const QString &path)>;
+    static void setReplaceChooser(ReplaceChooser chooser);
     // "northlight-motion.mp4": the page's site (else the frame's name), then what it is.
     QString suggestedName(FrameRecorder::Format format) const;
     // Asks where, then records. Returns why it can't start, or empty (a cancelled dialog is empty too).

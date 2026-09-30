@@ -142,7 +142,11 @@ private slots:
         qunsetenv("FAKE_FFMPEG_MODE");
     }
 
-    void cleanup() { BrowserViews::shutdownPool(); }
+    void cleanup()
+    {
+        MotionRecorder::setStopWaitMs(2000);
+        BrowserViews::shutdownPool();
+    }
 
     void aMotionIsAsManyPicturesAsItsSecondsAtTheFrameRate()
     {
@@ -210,6 +214,36 @@ private slots:
         QVERIFY2(kept >= 12 && kept < 120, qPrintable(QString::number(kept)));
         QVERIFY(read(file).contains(QByteArray("frames=") + QByteArray::number(kept)));
         QCOMPARE(done.first().at(2).toDouble(), kept / 30.0);
+    }
+
+    void stopEndsTheFileEvenWhenAStepNeverAnswers()
+    {
+        if (Browser::executable().isEmpty())
+            QSKIP("Chromium isn't installed.");
+        MotionRecorder::setStopWaitMs(300);
+        auto r = rig();
+        BrowserViews *views = BrowserViews::of(r->session);
+        MotionRecorder recorder(*views);
+        QSignalSpy done(&recorder, &MotionRecorder::finished);
+        const QString file = target(QStringLiteral("hung.mp4"));
+        MotionRecorder::Job made = job(*r, file, 4000);
+        // The first five seeks answer; the sixth never does, as a pool whose queue has stopped wouldn't.
+        const auto working = seeker(views, r->frame);
+        const auto seen = std::make_shared<int>(0);
+        made.seek = [working, seen](double ms, std::function<void(const QString &)> answered) {
+            if (++*seen > 5)
+                return;
+            working(ms, std::move(answered));
+        };
+        QVERIFY(recorder.start(made).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(recorder.step() >= 5, patience);
+        recorder.stop();
+        QVERIFY2(done.wait(patience), "Stop did nothing while a step never answered");
+        QCOMPARE(done.first().at(0).toString(), QString());
+        QCOMPARE(counted(), 5);
+        QVERIFY(read(file).contains("frames=5"));
+        QCOMPARE(done.first().at(2).toDouble(), 5 / 30.0);
+        QVERIFY(!recorder.recording());
     }
 
     void aFailingFfmpegRemovesTheFileAndSaysWhy()

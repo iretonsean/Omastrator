@@ -20,8 +20,10 @@ void BrowserViews::capture(const QUuid &frame, int longSide, CaptureDone done)
         // A tab that is opening again, or a frame that reconcile has just paused, is back within moments; a frame that stays away isn't showing.
         static constexpr int retryMs = 100;
         static constexpr int retries = 30;
+        // Each timer keeps the retry alive until it runs; the retry holds itself only weakly, so it doesn't outlive them in a cycle.
         const auto attempt = std::make_shared<std::function<void(int)>>();
-        *attempt = [this, frame, longSide, done, attempt](int left) {
+        const std::weak_ptr<std::function<void(int)>> weak = attempt;
+        *attempt = [this, frame, longSide, done, weak](int left) {
             const auto again = m_entries.constFind(frame);
             if (again != m_entries.constEnd() && again->state == State::live && !again->applied.css.isEmpty()) {
                 capture(frame, longSide, done);
@@ -31,7 +33,8 @@ void BrowserViews::capture(const QUuid &frame, int longSide, CaptureDone done)
                 done({}, {}, QStringLiteral("The page isn't showing. Bring the frame on screen and try again."));
                 return;
             }
-            QTimer::singleShot(retryMs, this, [attempt, left] { (*attempt)(left - 1); });
+            if (const auto self = weak.lock())
+                QTimer::singleShot(retryMs, this, [self, left] { (*self)(left - 1); });
         };
         QTimer::singleShot(0, this, [attempt] { (*attempt)(retries); });
         return;

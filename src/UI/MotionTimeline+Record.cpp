@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QMenu>
+#include <QMessageBox>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
@@ -30,6 +31,12 @@ MotionTimeline::RecordChooser &chooser()
 // How long a recording of a scroll-driven motion takes: the same two seconds Play scrolls its range in.
 constexpr double scrollMotionMs = 2000;
 
+MotionTimeline::ReplaceChooser &replaceChooser()
+{
+    static MotionTimeline::ReplaceChooser answer;
+    return answer;
+}
+
 QString slugOf(const QString &text)
 {
     static const QRegularExpression separators(QStringLiteral("[^a-z0-9]+"));
@@ -40,6 +47,11 @@ QString slugOf(const QString &text)
 void MotionTimeline::setRecordChooser(RecordChooser answer)
 {
     chooser() = std::move(answer);
+}
+
+void MotionTimeline::setReplaceChooser(ReplaceChooser answer)
+{
+    replaceChooser() = std::move(answer);
 }
 
 void MotionTimeline::buildRecord(QWidget *header, QHBoxLayout *row)
@@ -159,23 +171,36 @@ QString MotionTimeline::suggestedName(FrameRecorder::Format format) const
 
 QString MotionTimeline::askWhere(const RecordAsk &ask)
 {
-    if (chooser())
-        return chooser()(ask);
-    QSettings settings;
-    const QString videos = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
-    const QString fallback = QFileInfo(videos).isDir() ? videos : QDir::homePath();
-    const QString folder = settings.value(QStringLiteral("motion/recordFolder"), fallback).toString();
-    const bool frames = ask.format == FrameRecorder::Format::pngFrames;
-    const QString filter = ask.format == FrameRecorder::Format::mp4 ? tr("MP4 video (*.mp4)") : ask.format == FrameRecorder::Format::gif ? tr("GIF (*.gif)") : QString();
-    const QString title = frames ? tr("Save Frames as PNG") : ask.format == FrameRecorder::Format::gif ? tr("Record GIF") : tr("Record MP4");
-    QString path = QFileDialog::getSaveFileName(window(), title, QDir(QFileInfo(folder).isDir() ? folder : fallback).filePath(ask.suggested), filter);
+    QString path;
+    if (chooser()) {
+        path = chooser()(ask);
+    } else {
+        QSettings settings;
+        const QString videos = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+        const QString fallback = QFileInfo(videos).isDir() ? videos : QDir::homePath();
+        const QString folder = settings.value(QStringLiteral("motion/recordFolder"), fallback).toString();
+        const bool frames = ask.format == FrameRecorder::Format::pngFrames;
+        const QString filter = ask.format == FrameRecorder::Format::mp4 ? tr("MP4 video (*.mp4)") : ask.format == FrameRecorder::Format::gif ? tr("GIF (*.gif)") : QString();
+        const QString title = frames ? tr("Save Frames as PNG") : ask.format == FrameRecorder::Format::gif ? tr("Record GIF") : tr("Record MP4");
+        path = QFileDialog::getSaveFileName(window(), title, QDir(QFileInfo(folder).isDir() ? folder : fallback).filePath(ask.suggested), filter);
+        if (!path.isEmpty())
+            settings.setValue(QStringLiteral("motion/recordFolder"), QFileInfo(path).absolutePath());
+    }
     if (path.isEmpty())
         return {};
-    settings.setValue(QStringLiteral("motion/recordFolder"), QFileInfo(path).absolutePath());
-    // A name typed without its ending gets it.
+    // A name typed without its ending gets it. The dialog asked about replacing the name as typed, and ffmpeg overwrites without
+    // asking: a name that gained its ending is a new name, and asked about again when it is a file that exists.
     const QString ending = ask.format == FrameRecorder::Format::mp4 ? QStringLiteral(".mp4") : ask.format == FrameRecorder::Format::gif ? QStringLiteral(".gif") : QString();
-    if (!ending.isEmpty() && !path.endsWith(ending, Qt::CaseInsensitive))
+    if (!ending.isEmpty() && !path.endsWith(ending, Qt::CaseInsensitive)) {
         path += ending;
+        if (QFileInfo::exists(path)) {
+            const bool replace = replaceChooser() ? replaceChooser()(path)
+                                                  : QMessageBox::question(window(), tr("Replace the file?"), tr("%1 already exists. Replace it?").arg(QFileInfo(path).fileName()),
+                                                                          QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+            if (!replace)
+                return {};
+        }
+    }
     return path;
 }
 

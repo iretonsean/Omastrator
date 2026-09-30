@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QString>
+#include <functional>
 #include <memory>
 
 class QTemporaryDir;
@@ -43,6 +44,8 @@ public:
     void finish();
     // Ends it and removes what was written. No signal.
     void abort();
+    // Tests: called when a GIF's pass ends and before the next starts, so an abort can land in that gap.
+    void setPassHook(std::function<void(int pass)> hook) { m_passHook = std::move(hook); }
 
 signals:
     // Empty when the file is complete, else "Couldn't record: <ffmpeg's last line>", with the partial file removed.
@@ -68,4 +71,5 @@ private:
     // ffmpeg ended while pictures were still coming.
     bool m_died = false;
     QTimer *m_deadline = nullptr;
+    std::function<void(int)> m_passHook;
 };

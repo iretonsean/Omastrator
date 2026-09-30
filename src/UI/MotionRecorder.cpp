@@ -4,7 +4,20 @@
 #include <QTimer>
 #include <cmath>
 
+namespace {
+int &stopWaitMs()
+{
+    static int ms = 2000;
+    return ms;
+}
+}
+
 MotionRecorder::MotionRecorder(BrowserViews &views, QObject *parent) : QObject(parent), m_views(views) {}
+
+void MotionRecorder::setStopWaitMs(int ms)
+{
+    stopWaitMs() = ms;
+}
 
 MotionRecorder::~MotionRecorder()
 {
@@ -30,6 +43,8 @@ QString MotionRecorder::start(const Job &job)
     m_step = 0;
     m_steps = steps(job.durationMs, job.fps);
     m_stopping = false;
+    m_inFlight = false;
+    m_ending = false;
     m_running = true;
     ++m_generation;
     emit progress(0, m_steps);
@@ -39,8 +54,15 @@ QString MotionRecorder::start(const Job &job)
 
 void MotionRecorder::stop()
 {
-    if (m_running)
-        m_stopping = true;
+    if (!m_running || m_stopping)
+        return;
+    m_stopping = true;
+    // The step in flight finishes first. One that never answers (the pool's queue stopped) must not leave Stop doing nothing.
+    const int generation = m_generation;
+    QTimer::singleShot(stopWaitMs(), this, [this, generation] {
+        if (generation == m_generation && m_running && m_stopping && m_inFlight && !m_ending)
+            end();
+    });
 }
 
 void MotionRecorder::abort()
@@ -58,6 +80,8 @@ void MotionRecorder::next()
 {
     if (!m_running)
         return;
+    if (m_ending)
+        return;
     if (m_stopping || m_step >= m_steps) {
         end();
         return;
@@ -70,16 +94,19 @@ void MotionRecorder::next()
     const int generation = m_generation;
     const QPointer<MotionRecorder> guard(this);
     const double at = double(m_step) * 1000.0 / m_job.fps;
+    m_inFlight = true;
     m_job.seek(at, [guard, generation](const QString &error) {
-        if (!guard || guard->m_generation != generation || !guard->m_running)
+        if (!guard || guard->m_generation != generation || !guard->m_running || guard->m_ending)
             return;
         if (!error.isEmpty()) {
+            guard->m_inFlight = false;
             guard->fail(error);
             return;
         }
         guard->m_views.capture(guard->m_job.frame, guard->m_job.longSide, [guard, generation](const QByteArray &jpeg, const QSizeF &, const QString &why) {
-            if (!guard || guard->m_generation != generation || !guard->m_running)
+            if (!guard || guard->m_generation != generation || !guard->m_running || guard->m_ending)
                 return;
+            guard->m_inFlight = false;
             if (!why.isEmpty()) {
                 guard->fail(why);
                 return;
@@ -108,6 +135,7 @@ void MotionRecorder::fail(const QString &error)
 
 void MotionRecorder::end()
 {
+    m_ending = true;
     const int generation = m_generation;
     FrameRecorder *recorder = m_recorder.get();
     connect(recorder, &FrameRecorder::finished, this, [this, generation](const QString &error) {

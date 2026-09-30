@@ -197,6 +197,59 @@ private slots:
             QVERIFY2(!info.fileName().startsWith(QLatin1String(".omastrator-frames")), qPrintable(info.fileName()));
     }
 
+    void anAbortBetweenTheGifsPassesLeavesNoFileAndNeverCrashes()
+    {
+        // The turn between pass 1 ending and pass 2 starting: the abort is queued from the hook, so it runs before pass 2 is started.
+        FrameRecorder recorder;
+        const QString file = target(QStringLiteral("between.gif"));
+        QVERIFY(recorder.start({file, FrameRecorder::Format::gif, 30}).isEmpty());
+        for (int i = 0; i < 6; ++i)
+            QVERIFY(recorder.add(jpeg(i)).isEmpty());
+        bool aborted = false;
+        recorder.setPassHook([&](int pass) {
+            if (pass != 1)
+                return;
+            QMetaObject::invokeMethod(&recorder, [&] {
+                recorder.abort();
+                aborted = true;
+            }, Qt::QueuedConnection);
+        });
+        QSignalSpy done(&recorder, &FrameRecorder::finished);
+        recorder.finish();
+        QTRY_VERIFY_WITH_TIMEOUT(aborted, 20'000);
+        // Give a pass 2 that was wrongly started the time to crash, or to write.
+        QTest::qWait(300);
+        QVERIFY(done.isEmpty());
+        QVERIFY(!recorder.active());
+        QVERIFY(!QFileInfo::exists(file));
+        QCOMPARE(read(out() + QStringLiteral("/calls")).count("---"), 1);
+        for (const QFileInfo &info : QDir(m_directory.path()).entryInfoList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot))
+            QVERIFY2(!info.fileName().startsWith(QLatin1String(".omastrator-frames")), qPrintable(info.fileName()));
+    }
+
+    void aGifAbortedWhileItsPassesRunLeavesNoFileAndNeverCrashes()
+    {
+        // Abort lands at every moment of the two passes, among them the turn between pass 1 ending and pass 2 starting.
+        for (int wait = 0; wait < 40; wait += 2) {
+            FrameRecorder recorder;
+            const QString file = target(QStringLiteral("aborted-%1.gif").arg(wait));
+            QVERIFY(recorder.start({file, FrameRecorder::Format::gif, 30}).isEmpty());
+            for (int i = 0; i < 6; ++i)
+                QVERIFY(recorder.add(jpeg(i)).isEmpty());
+            QSignalSpy done(&recorder, &FrameRecorder::finished);
+            recorder.finish();
+            QTest::qWait(wait);
+            recorder.abort();
+            QTest::qWait(30);
+            // Finished before the abort (then the file is whole), or aborted (then nothing is left).
+            if (done.isEmpty())
+                QVERIFY2(!QFileInfo::exists(file), qPrintable(QString::number(wait)));
+            QVERIFY(!recorder.active());
+            for (const QFileInfo &info : QDir(m_directory.path()).entryInfoList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot))
+                QVERIFY2(!info.fileName().startsWith(QLatin1String(".omastrator-frames")), qPrintable(info.fileName()));
+        }
+    }
+
     void aGifWhoseSecondPassFailsIsRemoved()
     {
         qputenv("FAKE_FFMPEG_MODE", "fail-pass2");

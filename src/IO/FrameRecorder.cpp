@@ -226,6 +226,9 @@ void FrameRecorder::finish()
 
 void FrameRecorder::startPass(int pass)
 {
+    // Each pass has the time to itself.
+    if (m_deadline)
+        m_deadline->start(finishMs);
     m_stderr.clear();
     m_process = std::make_unique<QProcess>();
     m_process->setProgram(m_program);
@@ -238,9 +241,15 @@ void FrameRecorder::startPass(int pass)
             end(failure());
             return;
         }
-        if (pass == 1)
-            QTimer::singleShot(0, this, [this] { startPass(2); });
-        else
+        if (pass == 1) {
+            // Not from inside this process's own signal; and an abort that lands before it runs has ended the recording.
+            if (m_passHook)
+                m_passHook(pass);
+            QTimer::singleShot(0, this, [this] {
+                if (m_state == State::finishing && m_temporary)
+                    startPass(2);
+            });
+        } else
             end({});
     });
     connect(m_process.get(), &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
