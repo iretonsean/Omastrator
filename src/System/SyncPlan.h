@@ -46,6 +46,8 @@ struct GitTarget {
     QString branch;
     bool commit = true;
     QString message;
+    // The repository doesn't exist yet: the runner makes it (`git init`, on `branch`) after the files and before the commit.
+    bool create = false;
 };
 
 struct SyncPlan {
@@ -55,6 +57,8 @@ struct SyncPlan {
     QString title;
     // Where it publishes, in plain words with the full path.
     QString destination;
+    // The dialog's heading for `destination` when "Publishes to" and "Brings into" don't fit ("Creates").
+    QString destinationLabel;
     // Files read to make the plan (pulls).
     QStringList reads;
     std::vector<FileWrite> writes;
@@ -63,6 +67,8 @@ struct SyncPlan {
     QStringList command;
     // More programs run after `command`, in order.
     std::vector<QStringList> commands;
+    // Programs `apply` starts, shown under "Then runs" but never run by the runner (a dev server doesn't exit).
+    QStringList runsAfter;
     // Before anything is written, every file in `writes` (and `alsoBackUp`) is saved here with a manifest,
     // so the change can be reverted byte for byte (System/ConfigBackup.h). Empty: no backup.
     QString backupFolder;

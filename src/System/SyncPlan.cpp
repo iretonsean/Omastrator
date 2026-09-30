@@ -247,6 +247,15 @@ QString execute(const SyncPlan &plan, const Confirmation &confirmation)
         }
         written.append(write.path);
     }
+    if (plan.git && plan.git->create && !QFileInfo::exists(QDir(plan.git->repository).filePath(QStringLiteral(".git")))) {
+        if (const QString failed = run(git(), {QStringLiteral("init"), QStringLiteral("-q")}, plan.git->repository); !failed.isEmpty())
+            return failed;
+        // Before the first commit, so it also works where `git init -b` doesn't.
+        if (const QString failed = run(git(), {QStringLiteral("symbolic-ref"), QStringLiteral("HEAD"), QStringLiteral("refs/heads/") + plan.git->branch},
+                                       plan.git->repository);
+            !failed.isEmpty())
+            return failed;
+    }
     if (plan.git && plan.git->commit && !written.isEmpty()) {
         QStringList relative;
         for (const QString &path : written)

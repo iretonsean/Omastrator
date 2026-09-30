@@ -43,7 +43,10 @@ SyncConfirmDialog::SyncConfirmDialog(const SyncPlan &plan, QWidget *parent) : QD
         layout->addWidget(body(text, this));
         m_lines.append(title + QStringLiteral(": ") + text);
     };
-    section(plan.direction == SyncPlan::Direction::push ? QStringLiteral("Publishes to") : QStringLiteral("Brings into"), plan.destination);
+    section(!plan.destinationLabel.isEmpty()                       ? plan.destinationLabel
+                : plan.direction == SyncPlan::Direction::push ? QStringLiteral("Publishes to")
+                                                              : QStringLiteral("Brings into"),
+            plan.destination);
     if (!plan.reads.isEmpty())
         section(QStringLiteral("Reads"), plan.reads.join(QLatin1Char('\n')));
 
@@ -67,7 +70,10 @@ SyncConfirmDialog::SyncConfirmDialog(const SyncPlan &plan, QWidget *parent) : QD
         m_files->setMaximumHeight(160);
         layout->addWidget(m_files);
     }
-    if (plan.git) {
+    if (plan.git && plan.git->create) {
+        section(QStringLiteral("Commits to"),
+                QStringLiteral("A new git repository, branch %1: “%2”. Nothing is pushed.").arg(plan.git->branch, plan.git->message));
+    } else if (plan.git) {
         section(QStringLiteral("Commits to"),
                 plan.git->commit ? QStringLiteral("The git repository %1, branch %2, as “%3”. Nothing is pushed to a remote.")
                                        .arg(plan.git->repository, plan.git->branch, plan.git->message)
@@ -75,7 +81,7 @@ SyncConfirmDialog::SyncConfirmDialog(const SyncPlan &plan, QWidget *parent) : QD
     } else if (plan.direction == SyncPlan::Direction::push) {
         section(QStringLiteral("Commits to"), QStringLiteral("No repository."));
     }
-    if (const std::vector<QStringList> commands = plan.allCommands(); !commands.empty()) {
+    if (const std::vector<QStringList> commands = plan.allCommands(); !commands.empty() || !plan.runsAfter.isEmpty()) {
         QStringList lines;
         for (const QStringList &command : commands) {
             QStringList quoted;
@@ -83,6 +89,7 @@ SyncConfirmDialog::SyncConfirmDialog(const SyncPlan &plan, QWidget *parent) : QD
                 quoted.append(word.contains(QLatin1Char(' ')) || word.isEmpty() ? QLatin1Char('"') + word + QLatin1Char('"') : word);
             lines.append(quoted.join(QLatin1Char(' ')));
         }
+        lines += plan.runsAfter;
         section(QStringLiteral("Then runs"), lines.join(QLatin1Char('\n')));
     }
     if (!plan.backupFolder.isEmpty())
