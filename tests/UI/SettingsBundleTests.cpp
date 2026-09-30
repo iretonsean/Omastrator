@@ -121,8 +121,8 @@ void SettingsBundleTests::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
     useTemporaryConfig();
-    // Test mode keeps QSettings in ~/.qttest, apart from the real config.
-    QVERIFY(QSettings().fileName().contains(QLatin1String("/.qttest/")));
+    // QSettings lives in this run's own temporary config, apart from the real one.
+    QVERIFY(QSettings().fileName().startsWith(qEnvironmentVariable("XDG_CONFIG_HOME") + QLatin1Char('/')));
     QVERIFY(ShortcutDefinition::all().size() > 2);
     m_shortcutA = ShortcutDefinition::all().at(0).id();
     m_shortcutB = ShortcutDefinition::all().at(1).id();
@@ -146,9 +146,9 @@ void SettingsBundleTests::init()
 
 void SettingsBundleTests::cleanup()
 {
-    // Only the test-mode file: a test that made it read-only must not leave it so.
+    // Only this run's temporary file: a test that made it read-only must not leave it so.
     const QString settingsFile = QSettings().fileName();
-    if (settingsFile.contains(QLatin1String("/.qttest/")) && QFileInfo::exists(settingsFile))
+    if (settingsFile.startsWith(qEnvironmentVariable("XDG_CONFIG_HOME") + QLatin1Char('/')) && QFileInfo::exists(settingsFile))
         QFile::setPermissions(settingsFile, QFile::ReadOwner | QFile::WriteOwner);
     SettingsConfirmDialog::setResponder({});
     deleteTopLevelWidgets([](QWidget *widget) { return qobject_cast<QDialog *>(widget) != nullptr; });
@@ -483,9 +483,9 @@ void SettingsBundleTests::anUnwritableSettingsFileStopsTheImportBeforeAnythingCh
     const SettingsBundle::Plan plan = SettingsBundle::planImport(file, &error);
     QVERIFY(error.isEmpty());
 
-    // Only the test-mode file, which the guard above has already shown lives in ~/.qttest.
+    // Only this run's temporary file, which the guard above has already shown is apart from the real config.
     const QString settingsFile = QSettings().fileName();
-    QVERIFY(settingsFile.contains(QLatin1String("/.qttest/")));
+    QVERIFY(settingsFile.startsWith(qEnvironmentVariable("XDG_CONFIG_HOME") + QLatin1Char('/')));
     const QByteArray settingsBefore = readFile(settingsFile);
     QVERIFY(QFile::setPermissions(settingsFile, QFile::ReadOwner));
     if (QFileInfo(settingsFile).isWritable())
