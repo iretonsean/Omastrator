@@ -22,6 +22,19 @@ bool isFrame(const QString &prelude, const QString &frame)
     return false;
 }
 
+// A value that ends the declaration or the block would break the user's stylesheet: it is not written, and the agent gets the edit.
+bool unsafeValue(const QString &value)
+{
+    return value.contains(QLatin1Char(';')) || value.contains(QLatin1Char('{')) || value.contains(QLatin1Char('}'));
+}
+
+// A frame rule that lists more than one offset ("0%, 100% { … }") is not one frame: the page's preview changes the one that was
+// asked for, and the code would change both.
+bool listsFrames(const CssRules::Rule &rule)
+{
+    return rule.prelude.contains(QLatin1Char(','));
+}
+
 struct Placed {
     QString *text = nullptr;
     CssRules::Rule rule;
@@ -58,6 +71,8 @@ const QRegularExpression &reducedPrelude()
 
 Result customProperty(const Files &files, const QString &selector, const QString &property, const QString &value)
 {
+    if (unsafeValue(value))
+        return Result::ambiguous;
     const QString wanted = simplified(selector);
     std::vector<Placed> rules;
     for (QString *text : files)
@@ -99,6 +114,8 @@ Result customProperty(const Files &files, const QString &selector, const QString
 
 Result keyframeValue(const Files &files, const QString &name, const QString &frame, const QString &property, const QString &value)
 {
+    if (unsafeValue(value))
+        return Result::ambiguous;
     const QString wanted = QStringLiteral("@keyframes ") + simplified(name);
     std::vector<Placed> blocks;
     for (QString *text : files)
@@ -118,11 +135,16 @@ Result keyframeValue(const Files &files, const QString &name, const QString &fra
             matching.push_back(child);
     if (matching.size() != 1)
         return matching.empty() ? Result::none : Result::ambiguous;
+    if (listsFrames(matching.front()))
+        return Result::ambiguous;
     return replaceIn(text, matching.front(), property, value);
 }
 
 Result keyframeBody(const Files &files, const QString &name, const QString &frame, const QString &declarations)
 {
+    // A whole frame is several declarations, so `;` is expected here; a brace is not.
+    if (declarations.contains(QLatin1Char('{')) || declarations.contains(QLatin1Char('}')))
+        return Result::ambiguous;
     const QString wanted = QStringLiteral("@keyframes ") + simplified(name);
     std::vector<Placed> blocks;
     for (QString *text : files)
@@ -141,8 +163,16 @@ Result keyframeBody(const Files &files, const QString &name, const QString &fram
             matching.push_back(child);
     if (matching.size() != 1)
         return matching.empty() ? Result::none : Result::ambiguous;
+    if (listsFrames(matching.front()))
+        return Result::ambiguous;
     const CssRules::Rule &rule = matching.front();
     const QString old = text.mid(rule.open + 1, rule.close - rule.open - 1);
+    // The frame's own easing is not part of what an effect changes: the page keeps it, and so does the code.
+    QString kept;
+    if (!declarations.contains(QLatin1String("animation-timing-function")))
+        for (const CssRules::Declaration &each : CssRules::declarations(text, rule, QStringLiteral("animation-timing-function")))
+            kept += QStringLiteral(" animation-timing-function: %1;").arg(text.mid(each.valueStart, each.valueEnd - each.valueStart));
+    const QString frameBody = kept.isEmpty() ? declarations : declarations.trimmed() + (declarations.trimmed().endsWith(QLatin1Char(';')) ? QString() : QStringLiteral(";")) + kept;
     QString body;
     if (old.contains(QLatin1Char('\n'))) {
         // The lines keep the indent they had, and the brace its own.
@@ -153,13 +183,16 @@ Result keyframeBody(const Files &files, const QString &name, const QString &fram
         const QString indent = old.mid(first, end - first);
         const qsizetype lastBreak = old.lastIndexOf(QLatin1Char('\n'));
         const QString outer = old.mid(lastBreak + 1);
+        // The last declaration shares its line with the brace: this is not the brace's indent, and it would stay behind.
+        if (!outer.trimmed().isEmpty())
+            return Result::ambiguous;
         body = QStringLiteral("\n");
-        for (const QString &part : declarations.split(QLatin1Char(';'), Qt::SkipEmptyParts))
+        for (const QString &part : frameBody.split(QLatin1Char(';'), Qt::SkipEmptyParts))
             body += indent + part.trimmed() + QStringLiteral(";\n");
         body += outer;
     } else {
         QStringList parts;
-        for (const QString &part : declarations.split(QLatin1Char(';'), Qt::SkipEmptyParts))
+        for (const QString &part : frameBody.split(QLatin1Char(';'), Qt::SkipEmptyParts))
             parts << part.trimmed() + QLatin1Char(';');
         body = QLatin1Char(' ') + parts.join(QLatin1Char(' ')) + QLatin1Char(' ');
     }

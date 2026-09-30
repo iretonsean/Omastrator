@@ -550,7 +550,7 @@ std::optional<double> parseTime(const QString &css)
 
 bool isEasing(const QString &css)
 {
-    static const QRegularExpression pattern(QStringLiteral(R"(^(cubic-bezier\(.+\)|steps\(.+\)|linear\(.+\)|linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$)"));
+    static const QRegularExpression pattern(QStringLiteral(R"(^(cubic-bezier\([^;{}()]+\)|steps\([^;{}()]+\)|linear\([^;{}()]+\)|linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$)"));
     return pattern.match(css.trimmed()).hasMatch();
 }
 

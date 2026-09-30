@@ -47,6 +47,15 @@ private:
     QTemporaryDir m_home;
 
 private slots:
+    void anEasingIsOneValueNotTwoDeclarations()
+    {
+        for (const char *good : {"cubic-bezier(0.16, 1, 0.3, 1)", "steps(4, jump-end)", "linear(0, 0.25 75%, 1)", "linear", "ease-in-out", " ease "})
+            QVERIFY2(TokenFiles::isEasing(QString::fromLatin1(good)), good);
+        // What ends the declaration or the block would write a second declaration into the user's file.
+        for (const char *bad : {"cubic-bezier(1,1,1,1); --x: calc(1)", "cubic-bezier(1,1,1,1) } body { x: y", "steps(2) {", "linear(0, 1); a", "cubic-bezier(1,(2),3,4)", "ease; x"})
+            QVERIFY2(!TokenFiles::isEasing(QString::fromLatin1(bad)), bad);
+    }
+
     void initTestCase()
     {
         // Libraries and themes live under this HOME, never the user's.

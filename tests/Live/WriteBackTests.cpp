@@ -295,12 +295,164 @@ private slots:
         QCOMPARE(WriteBack::plan(open, {keyframe("nl-rise", "from", "opacity", "0.5")}).unresolved.size(), size_t(1));
     }
 
-    void aKeyframeValueInAFramesListIsFoundByAnyOfItsFrames()
+    void aFramesListIsLeftForTheAgentAndItsSingleFramesAreWritten()
     {
-        const QString repo = motionRepository("@keyframes nl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }\n");
-        const WriteBack::Plan plan = WriteBack::plan(repo, {keyframe("nl-pulse", "to", "opacity", "0.8"), keyframe("nl-pulse", "50%", "opacity", "0.2")});
+        // The page's preview changes the one offset asked for; the code would change both frames of "0%, 100%": not the same.
+        const QByteArray css = "@keyframes nl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }\n";
+        const QString repo = motionRepository(css);
+        WriteBack::Plan plan = WriteBack::plan(repo, {keyframe("nl-pulse", "to", "opacity", "0.8")});
+        QCOMPARE(plan.unresolved.size(), size_t(1));
+        QVERIFY(plan.changes.empty());
+        QCOMPARE(read(repo + "/src/motion.css"), css);
+        plan = WriteBack::plan(repo, {keyframe("nl-pulse", "50%", "opacity", "0.2")});
         QVERIFY(plan.unresolved.empty());
-        QCOMPARE(applied(repo, plan), QByteArray("@keyframes nl-pulse { 0%, 100% { opacity: 0.8; } 50% { opacity: 0.2; } }\n"));
+        QCOMPARE(applied(repo, plan), QByteArray("@keyframes nl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }\n"));
+    }
+
+    void aValueOfSeveralLinesIsReplacedWholeInAKeyframeAndAProperty()
+    {
+        // Prettier writes a shadow list this way; a value that stopped at the first line end would leave "0 0 0 4px blue;" behind.
+        const QByteArray css = "@keyframes nl-pulse {\n  from {\n    box-shadow: 0 0 0 0 red,\n      0 0 0 4px blue;\n    opacity: 1;\n  }\n}\n"
+                               "#guji {\n  --shadow: 0 0 red,\n    0 0 blue;\n}\n";
+        const QString repo = motionRepository(css);
+        WriteBack::Plan plan = WriteBack::plan(repo, {keyframe("nl-pulse", "from", "box-shadow", "0 0 0 8px green")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan),
+                 QByteArray("@keyframes nl-pulse {\n  from {\n    box-shadow: 0 0 0 8px green;\n    opacity: 1;\n  }\n}\n#guji {\n  --shadow: 0 0 red,\n    0 0 blue;\n}\n"));
+        plan = WriteBack::plan(repo, {property("#guji", "--shadow", "0 0 green")});
+        QVERIFY(plan.unresolved.empty());
+        const QByteArray after = applied(repo, plan);
+        QVERIFY2(after.contains("--shadow: 0 0 green;\n}"), after.constData());
+        QVERIFY(!after.contains("0 0 blue"));
+    }
+
+    void aDeclarationInsideACommentIsNotTheDeclaration()
+    {
+        const QString repo = motionRepository("#guji { /* --i: 2; */ --i: 1; }\n#huila { /* --i: 2; */ }\n");
+        // The live one is found, not the commented one; a rule with only a comment gets the property added.
+        WriteBack::Plan plan = WriteBack::plan(repo, {property("#guji", "--i", "5")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), QByteArray("#guji { /* --i: 2; */ --i: 5; }\n#huila { /* --i: 2; */ }\n"));
+        plan = WriteBack::plan(repo, {property("#huila", "--i", "7")});
+        QVERIFY(plan.unresolved.empty());
+        const QByteArray after = applied(repo, plan);
+        QVERIFY2(after.contains("/* --i: 2; */") && after.contains("--i: 7;"), after.constData());
+    }
+
+    void aValueThatWouldBreakTheStylesheetIsLeftForTheAgent()
+    {
+        const QByteArray css = "@keyframes nl-rise { from { opacity: 0; } }\n#guji { --i: 1; }\n";
+        const QString repo = motionRepository(css);
+        for (const QString &value : {QStringLiteral("0; } body { display: none"), QStringLiteral("1; --x: 2"), QStringLiteral("{}")}) {
+            WriteBack::Plan plan = WriteBack::plan(repo, {keyframe("nl-rise", "from", "opacity", value)});
+            QCOMPARE(plan.unresolved.size(), size_t(1));
+            QVERIFY(plan.changes.empty());
+            plan = WriteBack::plan(repo, {property("#guji", "--i", value)});
+            QCOMPARE(plan.unresolved.size(), size_t(1));
+            QVERIFY(plan.changes.empty());
+        }
+        QCOMPARE(read(repo + "/src/motion.css"), css);
+    }
+
+    void anElementsValueIsNeverWrittenIntoTheOneDeclarationTheProjectHas()
+    {
+        // A Svelte loop writes each word's index inline: the project has one "--i:" and it is not a rule's.
+        const QString svelte = m_directory.filePath(QStringLiteral("svelte%1").arg(++m_repos));
+        write(svelte + "/src/Headline.svelte", "{#each words as word, i}\n  <span class=\"word\" style=\"--i: {i}\">{word}</span>\n{/each}\n");
+        write(svelte + "/index.html", "<p>x</p>\n");
+        run(svelte, {"init", "-q", "-b", "main"});
+        run(svelte, {"add", "-A"});
+        run(svelte, {"commit", "-q", "-m", "First"});
+        WriteBack::Plan plan = WriteBack::plan(svelte, {property("#guji", "--i", "2"), property("#huila", "--delay-extra", "300ms")});
+        QCOMPARE(plan.unresolved.size(), size_t(2));
+        QVERIFY(plan.changes.empty());
+
+        // A default on :root that every element reads: an element's edit is not the default's.
+        const QByteArray css = ":root { --i: 0; --delay-extra: 0ms; }\n.card { animation-delay: calc(var(--i) * 140ms + var(--delay-extra, 0ms)); }\n";
+        const QString root = motionRepository(css);
+        plan = WriteBack::plan(root, {property("#guji", "--i", "1"), property("#guji", "--delay-extra", "300ms")});
+        QCOMPARE(plan.unresolved.size(), size_t(2));
+        QVERIFY(plan.changes.empty());
+        QCOMPARE(read(root + "/src/motion.css"), css);
+        // "Use the group's timing" writes an empty value: it must not blank the default for every card.
+        LiveEdit back = property("#guji", "--delay-extra", QString());
+        plan = WriteBack::plan(root, {back});
+        QCOMPARE(plan.unresolved.size(), size_t(1));
+        QVERIFY(plan.changes.empty());
+        // A token on :root is still written where it is declared.
+        plan = WriteBack::plan(root, {property(":root", "--delay-extra", "10ms")});
+        QVERIFY(plan.unresolved.empty());
+        QVERIFY(QString::fromUtf8(*plan.changes.front().after).contains(QStringLiteral("--delay-extra: 10ms;")));
+    }
+
+    void aWholeFrameIsReplacedAndAFrameWithItsBraceOnTheLastLineIsLeftForTheAgent()
+    {
+        // Lines that keep their indent, and the brace its own.
+        const QByteArray lined = "@keyframes nl-rise {\n  from {\n    opacity: 0;\n    translate: 0 44px;\n    rotate: -3deg;\n  }\n}\n";
+        const QString repo = motionRepository(lined);
+        WriteBack::Plan plan = WriteBack::plan(repo, {keyframe("nl-rise", "from", "*", "opacity: 0; scale: 0.9")});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), QByteArray("@keyframes nl-rise {\n  from {\n    opacity: 0;\n    scale: 0.9;\n  }\n}\n"));
+        // The last declaration shares its line with the brace: what the text after the last line break is cannot be told apart from
+        // the brace's indent, so a declaration would stay behind. The agent writes it.
+        const QByteArray shared = "@keyframes nl-rise {\n  from { opacity: 0;\n  translate: 0 44px; }\n}\n";
+        const QString other = motionRepository(shared);
+        plan = WriteBack::plan(other, {keyframe("nl-rise", "from", "*", "opacity: 0; scale: 0.9")});
+        QCOMPARE(plan.unresolved.size(), size_t(1));
+        QVERIFY(plan.changes.empty());
+        QCOMPARE(read(other + "/src/motion.css"), shared);
+    }
+
+    void aDeclarationOnTheNextLineIsTakenOutWholeWhenGivenBack()
+    {
+        const QByteArray css = "#huila {\n  --i: 2;\n  --delay-extra:\n    300ms;\n}\n";
+        const QString repo = motionRepository(css);
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property("#huila", "--delay-extra", QString())});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), QByteArray("#huila {\n  --i: 2;\n}\n"));
+    }
+
+    void aCardsOwnDelayIsTakenOffItsRuleWhenGivenBack()
+    {
+        // The code side of "Use the group's timing": an empty value takes the declaration out and leaves the rest of the rule.
+        const QString repo = motionRepository("#huila { --i: 2; --delay-extra: 300ms; }\n");
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property("#huila", "--delay-extra", QString())});
+        QVERIFY(plan.unresolved.empty());
+        QCOMPARE(applied(repo, plan), QByteArray("#huila { --i: 2; }\n"));
+    }
+
+    void aStyleBlockInMarkupIsScannedAndTheMarkupAroundItIsNot()
+    {
+        // The apostrophes in the title and the text are HTML's: as CSS they would open a string that swallows the braces.
+        const QString repo = m_directory.filePath(QStringLiteral("markup%1").arg(++m_repos));
+        write(repo + "/index.html",
+              "<!doctype html>\n<title>Joe's shop</title>\n<style>\n  #guji { --i: 1; }\n  #huila { --i: 2; }\n</style>\n<p>It's done.</p>\n"
+              "<style>\n  #nyeri { --i: 3; }\n</style>\n");
+        run(repo, {"init", "-q", "-b", "main"});
+        run(repo, {"add", "-A"});
+        run(repo, {"commit", "-q", "-m", "First"});
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property("#guji", "--i", "8"), property("#huila", "--i", "9"), property("#nyeri", "--i", "4")});
+        QVERIFY(plan.unresolved.empty());
+        QVERIFY(WriteBack::apply(plan.changes).isEmpty());
+        QCOMPARE(read(repo + "/index.html"),
+                 QByteArray("<!doctype html>\n<title>Joe's shop</title>\n<style>\n  #guji { --i: 8; }\n  #huila { --i: 9; }\n</style>\n<p>It's done.</p>\n"
+                            "<style>\n  #nyeri { --i: 4; }\n</style>\n"));
+    }
+
+    void aSassLineCommentIsNotCode()
+    {
+        // The apostrophes in the // comments would open strings; the // after a rule ends with its line.
+        const QString repo = m_directory.filePath(QStringLiteral("sass%1").arg(++m_repos));
+        write(repo + "/src/motion.scss", "// it's the reveal's own rule { }\n#guji { --i: 1; }\n#huila { --i: 2; } // don't touch\n#nyeri { background: url(//cdn.example/x.png); --i: 3; }\n");
+        write(repo + "/index.html", "<p>x</p>\n");
+        run(repo, {"init", "-q", "-b", "main"});
+        run(repo, {"add", "-A"});
+        run(repo, {"commit", "-q", "-m", "First"});
+        const WriteBack::Plan plan = WriteBack::plan(repo, {property("#huila", "--i", "6"), property("#nyeri", "--i", "7")});
+        QVERIFY(plan.unresolved.empty());
+        QVERIFY(WriteBack::apply(plan.changes).isEmpty());
+        QCOMPARE(read(repo + "/src/motion.scss"),
+                 QByteArray("// it's the reveal's own rule { }\n#guji { --i: 1; }\n#huila { --i: 6; } // don't touch\n#nyeri { background: url(//cdn.example/x.png); --i: 7; }\n"));
     }
 
     void reducedMotionIsTakenOutOfItsBlockAndPutBack()

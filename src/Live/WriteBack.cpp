@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <deque>
 #include <map>
 
 namespace {
@@ -17,6 +18,8 @@ namespace {
 const QStringList sourceSuffixes{"html", "htm", "js", "jsx", "mjs", "cjs", "ts", "tsx", "vue", "svelte", "astro", "md", "mdx",
                                  "css", "scss", "sass", "less", "php", "erb", "liquid", "njk", "hbs", "twig", "hbs", "pug", "ejs"};
 const QStringList styleSuffixes{"css", "scss", "sass", "less", "html", "htm", "vue", "svelte", "astro"};
+// Markup files hold CSS only inside their <style> elements; the rest is HTML, whose apostrophes and braces are not CSS's.
+const QStringList markupSuffixes{"html", "htm", "vue", "svelte", "astro"};
 constexpr qint64 largestSource = 2 * 1024 * 1024;
 
 QString describe(const LiveEdit &edit)
@@ -30,27 +33,6 @@ QString describe(const LiveEdit &edit)
     if (!edit.addClass.isEmpty())
         return QStringLiteral("%1: %2 to %3").arg(edit.selector, edit.removeClass, edit.addClass);
     return QStringLiteral("%1: %2 to %3").arg(edit.selector, edit.property, edit.after);
-}
-
-// The innermost rule a position in `css` is inside, as its prelude ("#guji", ":root", "@theme"), or empty.
-QString enclosing(const QString &css, qsizetype position)
-{
-    QString found;
-    qsizetype open = -1;
-    for (const CssRules::Rule &rule : CssRules::scan(css)) {
-        if (rule.open < position && position < rule.close && rule.open > open) {
-            open = rule.open;
-            found = rule.prelude;
-        }
-    }
-    return found;
-}
-
-// A rule every element sees: a declaration there is a token, not one element's own value.
-bool isGlobalScope(const QString &prelude)
-{
-    return prelude.isEmpty() || prelude == QLatin1String(":root") || prelude == QLatin1String("html") || prelude == QLatin1String("*")
-        || prelude == QLatin1String("body") || prelude.startsWith(QLatin1String("@theme"));
 }
 
 int count(const QString &text, const QString &needle)
@@ -194,6 +176,45 @@ QString Review::diff(const QString &folder) const
     return text;
 }
 
+// Runs a motion write on the style files. A markup file goes in as its <style> bodies, each its own text, and what the write
+// changed is put back in place; a stylesheet goes in whole. Read again for each call, so an edit made to the same file before
+// it (a text or a class swap) has already moved the positions.
+template <typename Write>
+MotionWrite::Result withStyles(Sources &sources, const QStringList &styleFiles, const Write &write)
+{
+    struct Body {
+        QString path;
+        qsizetype start;
+        qsizetype length;
+        QString original;
+    };
+    std::deque<QString> texts;
+    std::vector<Body> bodies;
+    MotionWrite::Files files;
+    static const QRegularExpression style(QStringLiteral(R"(<style\b[^>]*>(.*?)</style\s*>)"),
+                                          QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    for (const QString &path : styleFiles) {
+        QString &text = sources.of(path);
+        if (!markupSuffixes.contains(QFileInfo(path).suffix().toLower())) {
+            files.push_back(&text);
+            continue;
+        }
+        for (const QRegularExpressionMatch &match : style.globalMatch(text)) {
+            texts.push_back(match.captured(1));
+            bodies.push_back({path, match.capturedStart(1), match.capturedLength(1), match.captured(1)});
+            files.push_back(&texts.back());
+        }
+    }
+    const MotionWrite::Result result = write(files);
+    // Last body first, so the positions of the earlier ones stay true.
+    for (size_t i = bodies.size(); i > 0; --i) {
+        const Body &body = bodies[i - 1];
+        if (texts[i - 1] != body.original)
+            sources.of(body.path).replace(body.start, body.length, texts[i - 1]);
+    }
+    return result;
+}
+
 Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
 {
     Plan result;
@@ -208,10 +229,6 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
         if (styleSuffixes.contains(QFileInfo(path).suffix().toLower()))
             styleFiles << path;
 
-    MotionWrite::Files styleTexts;
-    for (const QString &path : std::as_const(styleFiles))
-        styleTexts.push_back(&sources.of(path));
-
     // Each element's class swaps become one change to its class attribute, made in place.
     std::vector<QString> order;
     std::map<QString, std::vector<const LiveEdit *>> classEdits;
@@ -222,8 +239,11 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
             const QString property = edit.property.section(QLatin1Char(' '), 1);
             // "from *" is the whole frame at once: an effect (Rise, Grow, Flip).
             const bool written = !property.isEmpty()
-                && (property == QLatin1String("*") ? MotionWrite::keyframeBody(styleTexts, edit.selector.mid(11), frame, edit.after)
-                                                   : MotionWrite::keyframeValue(styleTexts, edit.selector.mid(11), frame, property, edit.after))
+                && withStyles(sources, styleFiles,
+                              [&](const MotionWrite::Files &files) {
+                                  return property == QLatin1String("*") ? MotionWrite::keyframeBody(files, edit.selector.mid(11), frame, edit.after)
+                                                                        : MotionWrite::keyframeValue(files, edit.selector.mid(11), frame, property, edit.after);
+                              })
                     == MotionWrite::Result::written;
             if (written)
                 result.done << describe(edit);
@@ -232,7 +252,9 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
         } else if (edit.selector.startsWith(QLatin1String("motion:")) && edit.property == QLatin1String("reduced-motion")) {
             // Off then on again leaves the code as it was; otherwise the rule is cut out or put back.
             const bool same = edit.before.trimmed() == edit.after.trimmed();
-            if (same || MotionWrite::reducedMotion(styleTexts, edit.selector.mid(7), edit.before, edit.after) == MotionWrite::Result::written)
+            if (same
+                || withStyles(sources, styleFiles, [&](const MotionWrite::Files &files) { return MotionWrite::reducedMotion(files, edit.selector.mid(7), edit.before, edit.after); })
+                    == MotionWrite::Result::written)
                 result.done << describe(edit);
             else
                 result.unresolved.push_back(edit);
@@ -256,16 +278,22 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
             // The rule that names this one element holds its value (--i, --delay-extra) when it occurs once; a rule that occurs
             // twice is the agent's. Motion tokens are declared on :root, which the next rule reads.
             const bool root = edit.selector.isEmpty() || edit.selector == QLatin1String(":root") || edit.selector == QLatin1String("html");
+            // A value with `;` or a brace would end the declaration or the rule in the user's file.
+            if (edit.after.contains(QLatin1Char(';')) || edit.after.contains(QLatin1Char('{')) || edit.after.contains(QLatin1Char('}'))) {
+                result.unresolved.push_back(edit);
+                continue;
+            }
             if (!root) {
-                const MotionWrite::Result scoped = MotionWrite::customProperty(styleTexts, edit.selector, edit.property, edit.after);
+                const MotionWrite::Result scoped = withStyles(
+                    sources, styleFiles, [&](const MotionWrite::Files &files) { return MotionWrite::customProperty(files, edit.selector, edit.property, edit.after); });
                 if (scoped == MotionWrite::Result::written) {
                     result.done << QStringLiteral("%1: %2 to %3").arg(edit.selector, edit.property, edit.after);
                     continue;
                 }
-                if (scoped == MotionWrite::Result::ambiguous) {
-                    result.unresolved.push_back(edit);
-                    continue;
-                }
+                // No rule of its own (or two): one element's value is never written into the one declaration the project has. That
+                // could be a template loop (`style="--i: {i}"`) or a `:root` default that every element reads. The agent gets it.
+                result.unresolved.push_back(edit);
+                continue;
             }
             // A custom property's value, declared in exactly one stylesheet.
             const QRegularExpression declaration(QStringLiteral("(%1\\s*:\\s*)([^;}\\n]+)").arg(QRegularExpression::escape(edit.property)));
@@ -277,11 +305,8 @@ Plan plan(const QString &folder, const std::vector<LiveEdit> &edits)
                 if (times)
                     only = path;
             }
-            // One element's edit is not written into another element's own rule, which is what a `--i` declared once would be.
-            const QString home = total == 1 ? enclosing(sources.of(only), declaration.match(sources.of(only)).capturedStart(1)) : QString();
-            if (total == 1 && !root && !isGlobalScope(home) && home != edit.selector.simplified()) {
-                result.unresolved.push_back(edit);
-            } else if (total == 1) {
+            // Only a token on :root gets here (an element's own value was written above, or left for the agent).
+            if (total == 1) {
                 QString &text = sources.of(only);
                 const auto match = declaration.match(text);
                 text.replace(match.capturedStart(2), match.capturedLength(2), edit.after);
