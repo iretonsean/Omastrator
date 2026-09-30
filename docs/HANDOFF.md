@@ -21,8 +21,29 @@ here" just below.** Everything under "Earlier notes" is history.
   Omastrator-shortcuts and -share-device are the reusable build slots, detached at main and clean.
 - **Not done:** the README screenshots refresh (QUICK-WINS "Backlog, not queued") was claimed for after
   2 AM but not started; it's still open.
-- **The Mac mini session** went quiet after 11:34 PM: its Capture window thumbnails
-  (`feat/capture-windows`) and test settings isolation are not on GitHub; check with it.
+- **The Mac mini session** went quiet after 11:34 PM; see its summary below.
+
+### Overnight summary, Mac mini (2026-09-30, 9:45 AM Pacific)
+- **Merged to main from the Mac mini side:** the Pages flicker fix (`afb3293`); tests keep their QSettings to
+  themselves (`ef09a59`, then every test executable, `cf521ac`); frame resizes never scale type, and drawn or
+  dropped objects go into the frame under them (`81d6bee`); the window layout (selection and AI row with Ask and
+  a mic, the island as the tool's bar, Layers on the left, Properties and Capture tabs, `5e11ec2`); the Frame
+  tool's Browser View switch with the dev server's freeze and wake, and the island's Live controls (`157df2b`);
+  the Capture tab's window grid (`7ac7680`). The decisions are in docs/WINDOW-LAYOUT.md, marked [Mac mini].
+- **What went wrong:** at 11:36 PM the video recorder's test run held 1,500 raw frames in memory (8.7 GB), the
+  kernel's OOM killer took it, and systemd then stopped the whole terminal scope with the session in it. The
+  Mac mini did nothing until 7:18 AM, so the video moved to the Intel machine. Fixed on the Mac mini: the user
+  manager's `DefaultOOMPolicy=continue`, and a 7.7 GB zram swap (it had none). The recorder's unbounded write
+  buffer is reported to the video's owner.
+- **Open on the Mac mini:** `fix/motion-tests-arm64`. On arm64 with Chromium 153 the motion tests
+  (`MotionEditTests`, `MotionGroupTests`, `MotionTimelineUiTests`, `GeneratePageTests`) are slow and fail at
+  random, alone on an idle machine too; they pass on x86 with Chromium 152. Until it lands, check.sh on the
+  Mac mini isn't a merge gate for motion: run it on the Intel machine.
+- **Not done there:** the announcement video (the Intel machine records it), "Design over…" (phase B), and
+  the two suggestions at the end of the [Mac mini] decisions (the task bar's own Ask AI field; the Frame
+  presets list in Properties).
+- **Worktrees on the Mac mini:** main, the two reusable slots at main, and `Omastrator-flicker` for the
+  motion test fix. The old local branches there are the pre-rewrite history, kept in the private bundle.
 
 ### The desktop island is removed (`feat/remove-desktop-island`, 2026-09-29 night)
 - **What changed:** the pill and its plugin `omastrator.island` are gone. Draw,
