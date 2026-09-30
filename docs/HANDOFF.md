@@ -5,6 +5,25 @@ here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
+### Overnight summary, Intel machine (2026-09-30, 6:30 AM Pacific)
+- **Merged to main tonight from the Intel side:**
+  - the desktop island removed (`d76cafb`); its decisions are in docs/WINDOW-LAYOUT.md under "Decided
+    without the author (review)", marked [Intel] (`3cc7915`);
+  - motion phases A to F, merged onto the window layout with one fix round for three reviews (`c2d88cd`;
+    docs/MOTION.md section 13 lists what was fixed, what wasn't and why, and the decisions to review);
+  - LiveFrameTests waits for the page's tokens (`5657738`); the variables manager backlog doc; stale doc notes.
+- **The author reviews:** the [Intel] and [Mac mini] decisions in docs/WINDOW-LAYOUT.md, and docs/MOTION.md
+  section 13 ("Decided without the author (review)").
+- **The author's desktop:** the installed build is old and still shows the island. Reinstall with
+  `scripts/install-local.sh --shell` (it runs setup, which removes the island plugin with backups; the
+  daemon restarts and its window closes), then check the island removal's desktop list below.
+- **Branches:** only `main` and `claude/sponsorship-links` (waits for GitHub Sponsors). The worktrees
+  Omastrator-shortcuts and -share-device are the reusable build slots, detached at main and clean.
+- **Not done:** the README screenshots refresh (QUICK-WINS "Backlog, not queued") was claimed for after
+  2 AM but not started; it's still open.
+- **The Mac mini session** went quiet after 11:34 PM: its Capture window thumbnails
+  (`feat/capture-windows`) and test settings isolation are not on GitHub; check with it.
+
 ### The desktop island is removed (`feat/remove-desktop-island`, 2026-09-29 night)
 - **What changed:** the pill and its plugin `omastrator.island` are gone. Draw,
   Capture, AI and Live modes move into the app window (toolbar, Capture tab,
