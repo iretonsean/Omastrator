@@ -1,4 +1,4 @@
-# Motion in Browser View (design, 2026-09-30; phase A built, the rest not yet)
+# Motion in Browser View (design, 2026-09-30; phases A and B built, the rest not yet)
 
 The live page in a Browser View is the artboard for motion. The designer asks
 the agent for an animation, sees it as tracks on a timeline, tunes it with
@@ -7,7 +7,7 @@ truth: the agent writes plain CSS (or the project's own stack) into the
 project, and Omastrator reads that code back and edits it.
 
 This builds on Live inside the frame (LIVE-IN-FRAME.md): Edit Page, the element
-bar, Live's undo, write-back, Save, Deploy and Build It. Phase A (the read-only timeline) is built; "Decided while building" at the end says how. The rest is not.
+bar, Live's undo, write-back, Save, Deploy and Build It. Phases A (the read-only timeline) and B (inspector edits, write-back and motion tokens) are built; "Decided while building" at the end says how. The rest is not.
 
 The three flows (the approved prototype):
 
@@ -713,3 +713,59 @@ The author took the recommended answer to each open question.
     selects, the ruler scrubs and drags, a fast scrub sends few seeks, the picture changes after a seek, Play, Loop, Replay,
     scroll, a hover row, Esc, the × button, Stop Live, a page with no motion, the Code tab, the inspector) and one case in
     `MenusTests`. The fixture is `tests/Live/fixtures/motion/` (`index.html`, `style.css` with a marked block, `gsap.html`).
+
+- **Phase B (inspector edits, write-back and motion tokens, `feat/motion-b`).**
+  - **Which field edits what.** The Motion inspector's fields are the row's tokens when the code holds each value in one, and a
+    change for the agent when it doesn't. `MotionCode::bindings` reads the rule that runs the row's animation (`animation` or
+    `animation-name` naming the `@keyframes`) and takes `var(--duration-*)`, `var(--ease-*)` and `var(--stagger-*)` from its
+    animation declarations: **Duration** edits `--duration-x`, **Easing** (a preset menu, the curve editor and its text) edits
+    `--ease-x`, **Stagger** edits `--stagger-x` and is disabled, with a tooltip, when the stagger isn't a token. A row with no
+    duration token records `animation-duration` on each of its elements (`LiveSession::motionSetTiming`, `effect.updateTiming` on
+    the page), which `WriteBack::plan` leaves for the agent; the same for delay and easing. The list of tokens in the inspector is
+    the block's own (`MotionCode::tokens`), each editable, showing a pending edit as its new value.
+  - **Preview, then one edit.** A scrub or a curve drag calls `motionPreviewProperty` (an inline custom property on `:root`,
+    remembered so that `endPreview` takes it off first) on each step and nothing is recorded; letting go calls
+    `motionSetProperty`, which is one `LiveEdit` (selector `:root`, property `--duration-x`) with an undo step. A typed value (Enter)
+    is a step with nothing to preview. The page's animations follow at once, because a CSS animation's timing is computed from the
+    property, and the timeline reads the new durations back from the page.
+  - **Keyframes.** A keyframe value typed in the inspector calls `effect.setKeyframes` on every running animation of that
+    `@keyframes` name and records an edit with selector `@keyframes nl-rise` and property `from opacity` (the keyframe as the code
+    names it, then the property). Undo and redo restore the keyframes the overlay saved (`__oma.restore` now takes `{motion: state}`
+    and `{codeOnly}`, for the edits that have nothing to put back on the page).
+  - **`WriteBack::plan` writes three more things, each only when exactly one place matches** (`MotionWrite`, `CssRules`, a small
+    reader of CSS blocks that knows comments, strings, nesting and `;`):
+    1. a custom property inside the one rule whose selector text is the edit's selector (`#huila { --i: 2; }`): its value is
+       replaced, or the declaration is added to the rule (inline for a one-line rule, on a line of its own at the same indent for a
+       rule of lines); a rule that occurs twice (also inside `@media`) is left for the agent;
+    2. a value inside one `@keyframes <name>` block: the name occurs once in the project, the frame (`from`, `to`, `40%`, a list such
+       as `0%, 100%`, with `from` = `0%` and `to` = `100%`) matches one rule of the block, and the property is declared once in it. A
+       block that never closes is not read at all;
+    3. the reduced-motion rule of a marked block, taken out (its text is the edit's `before`, and it must be the text that is there) or put
+       back before the end marker (its text is `after`). Off and on again in one session nets to `before == after` and writes nothing.
+    A custom-property edit for one element is never written into another element's rule: `--i` declared once on `#guji` isn't the
+    declaration for `#huila`. Motion tokens are on `:root` (or `@theme`), and the old rule for a property declared once still writes them.
+  - **Reduced motion in the inspector.** The box shows what the code will have once the pending edits are written: the file's rule
+    XOR the pending toggle. Off records the rule's text; on puts the same text back, or the rule the block's own animations need
+    (`MotionCode::defaultReducedRule`: `@media (prefers-reduced-motion: reduce) { .word, .lede { animation: none; } }`) when it
+    never had one. The code is read again when the pending edits change (a Save writes them), so the box follows the file. Preview
+    reduced and the warning for motion with no rule are phase C's.
+  - **Motion tokens in the model.** `TokenKind` gains `duration` (ms; a stagger is a duration named in a `stagger` group) and
+    `easing` (`TokenValue::text`: `cubic-bezier(…)`, a keyword, or `linear(…)`, shown as "Custom"). The Design System panel lists
+    them, can add and edit them, and Sync writes them with the rest. Files: W3C `$type: "duration"` (`{"value": 480, "unit": "ms"}`,
+    or the text `"480ms"` in a file that already writes text) and `cubicBezier` (four numbers; a keyword or `linear()` is text with
+    `$type: "string"`, found again by its path `ease/*`); Tailwind v4 and CSS `--duration-*`, `--stagger-*` and `--ease-*`, in the
+    unit the file already uses (a file that writes `0.6s` keeps writing seconds). The W3C reader no longer skips durations.
+  - **The page's tokens.** `Live::TokenSet` gains `duration`, `easing` and `stagger` groups from the scan (names and values, since the
+    overlay reports a time as text), and snaps `animation-duration`, `transition-duration`, `-delay` and `-timing-function`: a time
+    to the nearest duration token, an easing to a token only when the page has exactly that value.
+  - **The Tailwind v4 check, done against 4.3.3 (2026-09-29).** With `--duration-reveal`, `--stagger-words` and `--ease-reveal` in
+    `@theme` and a rule using them through `var()`, the built CSS declares all three under `:root`; `--ease-reveal` also makes an
+    `ease-reveal` utility, and `--duration-*` makes none. A token nothing references (`--duration-unused`) is not emitted unless
+    the theme is `@theme static`, which is right for motion: the block that uses a token names it.
+  - **Not in phase B:** the Starts control (a trigger), which is phase C; editing a group's order and per-element delay (phase D).
+  - **Tests:** `WriteBackTests` (the three rules and what they refuse), `DesignSourcesTests` (durations and curves through W3C,
+    Tailwind v4 and CSS, keeping unknown keys and the file's unit), `LiveUnitTests` (the page's motion tokens and snapping),
+    `MotionModelTests` (bindings, the reduced rule) and `MotionEditTests` (Chromium: the fields are the tokens; a scrub shows on
+    the page and records one edit; the curve and a keyframe undo and redo; Save writes the token, the curve, the keyframe and the
+    scoped `--i` into a temporary git repository and nothing else; reduced motion off, on, off; a duration the code holds in no
+    token goes to the agent). The fixture `tests/Live/fixtures/motion/cards.html` and `cards.css` is the design's group block.

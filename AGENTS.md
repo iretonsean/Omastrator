@@ -50,7 +50,8 @@ Each folder builds as its own static library:
   with GitHub through `gh`), and motion (docs/MOTION.md): `motion.js` (the page
   side, run after the overlay, compiled in like it), `Motion` (the timeline's
   rows from the page's list) and `MotionCode` (the marked blocks in a project's
-  code). Browser View's Chromium (docs/BROWSER-VIEW.md) is
+  code, and which tokens a row takes its values from), `MotionWrite` and `CssRules` (what write-back is sure of in motion,
+  over a small reader of CSS blocks). Browser View's Chromium (docs/BROWSER-VIEW.md) is
   `BrowserPool` (its own thread, tabs, idle stop, the cap) and `Breakpoints`
   (the widths a site's stylesheets name). The page overlay
   is `overlay.js`, compiled in through `cmake/OverlayScript.h.in`. Headless
@@ -91,7 +92,7 @@ Each folder builds as its own static library:
   that aren't yours, This Is My Site), `BrowserViews+Deploy.cpp` (Deploy, Save,
   Review Changes, History) and `BrowserViews+Build.cpp` (Build It) on top of
   `AgentBridge`. The timeline under the canvas (docs/MOTION.md) is
-  `MotionTimeline` (with `MotionTrackView`, the drawing) and `MotionInspector`.
+  `MotionTimeline` (with `MotionTrackView`, the drawing) and `MotionInspector` (with `CurveEditor`).
   `DevServers` (in `src/Live`) starts a project's dev server
   for the window and the frames. Share with client
   (docs/SHARE.md) is `Share`, `ShareJob`, `ShareController` and
