@@ -16,10 +16,9 @@ here" just below.** Everything under "Earlier notes" is history.
   its `shell.json` entry, `island-visibility.json`, `island-seen.json` and the
   removed keys out); a second run changes nothing. Run it on the real desktop
   after the merge: it is the one step no test can do.
-- **Merge order:** `feat/window-layout` adds the real `focusAsk()`
-  (`ContextBar`'s `askField()`); this branch has a stub with the same name and
-  signature in `ProjectWorkspaceView` that focuses the task bar's "Ask AI…"
-  field. Keep the window-layout version on conflict.
+- **`focusAsk()`:** `omastrator island ask` sends `show_window` with `raise = true`
+  and `focus = "ask"`; `AgentBridge::showWindow` then calls main's
+  `ProjectWorkspaceView::focusAsk()`.
 - **Known gap:** design mode's drawing tools were buttons on the pill. Until
   "Design over…", choose them with `omastrator design tool …`; Esc leaves.
 - **The author tests on the real desktop:** the tray light click brings the

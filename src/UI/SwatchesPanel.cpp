@@ -86,7 +86,7 @@ void SwatchesPanel::rebuild()
     }
     if (m_library.groups().empty()) {
         auto *empty = new QLabel(QStringLiteral("No swatches yet. Pick a colour from anywhere on screen with the "
-                                                "`omastrator island capture color`, or load your Omarchy theme's colours."),
+                                                "Capture tab, or load your Omarchy theme's colours."),
                                  this);
         empty->setObjectName(QStringLiteral("swatchesEmpty"));
         empty->setWordWrap(true);
