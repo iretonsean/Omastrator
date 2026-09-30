@@ -1,4 +1,4 @@
-# Motion in Browser View (design, 2026-09-30)
+# Motion in Browser View (design, 2026-09-30; phase A built, the rest not yet)
 
 The live page in a Browser View is the artboard for motion. The designer asks
 the agent for an animation, sees it as tracks on a timeline, tunes it with
@@ -7,7 +7,7 @@ truth: the agent writes plain CSS (or the project's own stack) into the
 project, and Omastrator reads that code back and edits it.
 
 This builds on Live inside the frame (LIVE-IN-FRAME.md): Edit Page, the element
-bar, Live's undo, write-back, Save, Deploy and Build It. Nothing here is built.
+bar, Live's undo, write-back, Save, Deploy and Build It. Phase A (the read-only timeline) is built; "Decided while building" at the end says how. The rest is not.
 
 The three flows (the approved prototype):
 
@@ -649,3 +649,67 @@ The author took the recommended answer to each open question.
 4. **Record is stepped,** frame by frame at 30 fps (60 in the ⋯). Motion that a
    script drives with its own clock isn't recorded unless it can be seeked
    (GSAP's global timeline can) (section 8).
+
+## Decided while building
+
+- **Phase A (the read-only timeline, `feat/motion-a`).**
+  - **The page side is `src/Live/motion.js`,** not a part of `overlay.js`: a second script that runs after the overlay and
+    adds `__oma.motion`. CMake compiles both into `OverlayScript.h`, and `LiveSession::overlayScript()` joins them, so the
+    frame host and the window get it in one injection. `list()` returns the page's animations one by one (kind, name,
+    selector, parent, keyframes, timing, the scroll range for a scroll-driven one) and does not make rows. The rows are made in
+    C++ by `Motion::parse`, which needs no browser to test.
+  - **Row merging.** Animations merge into one row when they are the same kind and name, with the same parent and clock:
+    `nl-rise` on five siblings is "h1 .word × 5". A transition row is one per element, whatever properties it moves, so a
+    hover row keeps its id when its state is held. A row's label is the tag with an id or the first class; several
+    elements read "parent .class × n" or "tag × n". The id is `kind|name|parent|timeline`, which stays the same across
+    refreshes.
+  - **What `hold()` does.** It pauses every animation on the document timeline and keeps pausing the ones that start later
+    (the `transitionrun` and `animationstart` events, and a check once per frame with a 250 ms timer behind it, since a
+    hidden page draws no frames). It does not pause scroll-driven animations, which scrolling moves. Each held animation
+    remembers its offset: where its own time zero sits on the timeline (starts within 34 ms of each other are one start). An
+    animation that joins late starts at offset 0 and at the playhead, but never past its own end, because a transition that
+    has ended is gone and could not be scrubbed back. `release()` plays the rest on from where they are; an animation that
+    had ended before the hold ends again, and is not played from its start.
+  - **Scroll-driven rows.** The bar runs between two scroll positions in px, from the timeline's own `startOffset` and
+    `endOffset` where the page gives them, else from the subject's box. `animation-range` names (entry, exit, contain, cover,
+    the crossings) and percentages are applied. Seeking such a row is `window.scrollTo`, and the page's scroll (a wheel over
+    the frame) moves the scroll playhead. Chromium keeps a scroll position on whole device pixels, so the page is within a pixel
+    of the ruler.
+  - **Hover rows before there is a pointer.** A transition that only a `:hover`, `:focus` or `:active` rule starts is not in
+    `getAnimations()`, so `list()` scans the style sheets for such rules (only where the state is on the last compound of
+    the selector), finds the elements that have a transition for a property the rule sets, and lists them as rows that are
+    not held yet (dashed bars, "hover to preview"). Picking such a row calls `LiveSession::motionForce`, which forces the state
+    with `CSS.forcePseudoState`; the page then starts the real transition, which is held, and the row is real with the
+    same id. Letting the state go (another row, closing the timeline, Stop Live) drops the transition back that the page
+    starts, so the page is as it was. The protocol keeps a forced state per node and starts its nodes over at each
+    `DOM.getDocument`, so the session asks for the document once and lets a state go on the node it put it on.
+  - **The GSAP row** is read from `gsap.globalTimeline` (`getChildren`, `startTime`, `totalDuration`): one row, held with
+    `pause()`, seeked with `time()`, let go with `resume()`. The tests use a stand-in with the same calls, because no GSAP is
+    shipped in the repository.
+  - **Where the timeline is.** `MotionTimeline` is a widget in `ContentView`'s canvas column, under the canvas, hidden until
+    Window ▸ Timeline. Opening it enters Edit Page on the frame (the Browser View in Edit Page, else the selected one, else the
+    only one on the page), starts Live there, and holds the page once Live runs. It follows Edit Page to another frame, and
+    Edit Page ending, Stop Live, reset and the × close it. It does not open by itself yet: Animate (phase C) opens it, and
+    "when the selected frame's page has motion" would need Live on every selected frame, which starts a dev server, so it is
+    not done. The × closes the timeline and leaves Edit Page on.
+  - **Scrubbing.** One seek is in flight: `LiveFrames::run` answers, then the frame's next picture (`BrowserViews::pictureArrived`)
+    or 120 ms lets the next seek go, and a newer position replaces the one waiting. A frame with its timeline open streams
+    every picture (`BrowserViews::setScrubbed`). Play advances the playhead itself, 15 ms apart, asking for the time since Play
+    began, so it runs at the picture's pace; Loop starts again at the end; Replay is Play from 0. With only scroll-driven rows,
+    Play scrolls the page down its range over two seconds.
+  - **The inspector** (`MotionInspector`, Window ▸ Motion, opened with the timeline) shows the selected row: its name, what
+    starts it, the easing (named where it is a preset), duration and stagger (the even gap between the bars' starts), the
+    motion tokens declared in the row's marked block, the reduced-motion box (checked when the block has the rule, disabled
+    until phase B) and the keyframes. A script's row says it is not shown here. Nothing in it is a field yet.
+  - **The Code tab** shows the marked blocks of the project that name the selected row's `@keyframes` (all when none is
+    selected). `MotionCode::blocks` reads style and markup files under the project, skipping `node_modules`, `.git` and build
+    output, at most 600 files of 1 MB. A click on a line opens its file with `xdg-open` (`OMASTRATOR_XDG_OPEN` replaces it in
+    tests). A page that isn't one of the user's sites says its code isn't here.
+  - **Not in phase A:** `__oma.motion.trigger` (a Click trigger's preview, phase C), Record MP4 and Save to code in the header
+    (phases C and F), pending edits marked in the Code tab (phase B).
+  - **Tests:** `MotionModelTests` (rows, labels, ids, stagger, scroll rows, GSAP, the marked blocks, no browser),
+    `MotionTimelineTests` (Chromium: the list of each kind, hold, a later animation joining, seek, scroll seek, release, hover
+    forcing and letting go, a reload holding again, GSAP), `MotionTimelineUiTests` (Chromium: rows per parent, a row click
+    selects, the ruler scrubs and drags, a fast scrub sends few seeks, the picture changes after a seek, Play, Loop, Replay,
+    scroll, a hover row, Esc, the × button, Stop Live, a page with no motion, the Code tab, the inspector) and one case in
+    `MenusTests`. The fixture is `tests/Live/fixtures/motion/` (`index.html`, `style.css` with a marked block, `gsap.html`).
