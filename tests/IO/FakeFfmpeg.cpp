@@ -1,6 +1,7 @@
 // A stand-in for ffmpeg, run through OMASTRATOR_FFMPEG. It records its arguments, counts the JPEG pictures it is given
 // (on stdin for `-i -`, else the numbered files a `%05d.jpg` input names), and writes its output file.
 //   FAKE_FFMPEG_OUT   a folder: `calls` gets one block per run (its arguments, one per line), `frames-N` the count for run N
+//   FAKE_FFMPEG_KEEP  set: what arrives on stdin is kept as `stdin-N`, so a test can look at the pictures
 //   FAKE_FFMPEG_MODE  fail-at-start (an error, and it exits without reading anything), fail-at-end (it reads everything, then
 //                     fails), fail-pass2 (the GIF's palette pass works and the second pass fails)
 #include <QCoreApplication>
@@ -60,6 +61,8 @@ int main(int argc, char **argv)
         for (size_t got; (got = fread(buffer, 1, sizeof buffer, stdin)) > 0;)
             all.append(buffer, qsizetype(got));
         count = pictures(all);
+        if (qEnvironmentVariableIsSet("FAKE_FFMPEG_KEEP"))
+            append(QDir(out).filePath(QStringLiteral("stdin-%1").arg(run)), all);
     } else {
         // The first numbered input names the folder.
         for (const QString &word : arguments) {

@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>record</title>
+<style>
+html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
+#box { position: absolute; left: 0; top: 60px; width: 60px; height: 60px; background: #0a84ff; }
+</style>
+<div id="box"></div>
+<script>
+// A two-second slide across the page, held paused: the recording seeks it.
+const slide = document.getElementById('box').animate([{ translate: '0 0' }, { translate: '240px 0' }], { duration: 2000, fill: 'both', easing: 'linear' });
+slide.pause();
+window.seekTo = ms => { slide.currentTime = ms; };
+</script>
