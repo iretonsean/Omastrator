@@ -349,8 +349,9 @@ void MotionTimeline::onLiveChanged(const QUuid &frame)
         m_lastList = snapshot.motion;
         refresh(snapshot.motion);
     }
-    // A Save writes the pending edits into the code: the marked blocks are read again when they change.
-    if (snapshot.edits.size() != m_editCount) {
+    // A Save writes the pending edits into the code: the marked blocks are read again when they change. So are they when
+    // the project changes: a session reports running, and the page's rows can arrive, before its first load names it.
+    if (snapshot.edits.size() != m_editCount || snapshot.project != m_project) {
         m_editCount = snapshot.edits.size();
         scanCode();
         if (m_code)

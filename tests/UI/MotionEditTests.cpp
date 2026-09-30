@@ -237,6 +237,30 @@ private slots:
         QVERIFY(inspector.findChild<QCheckBox *>(QStringLiteral("motionInspectorReduced"))->isChecked());
     }
 
+    // The rows can come before the project is known (a session reports running before its first load names it): the
+    // code is read when the project is.
+    void theCodeIsReadWhenTheProjectIsKnownAfterTheRows()
+    {
+        NEEDS_CHROMIUM;
+        const auto served = site();
+        QVERIFY(served);
+        QVERIFY(ProjectRegistry::forget(page(*served)).isEmpty());
+        EditorSession session;
+        Hosted hosted(session, page(*served));
+        MotionTimeline timeline(session, hosted.canvas);
+        MotionInspector inspector(timeline);
+        QString row;
+        openOnCards(session, timeline, hosted.frame, row);
+        LiveFrames *frames = LiveFrames::of(session);
+        QVERIFY(frames->snapshot(hosted.frame).project.isEmpty());
+        QVERIFY(timeline.bindings().duration.isEmpty());
+        // The site becomes the user's, and the page loads again: the rows stay, and the project is named after them.
+        QVERIFY(ProjectRegistry::remember(page(*served), served->folder).isEmpty());
+        inPage(session, hosted.frame, QStringLiteral("location.reload()"));
+        QTRY_COMPARE_WITH_TIMEOUT(frames->snapshot(hosted.frame).project, served->folder, patience);
+        QTRY_COMPARE_WITH_TIMEOUT(timeline.bindings().duration, QStringLiteral("--duration-cascade"), patience);
+    }
+
     void aDurationScrubShowsOnThePageAndRecordsOneEdit()
     {
         NEEDS_CHROMIUM;
