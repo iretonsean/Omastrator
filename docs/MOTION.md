@@ -1,4 +1,4 @@
-# Motion in Browser View (design, 2026-09-30; phases A to D built, E and F are built on their own branches)
+# Motion in Browser View (design, 2026-09-30; phases A to D built here; E and F are on their own branches)
 
 The live page in a Browser View is the artboard for motion. The designer asks
 the agent for an animation, sees it as tracks on a timeline, tunes it with
