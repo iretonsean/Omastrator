@@ -83,10 +83,30 @@ void AgentWork::cleanup()
     worktree.clear();
 }
 
+namespace {
+// How motion starts, as the designer would say it.
+QString startsWords(const QString &trigger)
+{
+    if (trigger == QLatin1String("scroll"))
+        return QStringLiteral("as it scrolls into view");
+    if (trigger == QLatin1String("hover"))
+        return QStringLiteral("when the pointer is over it");
+    if (trigger == QLatin1String("click"))
+        return QStringLiteral("when it is clicked");
+    return QStringLiteral("when the page loads");
+}
+}
+
 QString AgentWork::describe(const std::vector<LiveEdit> &edits)
 {
     QString text;
     for (const LiveEdit &edit : edits) {
+        if (edit.property == QLatin1String("motion-trigger")) {
+            const QString name = edit.element["animation"].toString();
+            text += QStringLiteral("- Change %1%2 to start %3 (it starts %4 now)\n")
+                        .arg(edit.selector, name.isEmpty() ? QString() : QStringLiteral(" (the animation %1)").arg(name), startsWords(edit.after), startsWords(edit.before));
+            continue;
+        }
         text += edit.property == QLatin1String("text")
                     ? QStringLiteral("- %1: text \"%2\" becomes \"%3\"\n").arg(edit.selector, edit.before, edit.after)
                     : QStringLiteral("- %1: %2 %3 → %4%5\n")
