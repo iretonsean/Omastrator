@@ -25,6 +25,10 @@ file with the work. Don't delete finished items.
 - [ ] 9. Browser View and canvas workspaces (high effort, high priority;
       see section 9). Phase 1, Pages: merged (91e8f6c, 2026-09-28).
 
+- [ ] 10. **Pages as Workspaces UX** (medium-high priority, the author, 2026-09-30): smoother switching between
+      page workspaces, and no page list taking room in the window. See docs/backlog/PAGES-WORKSPACES-UX.md;
+      interview the author with previews before building.
+
 **The queue ends here.**
 - MEDIUM-EFFORT.md is on hold until the author says otherwise.
 - HIGH-EFFORT.md isn't scheduled, apart from its item 1, which is item 9

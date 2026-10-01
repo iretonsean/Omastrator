@@ -5,6 +5,10 @@ here" just below.** Everything under "Earlier notes" is history.
 
 ## Next session starts here
 
+### Next up (the author, 2026-09-30)
+- **Pages as Workspaces UX, medium-high priority:** docs/backlog/PAGES-WORKSPACES-UX.md (QUICK-WINS item 10).
+  Interview the author with previews first.
+
 ### v0.1.0 is released (2026-09-30, 3:28 PM Pacific)
 - **GitHub Release:** https://github.com/iretonsean/Omastrator/releases/tag/v0.1.0 (x86_64 and aarch64
   tarballs, `SHA256SUMS.txt`), built and tested by `release.yml` on main 926d85e. CI and Release are green.
