@@ -18,9 +18,11 @@ replaces the island's Live mode once it ships. Read it alongside VISION.md
    freezes it until it's back on or the app closes.
 3. **It shows the live site.** Design inside it: draw over the site, or paste
    content lifted from another browser window.
-4. **Resize it to check breakpoints.** The site reflows at the frame's width,
-   and the design doesn't change. The breakpoint buttons snap the width back
-   to the project's own breakpoints.
+4. **Resize it to check breakpoints.** Drag the frame's edge or corner: the
+   site reflows while you drag, and the frame keeps its new size. The
+   breakpoint buttons preview the project's own breakpoints and don't change
+   the frame; the dotted one is the frame's own width, and pressing it comes
+   back.
 5. **Build it and ship it.** "Build it" hands the design to the user's
    default agent. The agent writes it into the project's code on a branch,
    and the change waits under Review changes. **Deploy** publishes it to the
@@ -49,14 +51,20 @@ Live button opens a Browser View instead.
   - **Every other tool designs,** and Esc returns to Selection.
   - **The frame's own controls** (address bar, back, forward, reload,
     breakpoints) work with any tool.
-- **Resizing is a preview, not an edit.** Dragging the width isn't an undo
-  step. Releasing it, or pressing a breakpoint button, returns to the design
-  width. The objects inside follow one of three rules, chosen per object:
+- **Dragging an edge resizes the frame, as it does any frame.** The page
+  reflows during the drag, and releasing keeps the width and the height as one
+  undo step ("Resize"). The design width is the frame's width, so it follows.
+  **A breakpoint button is the preview:** it makes no undo step, and pressing
+  the dotted button (the frame's own width), the same button again, or Esc
+  returns to the frame's size. The objects inside follow one of three rules,
+  chosen per object:
   - **pinned to a page element**, following it as the page reflows (Lift
     knows which element each shape came from);
   - **following the frame's constraints and auto layout**, like any frame's
     children;
-  - **fixed**, with its design left alone at the design width.
+  - **fixed**, with its design left alone at the design width. (This rule
+    applies to a breakpoint preview. A kept resize moves children by their
+    constraints, as a plain frame's resize does.)
 - **Breakpoint buttons** come from the project's own breakpoints (its
   Tailwind theme or CSS media queries, read the way token snapping reads
   them). Otherwise they default to 390, 768, 1280 and 1440.

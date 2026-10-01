@@ -762,6 +762,23 @@ Changes and History go through `panelProject()` and `pendingEdits(folder)`.
     and the two stale-picture tests now check all four corners of a
     2-px-per-CSS-px page, at zoom 1 and 2.
 
+- **A live frame's resize drag is kept (fix/live-resize-sticks, 2026-09-30).**
+  The report: stretching a live Browser View's edge snapped it back on release,
+  and only Browser View off let it be resized. The drag is now a real
+  "Resize" step (`beginInteraction`, `previewFrameBox`, `commitInteraction`).
+  The page reflows during the drag as before (the frame's box drives
+  `LiveFrames`' viewport), and the frame keeps its width and height. Only the
+  breakpoint buttons are previews (`beginPreview`), and the frame's own width is
+  the dotted button. A frame's size is the one source: Save, export, Edit Page
+  and the picture read the document's box, and `designBox` returns the frame's
+  current size unless a held preview is open. The stale-picture rule is
+  unchanged (1:1 and clipped until a picture of the new size arrives). Tests:
+  `BrowserBarTests::draggingAHandleOfABrowserViewResizesItAndItStaysAfterRelease`,
+  `aCornerDragKeepsBothWidthAndHeight`,
+  `aButtonPreviewAndAClickOnTheFramesOwnWidthComeBackAfterADrag`, and
+  `BrowserSessionTests::aKeptResizeIsOneStepAndTheDesignWidthFollowsIt` (none
+  needs Chromium).
+
 ## Clearing what was written or sent
 
 `LiveFrames::clearPending(folder, taken)` removes the edits a write-back or a

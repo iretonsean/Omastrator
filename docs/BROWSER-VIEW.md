@@ -283,6 +283,16 @@ to `Tool`, and `toolInfo` grows. It sat in the rail's Frame group,
 
 ## 6. Resize is a preview
 
+> **Changed 2026-09-30 (fix/live-resize-sticks).** Dragging a live Browser
+> View's handles now resizes the frame for real: `beginInteraction("Resize")`,
+> `previewFrameBox`, and `commitInteraction()` on release, so the new width and
+> height stay as one undo step, and the design width (the frame's width)
+> follows. The author's report: the frame snapped back on release, and only
+> turning Browser View off let it be resized. Only the **breakpoint buttons**
+> are held previews now (`beginPreview`, never a step). Read the bullets below
+> with that change: where they say a drag "ends with `cancelInteraction()`",
+> it commits.
+
 - **Dragging a Browser View's handles** is `beginInteraction("Preview
   Width")`, then `previewDocument`. Width and height reflow the site live
   (the metrics override follows every step, and the screencast every settled
@@ -590,8 +600,11 @@ The tests:
     extra code.
   - Changing the address during a preview also changes the interaction's saved
     `before` and `base`, so ending the preview doesn't put an old address back.
-  - Dragging a handle of one selected Browser View is a "Preview Width" that
-    is cancelled on release. Other frames, and a Browser View selected with
+  - Dragging a handle of one selected live Browser View is a "Resize" that is
+    committed on release (it was a cancelled "Preview Width" before 2026-09-30).
+    `previewFrameBox` resizes with `preview = interaction->discard`, so a kept
+    drag moves children by their constraints (no `previewRule` is written) and a
+    locked frame is left alone. Other frames, and a Browser View selected with
     others, scale as before.
   - The breakpoint buttons sit in the bar, right of the name, and show for a
     selected, browsed or hovered frame (the hover reaches 36 px above the
@@ -620,7 +633,7 @@ The tests:
     `chrome-error://`; the frame keeps `unreachableUrl`, the address that was
     tried.
   - **The design width is `EditorSession::designDocument()`.** During a held
-    preview it is the interaction's `before`; save, export, Share, Export for
+    preview (not a drag, which is kept) it is the interaction's `before`; save, export, Share, Export for
     Screens and the agent's export all read it, so a phone-width preview is
     never written out as the design.
   - **A held preview and undo.** The first Ctrl+Z ends the held width and

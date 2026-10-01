@@ -222,6 +222,57 @@ private slots:
         QVERIFY(!board.session.isModified());
     }
 
+    void aKeptResizeIsOneStepAndTheDesignWidthFollowsIt()
+    {
+        Board board;
+        const QUuid badge = board.addBadge();
+        const int steps = board.session.undoNames().size();
+        board.session.beginInteraction(QStringLiteral("Resize"));
+        QVERIFY(!board.session.isPreviewOnly());
+        board.session.previewFrameBox(board.frame, {0, 0, 200, 300});
+        board.session.previewFrameBox(board.frame, {0, 0, 390, 350});
+        // The design box is the frame's size now, not the one before the drag.
+        QCOMPARE(board.session.designBox(board.frame), QRectF(0, 0, 390, 350));
+        QCOMPARE(board.session.designDocument().bounds(board.frame), QRectF(0, 0, 390, 350));
+        board.session.commitInteraction();
+        QCOMPARE(board.box(board.frame), QRectF(0, 0, 390, 350));
+        QCOMPARE(board.session.designBox(board.frame), QRectF(0, 0, 390, 350));
+        QCOMPARE(board.session.undoNames().size(), steps + 1);
+        QCOMPARE(board.session.undoNames().back(), QStringLiteral("Resize"));
+        QVERIFY(board.session.isModified());
+        // The badge took its constraint and keeps no preview rule from it.
+        QCOMPARE(board.box(badge).x(), 310.0);
+        QVERIFY(!board.session.document()->find(badge)->layout.absolute);
+        board.session.undo();
+        QCOMPARE(board.box(board.frame), QRectF(0, 0, 400, 300));
+        QCOMPARE(board.box(badge).x(), 320.0);
+        QCOMPARE(board.session.undoNames().size(), steps);
+    }
+
+    void aKeptResizeOfALockedFrameChangesNothing()
+    {
+        Board board;
+        board.session.setLocked(board.frame, true);
+        board.session.beginInteraction(QStringLiteral("Resize"));
+        board.session.previewFrameBox(board.frame, {0, 0, 200, 300});
+        QCOMPARE(board.box(board.frame), QRectF(0, 0, 400, 300));
+        board.session.cancelInteraction();
+    }
+
+    void aPreviewHeldOverAKeptSizeReturnsToThatSize()
+    {
+        Board board;
+        board.session.beginInteraction(QStringLiteral("Resize"));
+        board.session.previewFrameBox(board.frame, {0, 0, 500, 300});
+        board.session.commitInteraction();
+        board.session.beginPreview(QStringLiteral("Preview Width"));
+        board.session.previewFrameBox(board.frame, {0, 0, 390, 300});
+        QCOMPARE(board.session.designBox(board.frame), QRectF(0, 0, 500, 300));
+        QCOMPARE(board.session.designDocument().bounds(board.frame), QRectF(0, 0, 500, 300));
+        board.session.cancelInteraction();
+        QCOMPARE(board.box(board.frame), QRectF(0, 0, 500, 300));
+    }
+
     void committingAPreviewRecordsNothing()
     {
         Board board;

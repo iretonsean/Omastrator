@@ -106,12 +106,13 @@ public:
     // A resize preview of a Browser View (docs/BROWSER-VIEW.md, section 6): an interaction that is never recorded. Committing
     // it, or any edit, undo or tool change but Browse, ends it as cancelInteraction does.
     void beginPreview(const QString &name);
-    // Shows `frame` at `box`, its children following their constraints (or staying, when fixed). No step is made.
+    // Shows `frame` at `box`, its children following their constraints (or staying, when fixed, in a held preview).
+    // In a held preview no step is made; in a drag begun with beginInteraction the size is kept, as that step.
     void previewFrameBox(const QUuid &frame, const QRectF &box);
     bool isPreviewOnly() const { return m_interaction && m_interaction->discard; }
     // What is saved, exported and shared: the document without a held preview's width.
     const VectorDocument &designDocument() const { return m_interaction && m_interaction->discard ? m_interaction->before : *m_document; }
-    // The frame's box before the preview began, or its box now.
+    // The frame's box before a held preview began, or its box now.
     QRectF designBox(const QUuid &frame) const;
     // "Design Width": the frame's box becomes `box`, one undo step, as Transform's W does.
     void setDesignBox(const QUuid &frame, const QRectF &box);

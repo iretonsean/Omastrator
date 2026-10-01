@@ -304,13 +304,8 @@ void EditorCanvas::State::release(QPointF view, Qt::KeyboardModifiers modifiers)
     case DragKind::nodes:
     case DragKind::handle:
     case DragKind::convert:
-        if (drag->interacting && session.isInteracting()) {
-            // A Browser View's width was only a preview: the frame goes back to its design width.
-            if (drag->previewFrame)
-                session.cancelInteraction();
-            else
-                session.commitInteraction();
-        }
+        if (drag->interacting && session.isInteracting())
+            session.commitInteraction();
         break;
     case DragKind::shape:
         if (drag->interacting && session.isInteracting())

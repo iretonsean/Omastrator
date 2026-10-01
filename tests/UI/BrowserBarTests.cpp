@@ -339,19 +339,19 @@ private slots:
         QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, left);
         QTest::mouseMove(&rig.canvas, left + QPoint(40, 0));
         QTest::mouseMove(&rig.canvas, left + QPoint(101, 0));
-        QVERIFY(rig.session.isPreviewOnly());
+        QVERIFY(rig.session.isInteracting());
         QRectF shown = rig.object(rig.frame)->path.bounds();
         QVERIFY(shown.left() > 100);
         QVERIFY(qAbs(shown.right() - 700) < 1e-6);
         QCOMPARE(shown.width(), std::round(shown.width()));
         QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, left + QPoint(101, 0));
-        QVERIFY(!rig.session.isPreviewOnly());
-        // The top-middle handle, dragged down: the bottom edge (600) stays.
-        const QPoint top = rig.view({400, 200}).toPoint();
+        QVERIFY(!rig.session.isInteracting());
+        // The top-middle handle, dragged down: the bottom edge (600) stays. The frame kept its new width.
+        const QPoint top = rig.view({shown.center().x(), 200}).toPoint();
         QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, top);
         QTest::mouseMove(&rig.canvas, top + QPoint(0, 30));
         QTest::mouseMove(&rig.canvas, top + QPoint(0, 77));
-        QVERIFY(rig.session.isPreviewOnly());
+        QVERIFY(rig.session.isInteracting());
         shown = rig.object(rig.frame)->path.bounds();
         QVERIFY(shown.top() > 200);
         QVERIFY(qAbs(shown.bottom() - 600) < 1e-6);
@@ -371,9 +371,9 @@ private slots:
         QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle);
         QTest::mouseMove(&rig.canvas, handle - QPoint(40, 0));
         QTest::mouseMove(&rig.canvas, to);
-        QVERIFY(rig.session.isPreviewOnly());
+        QVERIFY(rig.session.isInteracting());
         const double width = rig.object(rig.frame)->path.bounds().width();
-        // The preview is neither the raw 600 − 101/zoom nor anything but whole px.
+        // The size is neither the raw 600 − 101/zoom nor anything but whole px.
         QVERIFY(qAbs((600 - 101 / zoom) - std::round(600 - 101 / zoom)) > 0.01);
         QCOMPARE(width, std::round(width));
         QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, to);
@@ -583,23 +583,91 @@ private slots:
         QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
     }
 
-    void draggingAHandleOfABrowserViewIsAPreviewThatEndsOnRelease()
+    void draggingAHandleOfABrowserViewResizesItAndItStaysAfterRelease()
     {
         Rig rig;
         rig.add();
         rig.session.select({rig.frame});
-        const auto steps = rig.session.undoNames();
+        const int steps = rig.session.undoNames().size();
         // The right-middle handle.
         const QPoint handle = rig.view({700, 400}).toPoint();
         QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle);
         QTest::mouseMove(&rig.canvas, handle - QPoint(40, 0));
         QTest::mouseMove(&rig.canvas, handle - QPoint(120, 0));
-        QVERIFY(rig.session.isPreviewOnly());
-        QVERIFY(rig.object(rig.frame)->path.bounds().width() < 600);
-        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle - QPoint(120, 0));
+        // The page reflows while the pointer is down, and nothing is held as a preview.
+        QVERIFY(rig.session.isInteracting());
         QVERIFY(!rig.session.isPreviewOnly());
+        const double width = rig.object(rig.frame)->path.bounds().width();
+        QVERIFY(width < 600);
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle - QPoint(120, 0));
+        QVERIFY(!rig.session.isInteracting());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), width);
+        QCOMPARE(rig.session.designBox(rig.frame).width(), width);
+        QCOMPARE(rig.session.designDocument().bounds(rig.frame).width(), width);
+        QCOMPARE(rig.session.undoNames().size(), steps + 1);
+        QCOMPARE(rig.session.undoNames().back(), QStringLiteral("Resize"));
+        rig.session.undo();
         QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
-        QVERIFY(rig.session.undoNames() == steps);
+        QCOMPARE(rig.session.undoNames().size(), steps);
+        rig.session.redo();
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), width);
+    }
+
+    void aCornerDragKeepsBothWidthAndHeight()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        const QPoint corner = rig.view({700, 600}).toPoint();
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, corner);
+        QTest::mouseMove(&rig.canvas, corner - QPoint(30, 20));
+        QTest::mouseMove(&rig.canvas, corner - QPoint(90, 60));
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, corner - QPoint(90, 60));
+        const QRectF box = rig.object(rig.frame)->path.bounds();
+        QVERIFY(box.width() < 600);
+        QVERIFY(box.height() < 400);
+        QCOMPARE(box.topLeft(), QPointF(100, 200));
+        QCOMPARE(box.width(), std::round(box.width()));
+        QCOMPARE(box.height(), std::round(box.height()));
+    }
+
+    void aButtonPreviewAndAClickOnTheFramesOwnWidthComeBackAfterADrag()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        const QPoint handle = rig.view({700, 400}).toPoint();
+        QTest::mousePress(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle);
+        QTest::mouseMove(&rig.canvas, handle - QPoint(40, 0));
+        QTest::mouseMove(&rig.canvas, handle - QPoint(120, 0));
+        QTest::mouseRelease(&rig.canvas, Qt::LeftButton, Qt::NoModifier, handle - QPoint(120, 0));
+        const int own = int(std::lround(rig.object(rig.frame)->path.bounds().width()));
+        QVERIFY(own < 600);
+        // The dotted button is the new width; a preview of 390 leaves the frame's own size to come back to.
+        rig.click(rig.button(390, rig.host.widths));
+        QVERIFY(rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 390.0);
+        QCOMPARE(int(std::lround(rig.session.designBox(rig.frame).width())), own);
+        rig.click(rig.button(own, rig.host.widths));
+        QVERIFY(!rig.session.isPreviewOnly());
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), double(own));
+        // Set as Design Width on a preview is still its own step, on top of the drag's.
+        rig.click(rig.button(768, rig.host.widths));
+        rig.session.setPreviewAsDesignWidth();
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 768.0);
+        QCOMPARE(rig.session.undoNames().back(), QStringLiteral("Design Width"));
+    }
+
+    void aLockedBrowserViewDoesNotResizeThroughTheFrameBox()
+    {
+        Rig rig;
+        rig.add();
+        rig.session.select({rig.frame});
+        rig.session.setLocked(rig.frame, true);
+        rig.session.beginInteraction(QStringLiteral("Resize"));
+        rig.session.previewFrameBox(rig.frame, QRectF(100, 200, 300, 400));
+        QCOMPARE(rig.object(rig.frame)->path.bounds().width(), 600.0);
+        rig.session.cancelInteraction();
     }
 
     void theSignInStripOffersAndRecordsTheAnswer()

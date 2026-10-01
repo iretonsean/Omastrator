@@ -86,11 +86,14 @@ Omastrator's thesis is that designing should feel as simple as the idea: profess
   shows a live web page, from Omastrator's own Chromium profile, not yours. Type
   an address in the bar above it. The page draws live on the
   canvas; the Browse tool (Selection flyout) clicks, types and scrolls inside
-  it, and Esc leaves. Dragging its handles, or pressing a width in the bar
-  (from the site's own breakpoints when it is a registered site of yours, else
-  390, 768, 1280 and 1440), previews the site at that width and never
-  makes an undo step; Set as Design Width (bar menu or Object ▸ Browser View)
-  makes it the frame's width in one step. Layout's "Fixed while previewing"
+  it, and Esc leaves. Dragging its handles resizes the frame for real, like any frame:
+  the page reflows while you drag, and the frame keeps the new size (one undo
+  step). Pressing a width in the bar (from the site's own breakpoints when it
+  is a registered site of yours, else 390, 768, 1280 and 1440) only previews
+  the site at that width and makes no undo step; the width with a dot is the
+  frame's own, and pressing it returns to it. Set as Design Width (bar menu
+  or Object ▸ Browser View) makes a previewed width the frame's width in one
+  step. Layout's "Fixed while previewing"
   keeps a note or callout put during a preview. Frames pause when off screen,
   small or hidden, at most 8 tabs are open at once, and `omastrator reset` closes them.
   Sign-in happens once in a normal window on the same profile.

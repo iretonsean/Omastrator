@@ -157,3 +157,9 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   - Every page button has the same opacity rule as the numbers, focused 1 and the rest 0.5. A page workspace always holds the editor or a stand-in, so there is no "empty" state.
   - The claims file gained `document` and `pageName` for each claim; older files are read by splitting the workspace name at the first " · ".
   - The gap before the first page is `Style.spaceReal(3)`, about twice the trailing gap of Omarchy's numbers. I did not draw a separator line.
+- [Intel] **A live Browser View's edge drag is a real resize** (fix/live-resize-sticks). It was a preview that snapped back on release; the author asked for it to resize like any frame. Decided while building:
+  - The drag keeps width and height as one undo step named "Resize". Undo gives the old size back; the design width is the frame's width, so it follows.
+  - The breakpoint buttons stay previews, and the dotted button is the frame's own width (so it moves after a drag). Set as Design Width still turns a previewed width into the frame's own, as "Design Width".
+  - A kept drag moves children by their constraints, as W and H do. "Fixed while previewing" applies to breakpoint previews only, since it would otherwise turn children absolute for good. A page-holding frame has no vector children to move in practice.
+  - A locked Browser View is not resized by the drag (the handle path skipped the lock check while it was only a preview).
+  - Dragging a handle while a button preview is held ends the preview first (the press already did this), then resizes the frame's own size.

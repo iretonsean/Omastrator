@@ -126,15 +126,20 @@ void EditorSession::previewFrameBox(const QUuid &frame, const QRectF &box)
 {
     if (!m_document || !m_interaction || !m_interaction->base.find(frame))
         return;
+    // A held width is only a preview, so a fixed child stays put; a drag keeps its size, so it resizes like any frame.
+    const bool preview = m_interaction->discard;
     VectorDocument document = m_interaction->base;
-    document.resizeFrame(frame, box, true);
+    if (!preview && document.isEffectivelyLocked(frame))
+        return;
+    document.resizeFrame(frame, box, preview);
     m_document = std::move(document);
     notify();
 }
 
 QRectF EditorSession::designBox(const QUuid &frame) const
 {
-    const VectorDocument *document = m_interaction ? &m_interaction->before : m_document ? &*m_document : nullptr;
+    // Only a held width leaves the frame's own size behind; a drag that is kept moves it.
+    const VectorDocument *document = m_interaction && m_interaction->discard ? &m_interaction->before : m_document ? &*m_document : nullptr;
     return document && document->find(frame) ? document->bounds(frame) : QRectF();
 }
 
