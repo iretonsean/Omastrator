@@ -175,14 +175,14 @@ PanelSection *PropertiesPanel::documentSection()
     size->addWidget(m_artboardHeight);
     body->addLayout(size);
     m_background = new PaintSwatch([this] {
-        return Paint::solid(m_session.document() ? m_session.document()->artboard(m_session.activeArtboard()).background : QColor(Qt::white));
+        return Paint::solid(m_session.document() && m_session.document()->artboardCount() > 0 ? m_session.document()->artboard(m_session.activeArtboard()).background : QColor(Qt::white));
     }, false, m_document);
     m_background->setObjectName(QStringLiteral("artboardBackground"));
     m_background->setFixedSize(36, 22);
     m_background->setToolTip(QStringLiteral("Artboard background color"));
     m_background->setAccessibleName(QStringLiteral("Artboard background color"));
     connect(m_background, &QAbstractButton::clicked, this, [this] {
-        if (!m_session.document())
+        if (!m_session.document() || m_session.document()->artboardCount() == 0)
             return;
         ColorPickerSheet::showIn(m_picker, QStringLiteral("Artboard Background"), m_session.document()->artboard(m_session.activeArtboard()).background,
                                  [this](const QColor &color) { m_session.setArtboardBackground(color); });
@@ -302,7 +302,7 @@ void PropertiesPanel::artboardsMenu(int index, QPoint at)
     menu.addAction(QStringLiteral("Rename…"), this, [this, index] { ObjectDialogs::renameArtboard(m_session, index, window()); });
     menu.addAction(QStringLiteral("Duplicate"), this, [this, index] { m_session.duplicateArtboard(index); });
     QAction *deleteOne = menu.addAction(QStringLiteral("Delete"), this, [this, index] { m_session.deleteArtboard(index); });
-    deleteOne->setEnabled(m_session.document() && m_session.document()->artboardCount() > 1);
+    deleteOne->setEnabled(m_session.document() && m_session.document()->artboardCount() > 0);
     menu.addSeparator();
     const bool exported = m_session.document() && m_session.document()->artboard(index).exported;
     QAction *toggle = menu.addAction(QStringLiteral("Export Artboard"), this, [this, index, exported] { m_session.setArtboardExported(index, !exported); });
@@ -366,7 +366,12 @@ void PropertiesPanel::synchronize()
     m_session.scaleStrokes = m_scaleStrokes->isChecked();
     m_session.scaleCorners = m_scaleCorners->isChecked();
 
-    const QSizeF size = drawn ? m_session.document()->artboard(m_session.activeArtboard()).rect.size() : QSizeF(0, 0);
+    // A page with no artboard has no size or paper to edit.
+    const bool hasBoard = drawn && m_session.document()->artboardCount() > 0;
+    const QSizeF size = hasBoard ? m_session.document()->artboard(m_session.activeArtboard()).rect.size() : QSizeF(0, 0);
+    m_artboardWidth->setEnabled(hasBoard);
+    m_artboardHeight->setEnabled(hasBoard);
+    m_background->setEnabled(hasBoard);
     m_artboardWidth->sync(size.width());
     m_artboardHeight->sync(size.height());
     m_background->update();
@@ -374,8 +379,8 @@ void PropertiesPanel::synchronize()
         synchronizeArtboards();
     {
         const QSignalBlocker quiet(m_artboardExported);
-        m_artboardExported->setChecked(!drawn || m_session.document()->artboard(m_session.activeArtboard()).exported);
-        m_artboardExported->setEnabled(drawn);
+        m_artboardExported->setChecked(!hasBoard || m_session.document()->artboard(m_session.activeArtboard()).exported);
+        m_artboardExported->setEnabled(hasBoard);
     }
     for (const auto &[box, on] : {std::pair{m_grid, m_session.showsGrid}, std::pair{m_snap, m_session.snapsToGrid},
                                   std::pair{m_outline, m_session.showsOutline}}) {

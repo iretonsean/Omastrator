@@ -59,16 +59,30 @@ std::vector<Subject> subjects(const VectorDocument &document, const std::vector<
     }
     const auto folderOf = [&](const QUuid &page) { return pages.size() > 1 ? folders[document.resolvePage(page)] : QString(); };
     for (const QUuid &id : artboardIds) {
+        bool found = false;
         for (const Page &page : pages) {
             VectorDocument shown = document;
             shown.currentPage = page.id;
             const int index = shown.artboardIndex(id);
             if (index < 0)
                 continue;
-            if (!shown.artboard(index).exported)
-                break;
-            result.push_back({sanitize(shown.artboard(index).name), folderOf(page.id), shown.artboards.empty() ? shown : shown.artboardDocument(index)});
+            found = true;
+            if (shown.artboard(index).exported)
+                result.push_back({sanitize(shown.artboard(index).name), folderOf(page.id), shown.artboards.empty() ? shown : shown.artboardDocument(index)});
             break;
+        }
+        if (found)
+            continue;
+        // Not an artboard: a top-level frame of a page without artboards, or such a page's content (named by the page's id).
+        if (const VectorObject *frame = document.find(id); frame && frame->kind == ObjectKind::frame) {
+            VectorDocument shown = document;
+            shown.currentPage = document.pageOf(id);
+            result.push_back({sanitize(frame->name), folderOf(shown.currentPage), shown.croppedTo({id})});
+        } else if (document.pageIndex(id) >= 0) {
+            VectorDocument shown = document;
+            shown.currentPage = id;
+            if (shown.artboardCount() == 0 && shown.topLevelFrames().empty() && !shown.topLevelArt().empty())
+                result.push_back({sanitize(pages[size_t(document.pageIndex(id))].name), folderOf(id), shown.contentPage()});
         }
     }
     for (const QUuid &id : assetIds) {

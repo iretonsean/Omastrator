@@ -154,7 +154,7 @@ void EditorSession::closeDocument()
 
 void EditorSession::setArtboardBackground(const QColor &color)
 {
-    if (!m_document)
+    if (!m_document || m_document->artboardCount() == 0)
         return;
     const int index = activeArtboard();
     if (m_document->artboard(index).background == color)
@@ -635,6 +635,10 @@ void EditorSession::zoomToFit()
 {
     if (!m_document)
         return;
+    if (m_document->artboardCount() == 0) {
+        fitWithoutArtboard();
+        return;
+    }
     const Artboard first = m_document->artboard(0);
     if (m_document->artboardCount() == 1 && first.rect.topLeft() == QPointF(0, 0)) {
         viewport.fit(m_document->viewSize());

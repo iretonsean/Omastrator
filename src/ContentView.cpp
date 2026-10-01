@@ -539,12 +539,18 @@ void ContentView::synchronize()
     if (document) {
         m_zoom->setText(percent(m_session.viewport.zoom()));
         const QLocale english(QLocale::English, QLocale::UnitedStates);
-        const Artboard active = document->artboard(m_session.activeArtboard());
-        const QString size = QStringLiteral("%1 × %2 pt").arg(english.toString(active.rect.width(), 'g', 6), english.toString(active.rect.height(), 'g', 6));
-        // Two or more pages: the page leads, "Page 2 · Artboard 1 · 400 × 300 pt".
-        QString text = document->artboardCount() > 1 ? active.name + QStringLiteral(" · ") + size : size;
-        if (document->pageCount() > 1)
-            text = document->allPages()[size_t(document->pageIndex(document->currentPageId()))].name + QStringLiteral(" · ") + text;
+        QString text;
+        if (document->artboardCount() == 0) {
+            // No artboard to size: the page's name stands in ("Page 1").
+            text = document->allPages()[size_t(document->pageIndex(document->currentPageId()))].name;
+        } else {
+            const Artboard active = document->artboard(m_session.activeArtboard());
+            const QString size = QStringLiteral("%1 × %2 pt").arg(english.toString(active.rect.width(), 'g', 6), english.toString(active.rect.height(), 'g', 6));
+            // Two or more pages: the page leads, "Page 2 · Artboard 1 · 400 × 300 pt".
+            text = document->artboardCount() > 1 ? active.name + QStringLiteral(" · ") + size : size;
+            if (document->pageCount() > 1)
+                text = document->allPages()[size_t(document->pageIndex(document->currentPageId()))].name + QStringLiteral(" · ") + text;
+        }
         m_artboard->setText(text);
         const size_t count = m_session.selection().size();
         m_selection->setText(count == 0 ? QStringLiteral("No selection") : count == 1 ? QStringLiteral("1 object selected")

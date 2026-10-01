@@ -115,7 +115,7 @@ void VectorDocument::ensurePages()
     if (wasImplicit)
         pages.push_back(Page{implicitPageId(), QStringLiteral("Page 1")});
     // Explicit artboards, so a second page has somewhere to keep its own.
-    if (artboards.empty())
+    if (artboards.empty() && !artboardsListed)
         artboards.push_back(implicitArtboard());
     for (VectorObject &object : objects) {
         if (!object.parentID)
@@ -134,11 +134,12 @@ void VectorDocument::ensurePages()
             layer.page = page.id;
             objects.push_back(layer);
         }
-        const bool hasBoard = std::any_of(artboards.begin(), artboards.end(), [&](const Artboard &board) { return board.page == page.id; });
+        // A listed document may have pages without artboards; only an unlisted one fills the gap.
+        const bool hasBoard = artboardsListed || std::any_of(artboards.begin(), artboards.end(), [&](const Artboard &board) { return board.page == page.id; });
         if (!hasBoard) {
             Artboard board;
             board.name = QStringLiteral("Artboard 1");
-            board.rect = QRectF(QPointF(0, 0), artboards.front().rect.size());
+            board.rect = QRectF(QPointF(0, 0), size);
             board.page = page.id;
             artboards.push_back(board);
         }

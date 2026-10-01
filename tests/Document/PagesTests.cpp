@@ -384,9 +384,10 @@ private slots:
         QCOMPARE(session.currentPage(), page);
         QCOMPARE(document.layers().size(), size_t(1));
         QCOMPARE(document.layersOn(first).size(), size_t(1));
-        QCOMPARE(document.artboardCount(), 1);
-        QCOMPARE(document.artboard(0).rect, QRectF(0, 0, 300, 200));
-        QCOMPARE(document.allArtboards().front().page, page);
+        // The new page has no artboard; the first page keeps its own.
+        QCOMPARE(document.artboardCount(), 0);
+        QCOMPARE(document.artboardsOn(first).size(), size_t(1));
+        QCOMPARE(document.artboardsOn(first).front().rect, QRectF(0, 0, 300, 200));
         session.undo();
         QCOMPARE(session.currentPage(), first);
         QCOMPARE(session.document()->pageCount(), 1);

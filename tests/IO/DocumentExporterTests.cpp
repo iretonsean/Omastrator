@@ -64,7 +64,7 @@ private slots:
         session.createDocument({200, 100});
         session.addArtboard(QRectF(300, 0, 120, 80));
         session.addPage(QStringLiteral("Second"));
-        session.renameArtboard(0, QStringLiteral("Wide"));
+        // New Page has no artboard; this one is its first.
         session.addArtboard(QRectF(300, 0, 50, 60));
         session.setCurrentPage(session.document()->allPages()[0].id);
         QTemporaryDir dir;
@@ -73,14 +73,14 @@ private slots:
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QString text = QString::fromLatin1(file.readAll());
-        // Four artboards, four pages, sized page 1's two then page 2's two, whichever page is current.
+        // Three artboards, three pages, sized page 1's two then page 2's, whichever page is current.
         QRegularExpression box(QStringLiteral(R"(/MediaBox \[0 0 (\d+)(?:\.0+)? (\d+)(?:\.0+)?\])"));
         QStringList sizes;
         for (auto it = box.globalMatch(text); it.hasNext();) {
             const auto match = it.next();
             sizes << match.captured(1) + QLatin1Char('x') + match.captured(2);
         }
-        QCOMPARE(sizes, (QStringList{"200x100", "120x80", "200x100", "50x60"}));
+        QCOMPARE(sizes, (QStringList{"200x100", "120x80", "50x60"}));
     }
 
     void aFlaggedArtboardOnPageTwoIsLeftOutOfTheAllPagesPdf()
@@ -90,7 +90,7 @@ private slots:
         session.addArtboard(QRectF(300, 0, 120, 80));
         session.addPage(QStringLiteral("Second"));
         session.addArtboard(QRectF(300, 0, 50, 60));
-        session.setArtboardExported(1, false);
+        session.setArtboardExported(0, false);
         // Page 1 is the current page, so the flag is on a page the export isn't showing.
         session.setCurrentPage(session.document()->allPages()[0].id);
         QTemporaryDir dir;
@@ -105,7 +105,7 @@ private slots:
             const auto match = it.next();
             sizes << match.captured(1) + QLatin1Char('x') + match.captured(2);
         }
-        QCOMPARE(sizes, (QStringList{"200x100", "120x80", "200x100"}));
+        QCOMPARE(sizes, (QStringList{"200x100", "120x80"}));
     }
 
     void aPageWithNothingToExportIsSkippedAndAllPagesOffIsAnError()
@@ -146,6 +146,7 @@ private slots:
         EditorSession session;
         session.createDocument({200, 100});
         session.addPage(QStringLiteral("Second"));
+        session.addArtboard(QRectF(0, 0, 200, 100));
         session.renameArtboard(0, QStringLiteral("Wide"));
         session.setArtboardSize(QSizeF(80, 40));
         QTemporaryDir dir;
@@ -346,6 +347,81 @@ private slots:
         } catch (const FileError &error) {
             QVERIFY(error.message().contains(QLatin1String("set not to export")));
         }
+    }
+
+    // A page with no artboard: the frames, else the content, else "Nothing to export".
+    static VectorDocument paperless()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.deleteArtboard(0);
+        return *session.document();
+    }
+
+    void withoutAnArtboardPngExportsTheContentBounds()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.deleteArtboard(0);
+        session.addPath(Shapes::rectangle({300, 300, 40, 20}), QStringLiteral("Far"));
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("content.png"));
+        DocumentExporter::writePng(*session.document(), path);
+        // The content's bounds include the 1 pt default stroke.
+        QCOMPARE(QImage(path).size(), QSize(41, 21));
+        const VectorDocument page = DocumentExporter::activePage(*session.document(), -1);
+        QCOMPARE(page.size, QSizeF(41, 21));
+    }
+
+    void withoutAnArtboardFramesExportInsteadOfTheContent()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.deleteArtboard(0);
+        session.addFrame({10, 10, 80, 60});
+        session.addPath(Shapes::rectangle({500, 500, 400, 400}), QStringLiteral("Stray"));
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("frame.png"));
+        DocumentExporter::writePng(*session.document(), path);
+        QCOMPARE(QImage(path).size(), QSize(80, 60));
+        QCOMPARE(DocumentExporter::exportedPage(*session.document()).size, QSizeF(80, 60));
+    }
+
+    void withoutAnArtboardPdfHasAPagePerFrameElseOneOfTheContent()
+    {
+        EditorSession session;
+        session.createDocument({200, 100});
+        session.deleteArtboard(0);
+        session.addPath(Shapes::rectangle({300, 300, 40, 20}), QStringLiteral("Far"));
+        QTemporaryDir dir;
+        QCOMPARE(DocumentExporter::writePdf(*session.document(), dir.filePath(QStringLiteral("one.pdf"))), 1);
+        session.addFrame({0, 0, 50, 50});
+        session.addFrame({100, 0, 50, 50});
+        QCOMPARE(DocumentExporter::writePdf(*session.document(), dir.filePath(QStringLiteral("frames.pdf"))), 2);
+    }
+
+    void withNothingAtAllExportSaysSoAndWritesNoFile()
+    {
+        const VectorDocument document = paperless();
+        QTemporaryDir dir;
+        for (const QString &name : {QStringLiteral("none.png"), QStringLiteral("none.jpg"), QStringLiteral("none.svg"), QStringLiteral("none.pdf")}) {
+            const QString path = dir.filePath(name);
+            try {
+                if (name.endsWith(QLatin1String("png")))
+                    DocumentExporter::writePng(document, path);
+                else if (name.endsWith(QLatin1String("jpg")))
+                    DocumentExporter::writeJpeg(document, path);
+                else if (name.endsWith(QLatin1String("svg")))
+                    SvgExporter::write(document, path);
+                else
+                    DocumentExporter::writePdf(document, path);
+                QFAIL("expected FileError");
+            } catch (const FileError &error) {
+                QVERIFY(error.message().contains(QLatin1String("Nothing to export")));
+            }
+            QVERIFY(!QFileInfo::exists(path));
+        }
+        QVERIFY_THROWS_EXCEPTION(FileError, DocumentExporter::activePage(document, -1));
     }
 
     void unwritablePathIsAFileError()

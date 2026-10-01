@@ -82,7 +82,7 @@ private slots:
         EditorSession session;
         session.createDocument({200, 100});
         session.addPage(QStringLiteral("Second"));
-        session.setArtboardSize({120, 80});
+        session.addArtboard(QRectF(0, 0, 120, 80));
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString path = dir.filePath(QStringLiteral("pages.pdf"));

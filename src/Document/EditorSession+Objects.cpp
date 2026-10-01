@@ -164,7 +164,7 @@ QUuid EditorSession::placeImage(const QImage &image, const QString &name, std::o
     object.name = name;
     QSizeF size = image.size();
     // Larger than the artboard: fit it, as Place does.
-    const QRectF board = m_document->artboard(activeArtboard()).rect;
+    const QRectF board = paperRect();
     const double scale = std::min({1.0, board.width() / size.width(), board.height() / size.height()});
     const QPointF middle = center.value_or(board.center());
     object.transform = QTransform::fromScale(scale, scale)
@@ -490,7 +490,7 @@ QRectF EditorSession::framePlacement(QSizeF size) const
 {
     if (!m_document)
         return QRectF(QPointF(0, 0), size);
-    const QPointF middle = viewport.viewSize.isEmpty() ? m_document->artboard(m_activeArtboard).rect.center()
+    const QPointF middle = viewport.viewSize.isEmpty() ? paperRect().center()
                                                        : viewport.documentPoint(viewport.center(), m_document->size);
     return QRectF(QPointF(std::round(middle.x() - size.width() / 2), std::round(middle.y() - size.height() / 2)), size);
 }
@@ -704,9 +704,13 @@ void EditorSession::align(AlignEdge edge, AlignTarget target)
         return;
     // A key object, once clicked, is what the selection aligns to.
     const bool toKey = m_keyObject && target != AlignTarget::artboard;
+    const bool noBoard = m_document->artboardCount() == 0;
+    // With no artboard, "align to artboard" aligns to the selection itself: one object has nothing to move against.
+    if (noBoard && !toKey && m_selection.size() == 1)
+        return;
     const QRectF reference = toKey ? m_document->bounds(*m_keyObject)
-        : target == AlignTarget::artboard || m_selection.size() == 1 ? m_document->artboard(activeArtboard()).rect
-                                                                     : selectionBounds();
+        : !noBoard && (target == AlignTarget::artboard || m_selection.size() == 1) ? m_document->artboard(activeArtboard()).rect
+                                                                                   : selectionBounds();
     edit(QStringLiteral("Align"), [&](VectorDocument &document) {
         for (const QUuid &id : m_selection) {
             if (document.isEffectivelyLocked(id) || (toKey && id == *m_keyObject))

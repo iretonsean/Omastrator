@@ -153,7 +153,9 @@ void PropertiesPanelTests::theArtboardListIsTheCurrentPages()
     session.addArtboard(QRectF(500, 0, 200, 100));
     QCOMPARE(list->count(), 2);
     session.addPage(QStringLiteral("Second"));
-    QCOMPARE(list->count(), 1);
+    // New Page has no artboard, and the size fields go quiet with none.
+    QCOMPARE(list->count(), 0);
+    QVERIFY(!panel.findChild<QLineEdit *>("artboardWidth")->isEnabled());
     session.setCurrentPage(session.document()->allPages()[0].id);
     QCOMPARE(list->count(), 2);
 }

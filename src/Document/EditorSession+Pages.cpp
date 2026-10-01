@@ -72,6 +72,11 @@ bool EditorSession::enterPage()
     m_activeArtboard = 0;
     m_artboardSelected = false;
     const QRectF bounds = m_document->artboardBounds();
+    if (m_document->artboardCount() == 0) {
+        if (!frameView(m_document->viewBounds()))
+            viewport.fit(size);
+        return true;
+    }
     if (m_document->artboardCount() == 1 && bounds.topLeft() == QPointF(0, 0))
         viewport.fit(size);
     else if (!frameView(bounds))
@@ -91,18 +96,12 @@ QUuid EditorSession::addPage(const QString &name)
     page.name = m_document->uniquePageName(wanted.isEmpty() ? QStringLiteral("Page %1").arg(m_document->pageCount() + 1) : wanted);
     const QUuid id = page.id;
     edit(QStringLiteral("New Page"), [&](VectorDocument &document) {
-        // The new page takes the current page's first artboard's size and paper.
-        const Artboard first = document.artboard(0);
+        // The existing artboards become explicit, and the list the whole truth: the new page has none.
         document.ensurePages();
+        document.artboardsListed = true;
         const int at = document.pageIndex(document.currentPageId()) + 1;
         document.pages.insert(document.pages.begin() + at, page);
         document.appendLayer(freshLayer(page.id));
-        Artboard board;
-        board.name = QStringLiteral("Artboard 1");
-        board.rect = QRectF(QPointF(0, 0), first.rect.size());
-        board.background = first.background;
-        board.page = page.id;
-        document.artboards.push_back(board);
         document.currentPage = page.id;
         m_selection.clear();
     });

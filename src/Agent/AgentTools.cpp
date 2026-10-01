@@ -297,6 +297,9 @@ QJsonObject AgentTools::documentGet(const QJsonObject &params)
             boards[index] = board;
         }
         json["artboards"] = boards;
+    } else if (current.document()->artboardsListed) {
+        // The page set has none: say so, so the agent doesn't look for one.
+        json["artboards"] = QJsonArray();
     }
     json["selection"] = idArray(current.selection());
     if (const auto layer = current.activeLayer())
@@ -332,8 +335,14 @@ QJsonObject AgentTools::render(const QJsonObject &params)
         fail(QStringLiteral("The selection is on the current page. Leave out “page”, or leave out “selectionOnly”."));
     // One rule for any number of pages: the page's first artboard, from the origin.
     copy.currentPage = page;
-    if (!selectionOnly && !copy.artboards.empty())
+    if (!selectionOnly && copy.artboardCount() == 0) {
+        // No artboard: the top-level frames together, else all the content.
+        if (copy.topLevelArt().empty())
+            fail(QStringLiteral("Nothing to render. This page has no artboard and no objects."));
+        copy = copy.contentPage();
+    } else if (!selectionOnly && !copy.artboards.empty()) {
         copy = copy.artboardDocument(0);
+    }
     QRectF area(QPointF(0, 0), copy.size);
     if (selectionOnly) {
         if (!current.hasSelection())
@@ -433,6 +442,8 @@ QJsonObject AgentTools::exportFile(const QJsonObject &params)
     // A PDF holds every exported artboard of every page; the rest write the first that exports.
     if (format == DocumentExporter::Format::pdf)
         reply["sheets"] = sheets;
+    else if (current.artboardCount() == 0)
+        reply["artboard"] = QJsonValue::Null;
     else if (!current.artboards.empty())
         reply["artboard"] = current.artboard(current.firstExportedArtboard()).name;
     return reply;

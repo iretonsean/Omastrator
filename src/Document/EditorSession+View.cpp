@@ -199,7 +199,7 @@ void EditorSession::releaseGuides()
         std::vector<QUuid> made;
         const std::vector<Guide> guides = document.guidesOnCurrentPage();
         std::erase_if(document.guides, [&](const Guide &guide) { return document.isOnCurrentPage(guide); });
-        const QRectF extent = document.artboard(activeArtboard()).rect;
+        const QRectF extent = paperRect();
         m_selection.clear();
         for (const Guide &guide : guides) {
             const QPointF from = guide.orientation == Qt::Horizontal ? QPointF(extent.left(), guide.position) : QPointF(guide.position, extent.top());

@@ -273,8 +273,11 @@ private slots:
         w.session().deselectAll();
         QCOMPARE(w.share().scopeText(), QStringLiteral("the artboard"));
         w.session().addPage(QStringLiteral("Second"));
-        QCOMPARE(w.share().scopeText(), QStringLiteral("the artboard on “Second”"));
+        // New Page has no artboard: the scope is the page's content.
+        QCOMPARE(w.share().scopeText(), QStringLiteral("the page’s content on “Second”"));
         w.session().addArtboard(QRectF(500, 0, 100, 100));
+        QCOMPARE(w.share().scopeText(), QStringLiteral("the artboard on “Second”"));
+        w.session().addArtboard(QRectF(700, 0, 100, 100));
         QCOMPARE(w.share().scopeText(), QStringLiteral("the artboard “Artboard 2” on “Second”"));
     }
 

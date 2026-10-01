@@ -91,8 +91,27 @@ Format format(const QString &path)
     throw FileError(QStringLiteral("Choose a file name ending in .pdf, .svg, .png or .jpg."));
 }
 
+namespace {
+// A page with no artboard exports its top-level frames together, else its content.
+VectorDocument withoutArtboard(const VectorDocument &document)
+{
+    if (document.topLevelArt().empty())
+        throw FileError(QStringLiteral("Nothing to export. This page has no artboard and no objects."));
+    return document.contentPage();
+}
+}
+
+VectorDocument activePage(const VectorDocument &document, int artboard)
+{
+    if (document.artboardCount() == 0)
+        return withoutArtboard(document);
+    return document.artboards.empty() ? document : document.artboardDocument(artboard);
+}
+
 VectorDocument exportedPage(const VectorDocument &document)
 {
+    if (document.artboardCount() == 0)
+        return withoutArtboard(document);
     if (document.artboards.empty())
         return document;
     // Several artboards: a call exports the first one that exports, alone.
@@ -109,6 +128,12 @@ int writePdf(const VectorDocument &document, const QString &path)
     for (const Page &page : document.allPages()) {
         VectorDocument shown = document;
         shown.currentPage = page.id;
+        if (shown.artboardCount() == 0) {
+            // No artboard: a page per top-level frame, else one of the content.
+            for (VectorDocument &sheet : shown.paperlessSheets())
+                sheets.push_back(std::move(sheet));
+            continue;
+        }
         if (shown.artboards.empty()) {
             sheets.push_back(shown);
             continue;
@@ -118,6 +143,8 @@ int writePdf(const VectorDocument &document, const QString &path)
                 sheets.push_back(shown.artboardDocument(index));
         }
     }
+    if (sheets.empty() && document.artboards.empty())
+        throw FileError(QStringLiteral("Nothing to export. No page has an artboard or an object."));
     if (sheets.empty())
         throw FileError(QStringLiteral("Every artboard is set not to export. Turn one on in Properties ▸ Document."));
     QByteArray bytes;

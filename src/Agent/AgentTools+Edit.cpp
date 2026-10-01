@@ -219,8 +219,18 @@ QJsonObject AgentTools::align(const QJsonObject &params)
     // The artboard is the active one of the page (the current page unless `page` names another).
     const QUuid page = pageParam(params, edited).value_or(edited.currentPageId());
     const std::vector<Artboard> boards = edited.artboardsOn(page);
-    const int active = page == edited.currentPageId() ? std::clamp(session().activeArtboard(), 0, int(boards.size()) - 1) : 0;
-    AgentEdits::align(edited, ids, AlignEdge(edge), AlignTarget(target), boards[size_t(active)].rect);
+    QRectF paper;
+    int alignTarget = target;
+    if (boards.empty()) {
+        // No artboard to align to: several objects align to their own bounds; one has nothing to move against.
+        if (ids.size() < 2)
+            fail(QStringLiteral("This page has no artboard. Select two or more objects to align them to each other."));
+        alignTarget = int(AlignTarget::selection);
+    } else {
+        const int active = page == edited.currentPageId() ? std::clamp(session().activeArtboard(), 0, int(boards.size()) - 1) : 0;
+        paper = boards[size_t(active)].rect;
+    }
+    AgentEdits::align(edited, ids, AlignEdge(edge), AlignTarget(alignTarget), paper);
     propose(QStringLiteral("Align"), edited, ids);
     return {{"ids", idArray(ids)}, {"bounds", rect(edited.bounds(ids))}};
 }

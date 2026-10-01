@@ -21,7 +21,7 @@ checked against the code on `feat/graphite-look` (0999e92).
 | Prototyping | missing | links between frames |
 | Text boxes | there | auto width, auto height, fixed (`TextContent::area`), styles, OpenType |
 | Canvas UX | partial | artboard labels, Alt distances and rulers are there. Keys are compared in docs/SHORTCUTS.md (Ctrl+Alt+G, Shift+A and K are in). Missing: tidy up, frame labels (done with frames) |
-| Pages | **built** (feat/pages) | docs/PAGES.md: a page is its own canvas of layers, artboards and guides. The Pages list in Layers, Object ▸ Pages, Move to Page, Alt+PageUp/PageDown, Ctrl+K, the agent's `page` tool. PDF, Figma, Sketch and Penpot imports and PDF export make and use pages. Still to come: workspaces (phase 2) |
+| Pages | **built** (feat/pages) | docs/PAGES.md: a page is its own canvas of layers, artboards and guides. The Pages list in Layers, Object ▸ Pages, Move to Page, Alt+PageUp/PageDown, Ctrl+K, the agent's `page` tool. PDF, Figma, Sketch and Penpot imports and PDF export make and use pages. Still to come: workspaces (phase 2). A page may have no artboard (docs/backlog/FRAMES-ONLY.md) |
 | Image fills | missing | `PaintKind` has no image; images are only their own layers |
 | Vector networks | missing | classic contour paths |
 

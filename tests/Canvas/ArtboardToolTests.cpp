@@ -116,7 +116,7 @@ private slots:
         QVERIFY(f.session.document()->artboard(0).id != f.session.document()->artboard(1).id);
     }
 
-    void deleteRemovesTheActiveArtboardButNeverTheLast()
+    void deleteRemovesTheActiveArtboardEvenTheLast()
     {
         Fixture f;
         f.drag({300, 20}, {450, 120});
@@ -125,6 +125,12 @@ private slots:
         QTest::keyClick(&f.canvas, Qt::Key_Delete);
         QCOMPARE(f.session.document()->artboardCount(), 1);
         QTest::keyClick(&f.canvas, Qt::Key_Delete);
+        QCOMPARE(f.session.document()->artboardCount(), 0);
+        QCOMPARE(f.session.undoName(), QStringLiteral("Delete Artboard"));
+        // With none, a key press does nothing and a drag draws a new one.
+        QTest::keyClick(&f.canvas, Qt::Key_Delete);
+        QCOMPARE(f.session.document()->artboardCount(), 0);
+        f.drag({100, 100}, {200, 200});
         QCOMPARE(f.session.document()->artboardCount(), 1);
     }
 };

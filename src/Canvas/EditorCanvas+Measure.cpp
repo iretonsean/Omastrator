@@ -18,6 +18,8 @@ std::optional<QRectF> EditorCanvas::State::measureTarget() const
         if (!inside)
             return document.bounds(*hovered);
     }
+    if (document.artboardCount() == 0)
+        return std::nullopt;
     return document.artboard(session.activeArtboard()).rect;
 }
 

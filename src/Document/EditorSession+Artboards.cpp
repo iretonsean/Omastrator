@@ -35,14 +35,34 @@ void placeArtboard(VectorDocument &document, int index, QRectF rect, bool artFol
 
 int EditorSession::activeArtboard() const
 {
-    if (!m_document)
-        return 0;
+    // -1 when the page has no artboard.
+    if (!m_document || m_document->artboardCount() == 0)
+        return -1;
     return std::clamp(m_activeArtboard, 0, m_document->artboardCount() - 1);
+}
+
+QRectF EditorSession::paperRect() const
+{
+    if (!m_document)
+        return {};
+    if (m_document->artboardCount() > 0)
+        return m_document->artboard(activeArtboard()).rect;
+    const QRectF view = m_document->viewBounds();
+    return view.isEmpty() ? QRectF(QPointF(0, 0), m_document->size) : view;
+}
+
+void EditorSession::fitWithoutArtboard()
+{
+    if (!m_document)
+        return;
+    if (!frameView(m_document->viewBounds()))
+        viewport.fit(m_document->viewSize());
+    notify(false);
 }
 
 void EditorSession::setArtboardSize(QSizeF size)
 {
-    if (!m_document || !(size.width() > 0 && size.height() > 0))
+    if (!m_document || m_document->artboardCount() == 0 || !(size.width() > 0 && size.height() > 0))
         return;
     size = limited(size);
     const int index = activeArtboard();
@@ -57,7 +77,7 @@ void EditorSession::setArtboardSize(QSizeF size)
 
 void EditorSession::setActiveArtboard(int index)
 {
-    if (!m_document)
+    if (!m_document || m_document->artboardCount() == 0)
         return;
     const int clamped = std::clamp(index, 0, m_document->artboardCount() - 1);
     if (clamped == m_activeArtboard)
@@ -68,7 +88,7 @@ void EditorSession::setActiveArtboard(int index)
 
 void EditorSession::selectArtboard(int index)
 {
-    if (!m_document)
+    if (!m_document || m_document->artboardCount() == 0)
         return;
     select({});
     m_pickedNodes.clear();
@@ -82,8 +102,9 @@ QUuid EditorSession::addArtboard(QRectF rect)
     if (!m_document)
         return {};
     if (rect.isEmpty()) {
-        const QRectF from = m_document->artboard(activeArtboard()).rect;
-        rect = QRectF(from.right() + 20, from.top(), from.width(), from.height());
+        // With no artboard to copy, the first one takes the document's own size, at the origin.
+        const QRectF from = m_document->artboardCount() > 0 ? m_document->artboard(activeArtboard()).rect : QRectF(QPointF(0, 0), m_document->size);
+        rect = m_document->artboardCount() > 0 ? QRectF(from.right() + 20, from.top(), from.width(), from.height()) : from;
     }
     Artboard board;
     board.name = m_document->uniqueArtboardName();
@@ -166,7 +187,8 @@ void EditorSession::setArtboardExported(int index, bool exported)
 
 void EditorSession::deleteArtboard(int index)
 {
-    if (!m_document || m_document->artboardCount() <= 1 || index < 0 || index >= m_document->artboardCount())
+    // The last artboard goes too: a page may have none.
+    if (!m_document || index < 0 || index >= m_document->artboardCount())
         return;
     edit(QStringLiteral("Delete Artboard"), [&](VectorDocument &document) {
         std::vector<Artboard> boards = document.allArtboards();
@@ -174,7 +196,7 @@ void EditorSession::deleteArtboard(int index)
         document.setArtboards(boards);
     });
     if (m_document)
-        m_activeArtboard = std::clamp(m_activeArtboard, 0, m_document->artboardCount() - 1);
+        m_activeArtboard = std::clamp(m_activeArtboard, 0, std::max(0, m_document->artboardCount() - 1));
     m_artboardSelected = false;
     notify(false);
 }
@@ -243,6 +265,10 @@ void EditorSession::fitAllArtboards()
 {
     if (!m_document)
         return;
+    if (m_document->artboardCount() == 0) {
+        fitWithoutArtboard();
+        return;
+    }
     zoomToRect(m_document->artboardBounds());
 }
 

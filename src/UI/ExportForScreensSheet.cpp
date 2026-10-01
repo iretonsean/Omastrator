@@ -62,10 +62,19 @@ ExportForScreensSheet::ExportForScreensSheet(EditorSession &session, QWidget *pa
         // Every page's artboards, under a heading per page once there are two or more.
         const std::vector<Page> pages = document->allPages();
         for (const Page &page : pages) {
-            std::vector<Artboard> exported;
+            std::vector<std::pair<QString, QUuid>> exported;
             for (const Artboard &board : document->artboardsOn(page.id)) {
                 if (board.exported)
-                    exported.push_back(board);
+                    exported.emplace_back(board.name, board.id);
+            }
+            if (document->artboardsOn(page.id).empty()) {
+                // No artboard on this page: its top-level frames, else its content as one picture (listed by the page's id).
+                VectorDocument shown = *document;
+                shown.currentPage = page.id;
+                for (const QUuid &frame : shown.topLevelFrames())
+                    exported.emplace_back(shown.find(frame)->name, frame);
+                if (exported.empty() && !shown.topLevelArt().empty())
+                    exported.emplace_back(QStringLiteral("%1 (content)").arg(page.name), page.id);
             }
             if (pages.size() > 1 && !exported.empty()) {
                 auto *heading = new QListWidgetItem(page.name, m_artboards);
@@ -74,8 +83,8 @@ ExportForScreensSheet::ExportForScreensSheet(EditorSession &session, QWidget *pa
                 bold.setBold(true);
                 heading->setFont(bold);
             }
-            for (const Artboard &board : exported)
-                checkableItem(m_artboards, board.name, board.id.toString(QUuid::WithoutBraces), true);
+            for (const auto &[name, id] : exported)
+                checkableItem(m_artboards, name, id.toString(QUuid::WithoutBraces), true);
         }
     }
     layout->addWidget(new QLabel(QStringLiteral("Artboards"), this));
@@ -235,6 +244,10 @@ void ExportForScreensSheet::runExport()
     const std::vector<QUuid> assets = checkedAssets();
     const std::vector<double> scales = checkedScales();
     const QStringList formats = checkedFormats();
+    if (m_artboards->count() == 0 && assets.empty()) {
+        m_status->setText(QStringLiteral("Nothing to export. The document has no artboard and no objects."));
+        return;
+    }
     if ((artboards.empty() && assets.empty()) || scales.empty() || formats.isEmpty()) {
         m_status->setText(QStringLiteral("Choose at least one artboard or asset, one scale and one format."));
         return;

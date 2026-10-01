@@ -98,15 +98,17 @@ void Menus::synchronize()
     action(QStringLiteral("invertOpacityMask"))->setChecked(maskGroup && s.document()->find(*maskGroup)->mask->inverted);
     action(QStringLiteral("unlockAll"))->setEnabled(editing && drawn);
     action(QStringLiteral("showAll"))->setEnabled(editing && drawn);
-    action(QStringLiteral("artboardSize"))->setEnabled(editing && drawn);
-    action(QStringLiteral("artboardsMenu"))->setEnabled(drawn);
-    action(QStringLiteral("artboardExported"))->setEnabled(editing && drawn);
-    action(QStringLiteral("artboardExported"))->setChecked(!drawn || s.document()->artboard(s.activeArtboard()).exported);
-    for (const char *name : {"newArtboard", "duplicateArtboard", "renameArtboard", "fitArtboardToArtwork", "switchArtboardOrientation",
-                             "fitAllArtboards"})
-        action(QString::fromLatin1(name))->setEnabled(editing && drawn);
+    // A page may have no artboard: only New Artboard and Fit All work then.
     const int artboards = drawn ? s.document()->artboardCount() : 1;
-    action(QStringLiteral("deleteArtboard"))->setEnabled(editing && drawn && artboards > 1);
+    const bool hasBoard = drawn && artboards > 0;
+    action(QStringLiteral("artboardSize"))->setEnabled(editing && hasBoard);
+    action(QStringLiteral("artboardsMenu"))->setEnabled(drawn);
+    action(QStringLiteral("artboardExported"))->setEnabled(editing && hasBoard);
+    action(QStringLiteral("artboardExported"))->setChecked(!hasBoard || s.document()->artboard(s.activeArtboard()).exported);
+    for (const char *name : {"duplicateArtboard", "renameArtboard", "fitArtboardToArtwork", "switchArtboardOrientation", "deleteArtboard"})
+        action(QString::fromLatin1(name))->setEnabled(editing && hasBoard);
+    for (const char *name : {"newArtboard", "fitAllArtboards"})
+        action(QString::fromLatin1(name))->setEnabled(editing && drawn);
     for (const char *name : {"nextArtboard", "previousArtboard"})
         action(QString::fromLatin1(name))->setEnabled(drawn && artboards > 1);
     const int pages = drawn ? s.document()->pageCount() : 1;

@@ -37,10 +37,10 @@ private slots:
         // Growing `size` alone keeps the first artboard's size in step.
         document.size = QSizeF(700, 250);
         QCOMPARE(document.allArtboards().front().rect, QRectF(0, 0, 700, 250));
-        // Empty leaves one: the implicit artboard, following `size` again.
+        // Empty leaves none: the list is the truth now, and `size` stays as it was.
         document.setArtboards({});
-        QCOMPARE(document.artboardCount(), 1);
-        QCOMPARE(document.allArtboards().front().rect, QRectF(0, 0, 700, 250));
+        QCOMPARE(document.artboardCount(), 0);
+        QCOMPARE(document.size, QSizeF(700, 250));
     }
 
     void artboardAtFindsTheLastOneListedFirst()
@@ -203,12 +203,14 @@ private slots:
         QCOMPARE(session.undoName(), QStringLiteral("New Artboard"));
         session.renameArtboard(1, QStringLiteral("Phone"));
         QCOMPARE(session.document()->artboard(1).name, QStringLiteral("Phone"));
-        // Never the last one.
         session.deleteArtboard(0);
         QCOMPARE(session.document()->artboardCount(), 1);
         QCOMPARE(session.document()->artboard(0).id, first);
+        // The last one goes too, and an index past the end does nothing.
         session.deleteArtboard(0);
-        QCOMPARE(session.document()->artboardCount(), 1);
+        QCOMPARE(session.document()->artboardCount(), 0);
+        session.deleteArtboard(0);
+        QCOMPARE(session.document()->artboardCount(), 0);
     }
 
     void duplicateArtboardCopiesItsArtToTheRight()

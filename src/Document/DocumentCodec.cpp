@@ -862,6 +862,9 @@ QJsonObject encode(const VectorDocument &document, bool pictures)
         }
         json["artboards"] = boards;
     }
+    // Additive: only a document whose artboard list is the whole truth (it may have none) writes the key.
+    if (document.artboardsListed)
+        json["artboardsListed"] = true;
     // Additive: only a locked document writes the key.
     if (document.locked)
         json["locked"] = true;
@@ -909,6 +912,7 @@ VectorDocument decode(const QJsonObject &json)
         document.artboards.push_back({boardId, board["name"].toString(), rect, readColor(board["background"], Qt::white),
                                       QUuid::fromString(board["page"].toString()), board["exported"].toBool(true)});
     }
+    document.artboardsListed = json["artboardsListed"].toBool(false);
     // Version 6 (or any file with the keys): pages. A file without them is one implicit page.
     if (json.contains("pages")) {
         std::set<QUuid> pageIds;

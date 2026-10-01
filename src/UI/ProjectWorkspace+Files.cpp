@@ -193,7 +193,7 @@ bool ProjectWorkspace::placeFile(const QString &path)
             session.moveObject(id, parent, -1);
         }
         session.select({groupID});
-        const QPointF middle = session.document()->artboard(session.activeArtboard()).rect.center();
+        const QPointF middle = session.paperRect().center();
         const QPointF shift = middle - session.selectionBounds().center();
         session.transformSelection(QTransform::fromTranslate(shift.x(), shift.y()), QStringLiteral("Place"));
         session.endEdit();
@@ -210,6 +210,8 @@ QString notExportedReason(const EditorSession &session)
 {
     const std::optional<VectorDocument> &document = session.document();
     if (!document)
+        return {};
+    if (document->artboardCount() == 0)
         return {};
     const Artboard board = document->artboard(session.activeArtboard());
     if (board.exported)
@@ -229,9 +231,9 @@ bool ProjectWorkspace::exportTo(const QString &path, DocumentExporter::Format fo
         showError(QStringLiteral("Couldn’t export “%1”").arg(QFileInfo(path).fileName()), reason);
         return false;
     }
-    // Several artboards: the active one, not always the first.
-    const VectorDocument page = document->artboards.empty() ? *document : document->artboardDocument(session.activeArtboard());
     try {
+        // Several artboards: the active one, not always the first. None: the frames, else the content.
+        const VectorDocument page = format == DocumentExporter::Format::pdf ? *document : DocumentExporter::activePage(*document, session.activeArtboard());
         switch (format) {
         // The PDF is the whole document: every artboard on every page.
         case DocumentExporter::Format::pdf: DocumentExporter::writePdf(*document, path); break;
@@ -370,6 +372,11 @@ void ProjectWorkspace::exportAs(DocumentExporter::Format format)
         showError(QStringLiteral("Couldn’t export"), reason);
         return;
     }
+    // Say so before the file dialog when there is nothing to write.
+    if (const VectorDocument &shown = current().session.designDocument(); shown.artboardCount() == 0 && shown.pageCount() == 1 && shown.topLevelArt().empty()) {
+        showError(QStringLiteral("Couldn’t export"), QStringLiteral("Nothing to export. This page has no artboard and no objects."));
+        return;
+    }
     const auto [filter, suffix] = [format]() -> std::pair<QString, QString> {
         switch (format) {
         case DocumentExporter::Format::pdf: return {QStringLiteral("PDF document (*.pdf)"), QStringLiteral("pdf")};
@@ -423,7 +430,14 @@ void ProjectWorkspace::exportAs(DocumentExporter::Format format)
     auto *layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(0, 0, 0, 0);
     const VectorDocument &shown = current().session.designDocument();
-    const VectorDocument page = shown.artboards.empty() ? shown : shown.artboardDocument(current().session.activeArtboard());
+    VectorDocument page;
+    try {
+        page = DocumentExporter::activePage(shown, current().session.activeArtboard());
+    } catch (const FileError &error) {
+        showError(QStringLiteral("Couldn’t export"), error.message());
+        delete dialog;
+        return;
+    }
     layout->addWidget(new ExportSheet(page, format, [dialog, choosePath](std::optional<RasterOptions> chosen) {
         dialog->done(chosen ? QDialog::Accepted : QDialog::Rejected);
         if (chosen)

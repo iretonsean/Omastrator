@@ -3,6 +3,12 @@
 **Status: decided by the author on 2026-09-29 (remove artboards, keep frames). Parked in the
 backlog. Not scheduled.**
 
+> **Update (2026-09-30): artboards became optional first** (branch `feat/optional-artboards`). A page may
+> now have zero artboards: Delete Artboard works on the last one, New Page makes none, and export, Export for
+> Screens, PDF, Share, Fit and the agent's tools fall back to the top-level frames, else the content bounds.
+> This does not remove artboards, does not change the file format beyond one additive key (`artboardsListed`),
+> and does not touch importers (they still make artboards). The migration below is still the plan.
+
 ## Why
 An artboard and a frame do the same job today, in two models:
 - `Artboard` (`VectorDocument.h`) is a flat list beside the object tree: a name, a rect, a

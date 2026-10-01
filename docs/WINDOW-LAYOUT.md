@@ -64,6 +64,21 @@ island goes, and every workflow it started gets a place in the window. Read with
 
 The author asked for these to be decided and logged overnight (2026-09-29/30). Each can be changed.
 
+- [Mac mini] **A page may have no artboard.** With none, the canvas shows no paper, only the canvas background and the
+  objects. Delete Artboard (menu, the Artboard tool's Delete key, the Artboards list) works on the last one, as one undo
+  step. The size and paper fields in Properties and the artboard menu items are greyed out; New Artboard stays on.
+- [Mac mini] **New Page makes no artboard.** It no longer copies the current artboard. New Document keeps the preset's
+  artboard, which can be deleted. I did not add a "no artboard" preset to the New Document sheet: the presets carry a size,
+  not a switch.
+- [Mac mini] **Fit with no artboard.** The order is the top-level frames' bounds, then the content's bounds, then the
+  default view (the document's own size at the origin). Fit All Artboards and Zoom to Fit use the same order.
+- [Mac mini] **Export with no artboard.** PNG, JPEG and SVG write the top-level frames together, else all the content,
+  cropped to its bounds. PDF writes one page per top-level frame, else one page of the content. Export for Screens lists each
+  top-level frame (else the page's content as one item). Share and the agent's render and export use the same rule. With
+  nothing on the page the message is "Nothing to export. This page has no artboard and no objects." and no file is written.
+- [Mac mini] **Status bar with no artboard.** It shows the page's name (for example "Page 1") in place of the artboard's
+  size; the selection count stays. The agent's "align to artboard" with none aligns several objects to each other, and
+  returns an error for one object.
 - [Mac mini] **The island is the tool's bar.** Row 4 is the per-tool bar that existed (`ToolHeaderBar`), moved under
   the selection/AI row; each tool shows its own options there.
 - [Mac mini] **The agent's state lives in row 3.** Waiting, then Keep/Discard/Cancel (`ProposalBar`) moved there from

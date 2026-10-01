@@ -23,9 +23,11 @@ Storage stays flat. A page is a tag on the three things that sit on a canvas:
   null layer, artboard and guide. Every page operation calls it first, and so
   does `decode`. After it, reordering pages can't move untagged art.
 - `insert()` of a top-level layer with a null page gives it `currentPage`.
-- Every page has at least one artboard. New Page makes "Artboard 1" at the
-  origin, the size of the current artboard. `size`/`background` keep mirroring
-  the raw `artboards[0]` (the first page's first artboard), as now.
+- A page may have no artboard (an infinite canvas). New Page makes none, and
+  Delete Artboard works on the last one. `VectorDocument::artboardsListed` says
+  the list is the whole truth; false (old files) keeps the one implicit
+  artboard. `size`/`background` keep mirroring the raw `artboards[0]`, and keep
+  their last value when the list is empty.
 
 Why flat, and not a list of pages each owning its objects: ids stay global, so
 everything that keeps a document consistent (components and their instances on
@@ -41,8 +43,8 @@ page it's on, and most of it already goes through a few helpers:
   `artboardDocument(i)` are **current page only**. Artboard indices are
   indices within the page, so `activeArtboard()` and every caller keep working.
   `allArtboards()` applies `size` to the raw first artboard, then filters.
-  `artboardsOn(page)` serves the all-pages exports. Delete Artboard refuses a
-  page's last artboard.
+  `artboardsOn(page)` serves the all-pages exports. Delete Artboard works on a
+  page's last artboard too; `activeArtboard()` is then -1.
 - `hitTest`, `hitTestAll`, `matching` (Select ▸ Same and the filters) and
   Select All are current page only. `artboardDocument(i)` and `croppedTo(ids)`
   return single-page documents (pages empty, page tags null).
@@ -90,7 +92,7 @@ Each is one named `EditorSession` step (EditorSession+Pages.cpp):
 
 | Call | Undo name | What it does |
 |---|---|---|
-| `addPage(name = {})` | New Page | After the current page, named `uniquePageName("Page")`, with one layer and one artboard. It becomes current. |
+| `addPage(name = {})` | New Page | After the current page, named `uniquePageName("Page")`, with one layer and no artboard. It becomes current. |
 | `duplicatePage(id)` | Duplicate Page | After the original, "<name> Copy" (made unique). Layers, artboards and guides are copied with fresh ids, and parents and text threads are remapped inside the copy. Instances keep their main component. It becomes current. |
 | `renamePage(id, name)` | Rename Page | Trimmed. An empty name is refused, and one already taken gets a number. |
 | `deletePage(id)` | Delete Page | Never the last page. Its layers, artboards and guides go, as deleting those objects does now (export assets are pruned). If it was current, the next page becomes current, else the previous one. |

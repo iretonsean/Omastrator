@@ -374,7 +374,7 @@ QUuid EditorSession::placeFromLibrary(const std::vector<VectorObject> &objects, 
             return;
         const VectorObject *main = document.find(*master);
         const QRectF bounds = document.bounds(*master);
-        const QPointF at = center.value_or(document.artboard(activeArtboard()).rect.center());
+        const QPointF at = center.value_or(paperRect().center());
         VectorObject instance;
         instance.kind = ObjectKind::group;
         instance.name = main->name;

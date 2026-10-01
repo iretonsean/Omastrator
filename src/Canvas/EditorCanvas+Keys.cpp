@@ -128,8 +128,7 @@ bool EditorCanvas::State::keyPress(QKeyEvent *event)
         if (pen)
             finishPen();
         if (session.tool() == Tool::artboard || session.artboardSelected()) {
-            if (session.document()->artboardCount() > 1)
-                session.deleteArtboard(session.activeArtboard());
+            session.deleteArtboard(session.activeArtboard());
             return true;
         }
         session.deleteSelection();

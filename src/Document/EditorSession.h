@@ -136,6 +136,11 @@ public:
     // Artboards (EditorSession+Artboards.cpp) ---------------------------------
     // The Artboard tool, the list, next/previous and select() all set this.
     int activeArtboard() const;
+    // Where new things go and what "the page" means: the active artboard's rect; with none, the
+    // frames' or content's bounds, else the document's own size at the origin.
+    QRectF paperRect() const;
+    // Fit with no artboard: the frames' bounds, else the content's, else the default view.
+    void fitWithoutArtboard();
     void setActiveArtboard(int index);
     // A click on an artboard's name: it becomes the selection, as a frame does, so the Select
     // tool shows its handles. The object selection empties; picking any object ends it.

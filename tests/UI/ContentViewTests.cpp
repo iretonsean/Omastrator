@@ -57,6 +57,7 @@ private slots:
     void theWelcomeShowsWithoutADocument();
     void theStatusBarFollowsTheSession();
     void theStatusBarNamesThePageFromTwoOn();
+    void theStatusBarShowsNoArtboardTextWithoutOne();
     void canvasKeysPickToolsAndSwapColours();
     void remappedKeysReachTheCanvasAsTheirOriginals();
     void theDockFollowsItsSettings();
@@ -281,14 +282,31 @@ void ContentViewTests::theWelcomeShowsWithoutADocument()
     QVERIFY(editor.view.findChild<NewDocumentSheet *>("newDocumentSheet"));
 }
 
+void ContentViewTests::theStatusBarShowsNoArtboardTextWithoutOne()
+{
+    Editor editor;
+    editor.session.deleteArtboard(0);
+    QCOMPARE(editor.status("artboardStatus"), QString("Page 1"));
+    QVERIFY(!editor.status("artboardStatus").contains(QStringLiteral("pt")));
+    QCOMPARE(editor.status("selectionStatus"), QString("No selection"));
+    editor.session.addPath(Shapes::rectangle(QRectF(10, 10, 50, 50)), QStringLiteral("A"));
+    QCOMPARE(editor.status("selectionStatus"), QString("1 object selected"));
+    editor.session.undo();
+    editor.session.undo();
+    QCOMPARE(editor.status("artboardStatus"), QString("400 × 300 pt"));
+}
+
 void ContentViewTests::theStatusBarNamesThePageFromTwoOn()
 {
     Editor editor;
     QCOMPARE(editor.status("artboardStatus"), QString("400 × 300 pt"));
     editor.session.addPage(QStringLiteral("Page 2"));
-    QCOMPARE(editor.status("artboardStatus"), QString("Page 2 · 400 × 300 pt"));
+    // New Page makes no artboard: the status bar names the page and no size.
+    QCOMPARE(editor.status("artboardStatus"), QString("Page 2"));
     editor.session.addArtboard(QRectF(500, 0, 200, 100));
-    QCOMPARE(editor.status("artboardStatus"), QString("Page 2 · Artboard 2 · 200 × 100 pt"));
+    QCOMPARE(editor.status("artboardStatus"), QString("Page 2 · 200 × 100 pt"));
+    editor.session.addArtboard(QRectF(800, 0, 100, 100));
+    QCOMPARE(editor.status("artboardStatus"), QString("Page 2 · Artboard 2 · 100 × 100 pt"));
     editor.session.showPage(false);
     QCOMPARE(editor.status("artboardStatus"), QString("Page 1 · 400 × 300 pt"));
     // Move to Page says where the objects went, on the hint line.

@@ -479,6 +479,9 @@ struct VectorDocument {
     // Every artboard in order; empty is one at the origin. The first one's size and
     // paper are always `size` and `background`, so code that knows one page still works.
     std::vector<Artboard> artboards;
+    // True once the list is the whole truth: a page with no artboard in it has none (an infinite
+    // canvas). False keeps the old reading, where an empty list is one implicit artboard.
+    bool artboardsListed = false;
     // Export for Screens: objects collected as assets, in the order they were added.
     std::vector<QUuid> exportAssets;
     // The design system's tokens, its modes ("light", "dark"; the first is each token's
@@ -589,7 +592,7 @@ struct VectorDocument {
     bool isOnCurrentPage(const Guide &guide) const { return resolvePage(guide.page) == currentPageId(); }
     std::vector<Guide> guidesOnCurrentPage() const;
     // The size the viewport centres on: the current page's first artboard (`size` with one page).
-    QSizeF viewSize() const { return artboard(0).rect.size(); }
+    QSizeF viewSize() const { return artboardCount() > 0 ? artboard(0).rect.size() : size; }
     // The layers of one page, bottom to top.
     std::vector<QUuid> layersOn(const QUuid &page) const;
     // Blank page names become "Page N" and repeats "Name 2", in order: importers copy names from files that allow both.
@@ -606,13 +609,14 @@ struct VectorDocument {
 
     // Artboards (VectorDocument+Artboards.cpp) ----------------------------------
     // The current page's artboards as listed, or the one `size` makes, named "Artboard 1".
+    // With `artboardsListed`, a page may have none: the count is 0 and artboard() is empty.
     // Every artboard call below counts and indexes the current page's.
     std::vector<Artboard> allArtboards() const;
     std::vector<Artboard> artboardsOn(const QUuid &page) const;
     int artboardCount() const;
     Artboard artboard(int index) const;
     // Replaces the current page's artboards; the first one listed on the first artboard's
-    // slot sets `size` and `background`. Empty leaves one.
+    // slot sets `size` and `background`. Empty leaves the page with none, and the list the truth.
     void setArtboards(std::vector<Artboard> boards);
     // The artboard under `point`, the last listed first; -1 over none.
     int artboardAt(QPointF point) const;
@@ -621,6 +625,18 @@ struct VectorDocument {
     int firstExportedArtboard() const;
     // Every artboard's rect together.
     QRectF artboardBounds() const;
+    // Page content without artboards: the visible top-level frames of the current page, their
+    // bounds together, every visible top-level object's bounds together, and the first of those
+    // that is not empty (frames, else content; null when the page is empty).
+    std::vector<QUuid> topLevelFrames() const;
+    std::vector<QUuid> topLevelArt() const;
+    QRectF contentBounds() const;
+    QRectF viewBounds() const;
+    // What a page with no artboard exports: one document per top-level frame, else one of all the
+    // content, moved to the origin; empty when the page has nothing.
+    std::vector<VectorDocument> paperlessSheets() const;
+    // The same as one document (all frames together, else all content); the page itself when empty.
+    VectorDocument contentPage() const;
     // The objects directly in layers that belong to an artboard: those whose bounds,
     // strokes included, meet it. With one artboard, every one of them.
     std::vector<QUuid> objectsOn(int index) const;

@@ -47,6 +47,7 @@ VectorDocument VectorDocument::croppedTo(const std::vector<QUuid> &ids) const
     cropped.size = box.size();
     cropped.background = Qt::transparent;
     cropped.artboards.clear();
+    cropped.artboardsListed = false;
     cropped.exportAssets.clear();
     return cropped;
 }

@@ -31,6 +31,33 @@ private slots:
         QCOMPARE(ScreenExport::scaleSuffix(3), QStringLiteral("@3x"));
     }
 
+    void withoutAnArtboardFramesAndThePageContentExportByTheirIds()
+    {
+        EditorSession session;
+        session.createDocument({100, 100});
+        session.deleteArtboard(0);
+        const QUuid art = session.addPath(Shapes::rectangle({300, 300, 40, 20}), QStringLiteral("Art"));
+        QTemporaryDir dir;
+        ScreenExport::Settings settings;
+        settings.folder = dir.path();
+        // No frames yet: the page itself (its id) is the one item, cropped to the content.
+        const QUuid page = session.document()->currentPageId();
+        QStringList written = ScreenExport::run(*session.document(), {page}, {}, settings);
+        QCOMPARE(written.size(), 1);
+        QCOMPARE(QImageReader(written.front()).size(), QSize(41, 21));
+        // Frames: each its own file.
+        const QUuid frame = session.addFrame({0, 0, 60, 30});
+        QVERIFY(!art.isNull());
+        written = ScreenExport::run(*session.document(), {frame}, {}, settings);
+        QCOMPARE(written.size(), 1);
+        QCOMPARE(QImageReader(written.front()).size(), QSize(60, 30));
+        // Nothing on the page: the page id exports nothing.
+        EditorSession empty;
+        empty.createDocument({100, 100});
+        empty.deleteArtboard(0);
+        QVERIFY(ScreenExport::run(*empty.document(), {empty.document()->currentPageId()}, {}, settings).isEmpty());
+    }
+
     void anUnexportedArtboardIsSkippedEvenWhenAskedFor()
     {
         VectorDocument document = VectorDocument::blank({100, 100});
@@ -109,6 +136,7 @@ private slots:
         const QUuid icon = session.selection().front();
         session.renameArtboard(0, QStringLiteral("Home"));
         session.addPage(QStringLiteral("Settings"));
+        session.addArtboard(QRectF(0, 0, 100, 100));
         session.renameArtboard(0, QStringLiteral("Home"));
         session.addPath(Shapes::rectangle({30, 30, 20, 20}), QStringLiteral("Gear"));
         const QUuid gear = session.selection().front();
@@ -141,6 +169,7 @@ private slots:
         session.createDocument({100, 100});
         session.renameArtboard(0, QStringLiteral("Home"));
         session.addPage(QStringLiteral("Drafts"));
+        session.addArtboard(QRectF(0, 0, 100, 100));
         session.renameArtboard(0, QStringLiteral("Sketch"));
         session.setArtboardExported(0, false);
         session.setCurrentPage(session.document()->allPages()[0].id);
@@ -163,6 +192,7 @@ private slots:
         session.renameArtboard(0, QStringLiteral("Home"));
         session.renamePage(session.currentPage(), QStringLiteral(".."));
         session.addPage(QStringLiteral("Other"));
+        session.addArtboard(QRectF(0, 0, 40, 40));
         session.renameArtboard(0, QStringLiteral("Home"));
         const VectorDocument document = *session.document();
         const std::vector<QUuid> boards = {document.artboardsOn(document.allPages()[0].id).front().id,
@@ -187,6 +217,7 @@ private slots:
         session.renameArtboard(0, QStringLiteral("Home"));
         session.renamePage(session.currentPage(), QStringLiteral("A/B"));
         session.addPage(QStringLiteral("A_B"));
+        session.addArtboard(QRectF(0, 0, 40, 40));
         session.renameArtboard(0, QStringLiteral("Home"));
         const VectorDocument document = *session.document();
         const std::vector<QUuid> boards = {document.artboardsOn(document.allPages()[0].id).front().id,

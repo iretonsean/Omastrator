@@ -449,14 +449,44 @@ private slots:
         tools.call(QStringLiteral("render"), {{"path", one}});
         QCOMPARE(QImage(one).size(), QSize(200, 100));
         tools.call(QStringLiteral("page"), {{"action", "add"}, {"name", "Mobile"}});
+        // The new page has no artboard and no art: render says so. Its first page still renders by name.
+        QCOMPARE(failure(tools, QStringLiteral("render"), {{"path", directory.filePath(QStringLiteral("both.png"))}}), int(AgentProtocol::invalidParams));
         const QString both = directory.filePath(QStringLiteral("both.png"));
-        tools.call(QStringLiteral("render"), {{"path", both}});
+        tools.call(QStringLiteral("render"), {{"path", both}, {"page", "Page 1"}});
         QCOMPARE(QImage(both).size(), QSize(200, 100));
         const QJsonObject pdf = tools.call(QStringLiteral("export"), {{"path", directory.filePath(QStringLiteral("all.pdf"))}});
-        QCOMPARE(pdf["sheets"].toInt(), 2);
+        QCOMPARE(pdf["sheets"].toInt(), 1);
+        host.editor.showPage(false);
         const QJsonObject png = tools.call(QStringLiteral("export"), {{"path", directory.filePath(QStringLiteral("board.png"))}});
         QVERIFY(png.contains(QStringLiteral("artboard")));
         QVERIFY(!png.contains(QStringLiteral("sheets")));
+    }
+
+    void renderAndAlignWithoutAnArtboardUseTheContent()
+    {
+        FakeAgentHost host;
+        host.editor.createDocument({200, 100});
+        host.editor.deleteArtboard(0);
+        AgentTools tools(host);
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("none.png"));
+        // Nothing on the page: a clear error, and no file.
+        QString message;
+        QCOMPARE(failure(tools, QStringLiteral("render"), {{"path", path}}, &message), int(AgentProtocol::invalidParams));
+        QVERIFY(message.contains(QStringLiteral("Nothing to render")));
+        QVERIFY(!QFileInfo::exists(path));
+        const QUuid a = rectangle(host.editor, {100, 100, 30, 20});
+        const QUuid b = rectangle(host.editor, {160, 150, 30, 20});
+        tools.call(QStringLiteral("render"), {{"path", path}});
+        QCOMPARE(QImage(path).size(), QSize(91, 71));
+        // Align to the artboard becomes align to each other; one object gets a clear error.
+        tools.call(QStringLiteral("align"), {{"ids", QJsonArray{a.toString(), b.toString()}}, {"edge", "left"}, {"target", "artboard"}});
+        QCOMPARE(host.editor.document()->bounds(b).left(), host.editor.document()->bounds(a).left());
+        QCOMPARE(failure(tools, QStringLiteral("align"), {{"ids", QJsonArray{a.toString()}}, {"edge", "left"}, {"target", "artboard"}}, &message),
+                 int(AgentProtocol::invalidParams));
+        QVERIFY(message.contains(QStringLiteral("no artboard")));
+        // The document tool says the page has none.
+        QVERIFY(tools.call(QStringLiteral("document_get"), {}).value(QStringLiteral("artboards")).toArray().isEmpty());
     }
 
     void renderWritesAPng()
@@ -520,9 +550,9 @@ private slots:
         tools.call(QStringLiteral("render"), {{"page", "Page 1"}, {"path", path}});
         QCOMPARE(QImage(path).size(), QSize(200, 100));
         QCOMPARE(failure(tools, QStringLiteral("render"), {{"page", "Page 1"}, {"selectionOnly", true}}), int(AgentProtocol::invalidParams));
-        tools.call(QStringLiteral("align"), {{"ids", QJsonArray{second.toString()}}, {"edge", "right"}});
-        host.editor.commitInteraction();
-        QCOMPARE(host.editor.document()->bounds(second).right(), 200.0);
+        // The Mobile page has no artboard, so one object has nothing to align to.
+        QCOMPARE(failure(tools, QStringLiteral("align"), {{"ids", QJsonArray{second.toString()}}, {"edge", "right"}}, &message), int(AgentProtocol::invalidParams));
+        QVERIFY(message.contains(QStringLiteral("no artboard")));
 
         // Rename, duplicate, reorder, show, move.
         tools.call(QStringLiteral("page"), {{"action", "rename"}, {"page", "Mobile"}, {"name", "Phone"}});

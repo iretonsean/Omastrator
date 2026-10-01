@@ -23,6 +23,8 @@ std::vector<Artboard> VectorDocument::artboardsOn(const QUuid &page) const
 {
     const QUuid target = resolvePage(page);
     if (artboards.empty()) {
+        if (artboardsListed)
+            return {};
         if (target != firstPageId())
             return {};
         return {implicitArtboard()};
@@ -33,8 +35,8 @@ std::vector<Artboard> VectorDocument::artboardsOn(const QUuid &page) const
     boards[0].background = background;
     if (!pages.empty())
         std::erase_if(boards, [&](const Artboard &board) { return resolvePage(board.page) != target; });
-    if (boards.empty()) {
-        // A page keeps at least one artboard, even in a document built by hand.
+    if (boards.empty() && !artboardsListed) {
+        // An unlisted page keeps at least one artboard, even in a document built by hand.
         Artboard board;
         board.id = QUuid::createUuidV5(target, QByteArrayLiteral("artboard"));
         board.name = QStringLiteral("Artboard 1");
@@ -48,7 +50,7 @@ std::vector<Artboard> VectorDocument::artboardsOn(const QUuid &page) const
 int VectorDocument::artboardCount() const
 {
     if (pages.empty())
-        return artboards.empty() ? 1 : int(artboards.size());
+        return artboards.empty() ? (artboardsListed ? 0 : 1) : int(artboards.size());
     return int(allArtboards().size());
 }
 
@@ -65,6 +67,7 @@ void VectorDocument::setArtboards(std::vector<Artboard> boards)
     if (pages.empty()) {
         if (boards.empty()) {
             artboards.clear();
+            artboardsListed = true;
             return;
         }
         size = boards[0].rect.size();
@@ -73,7 +76,7 @@ void VectorDocument::setArtboards(std::vector<Artboard> boards)
         return;
     }
     if (boards.empty())
-        return;
+        artboardsListed = true;
     // Only the current page's artboards change: they take the slots the old ones held.
     const QUuid current = currentPageId();
     for (Artboard &board : boards)
@@ -106,6 +109,8 @@ void VectorDocument::setArtboards(std::vector<Artboard> boards)
     while (taken < boards.size())
         merged.push_back(boards[taken++]);
     artboards = std::move(merged);
+    if (artboards.empty())
+        return;
     size = artboards[0].rect.size();
     background = artboards[0].background;
 }
@@ -146,6 +151,60 @@ QRectF VectorDocument::artboardBounds() const
     for (const Artboard &board : allArtboards())
         result = result.isNull() ? board.rect : result.united(board.rect);
     return result;
+}
+
+std::vector<QUuid> VectorDocument::topLevelFrames() const
+{
+    std::vector<QUuid> result;
+    for (const QUuid &layer : layers()) {
+        for (const QUuid &child : children(layer)) {
+            if (find(child)->kind == ObjectKind::frame && isEffectivelyVisible(child))
+                result.push_back(child);
+        }
+    }
+    return result;
+}
+
+std::vector<QUuid> VectorDocument::topLevelArt() const
+{
+    std::vector<QUuid> result;
+    for (const QUuid &layer : layers()) {
+        for (const QUuid &child : children(layer)) {
+            if (isEffectivelyVisible(child))
+                result.push_back(child);
+        }
+    }
+    return result;
+}
+
+QRectF VectorDocument::contentBounds() const
+{
+    const std::vector<QUuid> art = topLevelArt();
+    return art.empty() ? QRectF() : bounds(art, true);
+}
+
+QRectF VectorDocument::viewBounds() const
+{
+    const std::vector<QUuid> frames = topLevelFrames();
+    const QRectF framed = frames.empty() ? QRectF() : bounds(frames, true);
+    return framed.isEmpty() ? contentBounds() : framed;
+}
+
+std::vector<VectorDocument> VectorDocument::paperlessSheets() const
+{
+    std::vector<VectorDocument> sheets;
+    const std::vector<QUuid> frames = topLevelFrames();
+    for (const QUuid &frame : frames)
+        sheets.push_back(croppedTo({frame}));
+    if (frames.empty() && !topLevelArt().empty())
+        sheets.push_back(croppedTo(topLevelArt()));
+    return sheets;
+}
+
+VectorDocument VectorDocument::contentPage() const
+{
+    const std::vector<QUuid> frames = topLevelFrames();
+    return croppedTo(frames.empty() ? topLevelArt() : frames);
 }
 
 std::vector<QUuid> VectorDocument::objectsOn(int index) const
@@ -210,6 +269,7 @@ VectorDocument VectorDocument::artboardDocument(int index) const
     result.size = board.rect.size();
     result.background = board.background;
     result.artboards.clear();
+    result.artboardsListed = false;
     result.exportAssets.clear();
     return result;
 }

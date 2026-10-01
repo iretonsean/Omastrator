@@ -26,7 +26,7 @@ void drawArtboardHandle(QPainter &painter, QPointF at, double size, const QColor
 
 std::optional<QRectF> EditorCanvas::State::activeArtboardBox() const
 {
-    if (!session.hasDocument())
+    if (!session.hasDocument() || session.document()->artboardCount() == 0)
         return std::nullopt;
     return session.document()->artboard(session.activeArtboard()).rect;
 }

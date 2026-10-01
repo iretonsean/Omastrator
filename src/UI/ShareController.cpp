@@ -1,5 +1,6 @@
 #include "UI/ShareController.h"
 #include "Cloud/CloudStorage.h"
+#include "IO/DocumentExporter.h"
 #include "IO/FileError.h"
 #include "Live/History.h"
 #include "Live/WriteBack.h"
@@ -85,8 +86,10 @@ QString ShareController::scopeText() const
     if (sharesSelection())
         return QStringLiteral("the selection (%1)").arg(count(m_workspace.current().session.selection().size()));
     const EditorSession &session = m_workspace.current().session;
-    QString text = QStringLiteral("the artboard");
     const std::optional<VectorDocument> &document = session.document();
+    // No artboard: the top-level frames, else all the content.
+    QString text = document && document->artboardCount() == 0 ? (document->topLevelFrames().empty() ? QStringLiteral("the page’s content") : QStringLiteral("the frames"))
+                                                              : QStringLiteral("the artboard");
     if (document && document->artboardCount() > 1)
         text += QStringLiteral(" “%1”").arg(document->artboard(session.activeArtboard()).name);
     // With two or more pages it says which one the artboard is on.
@@ -275,12 +278,16 @@ QString ShareController::render(Share::Format format, const QString &baseName, Q
     EditorSession &session = tab.session;
     // Share and Send to a device both come through here: the newest picture of each Browser View goes out with them.
     BrowserViews::of(session)->flushPictures();
-    if (!sharesSelection() && !session.document()->artboard(session.activeArtboard()).exported)
+    if (!sharesSelection() && session.document()->artboardCount() > 0 && !session.document()->artboard(session.activeArtboard()).exported)
         return QStringLiteral("“%1” is set not to export. Turn it on in Properties ▸ Document, or pick another artboard.")
             .arg(session.document()->artboard(session.activeArtboard()).name);
     const VectorDocument &design = session.designDocument();
-    const VectorDocument document = sharesSelection() ? Share::selectionDocument(design, session.selection())
-        : design.artboards.empty() ? design : design.artboardDocument(session.activeArtboard());
+    VectorDocument document;
+    try {
+        document = sharesSelection() ? Share::selectionDocument(design, session.selection()) : DocumentExporter::activePage(design, session.activeArtboard());
+    } catch (const FileError &error) {
+        return error.message();
+    }
     m_folder = std::make_unique<QTemporaryDir>(QDir::temp().filePath(QStringLiteral("omastrator-share-XXXXXX")));
     *file = m_folder->filePath(QStringLiteral("%1.%2").arg(baseName, Share::suffix(format)));
     try {

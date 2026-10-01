@@ -404,7 +404,8 @@ void draw(QPainter &painter, const VectorDocument &document, const Options &opti
 QImage render(const VectorDocument &document, double scale, bool transparent)
 {
     // Several artboards: render the first one alone, moved to the origin.
-    const VectorDocument page = document.artboards.empty() ? document : document.artboardDocument(0);
+    const VectorDocument page = document.artboardCount() == 0 ? document.contentPage()
+        : document.artboards.empty() ? document : document.artboardDocument(0);
     const double width = std::max(1.0, std::ceil(page.size.width() * scale)), height = std::max(1.0, std::ceil(page.size.height() * scale));
     // A QImage holds at most 2 GB; past that there is nothing to draw into (the caller says why).
     if (width * height * 4 > double(std::numeric_limits<int>::max()))

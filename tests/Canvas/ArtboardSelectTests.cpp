@@ -230,7 +230,7 @@ private slots:
         QVERIFY(!f.session.canUndo());
     }
 
-    void deleteRemovesTheSelectedArtboardButNeverTheLast()
+    void deleteRemovesTheSelectedArtboardEvenTheLast()
     {
         Fixture f;
         f.session.addArtboard({300, 0, 100, 100});
@@ -239,6 +239,8 @@ private slots:
         QCOMPARE(f.document().artboardCount(), 1);
         f.selectArtboard();
         QTest::keyClick(&f.canvas, Qt::Key_Delete);
+        QCOMPARE(f.document().artboardCount(), 0);
+        f.session.undo();
         QCOMPARE(f.document().artboardCount(), 1);
     }
 

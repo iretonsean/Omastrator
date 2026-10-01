@@ -142,7 +142,7 @@ QDialog *ObjectDialogs::artboardSize(EditorSession &session, QWidget *window)
 {
     QFormLayout *form = nullptr;
     QDialog *dialog = sheet(window, QStringLiteral("artboardDialog"), QStringLiteral("Artboard Size"), form);
-    const QSizeF size = session.document() ? session.document()->artboard(session.activeArtboard()).rect.size() : QSizeF(612, 792);
+    const QSizeF size = session.document() ? session.paperRect().size() : QSizeF(612, 792);
     QDoubleSpinBox *width = number(dialog, QStringLiteral("artboardWidth"), size.width(), 1, VectorDocument::maximumArtboardSide, QStringLiteral(" pt"));
     QDoubleSpinBox *height = number(dialog, QStringLiteral("artboardHeight"), size.height(), 1, VectorDocument::maximumArtboardSide, QStringLiteral(" pt"));
     form->addRow(QStringLiteral("Width:"), width);
