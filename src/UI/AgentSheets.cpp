@@ -354,7 +354,7 @@ QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder, boo
     return dialog;
 }
 
-QDialog *deployLog(QWidget *window, const QString &path)
+QDialog *deployLog(QWidget *window, const QString &path, AgentBridge *bridge, const QString &folder)
 {
     auto *dialog = new QDialog(window);
     dialog->setObjectName(QStringLiteral("deployLog"));
@@ -375,6 +375,8 @@ QDialog *deployLog(QWidget *window, const QString &path)
     text->setMinimumSize(680, 420);
     text->moveCursor(QTextCursor::End);
     column->addWidget(text);
+    if (bridge && bridge->deployFailed(folder, path))
+        addDeployFix(dialog, column, *bridge, folder);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     column->addWidget(buttons);

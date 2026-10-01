@@ -464,6 +464,7 @@ QString AgentBridge::showDeployLog()
     }
     if (log.isEmpty() || !QFileInfo::exists(log))
         return QStringLiteral("No deploy has run yet, so there's no log.");
-    QMetaObject::invokeMethod(this, [this, log] { AgentSheets::deployLog(&m_window, log); }, Qt::QueuedConnection);
+    const QString folder = m_deployState.folder.isEmpty() ? deployProject() : m_deployState.folder;
+    QMetaObject::invokeMethod(this, [this, log, folder] { AgentSheets::deployLog(&m_window, log, this, folder); }, Qt::QueuedConnection);
     return {};
 }

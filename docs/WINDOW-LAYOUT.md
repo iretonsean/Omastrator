@@ -93,6 +93,20 @@ The author asked for these to be decided and logged overnight (2026-09-29/30). E
   "Nothing selected".
 - [Mac mini] **Suggested, not done yet:** remove the floating task bar's own "Ask AI…" field (row 3 has Ask now) and
   the Frame presets list in Properties while the Frame tool is on (the island has "Drop a size…").
+- [Intel] **Fix with <agent> runs in the project's own folder, not a worktree.** A worktree has no `node_modules` or
+  `.env`, so the agent couldn't run the build to check its fix. What it changed is read from git afterwards and kept as
+  a "Fix" write-back record (Review Changes, Discard), so **Deploy again** commits it; the agent itself never commits,
+  pushes or deploys.
+- [Intel] **The fix lives in Deploy Details.** The button, its running state with Stop, the agent's summary with the
+  files it changed, and **Deploy again** are in the window that opens from "Details" and from a failed frame's bar. They
+  show for failed production deploys only (not a failed Save or a Share preview). With no default agent the button is
+  hidden and the label shows Omarchy's hint to choose one. One fix runs at a time, and only while no other agent task is
+  waiting.
+- [Intel] **A stopped or silent run is still read.** If the agent is stopped or exits without an answer, the window says
+  so and lists any files it wrote; they are recorded like a finished fix, so nothing is left uncommitted without a way to
+  discard it.
+- [Intel] **The failure line** now skips box borders and update banners, prefers a JSON `message` (with its `reason`),
+  and prefers an "error" line over a later plain one, in every Deploy step (push, GitHub, the deploy command).
 - [Mac mini] **Browser View switch: opening a file starts no server.** A view saved on shows its page (and last
   picture); its project's dev server starts only when it's switched on, or on the first Edit Page. No `npm install` on
   open.

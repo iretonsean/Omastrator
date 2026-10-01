@@ -1,4 +1,5 @@
 #include "Live/Deploy.h"
+#include "Live/DeployFix.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -400,13 +401,7 @@ QString firstUrl(const QString &output)
 
 QString lastLine(const QString &output)
 {
-    const QStringList lines = output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
-        const QString line = it->trimmed();
-        if (!line.isEmpty())
-            return line.size() > 160 ? line.left(159) + QStringLiteral("…") : line;
-    }
-    return {};
+    return DeployFix::reason(output);
 }
 
 QString dryLine()

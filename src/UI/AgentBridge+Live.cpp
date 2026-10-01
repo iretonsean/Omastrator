@@ -169,6 +169,8 @@ QString AgentBridge::liveAgentDone(const QString &id, const QString &summary)
 {
     if (m_pages.count(id))
         return pageAgentDone(id, summary);
+    if (m_fixRun && m_fixRun->requestId == id)
+        return fixAgentDone(id, summary);
     auto job = m_liveJobs.find(id);
     if (job == m_liveJobs.end())
         return QStringLiteral("No Live task is waiting with the id “%1”.").arg(id);

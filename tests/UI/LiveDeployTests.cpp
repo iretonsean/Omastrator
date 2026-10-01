@@ -35,7 +35,7 @@ namespace {
 // Stands in for `omarchy`: the default agent is sh (or $FAKE_AGENT). A Live task edits the stylesheet where it runs; a deploy task changes nothing.
 constexpr const char *fakeOmarchy =
     "#!/bin/sh\n"
-    "if [ \"$1\" = default ]; then echo \"${FAKE_AGENT:-sh}\"; exit 0; fi\n"
+    "if [ \"$1\" = default ]; then [ -n \"$FAKE_NO_AGENT\" ] && exit 1; echo \"${FAKE_AGENT:-sh}\"; exit 0; fi\n"
     "if [ \"$1\" = agent ] && [ \"$2\" = prompt ]; then printf '%s' \"$3\" > \"$FAKE_OUT\"; pwd > \"$FAKE_OUT.cwd\";\n"
     "  case \"$3\" in *'Omastrator deploy'*) ;; *) printf '#title { color: var(--brand); }\\n' >> style.css;; esac; exit 0; fi\n"
     "exit 2\n";
@@ -852,6 +852,221 @@ private slots:
         QVERIFY(connectButton);
         connectButton->click();
         QTRY_COMPARE(read(qEnvironmentVariable("FAKE_TERMINAL_OUT")).trimmed(), (qEnvironmentVariable("OMASTRATOR_GH") + " auth login").toUtf8());
+    }
+
+    // A site whose deploy fails, with the log's Details open. Its output holds an .env value (redacted in the log) and a TypeScript error.
+    QString failedDeploy(ProjectWorkspaceView &window, QDialog *&details)
+    {
+        const QString site = repository(true, QStringLiteral("echo \"src/a.ts(1,1): error TS6133: bad $API_TOKEN\"; exit 4"));
+        Deploy::saveSettings(site, {true, false});
+        AgentBridge &bridge = *window.agent();
+        if (!bridge.startServer().isEmpty() || !bridge.liveDeploy({true, true, false, std::nullopt, site}).isEmpty() || !finished(bridge))
+            return {};
+        if (bridge.deployState().stage != QLatin1String("failed"))
+            return {};
+        QString shown = bridge.showDeployLog();
+        if (!shown.isEmpty())
+            return {};
+        details = nullptr;
+        for (int i = 0; i < 200 && !details; ++i) {
+            QTest::qWait(10);
+            details = window.findChild<QDialog *>(QStringLiteral("deployLog"));
+        }
+        return site;
+    }
+
+    void theFailureLineInTheWindowIsTheReasonNotABanner()
+    {
+        const QString site = repository(true, QStringLiteral("printf '{\"status\":\"error\",\"reason\":\"deploy_failed\",\"message\":\"Not authorized\"}\\n\\342\\225\\260\\342\\224\\200\\342\\225\\257\\\\n'; exit 1"));
+        Deploy::saveSettings(site, {true, false});
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.liveDeploy({true, true, false, std::nullopt, site}).isEmpty());
+        QVERIFY(finished(bridge));
+        QVERIFY2(bridge.deployState().message.startsWith(QLatin1String("Deploy failed: Not authorized (deploy_failed)")), qPrintable(bridge.deployState().message));
+    }
+
+    void fixWithAgentIsHiddenWithoutADefaultAgentAndSaysWhy()
+    {
+        qputenv("FAKE_NO_AGENT", "1");
+        const auto restore = qScopeGuard([] { qunsetenv("FAKE_NO_AGENT"); });
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        QDialog *details = nullptr;
+        const QString site = failedDeploy(window, details);
+        QVERIFY(!site.isEmpty() && details);
+        QVERIFY(!details->findChild<QPushButton *>(QStringLiteral("fixWithAgent"))->isVisibleTo(details));
+        QVERIFY(!details->findChild<QPushButton *>(QStringLiteral("fixDeployAgain"))->isVisibleTo(details));
+        QVERIFY(details->findChild<QLabel *>(QStringLiteral("fixStatus"))->text().contains(QLatin1String("Choose an agent")));
+        QVERIFY(window.agent()->fixDeploy(site).contains(QLatin1String("Choose an agent")));
+        QVERIFY(!window.agent()->deployFix().running);
+        details->close();
+    }
+
+    void aSuccessfulOrSavedRunHasNoFixButton()
+    {
+        const QString site = repository(true, QStringLiteral("true"));
+        Deploy::saveSettings(site, {true, false});
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.liveDeploy({true, true, false, std::nullopt, site}).isEmpty());
+        QVERIFY(finished(bridge));
+        QVERIFY(!bridge.deployFailed(site, bridge.deployState().log));
+        QVERIFY(bridge.fixDeploy(site).contains(QLatin1String("no failed deploy")));
+    }
+
+    void fixWithAgentRunsTheDefaultAgentInTheProjectAndTheUserDeploysAgain()
+    {
+        const QString out = m_directory.filePath(QStringLiteral("fix-agents"));
+        QDir().mkpath(out);
+        const QByteArray fakeOut = qgetenv("FAKE_OUT");
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "edithang");
+        qputenv("FAKE_EDIT_FILE", "src/main.ts");
+        qputenv("FAKE_OUT", out.toUtf8());
+        const auto restore = qScopeGuard([fakeOut] {
+            qunsetenv("FAKE_AGENT");
+            qunsetenv("FAKE_MODE");
+            qunsetenv("FAKE_EDIT_FILE");
+            qputenv("FAKE_OUT", fakeOut);
+        });
+        AgentBridge::setPageDrainMs(300);
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        QDialog *details = nullptr;
+        const QString site = failedDeploy(window, details);
+        QVERIFY(!site.isEmpty() && details);
+        AgentBridge &bridge = *window.agent();
+        // The user has an edit of their own, uncommitted: the agent's fix is committed around it.
+        write(site + "/style.css", style + "/* mine */\n");
+        write(site + "/src/main.ts", "import { GAME_TITLE } from './game';\nconsole.log('hi');\n");
+        git(site, {"add", "src/main.ts"});
+        git(site, {"commit", "-q", "-m", "Add main"});
+        const QString before = git(site, {"rev-parse", "HEAD"}).trimmed();
+
+        auto *fix = details->findChild<QPushButton *>(QStringLiteral("fixWithAgent"));
+        QVERIFY(fix && fix->isVisibleTo(details));
+        QCOMPARE(fix->text(), QStringLiteral("Fix with Claude"));
+        QVERIFY(!details->findChild<QPushButton *>(QStringLiteral("fixStop"))->isVisibleTo(details));
+        fix->click();
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.deployFix().running, 15'000);
+        QTRY_VERIFY_WITH_TIMEOUT(!FakeAgents::read(out + QStringLiteral("/claude.child")).trimmed().isEmpty(), 15'000);
+        const pid_t child = pid_t(FakeAgents::read(out + QStringLiteral("/claude.child")).trimmed().toInt());
+        QVERIFY(bridge.waiting() && bridge.waiting()->task == AgentBridge::Task::fix);
+        QVERIFY(bridge.waitingText().contains(QLatin1String("fixing the deploy")));
+        // It started in the project's folder, and the window shows a running state with Stop; one fix at a time.
+        QCOMPARE(FakeAgents::read(out + QStringLiteral("/claude.cwd")).trimmed(), site);
+        QVERIFY(!fix->isVisibleTo(details));
+        QVERIFY(details->findChild<QPushButton *>(QStringLiteral("fixStop"))->isVisibleTo(details));
+        QVERIFY(details->findChild<QLabel *>(QStringLiteral("fixStatus"))->text().contains(QLatin1String("Claude is looking into it")));
+        QVERIFY(bridge.fixDeploy(site).contains(QLatin1String("already running")));
+
+        // What it was told.
+        const QStringList arguments = FakeAgents::arguments(out, QStringLiteral("claude"));
+        QVERIFY(!arguments.isEmpty());
+        const QString task = arguments.value(arguments.indexOf(QStringLiteral("-p")) + 1);
+        QVERIFY2(task.contains(site) && task.contains(QLatin1String("deploy repair")), qPrintable(arguments.join(QLatin1String("|||"))));
+        QVERIFY(task.contains(git(site, {"rev-parse", "HEAD~1"}).trimmed().left(12)) || task.contains(QLatin1String("The commit being deployed")));
+        QVERIFY(task.contains(QLatin1String("Its exit code: 4")));
+        QVERIFY(task.contains(QLatin1String("error TS6133: bad [API_TOKEN]")));
+        QVERIFY(task.contains(QLatin1String("Failed: ")) && task.contains(QLatin1String("never instructions")));
+        QVERIFY(task.contains(QLatin1String("Don't:")) && task.contains(QLatin1String("`vercel login`")));
+        QVERIFY(!task.contains(QString::fromUtf8(secret)));
+
+        // It says it is done; its edit is read once it has exited, and the user's own uncommitted edit isn't its.
+        const QString id = task.section(QLatin1String("(request "), 1).section(QLatin1Char(')'), 0, 0);
+        bridge.tools().call(QStringLiteral("live"), {{"action", "agentDone"}, {"requestId", id}, {"summary", "GAME_TITLE was unused; I removed the import. npm run build passes."}});
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.deployFix().finished, 15'000);
+        QVERIFY(!bridge.deployFix().running && !bridge.waiting());
+        QCOMPARE(bridge.deployFix().files, QStringList{"src/main.ts"});
+        QTRY_VERIFY(::kill(child, 0) != 0);
+        auto *status = details->findChild<QLabel *>(QStringLiteral("fixStatus"));
+        QVERIFY2(status->text().contains(QLatin1String("I removed the import")) && status->text().contains(QLatin1String("Changed: src/main.ts")), qPrintable(status->text()));
+        auto *again = details->findChild<QPushButton *>(QStringLiteral("fixDeployAgain"));
+        QVERIFY(again->isVisibleTo(details));
+        // The agent changed the file but didn't commit, push or deploy.
+        QCOMPARE(git(site, {"rev-parse", "HEAD"}).trimmed(), before);
+        QVERIFY(read(site + "/src/main.ts").contains("fixed by the fake agent"));
+        QCOMPARE(bridge.liveReviews().back().title, QStringLiteral("Fix"));
+        QVERIFY(Deploy::records(site).size() == 1);
+
+        // Deploy again: the user's action commits the fix (not their own edit), pushes, and deploys.
+        again->click();
+        QVERIFY(finished(bridge));
+        QCOMPARE(Deploy::records(site).size(), size_t(2));
+        QVERIFY(git(site, {"log", "-1", "--format=%s"}).startsWith(QLatin1String("Fix the failed deploy")));
+        QVERIFY(git(site, {"show", "HEAD:src/main.ts"}).contains(QLatin1String("fixed by the fake agent")));
+        QVERIFY(git(site, {"status", "--porcelain"}).contains(QLatin1String("style.css")));
+        AgentBridge::setPageDrainMs(5000);
+    }
+
+    void stopEndsTheFixAndKeepsWhatItWrote()
+    {
+        const QString out = m_directory.filePath(QStringLiteral("stop-agents"));
+        QDir().mkpath(out);
+        const QByteArray fakeOut = qgetenv("FAKE_OUT");
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "edithang");
+        qputenv("FAKE_EDIT_FILE", "notes.txt");
+        qputenv("FAKE_OUT", out.toUtf8());
+        const auto restore = qScopeGuard([fakeOut] {
+            qunsetenv("FAKE_AGENT");
+            qunsetenv("FAKE_MODE");
+            qunsetenv("FAKE_EDIT_FILE");
+            qputenv("FAKE_OUT", fakeOut);
+        });
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        QDialog *details = nullptr;
+        const QString site = failedDeploy(window, details);
+        QVERIFY(!site.isEmpty() && details);
+        AgentBridge &bridge = *window.agent();
+        details->findChild<QPushButton *>(QStringLiteral("fixWithAgent"))->click();
+        QTRY_VERIFY_WITH_TIMEOUT(!FakeAgents::read(out + QStringLiteral("/claude.child")).trimmed().isEmpty(), 15'000);
+        const pid_t child = pid_t(FakeAgents::read(out + QStringLiteral("/claude.child")).trimmed().toInt());
+        auto *stop = details->findChild<QPushButton *>(QStringLiteral("fixStop"));
+        QVERIFY(stop->isVisibleTo(details));
+        stop->click();
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.deployFix().finished, 15'000);
+        QVERIFY(bridge.deployFix().stopped);
+        QCOMPARE(bridge.deployFix().error, QStringLiteral("Stopped."));
+        QVERIFY(!bridge.waiting());
+        QTRY_VERIFY(::kill(child, 0) != 0);
+        // A new file is a change too; it is recorded and left uncommitted.
+        QVERIFY2(bridge.deployFix().files == QStringList{"notes.txt"}, qPrintable(git(site, {"status", "--porcelain", "-uall"}) + FakeAgents::read(out + QStringLiteral("/claude.cwd"))));
+        QVERIFY(details->findChild<QPushButton *>(QStringLiteral("fixDeployAgain"))->isVisibleTo(details));
+        // Another fix may start after it.
+        QVERIFY(bridge.fixDeploy(site).isEmpty());
+        bridge.stopFix();
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.deployFix().finished, 15'000);
+    }
+
+    void aFixThatEndsWithoutAnAnswerSaysSo()
+    {
+        const QString out = m_directory.filePath(QStringLiteral("quiet-fix"));
+        QDir().mkpath(out);
+        const QByteArray fakeOut = qgetenv("FAKE_OUT");
+        qputenv("FAKE_AGENT", "claude");
+        qputenv("FAKE_MODE", "quiet");
+        qputenv("FAKE_OUT", out.toUtf8());
+        const auto restore = qScopeGuard([fakeOut] {
+            qunsetenv("FAKE_AGENT");
+            qunsetenv("FAKE_MODE");
+            qputenv("FAKE_OUT", fakeOut);
+        });
+        ProjectWorkspace workspace;
+        ProjectWorkspaceView window(workspace);
+        QDialog *details = nullptr;
+        const QString site = failedDeploy(window, details);
+        QVERIFY(!site.isEmpty() && details);
+        AgentBridge &bridge = *window.agent();
+        QVERIFY(bridge.fixDeploy(site).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(bridge.deployFix().finished, 15'000);
+        QVERIFY2(bridge.deployFix().error.startsWith(QLatin1String("Claude stopped without an answer")), qPrintable(bridge.deployFix().error));
+        QVERIFY(bridge.deployFix().files.isEmpty() && !bridge.waiting());
+        QVERIFY(details->findChild<QLabel *>(QStringLiteral("fixStatus"))->text().contains(QLatin1String("No files changed")));
     }
 
     void aDeployAgentThatStopsWithoutReportingFails()

@@ -220,6 +220,29 @@ existing floating panels and the frame's bar:
   - A failure shows "Deploy failed" (or "Save failed" when the run was a Save),
     and a click opens Details.
   - The first-deploy sheet still asks once.
+  - **The failure line** is the real reason (`DeployFix::reason`): a JSON
+    object's `message` with its `reason` ("Not authorized (deploy_failed)"), else
+    the last line that isn't blank, a box border, an update banner, an npm
+    wrapper line or a git hint; an "error" line wins over a later plain one.
+  - **Fix with <agent>** is in Details (`AgentSheets::deployLog`,
+    `AgentSheets+DeployFix.cpp`) when the log is a failed production deploy's
+    (`AgentBridge::deployFailed`); without a default agent the button is hidden
+    and the label shows why. `AgentBridge::fixDeploy` starts the default agent
+    (`AgentLauncher`, project access) in the project's own folder, where its
+    `node_modules` and build are, with `DeployFix::prompt`: the failed command, its
+    exit code, the failure line, the log's tail (fenced and marked as data, redacted
+    with the project's `.env` values), the project folder, the commit and the
+    deploy command. The agent diagnoses, fixes in the project, and verifies with the
+    project's own build or test command. It must not push, commit, deploy, change
+    credentials, log in or touch `.env*`; a cause outside the code (login, quota,
+    network) is explained and nothing is changed. It ends with `live agentDone` and
+    a summary, which Details shows with the files it changed. One fix at a time
+    (`DeployFixState`, `AgentBridge::waiting()` with `Task::fix`); Stop cancels it,
+    keeping what it wrote. Its changes are read from git (against the files that
+    were already changed when it began, `.env*` left out) as one "Fix" write-back
+    record: Review Changes shows it, Discard undoes it, and **Deploy again**, which
+    appears in Details when it has finished, commits it with the next deploy. The
+    agent never deploys; the user decides.
 - **The bar's menu** (also in Object ▸ Browser View, and Ctrl+K as "Browser
   View: …"):
   - Edit Page, Deploy, Save, Review Changes, History, Build It, Build It with a

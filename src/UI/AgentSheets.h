@@ -4,6 +4,7 @@
 #include <functional>
 
 class AgentBridge;
+class QBoxLayout;
 
 // The sheets the AI entries open. A launch failure shows in the sheet, which stays open.
 namespace AgentSheets {
@@ -17,8 +18,9 @@ QDialog *vectorize(AgentBridge &bridge, QWidget *window);
 QDialog *live(AgentBridge &bridge, QWidget *window);
 // Live's Deploy (or Save) when there's something to answer first: production the first time, and a GitHub repository.
 QDialog *deploy(AgentBridge &bridge, QWidget *window, const QString &folder = QString(), bool deploying = true, bool fromFrame = false);
-// Details: a deploy's log, redacted.
-QDialog *deployLog(QWidget *window, const QString &path);
+// Details: a deploy's log, redacted. With a bridge and the project's folder, a failed deploy's window also offers Fix with <agent>
+// (AgentSheets+DeployFix.cpp) and, once that has finished, Deploy again.
+QDialog *deployLog(QWidget *window, const QString &path, AgentBridge *bridge = nullptr, const QString &folder = QString());
 // File ▸ Hand to Agent…: the document in front as a mockup, for an app whose source is in a folder.
 QDialog *handoff(AgentBridge &bridge, QWidget *window);
 // Hand to Agent… from a surface (docs/ANYWHERE.md): `what` names it; `folder` is offered first; `run` starts it with the
@@ -27,6 +29,8 @@ QDialog *handoffFrom(QWidget *window, const QString &what, const QString &folder
                      const std::function<QString(const QString &folder, const QString &notes)> &run);
 // Help ▸ Connect an Agent…
 QDialog *connectAgent(AgentBridge &bridge, QWidget *window);
+// Deploy Details' fix row: Fix with <agent>, its state and Stop, and Deploy again. Hidden with the agent's hint when there is no default agent.
+void addDeployFix(QDialog *dialog, QBoxLayout *column, AgentBridge &bridge, const QString &folder);
 // The text Connect an Agent shows.
 QString connectText(const AgentBridge &bridge);
 }

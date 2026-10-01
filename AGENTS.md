@@ -49,7 +49,7 @@ Each folder builds as its own static library:
   `ProjectRegistry`, `TokenSet` snapping, `LiveSession`, `EditSets` (edits to
   sites that aren't yours, kept per origin), write-back
   (`WriteBack`, `AgentWork`), and Deploy (`Deploy`, `DeployJob`, `History`,
-  with GitHub through `gh`), and motion (docs/MOTION.md): `motion.js` (the page
+  `DeployFix`, the failure line and the Fix with agent prompt, with GitHub through `gh`), and motion (docs/MOTION.md): `motion.js` (the page
   side, run after the overlay, compiled in like it), `Motion` (the timeline's
   rows from the page's list) and `MotionCode` (the marked blocks in a project's
   code, and which tokens a row takes its values from), `MotionWrite` and `CssRules` (what write-back is sure of in motion,

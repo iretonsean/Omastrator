@@ -7,7 +7,8 @@
 // opencode config and arguments as $FAKE_OUT/<name>.*, the arguments last and whole
 // (a test that sees them may read the rest), then does what $FAKE_MODE says:
 // roast, variations or overlay (answers through "$OMASTRATOR_BIN" agent),
-// quiet (exits without answering), fail (an error on stderr) or hang.
+// quiet (exits without answering), fail (an error on stderr), hang, or edithang
+// (appends a line to $FAKE_EDIT_FILE in its folder, then hangs).
 namespace FakeAgents {
 inline constexpr const char *script = R"sh(#!/bin/sh
 out="$FAKE_OUT/$(basename "$0")"
@@ -40,6 +41,12 @@ fail)
   echo "Error: not logged in. Run /login" >&2
   echo "   " >&2
   exit 1
+  ;;
+edithang)
+  echo "// fixed by the fake agent" >> "$FAKE_EDIT_FILE"
+  sleep 300 &
+  echo $! > "$out.child"
+  wait
   ;;
 hang)
   sleep 300 &

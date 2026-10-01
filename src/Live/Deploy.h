@@ -92,7 +92,7 @@ QString agentPrompt(const AgentBrief &brief);
 
 // The first https URL in `output`: the live URL.
 QString firstUrl(const QString &output);
-// The line a failure is summed up by: the last non-empty line, cut short.
+// The line a failure is summed up by (DeployFix::reason): the real reason, not a banner or a box, cut short.
 QString lastLine(const QString &output);
 // One dry line for a deploy failure, each shown once per install; empty once all are used.
 QString dryLine();

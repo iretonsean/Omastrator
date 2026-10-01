@@ -396,6 +396,12 @@ Omastrator also works outside its window, through Omarchy's own shell
   script, the Vercel, Netlify, Cloudflare or Fly CLI, a Makefile or
   `deploy.sh`, or else your agent. The deploy gets the project's `.env` files;
   their values never show anywhere. The first deploy of a project asks once.
+  When a deploy fails, the message gives the real reason (not the CLI's update
+  banner), and **Details** opens the log with **Fix with <your agent>**: your
+  default agent reads the log, fixes what it can in the project, and checks the
+  build. It never pushes or deploys and never touches `.env` files or logins; if
+  the cause is outside the code, it says what to do. What it changed shows in
+  Review changes, and **Deploy again** is yours to press.
   **Review changes** shows every write-back as a diff, with Discard, when you
   want it; **History** lists the commits (on GitHub through `gh`, which it
   offers to set up) with what was deployed, and restores any version.

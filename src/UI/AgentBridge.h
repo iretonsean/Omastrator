@@ -63,7 +63,7 @@ public:
     QString vectorize(AgentLauncher::TraceMode mode);
     QString roast();
 
-    enum class Task { generate, edit, vectorize, roast, live, deploy };
+    enum class Task { generate, edit, vectorize, roast, live, deploy, fix };
     struct Waiting {
         QString requestId;
         Task task;
@@ -357,6 +357,28 @@ public:
     };
     const DeployState &deployState() const { return m_deployState; }
     QString rememberSuggested();
+    // Fix with <agent> (AgentBridge+DeployFix.cpp): the default agent diagnoses a failed deploy and repairs what it can in the
+    // project's own folder, then says so with agentDone. It never deploys or commits: its changes become a write-back record,
+    // which the next Deploy commits. One at a time.
+    struct DeployFixState {
+        // The project it is for; empty before any.
+        QString folder;
+        bool running = false;
+        // It has ended: `summary` is the agent's own words, or `error` says why it ended without them.
+        bool finished = false;
+        bool stopped = false;
+        QString summary;
+        QString error;
+        // The files it changed, relative to the project.
+        QStringList files;
+        QString agent;
+    };
+    const DeployFixState &deployFix() const { return m_fix; }
+    // Whether the log shown for `folder` is a failed deploy's, so the window can offer the fix.
+    bool deployFailed(const QString &folder, const QString &log) const;
+    // Returns why it couldn't start, or empty.
+    QString fixDeploy(const QString &folder);
+    void stopFix();
     // `gh auth status`, remembered for a minute unless `refresh`.
     GitHub::Auth githubAuth(bool refresh = false);
     QString connectGitHub();
@@ -389,6 +411,8 @@ signals:
     void roastChanged();
     // Reviews, kept files, the Live message.
     void liveReviewChanged();
+    // Fix with <agent> started, ended or was stopped.
+    void deployFixChanged();
     // A preview began, became ready, failed or ended for the project.
     void previewChanged(const QString &folder);
     // The Activity list changed.
@@ -522,6 +546,20 @@ private:
         // Said when a save finishes, instead of "Saved".
         QString doneMessage;
     };
+    // Fix with <agent> (AgentBridge+DeployFix.cpp).
+    struct FixRun {
+        QString requestId;
+        // The project's changed files when it started, with their bytes: what the agent changed is the difference from here.
+        std::map<QString, std::optional<QByteArray>> base;
+        // The agent said it was done while its process still ran; it is read when the process ends.
+        bool answered = false;
+        QString summary;
+    };
+    std::optional<FixRun> m_fixRun;
+    DeployFixState m_fix;
+    QString fixAgentDone(const QString &requestId, const QString &summary);
+    void fixRunFinished(AgentRun &run);
+    void finishFix(const QString &summary, const QString &error, bool stopped);
     Pipeline m_pipeline;
     DeployState m_deployState;
     DeployJob m_job;

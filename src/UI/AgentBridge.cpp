@@ -32,6 +32,8 @@ const char *verb(AgentBridge::Task task)
         return "roasting";
     case AgentBridge::Task::deploy:
         return "deploying";
+    case AgentBridge::Task::fix:
+        return "fixing the deploy";
     case AgentBridge::Task::live:
         break;
     }
@@ -41,7 +43,7 @@ const char *verb(AgentBridge::Task task)
 // The task as the status and the log name call it.
 QString taskName(AgentBridge::Task task)
 {
-    static const QStringList names{"generate", "edit", "vectorize", "roast", "live", "deploy"};
+    static const QStringList names{"generate", "edit", "vectorize", "roast", "live", "deploy", "fix"};
     return names.value(int(task));
 }
 
@@ -307,6 +309,8 @@ void AgentBridge::stopWaiting()
     if (m_waiting && m_pipeline.active
         && (m_pipeline.waitingFor.contains(m_waiting->requestId) || m_pipeline.agentRequest == m_waiting->requestId))
         cancelDeploy();
+    else if (m_waiting && m_waiting->task == Task::fix)
+        stopFix();
     else if (m_waiting && m_waiting->task == Task::live && m_pages.count(m_waiting->requestId))
         stopPageJob(m_waiting->requestId);
     else if (m_waiting && m_waiting->task == Task::live)
@@ -374,6 +378,8 @@ void AgentBridge::runFinished(const QString &requestId, AgentRun &run)
     // Live and deploy runs answer to their worktree and pipeline, whatever is waited on now.
     if (m_pages.count(requestId))
         return pageRunFinished(requestId, run);
+    if (m_fixRun && m_fixRun->requestId == requestId)
+        return fixRunFinished(run);
     if (m_liveJobs.count(requestId))
         return liveRunFinished(requestId, run);
     if (m_pipeline.active && m_pipeline.agentRequest == requestId && m_job.running())
