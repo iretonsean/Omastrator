@@ -26,6 +26,11 @@ section, then design (a `docs/ANALYTICS.md`), then build in phases with the usua
   keywords, SERP and AI-overview data), shown in Omastrator next to the page they describe.
 - **Guided by the Omarchy default agent:** it explains the numbers, suggests what to change, and makes the
   change as a proposal.
+- **Setup with the agent's help, in the app's UI:** the onboard agent walks the user through getting and
+  entering each credential (a GA4 property and access, a DataForSEO API key, and so on): what to open, where to
+  click, what to copy. The user pastes the key into a field in Omastrator's own UI (a settings panel or sheet),
+  never into the chat. The app checks the key and stores it as in "Constraints" below. The agent can see whether
+  a key is set and works, never the key itself.
 
 ## Constraints to keep in mind
 
