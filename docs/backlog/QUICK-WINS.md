@@ -35,6 +35,8 @@ file with the work. Don't delete finished items.
 
 ## Backlog, not queued
 
+- **Analytics, SEO and AEO built in:** see docs/backlog/ANALYTICS.md (the author, 2026-09-30). Whoever
+  builds it interviews the author first (AskUserQuestion).
 - **Interactive behaviours (fourth-wall design):** see
   docs/backlog/INTERACTIVE-BEHAVIORS.md (the author's idea, 2026-09-28).
 - **Heavy work off the UI thread:** see docs/backlog/BACKGROUND-WORK.md
